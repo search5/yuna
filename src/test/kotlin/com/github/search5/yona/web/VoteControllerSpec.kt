@@ -117,5 +117,42 @@ class VoteControllerSpec : DescribeSpec({
 
             verify(exactly = 1) { issueService.unvoteComment(100L, user) }
         }
+
+        it("익명 사용자가 이슈 추천 시 401 Unauthorized 상태코드를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
+            
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/vote")
+            )
+                .andExpect(status().isUnauthorized)
+        }
+
+        it("읽기 권한이 없는 사용자가 이슈 추천 시 403 Forbidden 상태코드를 반환해야 한다") {
+            val privateProject = Project(id = 1L, name = "test-project", owner = "tester", projectScope = com.github.search5.yona.domain.project.ProjectScope.PRIVATE)
+            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(privateProject)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/vote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isForbidden)
+        }
+
+        it("이슈 복수형 라우트(/issues)로 투표 요청 시에도 정상적으로 302 리다이렉트가 발생해야 한다") {
+            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
+            every { issueService.voteIssue(50L, user) } returns Unit
+
+            mockMvc.perform(
+                post("/tester/test-project/issues/1/vote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().is3xxRedirection)
+                .andExpect(redirectedUrl("/tester/test-project/issue/1"))
+        }
     }
 })

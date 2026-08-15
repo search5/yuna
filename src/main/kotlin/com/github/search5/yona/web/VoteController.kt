@@ -38,7 +38,7 @@ class VoteController(
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
     }
 
-    @PostMapping("/{owner}/{projectName}/issue/{issueNumber}/vote")
+    @PostMapping(value = ["/{owner}/{projectName}/issue/{issueNumber}/vote", "/{owner}/{projectName}/issues/{issueNumber}/vote"])
     fun vote(
         @PathVariable owner: String,
         @PathVariable projectName: String,
@@ -63,7 +63,7 @@ class VoteController(
         return "redirect:/$owner/$projectName/issue/$issueNumber"
     }
 
-    @PostMapping("/{owner}/{projectName}/issue/{issueNumber}/unvote")
+    @PostMapping(value = ["/{owner}/{projectName}/issue/{issueNumber}/unvote", "/{owner}/{projectName}/issues/{issueNumber}/unvote"])
     fun unvote(
         @PathVariable owner: String,
         @PathVariable projectName: String,
@@ -88,7 +88,7 @@ class VoteController(
         return "redirect:/$owner/$projectName/issue/$issueNumber"
     }
 
-    @PostMapping("/{owner}/{projectName}/issue/{issueNumber}/comment/{commentId}/vote")
+    @PostMapping(value = ["/{owner}/{projectName}/issue/{issueNumber}/comment/{commentId}/vote", "/{owner}/{projectName}/issues/{issueNumber}/comment/{commentId}/vote"])
     fun voteComment(
         @PathVariable owner: String,
         @PathVariable projectName: String,
@@ -114,7 +114,7 @@ class VoteController(
         return "redirect:/$owner/$projectName/issue/$issueNumber"
     }
 
-    @PostMapping("/{owner}/{projectName}/issue/{issueNumber}/comment/{commentId}/unvote")
+    @PostMapping(value = ["/{owner}/{projectName}/issue/{issueNumber}/comment/{commentId}/unvote", "/{owner}/{projectName}/issues/{issueNumber}/comment/{commentId}/unvote"])
     fun unvoteComment(
         @PathVariable owner: String,
         @PathVariable projectName: String,

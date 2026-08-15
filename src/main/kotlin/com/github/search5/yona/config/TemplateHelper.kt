@@ -194,4 +194,29 @@ class TemplateHelper(
     fun countBoardPosts(project: Project): Long {
         return postingRepository.countByProject(project)
     }
+
+    fun getVotersExceptCurrentUser(voters: Collection<com.github.search5.yona.domain.user.User>, currentUser: com.github.search5.yona.domain.user.User?): List<com.github.search5.yona.domain.user.User> {
+        if (currentUser == null) return voters.toList()
+        return voters.filter { it.id != currentUser.id }
+    }
+
+    fun getVotersForAvatar(voters: Collection<com.github.search5.yona.domain.user.User>, size: Int): List<com.github.search5.yona.domain.user.User> {
+        return voters.take(size)
+    }
+
+    fun getVotersForName(voters: Collection<com.github.search5.yona.domain.user.User>, fromIndex: Int, size: Int): List<com.github.search5.yona.domain.user.User> {
+        val list = voters.toList()
+        val start = Math.max(0, fromIndex)
+        val end = Math.min(list.size, fromIndex + size)
+        if (start >= list.size) return emptyList()
+        return list.subList(start, end)
+    }
+
+    fun getVotersTooltip(voters: Collection<com.github.search5.yona.domain.user.User>, fromIndex: Int, size: Int): String {
+        val list = getVotersForName(voters, fromIndex, size)
+        val names = list.joinToString("<br>") { it.name ?: it.loginId }
+        val hasMore = voters.size > fromIndex + size
+        return if (hasMore) "$names<br>&hellip;" else names
+    }
 }
+

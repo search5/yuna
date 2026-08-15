@@ -83,8 +83,30 @@
                                     <span class="heart"><i class="yobicon-hearts"></i></span>
                                 </span>
                             </th:block>
-                            
-                            <span th:each="voter : ${issue.voters}" th:text="${voter.name != null ? voter.name : voter.loginId} + ' '" style="font-weight: bold; font-size: 11px;">Voter </span>
+
+                            <div th:if="${!issue.voters.isEmpty()}" class="voter-list-wrap">
+                                <ul class="voter-list">
+                                    <li th:if="${currentUser != null && issue.voters.![id].contains(currentUser.id)}">
+                                        <a th:href="@{/user/{loginId}(loginId=${currentUser.loginId})}" class="avatar-wrap smaller" data-toggle="tooltip" data-placement="top" th:title="${currentUser.name}">
+                                            <img th:src="${currentUser.avatarUrl}">
+                                        </a>
+                                    </li>
+
+                                    <th:block th:with="otherVoters=${templateHelper.getVotersExceptCurrentUser(issue.voters, currentUser)}">
+                                        <li th:each="voter : ${templateHelper.getVotersForAvatar(otherVoters, 3)}">
+                                            <a th:href="@{/user/{loginId}(loginId=${voter.loginId})}" class="avatar-wrap smaller" data-toggle="tooltip" data-placement="top" th:title="${voter.name}">
+                                                <img th:src="${voter.avatarUrl}">
+                                            </a>
+                                        </li>
+                                        <li th:if="${otherVoters.size() > 3}" data-toggle="tooltip" data-html="true"
+                                            th:title="${templateHelper.getVotersTooltip(otherVoters, 3, 5)}">
+                                            <a href="#voters" data-toggle="modal" th:text="#{issue.voters.more(${otherVoters.size() - 3})}">
+                                                외 N명
+                                            </a>
+                                        </li>
+                                    </th:block>
+                                </ul>
+                            </div>
                         </div>
 
                         <button type="button" id="translate" class="icon btn-transparent-with-fontsize-lineheight ml10" data-toggle="tooltip" th:title="#{button.translation}"><i class="yobicon-lang"></i></button>
@@ -111,6 +133,61 @@
                                         <div class="author-info">
                                             <strong class="name" th:text="${comment.authorName != null ? comment.authorName : comment.authorLoginId}">댓글작성자</strong>
                                             <span class="date" th:text="${templateHelper.agoOrDateString(comment.createdDate)}">작성일</span>
+
+                                            <span class="act-row pull-right">
+                                                <!-- 댓글 공감인 5명 초과인 경우 -->
+                                                <th:block th:if="${comment.voters.size() > 5}">
+                                                    <span style="margin-right: 2px;" data-toggle="tooltip" data-html="true" th:title="${templateHelper.getVotersTooltip(comment.voters, 0, 5)}">
+                                                        <a class="vote-description-people" th:href="'#voters-' + ${comment.id}" data-toggle="modal" th:text="${comment.voters.size() == 1 ? #messages.msg('common.comment.vote.agreement', comment.voters.size()) : #messages.msg('common.comment.vote.agreements', comment.voters.size())}">
+                                                            N 공감
+                                                        </a>
+                                                    </span>
+
+                                                    <!-- 댓글 추천인 모달 -->
+                                                    <div th:id="'voters-' + ${comment.id}" class="modal hide voters-dialog">
+                                                        <div class="modal-header">
+                                                            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                                                            <h5 class="nm" th:text="#{issue.voters}">공감하는 사람들</h5>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <ul class="unstyled">
+                                                                <li th:each="voter : ${comment.voters}">
+                                                                    <a th:href="@{/user/{loginId}(loginId=${voter.loginId})}" class="usf-group" target="_blank">
+                                                                        <span class="avatar-wrap mlarge">
+                                                                            <img th:src="${voter.avatarUrl}" width="40" height="40">
+                                                                        </span>
+                                                                        <strong class="name" th:text="${voter.name}">이름</strong>
+                                                                        <span class="loginid"> <strong>@</strong><span th:text="${voter.loginId}">loginId</span></span>
+                                                                    </a>
+                                                                </li>
+                                                            </ul>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button class="ybtn ybtn-info ybtn-small" data-dismiss="modal" aria-hidden="true" th:text="#{button.close}">닫기</button>
+                                                        </div>
+                                                    </div>
+                                                </th:block>
+
+                                                <!-- 댓글 공감인 5명 이하인 경우 -->
+                                                <th:block th:if="${comment.voters.size() <= 5}">
+                                                    <a th:each="voter : ${comment.voters}" th:href="@{/user/{loginId}(loginId=${voter.loginId})}" class="avatar-wrap smaller" data-toggle="tooltip" data-placement="top" th:title="${voter.name}">
+                                                        <img th:src="${voter.avatarUrl}">
+                                                    </a>
+                                                </th:block>
+
+                                                <!-- 공감 버튼 토글 -->
+                                                <th:block th:with="hasCommentVoted=${currentUser != null && comment.voters.![id].contains(currentUser.id)}">
+                                                    <button th:if="${hasCommentVoted}" type="button" class="btn-transparent-with-fontsize-lineheight" th:title="#{common.comment.unvote}" data-request-type="comment-vote" th:data-request-uri="@{/{owner}/{projectName}/issue/{issueNumber}/comment/{commentId}/unvote(owner=${project.owner}, projectName=${project.name}, issueNumber=${issue.number}, commentId=${comment.id})}">
+                                                        <i class="yobicon-hearts vote-heart-on"></i>
+                                                    </button>
+                                                    <button th:if="${!hasCommentVoted && currentUser != null}" type="button" class="btn-transparent-with-fontsize-lineheight" th:title="#{common.comment.vote}" data-request-type="comment-vote" th:data-request-uri="@{/{owner}/{projectName}/issue/{issueNumber}/comment/{commentId}/vote(owner=${project.owner}, projectName=${project.name}, issueNumber=${issue.number}, commentId=${comment.id})}">
+                                                        <i class="yobicon-hearts vote-heart-off"></i>
+                                                    </button>
+                                                    <span th:if="${currentUser == null}" class="btn-transparent-with-fontsize-lineheight" th:title="#{common.comment.vote}">
+                                                        <i class="yobicon-hearts vote-heart-off vote-heart-disable-hover"></i>
+                                                    </span>
+                                                </th:block>
+                                            </span>
                                         </div>
                                         <div class="content markdown-wrap" th:utext="${markdownService.render(comment.contents, true, project)}">댓글내용</div>
                                     </div>
@@ -165,6 +242,30 @@
         <div class="modal-footer">
             <button type="button" class="ybtn ybtn-danger" data-request-method="delete" th:data-request-uri="@{/api/projects/{projectId}/issues/{number}(projectId=${project.id}, number=${issue.number})}">네</button>
             <button type="button" class="ybtn" data-dismiss="modal">아니요</button>
+        </div>
+    </div>
+
+    <!-- Voters Modal -->
+    <div id="voters" class="modal hide voters-dialog">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+            <h5 class="nm" th:text="#{issue.voters}">공감하는 사람들</h5>
+        </div>
+        <div class="modal-body">
+            <ul class="unstyled">
+                <li th:each="voter : ${issue.voters}">
+                    <a th:href="@{/user/{loginId}(loginId=${voter.loginId})}" class="usf-group" target="_blank">
+                        <span class="avatar-wrap mlarge">
+                            <img th:src="${voter.avatarUrl}" width="40" height="40">
+                        </span>
+                        <strong class="name" th:text="${voter.name}">이름</strong>
+                        <span class="loginid"> <strong>@</strong><span th:text="${voter.loginId}">loginId</span></span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="modal-footer">
+            <button class="ybtn ybtn-info ybtn-small" data-dismiss="modal" aria-hidden="true" th:text="#{button.close}">닫기</button>
         </div>
     </div>
 
