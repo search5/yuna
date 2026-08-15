@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head('마이그레이션')}">
+  <link rel="stylesheet" type="text/css" media="all" href="/javascripts/lib/select2/select2.css"/>
+  <link rel="stylesheet" type="text/css" media="all" href="/javascripts/lib/pikaday/pikaday.css" />
+  <link rel="stylesheet" type="text/css" media="all" href="/javascripts/lib/nprogress/nprogress.css"/>
+  <style>
+    .header-pannel {
+        padding: 20px;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .warn {
+        color: #d9534f;
+        font-weight: bold;
+    }
+    .selected {
+        background-color: #f5f5f5;
+        border-left: 5px solid #007bff;
+    }
+    .yobi-migration .project-list {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+    }
+    .yobi-migration .project-list:hover {
+        background-color: #fafafa;
+    }
+    .left-project-list, .destination-project-list {
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: #fff;
+    }
+    .search {
+        margin-bottom: 10px;
+    }
+    .search-query {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 12px;
+    }
+    .title-text-bg {
+        margin-bottom: 15px;
+    }
+    .progress {
+        height: 20px;
+        margin-bottom: 20px;
+    }
+  </style>
+  <script type="text/javascript" src="/javascripts/lib/nprogress/nprogress.js"></script>
+  <script type="text/javascript">
+    NProgress.configure({ minimum: 0.6 });
+  </script>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <div th:replace="~{site/layout :: gnb}"></div>
+
+  <div class="container">
+    <div ng-app="yona.migration" ng-controller="MigrationController as vm" class="yobi-migration" th:attr="ng-init='vm.setUserToken(\'' + ${token} + '\');vm.yobiUser = \'' + ${currentUser.loginId} + '\';vm.yobiUserEmail = \'' + ${currentUser.email} + '\''">
+      <div class="header-pannel">
+        <div class="comeback-text pull-right" style="font-size: 16px; font-weight: bold; color: #555;">Yona to Github <span class="midium-font">Migration</span></div>
+        <div class="row title-text-bg">
+          <div id="system-msg" class="well board" ng-cloak style="margin: 20px 0 10px 0; padding: 10px;">
+            <div class="messages" ng-repeat="msg in vm.systemMessages track by $index" style="color: #004085; background-color: #cce5ff; border: 1px solid #b8daff; padding: 5px; margin-bottom: 5px; border-radius: 4px;">
+              {{::msg}}
+            </div>
+            <div class="error-data" ng-if="vm.importResult.errorData.length > 0" style="color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 5px; border-radius: 4px;">
+              {{vm.importResult.errorData}}
+            </div>
+          </div>
+        </div>
+
+        <div class="status" style="margin-bottom: 20px;">
+          <div class="row">
+            <div class="head-title row-fluid" ng-cloak style="display: flex; align-items: center;">
+              <div class="source-title span5" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; text-align: center; background: #fdfdfd;">
+                <div class="project-name warn" ng-if="!vm.source.owner">Source 프로젝트를 선택해 주세요</div>
+                <div class="project-name" ng-if="vm.source.owner" style="font-size: 16px; font-weight: bold;">{{vm.source.owner}}/{{vm.source.projectName}}</div>
+              </div>
+              <div class="arrow span1" style="width: 50px; text-align: center; font-size: 24px; color: #888;">&rarr;</div>
+              <div class="destination-title span6" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; text-align: center; background: #fdfdfd;">
+                <div class="project-name warn" ng-if="!vm.destination.owner">Destination 프로젝트를 선택해 주세요</div>
+                <div class="project-name" ng-if="vm.destination.owner" style="font-size: 16px; font-weight: bold;">{{vm.destination.owner}}/{{vm.destination.projectName}}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row source-destination" style="display: flex; gap: 20px;">
+          <!-- Source Projects -->
+          <div class="source-project span4" style="flex: 1;">
+            <div class="header" ng-cloak style="font-weight: bold; margin-bottom: 5px;">Source ({{vm.sourceProjects.length}} 개)</div>
+            <div class="search left-border"><input tabindex="1" type="text" class="search-query" name="target-filter" ng-model="source.full_name" placeholder="Search.." autofocus></div>
+            <div class="left-project-list">
+              <div class="project-list" ng-repeat="repo in vm.sourceProjects | filter:source:strict" ng-click="vm.getSourceProject(repo.owner, repo.projectName);vm.selectSourceProject(repo.full_name)" ng-class="{'selected': repo.full_name == vm.selectedSourceName }" ng-cloak>
+                <div class="owner" ng-if="vm.isNewOwner(repo)" style="font-weight: bold; background: #eee; padding: 2px 5px; font-size: 11px; margin-bottom: 5px;">{{repo.owner}}</div>
+                <div class="project-name" style="font-weight: bold;">
+                  <a th:href="@{/projects/{{repo.full_name}}}" target="_blank">{{repo.projectName}}</a>
+                </div>
+                <div class="metainfo-sm" style="color: #666; font-size: 11px;">
+                  {{repo.owner}} · 멤버 {{repo.members}}명 <i class="yobicon-lock yobicon-small" ng-if="repo.private"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Destination Projects -->
+          <div class="destination-project span4" style="flex: 1;" th:attr="ng-init=${token != null} ? 'vm.getDestinationProjects();vm.getCurrentGithubUser()' : ''">
+            <div class="header" ng-cloak style="font-weight: bold; margin-bottom: 5px;">Destination ({{vm.destinationProjects.length}} 개)</div>
+            <div class="search"><input type="text" tabindex="2" class="search-query" name="target-filter" ng-model="destination.full_name" placeholder="Search.."></div>
+            <div class="destination-project-list">
+              <div class="project-list" ng-repeat="repo in vm.destinationProjects | filter:destination:strict" ng-click="vm.setDestination(repo);vm.selectDestinationProject(repo.full_name)" ng-class="{'selected': repo.full_name == vm.selectedDestinationName }" ng-cloak>
+                <div class="owner" ng-if="vm.isNewOwner(repo)" style="font-weight: bold; background: #eee; padding: 2px 5px; font-size: 11px; margin-bottom: 5px;">{{::repo.owner.login}}</div>
+                <div class="project-name"><a href="{{repo.html_url}}" target="_blank" style="font-weight: bold;">{{repo.name}}</a></div>
+                <div class="metainfo-sm" style="color: #666; font-size: 11px;">
+                  {{repo.owner.login}} <i class="yobicon-lock yobicon-small" ng-if="repo.private"></i>
+                </div>
+                <div class="warn-no-worker" ng-show="repo.full_name == vm.destination.full_name && vm.showWorkerWarning" ng-cloak style="margin-top: 5px;">
+                  <span class="label label-important" style="background-color: #d9534f; color: #fff; padding: 2px 5px; font-size: 10px; border-radius: 3px;">Admin에 {{vm.CONFIG.DEFAULT_WORKER}} 유저가 없음</span>
+                  <div style="font-size: 11px; color: #888; margin-top: 2px;">{{vm.CONFIG.DEFAULT_WORKER}} 유저가 대상 프로젝트/그룹의 admin으로 추가되어 있어야 합니다. 그렇지 않을 경우 사용자 아이디가 작성자로 표시됩니다.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Migration status / buttons -->
+          <div class="span6 status" style="flex: 1.5; padding: 15px; border: 1px solid #ddd; border-radius: 4px; background: #fcfcfc;">
+            <div class="progress row-fluid" style="margin-bottom: 15px;">
+              <div class="progress-bar progress-bar-striped active" role="progressbar" 
+                   ng-class="vm.importResult.count/vm.expectedImportCount*100<100 ? 'progress-bar-danger' : 'progress-bar-success'"
+                   style="width: {{vm.importResult.count/vm.expectedImportCount*100 || 0 }}%; background-color: #28a745; text-align: center; color: white; line-height: 20px;" ng-cloak>
+                {{vm.importResult.count}}/{{vm.expectedImportCount}}
+              </div>
+            </div>
+
+            <table class="table table-bordered">
+              <thead>
+                <tr>
+                  <th colspan="2" style="background: #f1f1f1;">Migration 대상</th>
+                  <th style="background: #f1f1f1;">작업</th>
+                </tr>
+              </thead>
+              <tbody ng-cloak>
+                <tr>
+                  <td class="left-title" style="font-weight: bold; width: 100px;">마일스톤</td>
+                  <td class="left-title" style="width: 50px; text-align: center;">{{vm.source.milestoneCount}}</td>
+                  <td>
+                    <button class="btn btn-sm btn-danger" ng-click="vm.importMilestones()" ng-if="vm.destination.projectName" ng-disabled="!vm.source.milestoneCount || vm.importBtnDisabled">
+                      마일스톤 옮기기
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="left-title" style="font-weight: bold;">이슈</td>
+                  <td class="left-title" style="text-align: center;">{{vm.source.issueCount}}</td>
+                  <td>
+                    <div class="caution" ng-if="vm.destination.projectName" style="font-size: 11px; color: #d9534f; margin-bottom: 5px;">
+                      마일스톤을 먼저 옮겨 놓지 않으면 마일스톤이 지정되지 않은 상태로 이슈가 이동됩니다.
+                    </div>
+                    <button class="btn btn-sm btn-danger" ng-click="vm.importIssues(vm.source)" ng-if="vm.destination.projectName" ng-disabled="!vm.source.issueCount || vm.importBtnDisabled">
+                      이슈 옮기기
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="left-title" style="font-weight: bold;">게시글</td>
+                  <td class="left-title" style="text-align: center;">{{vm.source.postCount}}</td>
+                  <td>
+                    <div class="caution" ng-if="vm.destination.projectName" style="font-size: 11px; color: #d9534f; margin-bottom: 5px;">
+                      기존 게시글은 '게시글'라벨을 붙여 이슈로 옮겨집니다.
+                    </div>
+                    <button class="btn btn-sm btn-danger" ng-click="vm.importPosts()" ng-if="vm.destination.projectName" ng-disabled="!vm.source.postCount || vm.importBtnDisabled">
+                      게시글 옮기기
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="assignee-wrap" style="margin-top: 20px;">
+              <div class="left-title" style="font-weight: bold; margin-bottom: 5px;" ng-cloak>
+                기존 이슈 담당자<span ng-if="vm.source.assignees"> ({{vm.source.assignees.length}}명)</span>
+              </div>
+              <div class="caution" ng-if="vm.destination.projectName" style="font-size: 11px; color: #888; margin-bottom: 10px;">
+                대응되는 새 프로젝트 소속의 담당자 id를 입력해 주세요. 지정하지 않으면 담당자가 해제된 상태로 이전됩니다.
+              </div>
+              <table class="table table-bordered table-striped" ng-if="vm.source.assignees.length > 0" ng-show="vm.destination.projectName" ng-cloak>
+                <thead>
+                  <tr>
+                    <th>Yona 유저</th>
+                    <th>Github 유저 ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr ng-repeat="assignee in vm.source.assignees">
+                    <td>{{assignee.name}} ({{assignee.login}})</td>
+                    <td>
+                      <input ng-keyup="vm.userExistAtDestinationProject(vm.destination, assignee.login)" type="text" class="form-control input-sm" placeholder="지정되지 않음" ng-model="vm.destination.assignees[assignee.login].login" ng-init="vm.getAssigneeFromLocal(assignee.login)" style="display: inline-block; width: 150px; margin-right: 5px;">
+                      <i class="yobicon-check-circle" ng-if="vm.destination.assignees[assignee.login].login && vm.destination.assignees[assignee.login].confirmed" style="color: green; font-size: 16px;"></i>
+                      <i class="yobicon-delete-circle-alt" ng-if="vm.destination.assignees[assignee.login].login && vm.destination.assignees[assignee.login].confirmed === false" style="color: red; font-size: 16px;"></i>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/javascripts/lib/jquery.js"></script>
+<script src="/bootstrap/js/bootstrap.js"></script>
+<script src="/javascripts/common/yobi.Common.js"></script>
+<script src="/javascripts/lib/vendor.js"></script>
+<script src="/javascripts/service/yona.Migration.js"></script>
+<footer th:replace="~{site/layout :: footer}"></footer>
+</body>
+</html>

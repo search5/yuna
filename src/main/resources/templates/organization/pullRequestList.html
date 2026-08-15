@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${org.name} + ' 풀 리퀘스트 - Yona'">조직 풀 리퀘스트 목록</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .org-header {
+      background-color: #f8f9fa;
+      padding: 30px 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 30px;
+  }
+  .org-tab-menu {
+      margin-bottom: 20px;
+  }
+  .pr-item {
+      padding: 12px 15px;
+      border-bottom: 1px solid #eee;
+  }
+  .pr-item:hover {
+      background: #fcfcfc;
+  }
+  .pr-title {
+      font-size: 15px;
+      font-weight: bold;
+      margin-bottom: 5px;
+  }
+  .pr-meta {
+      font-size: 12px;
+      color: #777;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 조직 헤더 -->
+  <div class="org-header">
+    <div class="container">
+      <h2><a th:href="@{/org/{orgName}(orgName=${org.name})}" th:text="${org.name}" style="text-decoration: none; color: inherit;">조직 이름</a></h2>
+      <p th:text="${org.descr != null && !org.descr.isEmpty() ? org.descr : '조직 설명이 등록되지 않았습니다.'}" style="color: #666; font-size: 15px; margin-top: 10px;"></p>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="row">
+      <div class="col-md-12">
+        <!-- 탭 메뉴 -->
+        <div class="org-tab-menu">
+          <ul class="nav nav-tabs">
+            <li><a th:href="@{/org/{orgName}(orgName=${org.name})}">프로젝트</a></li>
+            <li><a th:href="@{/org/{orgName}/issues(orgName=${org.name})}">이슈</a></li>
+            <li><a th:href="@{/org/{orgName}/boards(orgName=${org.name})}">게시판</a></li>
+            <li class="active"><a th:href="@{/org/{orgName}/pullrequests(orgName=${org.name})}">풀 리퀘스트</a></li>
+            <li><a th:href="@{/org/{orgName}/members(orgName=${org.name})}">멤버 관리</a></li>
+          </ul>
+        </div>
+
+        <div style="background: #fff; border: 1px solid #d8dee2; border-radius: 3px; padding: 25px; margin-bottom: 20px;">
+          <!-- 풀 리퀘스트 상태 필터 -->
+          <div class="pull-right">
+            <a th:href="@{/org/{orgName}/pullrequests(orgName=${org.name}, category='open')}" th:class="${category == 'open' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-default'}">열림</a>
+            <a th:href="@{/org/{orgName}/pullrequests(orgName=${org.name}, category='closed')}" th:class="${category == 'closed' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-default'}">닫힘</a>
+          </div>
+          
+          <h3>조직 풀 리퀘스트 목록</h3>
+          <hr style="margin-top: 10px; margin-bottom: 20px;"/>
+
+          <!-- 풀 리퀘스트 목록 -->
+          <div th:if="${!pullRequests.isEmpty()}">
+            <div th:each="pr : ${pullRequests}" class="pr-item">
+              <div class="pr-title">
+                <a th:href="@{/projects/{projectId}/pulls/{number}(projectId=${pr.toProject.id}, number=${pr.number})}" th:text="'#' + ${pr.number} + ' ' + ${pr.title}">풀 리퀘스트 제목</a>
+                <span class="label label-info" th:text="${pr.toProject.name}" style="margin-left: 5px;">프로젝트명</span>
+              </div>
+              <div class="pr-meta">
+                보낸이: <span th:text="${pr.contributor.name}">보낸이</span> | 
+                대상 브랜치: <span th:text="${pr.toBranch}">master</span> |
+                상태: <span th:text="${pr.state}" class="badge">OPEN</span>
+              </div>
+            </div>
+            
+            <!-- 페이징 처리 -->
+            <div class="text-center" style="margin-top: 20px;" th:if="${page.totalPages > 1}">
+              <ul class="pagination">
+                <li th:class="${page.first ? 'disabled' : ''}">
+                  <a th:href="@{/org/{orgName}/pullrequests(orgName=${org.name}, category=${category}, page=${page.number - 1})}">&laquo;</a>
+                </li>
+                <li th:each="idx : ${#numbers.sequence(0, page.totalPages - 1)}" th:class="${page.number == idx ? 'active' : ''}">
+                  <a th:href="@{/org/{orgName}/pullrequests(orgName=${org.name}, category=${category}, page=${idx})}" th:text="${idx + 1}">1</a>
+                </li>
+                <li th:class="${page.last ? 'disabled' : ''}">
+                  <a th:href="@{/org/{orgName}/pullrequests(orgName=${org.name}, category=${category}, page=${page.number + 1})}">&raquo;</a>
+                </li>
+              </ul>
+            </div>
+          </div>
+          
+          <div th:if="${pullRequests.isEmpty()}" class="text-center" style="padding: 50px; color: #999;">
+            조건에 맞는 풀 리퀘스트가 존재하지 않습니다.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

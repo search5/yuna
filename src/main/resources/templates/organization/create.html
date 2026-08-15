@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head(#{title.newOrganization})}">
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <div th:replace="~{site/layout :: gnb}"></div>
+
+  <div class="page-wrap-outer">
+    <div class="project-page-wrap">
+      <div class="form-wrap new-project">
+        <form id="newOrgForm" th:action="@{/organizations/new}" method="POST" class="frm-wrap">
+          <legend>
+            <span th:text="#{title.newOrganization}">그룹 생성</span>
+          </legend>
+
+          <!-- 에러 메시지 출력 -->
+          <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
+          <dl>
+            <!-- Organization Name -->
+            <dt>
+              <label for="name">
+                <span th:text="#{organization.name}">그룹 이름</span>
+                <strong class="orange-txt">*</strong>
+              </label>
+            </dt>
+            <dd>
+              <input id="name" type="text" name="name" class="text" maxlength="250"
+                     th:placeholder="#{organization.name.placeholder}" required autofocus>
+            </dd>
+
+            <!-- Description -->
+            <dt>
+              <label for="descr" th:text="#{organization.description}">설명</label>
+            </dt>
+            <dd>
+              <textarea id="descr" name="descr" class="text textarea.span4" style="resize: vertical;"></textarea>
+            </dd>
+          </dl>
+
+          <div class="actions">
+            <button type="submit" class="ybtn ybtn-success">
+              <i class="yobicon-friends"></i> <span th:text="#{organization.create}">그룹 만들기</span>
+            </button>
+            <a href="/" class="ybtn" th:text="#{button.cancel}">취소</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

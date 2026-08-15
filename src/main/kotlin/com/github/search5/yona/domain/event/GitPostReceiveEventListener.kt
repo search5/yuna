@@ -1,0 +1,128 @@
+package com.github.search5.yona.domain.event
+
+import com.github.search5.yona.domain.project.GitService
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.notification.NotificationEvent
+import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.enumeration.EventType
+import org.eclipse.jgit.lib.ObjectId
+import org.eclipse.jgit.lib.RepositoryBuilder
+import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.transport.ReceiveCommand
+import org.springframework.context.event.EventListener
+import org.springframework.scheduling.annotation.Async
+import org.springframework.stereotype.Component
+import org.slf4j.LoggerFactory
+import org.springframework.transaction.annotation.Transactional
+import java.io.IOException
+import java.time.Instant
+
+@Component
+class GitPostReceiveEventListener(
+    private val gitService: GitService,
+    private val notificationEventRepository: NotificationEventRepository
+) {
+    private val logger = LoggerFactory.getLogger(GitPostReceiveEventListener::class.java)
+
+    @Async("taskExecutor")
+    @EventListener
+    @Transactional
+    fun handleGitPostReceiveEvent(event: GitPostReceiveEvent) {
+        logger.info("Handling GitPostReceiveEvent asynchronously for project: ${event.project.name} by user: ${event.user.loginId}")
+        
+        val commits = mutableListOf<RevCommit>()
+        val refNames = mutableListOf<String>()
+
+        val repoDir = gitService.getRepositoryPath(event.project.owner ?: "", event.project.name)
+        if (!repoDir.exists()) {
+            logger.warn("Repository directory does not exist: ${repoDir.absolutePath}")
+            return
+        }
+
+        try {
+            val repository = RepositoryBuilder().setGitDir(repoDir).build()
+            repository.use { repo ->
+                for (command in event.commands) {
+                    if (isNewOrUpdateCommand(command)) {
+                        commits.addAll(parseCommitsFrom(command, repo))
+                        refNames.add(command.refName)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to parse commits from git repository", e)
+            return
+        }
+
+        logger.info("Parsed ${commits.size} commits from ref: $refNames")
+
+        // 1. CommitsNotificationActor 로직 (신규 커밋 알림)
+        processCommitsNotification(commits, refNames, event.project, event.user)
+
+        // 2. IssueReferredFromCommitEventActor 로직 (이슈 언급 처리)
+        processIssueReferredFromCommit(commits, event.project, event.user)
+    }
+
+    private fun isNewOrUpdateCommand(command: ReceiveCommand): Boolean {
+        return command.type == ReceiveCommand.Type.CREATE ||
+                command.type == ReceiveCommand.Type.UPDATE ||
+                command.type == ReceiveCommand.Type.UPDATE_NONFASTFORWARD
+    }
+
+    private fun parseCommitsFrom(command: ReceiveCommand, repository: org.eclipse.jgit.lib.Repository): Collection<RevCommit> {
+        val list = mutableListOf<RevCommit>()
+        try {
+            val endRange = command.newId
+            val startRange = command.oldId
+
+            RevWalk(repository).use { rw ->
+                rw.markStart(rw.parseCommit(endRange))
+                if (startRange.equals(ObjectId.zeroId())) {
+                    list.add(rw.parseCommit(endRange))
+                    return list
+                } else {
+                    rw.markUninteresting(rw.parseCommit(startRange))
+                }
+
+                for (rev in rw) {
+                    list.add(rev)
+                }
+            }
+        } catch (e: IOException) {
+            logger.error("Failed to walk commits in Repository", e)
+        }
+        return list
+    }
+
+    private fun processCommitsNotification(commits: List<RevCommit>, refNames: List<String>, project: Project, sender: User) {
+        if (commits.isEmpty()) return
+        
+        val title = if (refNames.size == 1) {
+            "[${project.name}] ${commits.size}개의 커밋이 ${refNames[0]} 브랜치로 푸시되었습니다."
+        } else {
+            "[${project.name}] ${commits.size}개의 커밋이 푸시되었습니다."
+        }
+
+        val notificationEvent = NotificationEvent(
+            title = title,
+            senderId = sender.id,
+            created = Instant.now(),
+            resourceType = ResourceType.COMMIT,
+            resourceId = commits.first().name,
+            eventType = EventType.NEW_COMMIT,
+            newValue = title
+        )
+        notificationEventRepository.save(notificationEvent)
+        logger.info("[NOTIFICATION] Pushed commits notification created and saved: '$title' by ${sender.name}")
+    }
+
+    private fun processIssueReferredFromCommit(commits: List<RevCommit>, project: Project, sender: User) {
+        for (commit in commits) {
+            val message = commit.fullMessage
+            logger.info("[ISSUE REFER] Parsing issue references from commit '${commit.name}': $message by ${sender.loginId}")
+        }
+    }
+}

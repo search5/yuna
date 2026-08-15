@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${project.name} + ' - 포크'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .fork-container {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 30px;
+      margin-bottom: 20px;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+  }
+  .help-well {
+      background-color: #f8f9fa;
+      border: 1px solid #e9ecef;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+  }
+  .help-well p {
+      margin-bottom: 5px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="fork-container">
+      <form th:action="@{/{owner}/{name}/fork(owner=${project.owner}, name=${project.name})}" method="post" class="form-horizontal">
+        <fieldset>
+          <legend>
+            <h3 style="margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+              <span th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</span> 프로젝트 Fork
+            </h3>
+          </legend>
+
+          <!-- 에러 메시지 -->
+          <div th:if="${error}" class="alert alert-danger" th:text="${error}">
+            에러 메시지 내용
+          </div>
+
+          <div class="help-well">
+            <h4 style="margin-top:0;">프로젝트 포크(Fork)란?</h4>
+            <p>원본 프로젝트의 독립적인 복사본을 생성합니다.</p>
+            <p>복사본 프로젝트에서 자유롭게 커밋하고 코드를 수정한 뒤, 언제든 원본 프로젝트에 코드 보내기(Pull Request)를 요청할 수 있습니다.</p>
+          </div>
+
+          <!-- 소유자 선택 -->
+          <div class="form-group">
+            <label class="col-sm-3 control-label" for="ownerSelect">프로젝트 소유자</label>
+            <div class="col-sm-9">
+              <select id="ownerSelect" name="owner" class="form-control" required style="max-width: 300px;">
+                <!-- 로그인 유저 본인 -->
+                <option th:value="${currentUser.loginId}" th:text="${currentUser.loginId} + ' (개인 계정)'"></option>
+                <!-- 내가 관리하는 조직들 -->
+                <option th:each="org : ${organizations}" th:value="${org.name}" th:text="${org.name} + ' (그룹)'"></option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 프로젝트 이름 입력 -->
+          <div class="form-group">
+            <label class="col-sm-3 control-label" for="projectNameInput">프로젝트 이름</label>
+            <div class="col-sm-9">
+              <input type="text" id="projectNameInput" name="name" th:value="${project.name}" class="form-control" required style="max-width: 300px;" />
+              <span class="help-block" style="font-size: 12px; color: #777;">알파벳, 숫자, 대시(-)와 언더스코어(_)만 사용할 수 있습니다.</span>
+            </div>
+          </div>
+
+          <!-- 공개 여부 설정 -->
+          <div class="form-group">
+            <label class="col-sm-3 control-label">공개 범위 설정</label>
+            <div class="col-sm-9">
+              <div class="radio">
+                <label>
+                  <input type="radio" name="projectScope" id="scopePublic" value="PUBLIC" checked>
+                  <strong>공개 (Public)</strong> - 누구나 프로젝트를 조회하고 코드를 볼 수 있습니다.
+                </label>
+              </div>
+              <div class="radio" style="margin-top: 10px;">
+                <label>
+                  <input type="radio" name="projectScope" id="scopePrivate" value="PRIVATE">
+                  <strong>비공개 (Private)</strong> - 지정한 멤버들만 접근할 수 있습니다.
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 30px;">
+            <div class="col-sm-offset-3 col-sm-9">
+              <button type="submit" class="btn btn-info" style="min-width: 100px;">Fork 생성</button>
+              <a th:href="@{/{owner}/{name}(owner=${project.owner}, name=${project.name})}" class="btn btn-default" style="margin-left: 10px;">취소</a>
+            </div>
+          </div>
+
+        </fieldset>
+      </form>
+    </div>
+  </div>
+</div>
+</body>
+</html>

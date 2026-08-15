@@ -1,0 +1,43 @@
+package com.github.search5.yona.web
+
+import tools.jackson.databind.ObjectMapper
+import io.kotest.core.spec.style.DescribeSpec
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
+import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import java.util.*
+
+class MessagesControllerSpec : DescribeSpec({
+    val objectMapper = ObjectMapper()
+    val controller = MessagesController(objectMapper)
+    val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
+
+    describe("MessagesController 단위 테스트") {
+        describe("GET /messages.js") {
+            it("한국어 로케일에 대해 ko-KR 메시지 데이터를 포함한 JS 번들을 렌더링해야 한다") {
+                mockMvc.perform(
+                    get("/messages.js")
+                        .locale(Locale.KOREA)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(content().contentType("application/javascript;charset=UTF-8"))
+                    .andExpect(header().exists("Cache-Control"))
+                    .andExpect(content().string(org.hamcrest.Matchers.containsString("window.Messages = function(key)")))
+                    .andExpect(content().string(org.hamcrest.Matchers.containsString("app.name")))
+            }
+
+            it("영어/기본 로케일에 대해 기본 messages 데이터를 포함한 JS 번들을 렌더링해야 한다") {
+                mockMvc.perform(
+                    get("/messages.js")
+                        .locale(Locale.US)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(content().contentType("application/javascript;charset=UTF-8"))
+                    .andExpect(content().string(org.hamcrest.Matchers.containsString("window.Messages = function(key)")))
+                    .andExpect(content().string(org.hamcrest.Matchers.containsString("app.name")))
+            }
+        }
+    }
+})

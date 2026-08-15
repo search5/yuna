@@ -1,0 +1,126 @@
+spring:
+  profiles:
+    active: mariadb
+  messages:
+    basename: messages/messages
+    encoding: UTF-8
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: dummy-client-id
+            client-secret: dummy-client-secret
+            scope: profile,email
+          github:
+            client-id: dummy-client-id
+            client-secret: dummy-client-secret
+            scope: user:email,read:user
+
+yuna:
+  upload:
+    base-dir: "${yona.data:data}/uploads"
+
+yona:
+  feedback-url: "${YONA_FEEDBACK_URL:https://github.com/yona-projects/yona/issues}"
+  translation:
+    api: "${YONA_TRANSLATION_API:}"
+    header-key: "${YONA_TRANSLATION_HEADER_KEY:}"
+    header-value: "${YONA_TRANSLATION_HEADER_VALUE:}"
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: dummy-client-id
+            client-secret: dummy-client-secret
+            scope: profile,email
+          github:
+            client-id: dummy-client-id
+            client-secret: dummy-client-secret
+            scope: user:email,read:user
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus
+  metrics:
+    tags:
+      application: yuna
+
+---
+spring:
+  config:
+    activate:
+      on-profile: mariadb
+  datasource:
+    url: jdbc:mariadb://localhost:23306/yona?characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false
+    username: yona
+    password: yona_password
+    driver-class-name: org.mariadb.jdbc.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: postgres
+  datasource:
+    url: jdbc:postgresql://localhost:5432/yona
+    username: yona
+    password: yona_password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    org.springframework.web: DEBUG
+    org.hibernate: WARN
+

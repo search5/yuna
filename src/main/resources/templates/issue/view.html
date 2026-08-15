@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head(title=${issue.title} + ' - Yona')}">
+</head>
+<body class="theme-default prj" id="html-body">
+<div id="main" class="main">
+    <div th:replace="~{site/layout :: gnb}"></div>
+    <div th:replace="~{site/layout :: projectHeader}"></div>
+    <div th:replace="~{site/layout :: projectMenu('ISSUE')}"></div>
+
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap board-view">
+            <!-- Post Info -->
+            <div class="board-header issue">
+                <div class="pull-right mr10 mt10 hide-in-mobile">
+                    <div class="date" th:title="${templateHelper.getDateString(issue.createdDate)}" th:text="${templateHelper.agoOrDateString(issue.createdDate)}">
+                        작성일
+                    </div>
+                    <span class="badge" th:classappend="'badge-issue-' + ${#strings.toLowerCase(issue.state)}" th:text="${#messages.msg('issue.state.' + issue.state)}">상태</span>
+                </div>
+                <div class="title">
+                    <strong class="board-id" th:text="'#' + ${issue.number}">#1</strong>
+                    <span th:text="${issue.title}">이슈 제목</span>
+                    <span class="favorite-issue" th:data-issue-id="${issue.id}">
+                        <i class="star material-icons va-text-top" th:classappend="${isFavoriteIssue ? 'starred' : ''}">star</i>
+                    </span>
+                    <div class="pull-right hide show-in-mobile" style="font-size: 0.7em">
+                        <span class="date" th:title="${templateHelper.getDateString(issue.createdDate)}" th:text="${templateHelper.agoOrDateString(issue.createdDate)}">작성일</span>
+                        <span class="badge badge-small" th:classappend="'badge-issue-' + ${#strings.toLowerCase(issue.state)}" th:text="${#messages.msg('issue.state.' + issue.state)}">상태</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content body -->
+            <div class="board-body row-fluid">
+                <div class="span9 span-left-pane">
+                    <div class="author-info">
+                        <a href="javascript:void(0);" class="usf-group">
+                            <span class="avatar-wrap smaller">
+                                <img src="/images/default-avatar-128.png" width="20" height="20">
+                            </span>
+                            <strong class="name" th:text="${issue.authorName != null ? issue.authorName : issue.authorLoginId}">작성자</strong>
+                            <span class="loginid"> <strong>@</strong><span th:text="${issue.authorLoginId}">loginId</span></span>
+                        </a>
+                    </div>
+                    
+                    <div th:id="'issue-' + ${issue.number}" class="hide">
+                        <form th:action="@{/api/{owner}/{projectName}/issues/{number}/content(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}">
+                            <textarea th:text="${issue.body}"></textarea>
+                        </form>
+                    </div>
+                    <div th:id="'issue-body-' + ${issue.number}">
+                        <div class="content markdown-wrap" th:data-allowed-update="${isAllowedUpdate}" th:utext="${markdownService.render(issue.body, true, project)}">본문 내용</div>
+                    </div>
+                    
+                    <div class="attachments" id="attachments" th:data-attachments="${attachmentsJson}"></div>
+                    
+                    <div class="board-actrow right-txt">
+                        <div class="pull-left">
+                            <div>
+                                <button id="watch-button" type="button" class="ybtn" th:classappend="${isWatching ? 'ybtn-watching' : ''}"
+                                        data-toggle="tooltip" data-placement="top" th:title="#{issue.watch.description}" th:data-watching="${isWatching}"
+                                        th:text="${isWatching ? #messages.msg('issue.unwatch') : #messages.msg('issue.watch')}">
+                                    지켜보기
+                                </button>
+                                <button th:if="${isAllowedUpdate}" id="issue-share-button" type="button" class="ybtn" data-toggle="popover" data-trigger="hover" data-placement="top" th:data-content="#{issue.sharer.description}" th:text="#{button.share.issue}">공유</button>
+                                <span class="issue-weight">
+                                    <span class="divider">|</span>
+                                    <button id="upvote-issue-weight" class="ybtn ybtn-small" data-toggle="tooltip" title="Upvote"><i class="yobicon-arrow-up-alt"></i></button>
+                                    <button class="ybtn ybtn-small" id="down-vote-issue-weight" data-toggle="tooltip" title="Down vote"><i class="yobicon-arrow-down-alt"></i></button>
+                                    <span class="weight-number" data-toggle="popover" data-trigger="hover" data-placement="top" th:data-content="#{issue.weight.description}" th:text="${issue.weight}">0</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div id="vote" class="vote-wrap" th:classappend="${!issue.voters.isEmpty() ? 'voter-exists' : ''}">
+                            <th:block th:with="hasVoted=${currentUser != null && issue.voters.![id].contains(currentUser.id)}">
+                                <a th:if="${currentUser != null}" th:href="@{/{owner}/{projectName}/issue/{issueNumber}/vote(owner=${project.owner}, projectName=${project.name}, issueNumber=${issue.number})}" 
+                                   class="ybtn-watching-link" th:classappend="${hasVoted ? 'ybtn-watching' : ''}"
+                                   data-request-method="post" data-toggle="tooltip" th:title="${hasVoted ? #messages.msg('issue.unvote.description') : #messages.msg('issue.vote.description')}">
+                                    <span class="heart"><i class="yobicon-hearts"></i></span>
+                                </a>
+                                <span th:if="${currentUser == null}" class="ybtn-disabled" style="color: #777;" data-toggle="tooltip" th:title="#{user.login.alert}" data-login="required">
+                                    <span class="heart"><i class="yobicon-hearts"></i></span>
+                                </span>
+                            </th:block>
+                            
+                            <span th:each="voter : ${issue.voters}" th:text="${voter.name != null ? voter.name : voter.loginId} + ' '" style="font-weight: bold; font-size: 11px;">Voter </span>
+                        </div>
+
+                        <button type="button" id="translate" class="icon btn-transparent-with-fontsize-lineheight ml10" data-toggle="tooltip" th:title="#{button.translation}"><i class="yobicon-lang"></i></button>
+
+                        <span class="act-row">
+                            <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:onclick="|window.location='/${project.owner}/${project.name}/issue/${issue.number}/editform'|"><i class="yobicon-edit-2"></i></button>
+                            <a th:if="${!isAllowedUpdate}" th:href="@{/{owner}/{projectName}/issue/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}">
+                                <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.show.original}"><i class="yobicon-edit-2"></i></button>
+                            </a>
+                            <th:block th:if="${isAllowedUpdate}">
+                                <a href="#deleteConfirm" data-toggle="modal">
+                                    <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml6" data-toggle="tooltip" th:title="#{button.delete}"><i class="yobicon-trash"></i></button>
+                                </a>
+                            </th:block>
+                        </span>
+                    </div>
+
+                    <div id="comments" class="board-comment-wrap">
+                        <div id="timeline">
+                            <div class="timeline-list">
+                                <!-- 댓글 영역 (Thymeleaf Loop) -->
+                                <div th:each="comment : ${comments}" class="comment" th:id="'comment-' + ${comment.id}">
+                                    <div class="comment-body">
+                                        <div class="author-info">
+                                            <strong class="name" th:text="${comment.authorName != null ? comment.authorName : comment.authorLoginId}">댓글작성자</strong>
+                                            <span class="date" th:text="${templateHelper.agoOrDateString(comment.createdDate)}">작성일</span>
+                                        </div>
+                                        <div class="content markdown-wrap" th:utext="${markdownService.render(comment.contents, true, project)}">댓글내용</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Pane -->
+                <div class="span3 span-right-pane mb20">
+                    <div class="issue-info">
+                        <form id="issueUpdateForm" th:action="@{/api/projects/{projectId}(projectId=${project.id})}" method="post">
+                            <input type="hidden" name="issues[0].id" th:value="${issue.id}" />
+
+                            <dl>
+                                <dt th:text="#{issue.assignee}">담당자</dt>
+                                <dd>
+                                    <span th:text="${issue.assignee != null ? issue.assignee.user.name : #messages.msg('issue.noAssignee')}">담당자 없음</span>
+                                </dd>
+                            </dl>
+
+                            <dl>
+                                <dt th:text="#{milestone}">마일스톤</dt>
+                                <dd>
+                                    <span th:text="${issue.milestone != null ? issue.milestone.title : #messages.msg('issue.noMilestone')}">마일스톤 없음</span>
+                                </dd>
+                            </dl>
+
+                            <dl>
+                                <dt th:text="#{issue.dueDate}">마감일</dt>
+                                <dd>
+                                    <span th:text="${issue.dueDate != null ? #dates.format(issue.dueDate, 'yyyy-MM-dd') : #messages.msg('issue.noDuedate')}">마감일 없음</span>
+                                </dd>
+                            </dl>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm to delete post -->
+    <div id="deleteConfirm" class="modal hide fade">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal">×</button>
+            <h3 th:text="#{issue.delete}">이슈 삭제</h3>
+        </div>
+        <div class="modal-body">
+            <p th:text="#{post.delete.confirm}">정말 이 이슈를 삭제하시겠습니까?</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="ybtn ybtn-danger" data-request-method="delete" th:data-request-uri="@{/api/projects/{projectId}/issues/{number}(projectId=${project.id}, number=${issue.number})}">네</button>
+            <button type="button" class="ybtn" data-dismiss="modal">아니요</button>
+        </div>
+    </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
+</div>
+
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
+<th:block th:replace="~{common/select2 :: select2}"></th:block>
+<script type="text/javascript" src="/javascripts/lib/atjs/jquery.caret.min.js"></script>
+<script type="text/javascript" src="/javascripts/lib/atjs/jquery.atwho.js"></script>
+<script type="text/javascript">
+    $(function(){
+        $yobi.loadModule("issue.View", {
+            "issueId"  : "[[${issue.id}]]",
+            "nextState": "[[${issue.state}]]",
+            "urls"     : {
+                "watch"     : "/watch",
+                "unwatch"   : "/unwatch"
+            }
+        });
+
+        $('[data-request-method="delete"]').click(function(){
+            var uri = $(this).data("requestUri");
+            $.ajax({
+                url: uri,
+                type: "DELETE",
+                success: function() {
+                    window.location = "[[@{/{owner}/{projectName}/issues(owner=${project.owner}, projectName=${project.name})}]]";
+                }
+            });
+        });
+    });
+</script>
+</body>
+</html>

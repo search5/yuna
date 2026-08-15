@@ -1,0 +1,123 @@
+package com.github.search5.yona.web
+
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.vcs.Commit
+import com.github.search5.yona.domain.vcs.PlayRepository
+import com.github.search5.yona.domain.vcs.RepositoryService
+import io.kotest.core.spec.style.DescribeSpec
+import io.mockk.every
+import io.mockk.mockk
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
+import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import java.util.Optional
+
+class CompareViewControllerSpec : DescribeSpec({
+    val projectRepository = mockk<ProjectRepository>()
+    val projectUserRepository = mockk<ProjectUserRepository>()
+    val userRepository = mockk<UserRepository>()
+    val repositoryService = mockk<RepositoryService>()
+    val playRepository = mockk<PlayRepository>()
+    val commentThreadRepository = mockk<CommentThreadRepository>()
+
+    val compareViewController = CompareViewController(
+        projectRepository,
+        projectUserRepository,
+        userRepository,
+        repositoryService,
+        commentThreadRepository
+    )
+
+    val mockMvc = MockMvcBuilders.standaloneSetup(compareViewController)
+        .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
+        .build()
+
+    beforeTest {
+        io.mockk.clearMocks(projectRepository, projectUserRepository, userRepository, repositoryService, playRepository, commentThreadRepository)
+    }
+
+    describe("CompareViewController 템플릿 연동 테스트") {
+        val user = User(id = 10L, loginId = "testuser", name = "테스트유저")
+        val userAuth = UsernamePasswordAuthenticationToken("testuser", "password")
+
+        val publicProject = Project(id = 1L, owner = "testowner", name = "public-project", projectScope = ProjectScope.PUBLIC, vcs = "GIT")
+        val privateProject = Project(id = 2L, owner = "testowner", name = "private-project", projectScope = ProjectScope.PRIVATE, vcs = "GIT")
+        val svnProject = Project(id = 3L, owner = "testowner", name = "svn-project", projectScope = ProjectScope.PUBLIC, vcs = "SUBVERSION")
+
+        val commitA = mockk<Commit>()
+        val commitB = mockk<Commit>()
+
+        every { commitA.getId() } returns "aaaaaaa"
+        every { commitB.getId() } returns "bbbbbbb"
+
+        describe("GET /{owner}/{projectName}/compare/{revA}..{revB}") {
+            it("프로젝트가 존재하지 않으면 404 응답을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("testowner", "nonexistent") } returns Optional.empty()
+
+                mockMvc.perform(get("/testowner/nonexistent/compare/aaaaaaa..bbbbbbb").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/404"))
+            }
+
+            it("비공개 프로젝트일 때 프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("testowner", "private-project") } returns Optional.of(privateProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 10L) } returns false
+
+                mockMvc.perform(get("/testowner/private-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
+
+            it("공개 프로젝트이며 Git 저장소일 때 200 OK와 code/compare 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("testowner", "public-project") } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { repositoryService.getRepository(publicProject) } returns playRepository
+                every { playRepository.getCommit("aaaaaaa") } returns commitA
+                every { playRepository.getCommit("bbbbbbb") } returns commitB
+                every { playRepository.getDiff("aaaaaaa", "bbbbbbb") } returns emptyList()
+                every { commentThreadRepository.findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(publicProject, "bbbbbbb") } returns emptyList()
+
+                mockMvc.perform(get("/testowner/public-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/compare"))
+                    .andExpect(model().attributeExists("project", "commitA", "commitB", "diffs"))
+            }
+
+            it("공개 프로젝트이며 SVN 저장소일 때 200 OK와 code/compare_svn 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("testowner", "svn-project") } returns Optional.of(svnProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { repositoryService.getRepository(svnProject) } returns playRepository
+                every { playRepository.getCommit("aaaaaaa") } returns commitA
+                every { playRepository.getCommit("bbbbbbb") } returns commitB
+                every { playRepository.getPatch("aaaaaaa", "bbbbbbb") } returns "svn-patch-diff-content"
+                every { commentThreadRepository.findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(svnProject, "bbbbbbb") } returns emptyList()
+
+                mockMvc.perform(get("/testowner/svn-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/compare_svn"))
+                    .andExpect(model().attributeExists("project", "commitA", "commitB", "patch"))
+            }
+
+            it("커밋이 존재하지 않는 리비전일 경우 404 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("testowner", "public-project") } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { repositoryService.getRepository(publicProject) } returns playRepository
+                every { playRepository.getCommit("aaaaaaa") } returns null
+                every { playRepository.getCommit("bbbbbbb") } returns commitB
+
+                mockMvc.perform(get("/testowner/public-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/404"))
+            }
+        }
+    }
+})

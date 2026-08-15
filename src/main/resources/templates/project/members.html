@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${project.name} + ' - 멤버 관리'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .member-container {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 20px;
+  }
+  .member-avatar {
+      border-radius: 50%;
+      margin-right: 10px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="row">
+      <div class="col-md-9">
+        <div class="member-container">
+          <div th:replace="~{project/setting_menu :: menu(${project}, 'members')}"></div>
+          <h3 style="margin-top: 0; margin-bottom: 20px;">프로젝트 멤버 관리</h3>
+
+          <!-- 멤버 추가 폼 -->
+          <form id="add-member-form" class="form-inline" style="margin-bottom: 30px;">
+            <div class="form-group">
+              <input type="text" id="loginId" class="form-control" placeholder="추가할 사용자 ID" required>
+            </div>
+            <div class="form-group">
+              <select id="role" class="form-control" required>
+                <option value="MEMBER">MEMBER</option>
+                <option value="MANAGER">MANAGER</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary">멤버 추가</button>
+          </form>
+
+          <!-- 멤버 리스트 테이블 -->
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>사용자</th>
+                <th>아이디</th>
+                <th>권한</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="pu : ${projectUsers}">
+                <td style="display: flex; align-items: center;">
+                  <img th:src="${pu.user.avatarUrl != null ? pu.user.avatarUrl : '/images/default-avatar-34.png'}" class="member-avatar" width="28" height="28" alt="avatar"/>
+                  <span th:text="${pu.user.name}">홍길동</span>
+                </td>
+                <td th:text="${pu.user.loginId}">loginId</td>
+                <td th:text="${pu.role.id}">MEMBER</td>
+                <td>
+                  <!-- 본인 제외 및 관리자 권한에 의해 삭제 처리 가능 -->
+                  <button class="btn btn-xs btn-danger delete-member-btn" th:data-user-id="${pu.user.id}" th:text="제거"></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" class="btn btn-default">프로젝트 홈으로</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script th:inline="javascript">
+  $(document).ready(function() {
+      // 멤버 추가
+      $("#add-member-form").submit(function(e) {
+          e.preventDefault();
+          var projectId = [[${project.id}]];
+          var loginId = $("#loginId").val();
+          var role = $("#role").val();
+
+          var requestData = {
+              loginId: loginId,
+              role: role
+          };
+
+          $.ajax({
+              url: '/api/projects/' + projectId + '/members',
+              type: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify(requestData),
+              success: function(result) {
+                  alert("멤버가 성공적으로 추가되었습니다.");
+                  window.location.reload();
+              },
+              error: function(xhr, status, error) {
+                  alert("추가 실패: " + xhr.responseText);
+              }
+          });
+      });
+
+      // 멤버 제거
+      $(".delete-member-btn").click(function() {
+          var userId = $(this).data("user-id");
+          var projectId = [[${project.id}]];
+
+          if (confirm("정말 이 멤버를 프로젝트에서 제거하시겠습니까?")) {
+              $.ajax({
+                  url: '/api/projects/' + projectId + '/members/' + userId,
+                  type: 'DELETE',
+                  success: function(result) {
+                      alert("멤버가 제거되었습니다.");
+                      window.location.reload();
+                  },
+                  error: function(xhr, status, error) {
+                      alert("제거 실패: " + xhr.responseText);
+                  }
+              });
+          }
+      });
+  });
+</script>
+</body>
+</html>

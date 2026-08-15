@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head(|${project.name} - 커밋 상세|)}">
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <div th:replace="~{site/layout :: gnb}"></div>
+
+  <div class="site-breadcrumb-outer">
+    <div class="site-breadcrumb-inner">
+      <div class="title_area">
+        <ul class="nav nav-tabs" style="margin-bottom:20px;">
+          <li>
+            <a th:href="@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}" th:text="#{code.files}">Files</a>
+          </li>
+          <li class="active">
+            <a th:href="@{/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}" th:text="#{code.commits}">Commits</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-wrap-outer">
+    <div class="project-page-wrap">
+      <div id="code-browse-wrap" class="code-browse-wrap">
+        <p class="commitInfo" style="background-color: #fafbfc; border: 1px solid #d1d5da; padding: 15px; border-radius: 3px;">
+          <span class="avatar-wrap smaller">
+            <img src="/images/default-avatar-128.png" width="32" height="32">
+          </span>
+          <strong th:text="${commit.authorName}">Author Name</strong>
+          <span class="ago" th:text="${commit.authorDate != null ? #dates.format(commit.authorDate, 'yyyy-MM-dd HH:mm') : ''}">Date</span>
+          <strong class="commitId pull-right" th:text="'@' + ${commit.id}">Commit ID</strong>
+        </p>
+
+        <pre class="commitMsg" style="margin-top: 10px; font-family: inherit; font-size: inherit; white-space: pre-wrap;" th:text="${commit.message}">Commit Message</pre>
+
+        <div class="diff-wrap">
+          <div id="commit" data-commit-origin="true" class="diff-body hide" th:text="${patch}">Patch Content</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer th:replace="~{site/layout :: footer}"></footer>
+</div>
+
+<script type="text/javascript" src="/javascripts/lib/diff.js"></script>
+<script type="text/javascript" th:inline="javascript">
+    $(document).ready(function(){
+        /*[<![CDATA[*/
+        var parentCommitId = /*[[${parentCommit != null ? parentCommit.id : ''}]]*/ '';
+        var commitId = /*[[${commit.id}]]*/ '';
+        var codeUrl = /*[[@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}]]*/ '';
+        /*]]>*/
+
+        if (typeof $yobi !== 'undefined' && $yobi.loadModule) {
+            $yobi.loadModule("code.SvnDiff", {
+                "bCommentable"   : false,
+                "sWatchUrl"      : "",
+                "sUnwatchUrl"    : "",
+                "sParentCommitId": parentCommitId,
+                "sCommitId"      : commitId,
+                "sCodeURL"       : codeUrl
+            });
+        }
+    });
+</script>
+</body>
+</html>
