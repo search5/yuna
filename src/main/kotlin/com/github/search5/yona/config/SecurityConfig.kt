@@ -39,6 +39,7 @@ class SecurityConfig(
                     .requestMatchers("/login", "/signup", "/lostPassword", "/user/reset-password", "/bootstrap-setup", "/users/loginform", "/users/signupform", "/users/signup").permitAll()
                     .requestMatchers("/git/**").permitAll()
                     .requestMatchers("/svn/**").permitAll()
+                    .requestMatchers("/site/**", "/sites/**").hasAnyRole("ADMIN", "SITE_ADMIN")
                     .anyRequest().permitAll()
             }
             .formLogin { form ->

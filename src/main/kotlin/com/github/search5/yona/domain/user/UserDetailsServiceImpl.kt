@@ -20,6 +20,9 @@ class UserDetailsServiceImpl(
             if (authorities.none { it.authority == "ROLE_SITE_ADMIN" }) {
                 authorities.add(SimpleGrantedAuthority("ROLE_SITE_ADMIN"))
             }
+            if (authorities.none { it.authority == "ROLE_ADMIN" }) {
+                authorities.add(SimpleGrantedAuthority("ROLE_ADMIN"))
+            }
         }
 
         return YonaUserDetails(
