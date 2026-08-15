@@ -18,6 +18,9 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import org.springframework.ui.Model
 
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.config.security.AccessControl
+
 @Controller
 class WatchController(
     private val watchService: WatchService,
@@ -25,7 +28,8 @@ class WatchController(
     private val projectRepository: ProjectRepository,
     private val userProjectNotificationRepository: UserProjectNotificationRepository,
     private val issueRepository: IssueRepository,
-    private val postingRepository: PostingRepository
+    private val postingRepository: PostingRepository,
+    private val pullRequestRepository: PullRequestRepository
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User {
@@ -34,6 +38,37 @@ class WatchController(
         }
         return userRepository.findByLoginId(authentication.name).orElseThrow {
             ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 정보를 찾을 수 없습니다.")
+        }
+    }
+
+    private fun checkWatchPermission(user: User, resourceType: ResourceType, resourceId: String) {
+        val project = when (resourceType) {
+            ResourceType.PROJECT -> {
+                projectRepository.findById(resourceId.toLongOrNull() ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 리소스 ID입니다."))
+                    .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.") }
+            }
+            ResourceType.ISSUE_POST -> {
+                val issue = issueRepository.findById(resourceId.toLongOrNull() ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 리소스 ID입니다."))
+                    .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "이슈를 찾을 수 없습니다.") }
+                issue.project
+            }
+            ResourceType.BOARD_POST -> {
+                val posting = postingRepository.findById(resourceId.toLongOrNull() ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 리소스 ID입니다."))
+                    .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "게시글을 찾을 수 없습니다.") }
+                posting.project
+            }
+            ResourceType.PULL_REQUEST -> {
+                val pullRequest = pullRequestRepository.findById(resourceId.toLongOrNull() ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 리소스 ID입니다."))
+                    .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Pull Request를 찾을 수 없습니다.") }
+                pullRequest.toProject
+            }
+            else -> {
+                throw ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 리소스 타입입니다.")
+            }
+        }
+
+        if (!AccessControl.isAllowedToReadProject(user, project)) {
+            throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
     }
 
@@ -47,6 +82,7 @@ class WatchController(
     ): ResponseEntity<Unit> {
         val user = getLoginUser(authentication)
         val resourceType = ResourceType.valueOf(resourceTypeStr)
+        checkWatchPermission(user, resourceType, resourceId)
         watchService.watch(user, resourceType, resourceId)
         return ResponseEntity.ok().build()
     }
@@ -60,6 +96,7 @@ class WatchController(
     ): String {
         val user = getLoginUser(authentication)
         val resourceType = ResourceType.valueOf(resourceTypeStr)
+        checkWatchPermission(user, resourceType, resourceId)
         watchService.unwatch(user, resourceType, resourceId)
         return "redirect:${referer ?: "/"}"
     }
@@ -74,6 +111,9 @@ class WatchController(
         val user = getLoginUser(authentication)
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
+        }
+        if (!AccessControl.isAllowedToReadProject(user, project)) {
+            throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
         watchService.watch(user, ResourceType.PROJECT, project.id.toString())
         return ResponseEntity.ok().build()
@@ -91,6 +131,9 @@ class WatchController(
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
+        if (!AccessControl.isAllowedToReadProject(user, project)) {
+            throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
+        }
         watchService.unwatch(user, ResourceType.PROJECT, project.id.toString())
         userProjectNotificationRepository.deleteByUserAndProject(user, project)
         return ResponseEntity.ok().build()
@@ -106,6 +149,10 @@ class WatchController(
         val user = getLoginUser(authentication)
         val project = projectRepository.findById(projectId).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
+        }
+
+        if (!AccessControl.isAllowedToReadProject(user, project)) {
+            throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
 
         if (!watchService.isWatching(user, ResourceType.PROJECT, projectId.toString())) {
