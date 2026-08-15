@@ -38,6 +38,42 @@
         <div class="diff-wrap">
           <div id="commit" data-commit-origin="true" class="diff-body hide" th:text="${patch}">Patch Content</div>
         </div>
+
+        <!-- SVN Comments List -->
+        <div class="board-comment-wrap" style="margin-top: 30px;">
+          <ul class="comments" style="list-style: none; padding-left: 0;" th:if="${comments != null && !comments.isEmpty()}">
+            <li th:each="comment : ${comments}" th:id="'comment-' + ${comment.id}" class="comment" style="display: flex; margin-bottom: 15px; border-bottom: 1px solid #f6f8fa; padding-bottom: 10px;">
+              <div class="comment-avatar" style="margin-right: 10px;">
+                <img src="/images/default-avatar-32.png" width="32" height="32" style="border-radius: 50%;">
+              </div>
+              <div class="media-body" style="flex: 1;">
+                <div class="meta-info" style="font-size: 12px; color: #586069; margin-bottom: 4px;">
+                  <strong style="color: #24292e;" th:text="${comment.author?.loginId}">작성자</strong>
+                  <span th:text="${#temporals.format(comment.createdDate, 'yyyy-MM-dd HH:mm')}">작성일</span>
+                  <span class="edit pull-right" th:if="${currentUser != null && comment.author?.id == currentUser.id}">
+                    <button type="button" class="btn-transparent btn-comment-delete" th:data-comment-id="${comment.id}" style="background: none; border: none; font-size: 13px; cursor: pointer; color: #cb2431;">
+                      <i class="yobicon-trash"></i>
+                    </button>
+                  </span>
+                </div>
+                <div class="comment-body markdown-wrap" style="font-size: 13px; color: #24292e; white-space: pre-wrap;" th:text="${comment.contents}">댓글 내용</div>
+              </div>
+            </li>
+          </ul>
+
+          <!-- SVN Comment Form -->
+          <div class="write-comment-form" th:if="${currentUser != null}" style="margin-top: 20px;">
+            <form th:action="@{/{owner}/{projectName}/commit/{commitId}/comments(owner=${project.owner}, projectName=${project.name}, commitId=${commit.id})}" method="post">
+              <div class="write-comment-box" style="display: flex; flex-direction: column; gap: 8px;">
+                <textarea name="contents" placeholder="이 SVN 커밋에 댓글을 남기세요..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical;" required></textarea>
+                <div style="text-align: right;">
+                  <button type="submit" class="ybtn ybtn-success">댓글 등록</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -56,7 +92,7 @@
 
         if (typeof $yobi !== 'undefined' && $yobi.loadModule) {
             $yobi.loadModule("code.SvnDiff", {
-                "bCommentable"   : false,
+                "bCommentable"   : /*[[${currentUser != null}]]*/ false,
                 "sWatchUrl"      : "",
                 "sUnwatchUrl"    : "",
                 "sParentCommitId": parentCommitId,
@@ -64,6 +100,22 @@
                 "sCodeURL"       : codeUrl
             });
         }
+
+        // delete comment action
+        $(document).on("click", ".btn-comment-delete", function() {
+            const commentId = $(this).attr("data-comment-id");
+            if (confirm("댓글을 삭제하시겠습니까?")) {
+              fetch("/comments/COMMIT_COMMENT/" + commentId, {
+                method: "DELETE"
+              }).then(res => {
+                if (res.ok) {
+                  location.reload();
+                } else {
+                  alert("댓글 삭제에 실패했습니다.");
+                }
+              });
+            }
+        });
     });
 </script>
 </body>

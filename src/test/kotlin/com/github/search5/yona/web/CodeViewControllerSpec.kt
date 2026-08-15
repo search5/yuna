@@ -6,6 +6,8 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.GitBranch
 import com.github.search5.yona.domain.vcs.PlayRepository
@@ -23,18 +25,29 @@ class CodeViewControllerSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
     val repositoryService = mockk<RepositoryService>()
+    val commentThreadRepository = mockk<CommentThreadRepository>()
+    val commitCommentRepository = mockk<CommitCommentRepository>()
 
     val controller = CodeViewController(
         projectRepository,
         projectUserRepository,
         userRepository,
-        repositoryService
+        repositoryService,
+        commentThreadRepository,
+        commitCommentRepository
     )
 
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, projectUserRepository, userRepository, repositoryService)
+        io.mockk.clearMocks(
+            projectRepository,
+            projectUserRepository,
+            userRepository,
+            repositoryService,
+            commentThreadRepository,
+            commitCommentRepository
+        )
     }
 
     describe("CodeViewController 단위 테스트") {

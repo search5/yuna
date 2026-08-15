@@ -46,7 +46,7 @@
           </div>
 
           <!-- Diff Body -->
-          <div class="diff-body">
+          <div class="diff-body discommentable">
             <div class="diff-partial-outer" th:each="diff : ${fileDiffs}" th:id="${diff.pathB != null ? diff.pathB : diff.pathA}">
               <div class="diff-partial-inner">
                 <div class="diff-partial-meta clearfix" style="background-color: #fafbfc; border: 1px solid #d1d5da; border-bottom: none; padding: 10px; border-top-left-radius: 3px; border-top-right-radius: 3px; font-family: monospace;">
@@ -54,35 +54,136 @@
                 </div>
                 <div class="diff-partial-code" style="border: 1px solid #d1d5da; border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; overflow: auto; margin-bottom: 20px;">
                   <table class="diff-container show-comments" style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 12px;">
+                    <tbody>
                     <!-- ADD -->
-                    <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).ADD}">
-                      <tr th:each="i : ${#numbers.sequence(0, diff.b.size() - 1)}" class="add diff-line-tr" style="background-color: #e6ffed;">
-                        <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'+' + ${diff.b.getString(i)}"></pre></td>
+                    <th:block th:if="${diff.changeType.name == 'ADD'}">
+                      <tr class="range">
+                        <td colspan="3" class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
+                            th:text="'@@ -0,0 +1,' + ${diff.b.size()} + ' @@'"></td>
                       </tr>
-                    </th:block>
-                    <!-- DELETE -->
-                    <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).DELETE}">
-                      <tr th:each="i : ${#numbers.sequence(0, diff.a.size() - 1)}" class="remove diff-line-tr" style="background-color: #ffeef0;">
-                        <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'-' + ${diff.a.getString(i)}"></pre></td>
-                      </tr>
-                    </th:block>
-                    <!-- MODIFY / RENAME -->
-                    <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).MODIFY or diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).RENAME}">
-                      <th:block th:if="${!diff.isBinaryA and !diff.isBinaryB and diff.getHunks() != null}" th:each="hunk : ${diff.getHunks()}">
-                        <tr th:each="line : ${hunk.lines}" class="diff-line-tr"
-                            th:style="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? 'background-color: #e6ffed;' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? 'background-color: #ffeef0;' : '')}">
-                          <td class="code" style="padding-left: 10px;">
-                            <pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;"
-                                 th:text="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? '+' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? '-' : ' ')} + ${line.content}"></pre>
-                          </td>
+                      <th:block th:each="i : ${#numbers.sequence(0, diff.b.size() - 1)}">
+                        <tr class="add diff-line-tr" style="background-color: #e6ffed;"
+                            th:data-path="${diff.pathB}"
+                            th:data-line-num-b="${i}"
+                            data-kind="ADD">
+                          <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;">+</td>
+                          <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
+                          <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'+' + ${diff.b.getString(i)}"></pre></td>
                         </tr>
+                        
+                        <th:block th:with="lineVal=${i}, pathVal=${diff.pathB}, sideVal='B'">
+                          <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
+                        </th:block>
                       </th:block>
                     </th:block>
+
+                    <!-- DELETE -->
+                    <th:block th:if="${diff.changeType.name == 'DELETE'}">
+                      <tr class="range">
+                        <td colspan="3" class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
+                            th:text="'@@ -1,' + ${diff.a.size()} + ' +0,0 @@'"></td>
+                      </tr>
+                      <th:block th:each="i : ${#numbers.sequence(0, diff.a.size() - 1)}">
+                        <tr class="remove diff-line-tr" style="background-color: #ffeef0;"
+                            th:data-path="${diff.pathA}"
+                            th:data-line-num-a="${i}"
+                            data-kind="REMOVE">
+                          <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
+                          <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;">+</td>
+                          <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'-' + ${diff.a.getString(i)}"></pre></td>
+                        </tr>
+
+                        <th:block th:with="lineVal=${i}, pathVal=${diff.pathA}, sideVal='A'">
+                          <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
+                        </th:block>
+                      </th:block>
+                    </th:block>
+
+                    <!-- MODIFY / RENAME -->
+                    <th:block th:if="${diff.changeType.name == 'MODIFY' or diff.changeType.name == 'RENAME' or diff.changeType.name == 'COPY'}">
+                      <tr th:if="${diff.isBinaryA or diff.isBinaryB}">
+                        <td colspan="3" class="isBinary" style="padding: 10px; color: #666; font-style: italic;">이진(Binary) 파일이 변경되었습니다.</td>
+                      </tr>
+                      <th:block th:if="${!diff.isBinaryA and !diff.isBinaryB and diff.getHunks() != null}" th:each="hunk : ${diff.getHunks()}">
+                        <tr class="range">
+                          <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;">...</td>
+                          <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;">...</td>
+                          <td class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
+                              th:text="'@@ -' + ${hunk.beginA + 1} + ',' + ${hunk.endA - hunk.beginA} + ' +' + ${hunk.beginB + 1} + ',' + ${hunk.endB - hunk.beginB} + ' @@'"></td>
+                        </tr>
+                        
+                        <th:block th:each="line : ${hunk.lines}">
+                          <tr class="diff-line-tr" 
+                              th:style="${line.kind.name == 'ADD' ? 'background-color: #e6ffed;' : (line.kind.name == 'REMOVE' ? 'background-color: #ffeef0;' : '')}"
+                              th:data-path="${line.kind.name == 'REMOVE' ? diff.pathA : diff.pathB}"
+                              th:data-line-num-a="${line.numA}"
+                              th:data-line-num-b="${line.numB}"
+                              th:data-kind="${line.kind}">
+                            <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" 
+                                th:text="${line.numA != null ? line.numA + 1 : '+'}"></td>
+                            <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" 
+                                th:text="${line.numB != null ? line.numB + 1 : '+'}"></td>
+                            <td class="code" style="padding-left: 10px;">
+                              <pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" 
+                                   th:text="${line.kind.name == 'ADD' ? '+' : (line.kind.name == 'REMOVE' ? '-' : ' ')} + ${line.content}"></pre>
+                            </td>
+                          </tr>
+
+                          <th:block th:with="lineVal=${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? line.numA : line.numB}, 
+                                             sideVal=${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? 'A' : 'B'}">
+                            <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
+                          </th:block>
+                        </th:block>
+                      </th:block>
+                    </th:block>
+                    </tbody>
                   </table>
                 </div>
               </div>
             </div>
           </div>
+
+          <!-- Global Conversation Comment Form (Non-ranged) -->
+          <div class="board-comment-wrap" style="margin-top: 30px;">
+            <div class="non-ranged-threads-wrap" style="margin-bottom: 20px;">
+              <div th:each="thread : ${commentThreads}" th:if="${thread.class.simpleName == 'NonRangedCodeCommentThread'}"
+                   th:id="'thread-' + ${thread.id}" class="comment-thread-wrap" 
+                   style="border: 1px solid #e1e4e8; border-radius: 4px; padding: 15px; background: #fff; margin-bottom: 15px;">
+                <ul class="comments" style="list-style: none; padding-left: 0; margin-bottom: 0;">
+                  <li th:each="comment : ${thread.reviewComments}" th:id="'comment-' + ${comment.id}" class="comment" style="display: flex; margin-bottom: 12px;">
+                    <div class="comment-avatar" style="margin-right: 10px;">
+                      <img src="/images/default-avatar-34.png" width="32" height="32" style="border-radius: 50%;">
+                    </div>
+                    <div class="media-body" style="flex: 1;">
+                      <div class="meta-info" style="font-size: 12px; color: #586069; margin-bottom: 4px;">
+                        <strong style="color: #24292e;" th:text="${comment.author?.loginId}">작성자</strong>
+                        <span th:text="${#temporals.format(comment.createdDate, 'yyyy-MM-dd HH:mm')}">작성일</span>
+                        <span class="edit pull-right" th:if="${currentUser != null && comment.author?.id == currentUser.id}">
+                          <button type="button" class="btn-transparent btn-comment-delete" th:data-comment-id="${comment.id}" style="background: none; border: none; font-size: 13px; cursor: pointer; color: #cb2431;">
+                            <i class="yobicon-trash"></i>
+                          </button>
+                        </span>
+                      </div>
+                      <div class="comment-body markdown-wrap" style="font-size: 13px; color: #24292e; white-space: pre-wrap;" th:text="${comment.contents}">댓글 내용</div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Global comment write form -->
+            <div class="write-comment-form" th:if="${currentUser != null}">
+              <form th:action="@{/{owner}/{projectName}/commit/{commitId}/comments(owner=${project.owner}, projectName=${project.name}, commitId=${commit.id})}" method="post">
+                <div class="write-comment-box" style="display: flex; flex-direction: column; gap: 8px;">
+                  <textarea name="contents" placeholder="이 커밋에 전역 댓글을 남기세요..." style="width: 100%; height: 80px; padding: 10px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical;" required></textarea>
+                  <div style="text-align: right;">
+                    <button type="submit" class="ybtn ybtn-success">댓글 등록</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -90,5 +191,98 @@
 
   <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
+
+<script th:inline="javascript">
+document.addEventListener("DOMContentLoaded", function() {
+  const currentUser = [[${currentUser != null}]];
+  const postUrl = [[@{/{owner}/{projectName}/commit/{commitId}/comments(owner=${project.owner}, projectName=${project.name}, commitId=${commit.id})}]];
+
+  // hover effect for add-comment button
+  document.querySelectorAll(".diff-line-tr").forEach(tr => {
+    const btnCell = tr.querySelector(".add-comment-btn-cell");
+    if (btnCell) {
+      btnCell.style.color = "transparent";
+      tr.addEventListener("mouseenter", () => {
+        if (currentUser) btnCell.style.color = "#0366d6";
+      });
+      tr.addEventListener("mouseleave", () => {
+        btnCell.style.color = "transparent";
+      });
+      
+      btnCell.addEventListener("click", function(e) {
+        if (!currentUser) return;
+        e.stopPropagation();
+        
+        // check if form already open
+        let nextTr = tr.nextElementSibling;
+        if (nextTr && nextTr.classList.contains("comments-form-tr")) {
+          nextTr.remove();
+          return;
+        }
+        
+        const path = tr.getAttribute("th:data-path") || tr.getAttribute("data-path");
+        const lineNumA = tr.getAttribute("data-line-num-a");
+        const lineNumB = tr.getAttribute("data-line-num-b");
+        const kind = tr.getAttribute("data-kind");
+        
+        let side = "B";
+        let lineVal = lineNumB;
+        if (kind === "REMOVE") {
+          side = "A";
+          lineVal = lineNumA;
+        } else if (kind === "ADD") {
+          side = "B";
+          lineVal = lineNumB;
+        } else {
+          side = "B";
+          lineVal = lineNumB || lineNumA;
+        }
+        
+        const formHtml = `
+          <tr class="comments-form-tr">
+            <td colspan="3" style="padding: 10px; background-color: #fafbfc; border-top: 1px solid #e1e4e8; border-bottom: 1px solid #e1e4e8;">
+              <div class="write-comment-form">
+                <form action="${postUrl}" method="post">
+                  <input type="hidden" name="path" value="${path}">
+                  <input type="hidden" name="startSide" value="${side}">
+                  <input type="hidden" name="startLine" value="${lineVal}">
+                  <input type="hidden" name="startColumn" value="0">
+                  <input type="hidden" name="endSide" value="${side}">
+                  <input type="hidden" name="endLine" value="${lineVal}">
+                  <input type="hidden" name="endColumn" value="0">
+                  
+                  <div style="display: flex; align-items: flex-start;">
+                    <textarea name="contents" placeholder="새 코드 댓글을 입력하세요..." style="width: 100%; height: 50px; padding: 6px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical; margin-right: 10px; font-size: 12px;" required></textarea>
+                    <button type="submit" class="ybtn ybtn-success ybtn-small" style="padding: 4px 10px;">등록</button>
+                  </div>
+                </form>
+              </div>
+            </td>
+          </tr>
+        `;
+        tr.insertAdjacentHTML("afterend", formHtml);
+      });
+    }
+  });
+
+  // delete comment action
+  document.querySelectorAll(".btn-comment-delete").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const commentId = this.getAttribute("data-comment-id");
+      if (confirm("댓글을 삭제하시겠습니까?")) {
+        fetch("/comments/REVIEW_COMMENT/" + commentId, {
+          method: "DELETE"
+        }).then(res => {
+          if (res.ok) {
+            location.reload();
+          } else {
+            alert("댓글 삭제에 실패했습니다.");
+          }
+        });
+      }
+    });
+  });
+});
+</script>
 </body>
 </html>
