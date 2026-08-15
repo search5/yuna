@@ -14,6 +14,7 @@ import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
+import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 
 @Controller
@@ -39,21 +40,8 @@ class ReviewThreadController(
 
         if (format == "xls") {
             val threads = reviewThreadService.getReviewThreads(project, condition)
-            val csvBuilder = StringBuilder()
-            csvBuilder.append('\ufeff')
-            csvBuilder.append("No,COMMIT ID,REVIEW ID,REVIEW TITLE,Thread Author,REVIEW STATE,Date\n")
-            threads.forEachIndexed { index, thread ->
-                val commitId = thread.commitId ?: ""
-                val firstComment = if (thread.reviewComments.isNotEmpty()) thread.getFirstReviewComment().contents else ""
-                val authorName = thread.author?.name ?: ""
-                val state = thread.state.name
-                val createdDate = thread.createdDate.toString()
-
-                csvBuilder.append("${index + 1},$commitId,${thread.id},\"${firstComment.replace("\"", "\"\"")}\",\"$authorName\",$state,$createdDate\n")
-            }
-
-            val fileBytes = csvBuilder.toString().toByteArray(StandardCharsets.UTF_8)
-            val filename = "${project.name}_reviews.csv"
+            val fileBytes = excelFrom(threads)
+            val filename = "${project.name}_reviews_${java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss").format(java.time.LocalDateTime.now())}.xls"
 
             return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
@@ -86,5 +74,83 @@ class ReviewThreadController(
         model.addAttribute("countClosed", countClosed)
 
         return "reviewthread/list"
+    }
+
+    private fun excelFrom(commentThreads: List<com.github.search5.yona.domain.pullrequest.CommentThread>): ByteArray {
+        val bos = ByteArrayOutputStream()
+        val workbook = jxl.Workbook.createWorkbook(bos)
+        val todayStr = java.time.Instant.now().toEpochMilli().toString()
+        val sheet = workbook.createSheet(todayStr, 0)
+
+        val headerCellFormat = getHeaderCellFormat()
+        val bodyCellFormat = getBodyCellFormat()
+        val dateCellFormat = getDateCellFormat()
+
+        val titles = arrayOf("No", "COMMIT ID", "REVIEW ID", "REVIEW TITLE", "Thread Author", "Response Text", "Response", "REVIEW STATE", "is PullRequest?", "Date")
+
+        for (i in titles.indices) {
+            sheet.addCell(jxl.write.Label(i, 0, titles[i], headerCellFormat))
+            sheet.setColumnView(i, 20)
+        }
+
+        var rowNumber = 0
+        for (idx in commentThreads.indices) {
+            val commentThread = commentThreads[idx]
+            val commitId = commentThread.commitId ?: ""
+            val threadFirstComment = commentThread.getFirstReviewComment().contents
+            for (j in commentThread.reviewComments.indices) {
+                val comment = commentThread.reviewComments[j]
+                var columnPos = 0
+                val responseComment = if (threadFirstComment == comment.contents) "" else comment.contents
+                
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, (rowNumber + 1).toString(), bodyCellFormat))
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, if (commitId.length >= 7) commitId.substring(0, 7) else commitId, bodyCellFormat))
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, commentThread.id.toString(), bodyCellFormat))
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, if (responseComment.isEmpty()) threadFirstComment else "", bodyCellFormat))
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, if (responseComment.isEmpty()) (commentThread.author?.name ?: "") else "", bodyCellFormat))
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, responseComment, bodyCellFormat))
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, if (responseComment.isNotEmpty()) (comment.author?.name ?: "") else "", bodyCellFormat))
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, commentThread.state.toString(), bodyCellFormat))
+                sheet.addCell(jxl.write.Label(columnPos++, rowNumber + 1, commentThread.isOnPullRequest().toString(), bodyCellFormat))
+                sheet.addCell(jxl.write.DateTime(columnPos++, rowNumber + 1, java.util.Date.from(comment.createdDate), dateCellFormat))
+                rowNumber++
+            }
+        }
+        workbook.write()
+        try {
+            workbook.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return bos.toByteArray()
+    }
+
+    private fun getHeaderCellFormat(): jxl.write.WritableCellFormat {
+        val headerFont = jxl.write.WritableFont(jxl.write.WritableFont.ARIAL, 14, jxl.write.WritableFont.BOLD, false, jxl.format.UnderlineStyle.NO_UNDERLINE, jxl.format.Colour.BLACK, jxl.format.ScriptStyle.NORMAL_SCRIPT)
+        val headerCell = jxl.write.WritableCellFormat(headerFont)
+        headerCell.setBorder(jxl.format.Border.ALL, jxl.format.BorderLineStyle.DOUBLE)
+        headerCell.alignment = jxl.format.Alignment.CENTRE
+        return headerCell
+    }
+
+    private fun getBodyCellFormat(): jxl.write.WritableCellFormat {
+        val baseFont = jxl.write.WritableFont(jxl.write.WritableFont.ARIAL, 12, jxl.write.WritableFont.NO_BOLD, false, jxl.format.UnderlineStyle.NO_UNDERLINE, jxl.format.Colour.BLACK, jxl.format.ScriptStyle.NORMAL_SCRIPT)
+        val cellFormat = jxl.write.WritableCellFormat(baseFont)
+        cellFormat.setBorder(jxl.format.Border.ALL, jxl.format.BorderLineStyle.THIN)
+        cellFormat.wrap = true
+        cellFormat.verticalAlignment = jxl.format.VerticalAlignment.TOP
+        return cellFormat
+    }
+
+    private fun getDateCellFormat(): jxl.write.WritableCellFormat {
+        val baseFont = jxl.write.WritableFont(jxl.write.WritableFont.ARIAL, 12, jxl.write.WritableFont.NO_BOLD, false, jxl.format.UnderlineStyle.NO_UNDERLINE, jxl.format.Colour.BLACK, jxl.format.ScriptStyle.NORMAL_SCRIPT)
+        val valueFormatDate = jxl.write.DateFormat("yyyy-MM-dd HH:mm")
+        val cellFormat = jxl.write.WritableCellFormat(valueFormatDate)
+        cellFormat.setFont(baseFont)
+        cellFormat.setShrinkToFit(true)
+        cellFormat.setBorder(jxl.format.Border.ALL, jxl.format.BorderLineStyle.THIN)
+        cellFormat.alignment = jxl.format.Alignment.CENTRE
+        cellFormat.verticalAlignment = jxl.format.VerticalAlignment.TOP
+        return cellFormat
     }
 }
