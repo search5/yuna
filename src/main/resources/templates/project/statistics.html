@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${project.name} + ' - Yona'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .project-sidebar {
+      background: #fafbfc;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 15px;
+  }
+  .menu-list a {
+      display: block;
+      padding: 8px 10px;
+      color: #0366d6;
+      text-decoration: none;
+      border-bottom: 1px solid #eaecef;
+  }
+  .menu-list a:hover {
+      background-color: #f1f8ff;
+  }
+  .member-avatar {
+      border-radius: 50%;
+      margin-right: 5px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+        <span th:if="${project.projectScope == T(com.github.search5.yona.domain.project.ProjectScope).PRIVATE}" class="label label-important" style="font-size: 12px; margin-left: 10px;">Private</span>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="row">
+      <!-- 본문 -->
+      <div class="col-md-9">
+        <div style="background: #fff; border: 1px solid #d8dee2; border-radius: 3px; padding: 25px; margin-bottom: 20px;">
+          <h1>Under Construction</h1>
+        </div>
+      </div>
+
+      <!-- 우측 사이드바 -->
+      <div class="col-md-3">
+        <div class="project-sidebar" style="margin-bottom: 20px;">
+          <h4>바로가기</h4>
+          <div class="menu-list" style="margin-top: 10px;">
+            <a th:href="@{/{owner}/{projectName}/issues(owner=${project.owner}, projectName=${project.name})}"><i class="yobicon-comments"></i> 이슈 목록</a>
+            <a th:href="@{/{owner}/{projectName}/posts(owner=${project.owner}, projectName=${project.name})}"><i class="yobicon-post"></i> 자유게시판</a>
+            <a th:href="@{/{owner}/{projectName}/milestones(owner=${project.owner}, projectName=${project.name})}"><i class="yobicon-milestone"></i> 마일스톤</a>
+            <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name})}"><i class="yobicon-pullrequest"></i> 풀 리퀘스트</a>
+            <a th:href="@{/{owner}/{projectName}/members(owner=${project.owner}, projectName=${project.name})}"><i class="yobicon-users"></i> 멤버 관리</a>
+            <a th:href="@{/{owner}/{projectName}/setting(owner=${project.owner}, projectName=${project.name})}"><i class="yobicon-cog"></i> 설정</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

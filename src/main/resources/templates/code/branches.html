@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="'브랜치 목록 - ' + ${project.owner} + '/' + ${project.name} + ' - Yona'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<!-- CSRF Meta Tags -->
+<meta name="_csrf" th:content="${_csrf?.token}"/>
+<meta name="_csrf_header" th:content="${_csrf?.headerName}"/>
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .code-browse-wrap {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 25px;
+  }
+  .headBranch {
+      background-color: #2c974b;
+      color: #fff;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: bold;
+      border-radius: 3px;
+  }
+  .branchName {
+      font-weight: bold;
+      font-size: 14px;
+  }
+  .commitId {
+      font-family: monospace;
+      font-weight: bold;
+      color: #0366d6;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="code-browse-wrap">
+      <ul class="nav nav-tabs" style="margin-bottom:20px;">
+        <li>
+          <a th:href="@{/projects/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}">파일</a>
+        </li>
+        <li>
+          <a th:href="@{/projects/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}">커밋</a>
+        </li>
+        <li class="active">
+          <a th:href="@{/projects/{owner}/{name}/branches(owner=${project.owner}, name=${project.name})}">브랜치</a>
+        </li>
+      </ul>
+
+      <table class="table table-hover branch-list-wrap">
+        <thead>
+          <tr>
+            <th>브랜치 이름</th>
+            <th>최신 커밋</th>
+            <th>작성자</th>
+            <th>관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- 1. 기본(Head) 브랜치 렌더링 -->
+          <tr th:if="${headBranch != null}" class="head warning">
+            <td class="branchName">
+              <a th:href="@{/projects/{owner}/{name}/code(owner=${project.owner}, name=${project.name}, path='', branch=${headBranch.shortName})}" th:text="${headBranch.shortName}">default</a>
+              <span class="headBranch ml10">기본 브랜치</span>
+            </td>
+            <td class="commit">
+              <a th:href="@{/projects/{owner}/{name}/commit/{commitId}(owner=${project.owner}, name=${project.name}, commitId=${headBranch.headCommit.id})}"
+                 class="commitId" th:title="${headBranch.headCommit.id}" th:text="${headBranch.headCommit.shortId}">shortId</a>
+              <span class="date" th:text="${#dates.format(headBranch.headCommit.committerDate, 'yyyy-MM-dd HH:mm')}">date</span>
+            </td>
+            <td th:text="${headBranch.user != null ? headBranch.user.name : 'Unknown'}">작성자</td>
+            <td>-</td>
+          </tr>
+
+          <!-- 2. 나머지 브랜치 리스트 렌더링 -->
+          <tr th:each="branch : ${allBranches}">
+            <td class="branchName">
+              <a th:href="@{/projects/{owner}/{name}/code(owner=${project.owner}, name=${project.name}, path='', branch=${branch.shortName})}" th:text="${branch.shortName}">branchName</a>
+            </td>
+            <td class="commit">
+              <a th:href="@{/projects/{owner}/{name}/commit/{commitId}(owner=${project.owner}, name=${project.name}, commitId=${branch.headCommit.id})}"
+                 class="commitId" th:title="${branch.headCommit.id}" th:text="${branch.headCommit.shortId}">shortId</a>
+              <span class="date" th:text="${#dates.format(branch.headCommit.committerDate, 'yyyy-MM-dd HH:mm')}">date</span>
+            </td>
+            <td th:text="${branch.user != null ? branch.user.name : 'Unknown'}">작성자</td>
+            <td class="actions">
+              <!-- 기본 브랜치로 설정 버튼 -->
+              <button type="button"
+                      class="btn btn-default btn-xs"
+                      data-request-method="post"
+                      th:data-request-uri="@{/projects/{owner}/{name}/code/{branch}/setAsDefault(owner=${project.owner}, name=${project.name}, branch=${branch.shortName})}">
+                기본 브랜치로 설정
+              </button>
+
+              <!-- 삭제 버튼 -->
+              <button type="button"
+                      class="btn btn-danger btn-xs"
+                      data-request-method="delete"
+                      th:data-request-uri="@{/projects/{owner}/{name}/code/{branch}(owner=${project.owner}, name=${project.name}, branch=${branch.shortName})}">
+                삭제
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="/webjars/jquery/jquery.min.js"></script>
+<script src="/bootstrap/js/bootstrap.min.js"></script>
+<script type="text/javascript">
+  $(document).ready(function(){
+      $(document).on('click', '[data-request-method]', function(e) {
+          e.preventDefault();
+          var $el = $(this);
+          var method = $el.data('request-method');
+          var uri = $el.data('request-uri');
+          if (!uri) return;
+          
+          var confirmMsg = method === 'delete' ? '정말로 이 브랜치를 삭제하시겠습니까?' : '기본 브랜치로 변경하시겠습니까?';
+          if (confirm(confirmMsg)) {
+              var form = $('<form></form>');
+              form.attr('method', 'post');
+              form.attr('action', uri);
+              
+              if (method === 'delete') {
+                  form.append('<input type="hidden" name="_method" value="DELETE" />');
+              }
+              
+              var csrfToken = $("meta[name='_csrf']").attr("content");
+              if (csrfToken) {
+                  form.append('<input type="hidden" name="_csrf" value="' + csrfToken + '" />');
+              }
+              $(document.body).append(form);
+              form.submit();
+          }
+      });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+package com.github.search5.yona.domain.project
+
+import org.eclipse.jgit.lib.RepositoryBuilder
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Service
+import java.io.File
+
+@Service
+class GitServiceImpl(
+    @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
+    private val baseDir: String
+) : GitService {
+
+    override fun createRepository(owner: String, name: String): File {
+        val repoDir = getRepositoryPath(owner, name)
+        if (repoDir.exists()) {
+            return repoDir
+        }
+        val repository = RepositoryBuilder()
+            .setGitDir(repoDir)
+            .setBare()
+            .build()
+        repository.create(true)
+        return repoDir
+    }
+
+    override fun getRepositoryPath(owner: String, name: String): File {
+        return File(baseDir, "$owner/$name.git")
+    }
+
+    override fun deleteRepository(owner: String, name: String): Boolean {
+        val repoDir = getRepositoryPath(owner, name)
+        return if (repoDir.exists()) {
+            repoDir.deleteRecursively()
+        } else {
+            false
+        }
+    }
+
+    override fun cloneRepository(gitUrl: String, owner: String, name: String, authId: String?, authPw: String?): File {
+        val repoDir = getRepositoryPath(owner, name)
+        if (repoDir.exists()) {
+            repoDir.deleteRecursively()
+        }
+        val cloneCommand = org.eclipse.jgit.api.Git.cloneRepository()
+            .setURI(gitUrl)
+            .setDirectory(repoDir)
+            .setCloneAllBranches(true)
+            .setBare(true)
+
+        if (!authId.isNullOrEmpty() || !authPw.isNullOrEmpty()) {
+            cloneCommand.setCredentialsProvider(
+                org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider(authId ?: "", authPw ?: "")
+            )
+        }
+
+        cloneCommand.call().use { git ->
+            // resource close
+        }
+        return repoDir
+    }
+}

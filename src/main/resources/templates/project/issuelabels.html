@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${project.name} + ' - 이슈 라벨 설정'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .setting-container {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 20px;
+  }
+  .label-preset-colors {
+      margin-top: 10px;
+      margin-bottom: 10px;
+  }
+  .btn-preset-color {
+      width: 24px;
+      height: 24px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      margin-right: 5px;
+      cursor: pointer;
+  }
+  .label-item {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 3px;
+      color: #fff;
+      font-weight: bold;
+      font-size: 13px;
+      margin-right: 10px;
+      margin-bottom: 10px;
+  }
+  .label-item .delete-label-btn {
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-weight: bold;
+      margin-left: 8px;
+      cursor: pointer;
+      opacity: 0.7;
+  }
+  .label-item .delete-label-btn:hover {
+      opacity: 1;
+  }
+  .category-box {
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 20px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="row">
+      <div class="col-md-9">
+        <div class="setting-container">
+          <div th:replace="~{project/setting_menu :: menu(${project}, 'labels')}"></div>
+          
+          <h3 style="margin-top: 0; margin-bottom: 20px;">이슈 라벨 설정</h3>
+
+          <!-- 신규 카테고리 생성 폼 -->
+          <div style="border: 1px solid #d8dee2; border-radius: 3px; padding: 15px; margin-bottom: 20px; background: #fafbfc;">
+            <h4 style="margin-top: 0; margin-bottom: 15px;">새 카테고리 추가</h4>
+            <form id="create-category-form" class="form-inline">
+              <div class="form-group">
+                <input type="text" id="categoryName" class="form-control" placeholder="카테고리 이름 (예: State, Type)" required style="width: 250px;">
+              </div>
+              <div class="checkbox" style="margin-left: 10px; margin-right: 15px;">
+                <label>
+                  <input type="checkbox" id="isExclusive"> 다중 선택 방지 (단일 라벨만 허용)
+                </label>
+              </div>
+              <button type="submit" class="btn btn-default">카테고리 생성</button>
+            </form>
+          </div>
+
+          <!-- 신규 라벨 생성 폼 -->
+          <div style="border: 1px solid #d8dee2; border-radius: 3px; padding: 15px; margin-bottom: 30px; background: #fafbfc;">
+            <h4 style="margin-top: 0; margin-bottom: 15px;">새 라벨 추가</h4>
+            <form id="create-label-form">
+              <div class="row">
+                <div class="col-md-4">
+                  <div class="form-group">
+                    <label for="labelCategoryId">카테고리</label>
+                    <select id="labelCategoryId" class="form-control" required>
+                      <option value="">-- 카테고리 선택 --</option>
+                      <!-- 비동기로 혹은 Thymeleaf를 활용하여 카테고리 주입 -->
+                    </select>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group">
+                    <label for="labelName">라벨 이름</label>
+                    <input type="text" id="labelName" class="form-control" placeholder="라벨 이름" required>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="form-group">
+                    <label for="labelColor">라벨 색상 (HEX)</label>
+                    <input type="text" id="labelColor" class="form-control" value="#2196f3" required placeholder="#ffffff">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 프리셋 색상 선택기 -->
+              <div class="label-preset-colors">
+                <button type="button" class="btn-preset-color" style="background-color:#f44336;" data-color="#f44336"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#e91e63;" data-color="#e91e63"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#9c27b0;" data-color="#9c27b0"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#3f51b5;" data-color="#3f51b5"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#2196f3;" data-color="#2196f3"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#00bcd4;" data-color="#00bcd4"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#009688;" data-color="#009688"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#4caf50;" data-color="#4caf50"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#ffeb3b;" data-color="#ffeb3b"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#ff9800;" data-color="#ff9800"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#ff5722;" data-color="#ff5722"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#795548;" data-color="#795548"></button>
+                <button type="button" class="btn-preset-color" style="background-color:#9e9e9e;" data-color="#9e9e9e"></button>
+              </div>
+
+              <button type="submit" class="btn btn-primary">라벨 추가</button>
+            </form>
+          </div>
+
+          <!-- 라벨 및 카테고리 렌더링 리스트 영역 -->
+          <div id="labels-list-container">
+            <!-- 비동기로 로드되거나, 목록을 그리는 컨텐츠가 추가됩니다. -->
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script th:inline="javascript">
+  $(document).ready(function() {
+      var projectId = [[${project.id}]];
+
+      // 1. 라벨 및 카테고리 목록 조회 및 렌더링 함수
+      function loadLabels() {
+          $.ajax({
+              url: '/api/projects/' + projectId + '/labels',
+              type: 'GET',
+              success: function(data) {
+                  var container = $("#labels-list-container");
+                  var select = $("#labelCategoryId");
+                  container.empty();
+                  select.empty().append('<option value="">-- 카테고리 선택 --</option>');
+
+                  var categories = data.categories || [];
+                  var labels = data.labels || [];
+
+                  if (categories.length === 0) {
+                      container.html('<div class="text-center" style="color: #999; padding: 20px;">이슈 라벨 카테고리가 존재하지 않습니다. 먼저 카테고리를 생성하세요.</div>');
+                      return;
+                  }
+
+                  // 카테고리별로 라벨 분류하여 렌더링
+                  categories.forEach(function(cat) {
+                      // 셀렉트 박스에도 옵션 추가
+                      select.append('<option value="' + cat.id + '">' + cat.name + '</option>');
+
+                      var catBox = $('<div class="category-box"></div>');
+                      var header = $('<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;"></div>');
+                      
+                      var title = $('<h4 style="margin: 0;">' + cat.name + '</h4>');
+                      if (cat.isExclusive) {
+                          title.append(' <span class="label label-warning" style="font-size: 10px;">단일 선택</span>');
+                      }
+                      header.append(title);
+
+                      var deleteCatBtn = $('<button class="btn btn-xs btn-danger delete-category-btn" data-id="' + cat.id + '">카테고리 삭제</button>');
+                      header.append(deleteCatBtn);
+                      catBox.append(header);
+
+                      // 해당 카테고리에 속한 라벨들 필터링
+                      var catLabels = labels.filter(function(lbl) {
+                          return lbl.category && lbl.category.id === cat.id;
+                      });
+
+                      var labelContainer = $('<div style="margin-top: 10px;"></div>');
+                      if (catLabels.length === 0) {
+                          labelContainer.append('<span style="color: #999; font-size: 13px;">이 카테고리에 정의된 라벨이 없습니다.</span>');
+                      } else {
+                          catLabels.forEach(function(lbl) {
+                              var labelEl = $('<span class="label-item" style="background-color: ' + lbl.color + ';"></span>');
+                              labelEl.text(lbl.name);
+                              var delBtn = $('<button class="delete-label-btn" data-id="' + lbl.id + '">&times;</button>');
+                              labelEl.append(delBtn);
+                              labelContainer.append(labelEl);
+                          });
+                      }
+                      catBox.append(labelContainer);
+                      container.append(catBox);
+                  });
+              },
+              error: function(xhr, status, error) {
+                  alert("라벨 조회 실패: " + xhr.responseText);
+              }
+          });
+      }
+
+      // 초기 로딩
+      loadLabels();
+
+      // 프리셋 색상 클릭 시 색상 입력란에 채우기
+      $(".btn-preset-color").click(function() {
+          var color = $(this).data("color");
+          $("#labelColor").val(color);
+      });
+
+      // 2. 카테고리 생성
+      $("#create-category-form").submit(function(e) {
+          e.preventDefault();
+          var name = $("#categoryName").val();
+          var isExclusive = $("#isExclusive").is(":checked");
+
+          $.ajax({
+              url: '/api/projects/' + projectId + '/labels/categories',
+              type: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify({
+                  name: name,
+                  isExclusive: isExclusive
+              }),
+              success: function(result) {
+                  alert("카테고리가 추가되었습니다.");
+                  $("#categoryName").val('');
+                  $("#isExclusive").prop('checked', false);
+                  loadLabels();
+              },
+              error: function(xhr, status, error) {
+                  alert("카테고리 추가 실패: " + xhr.responseText);
+              }
+          });
+      });
+
+      // 3. 라벨 생성
+      $("#create-label-form").submit(function(e) {
+          e.preventDefault();
+          var categoryId = $("#labelCategoryId").val();
+          var name = $("#labelName").val();
+          var color = $("#labelColor").val();
+
+          if (!categoryId) {
+              alert("카테고리를 선택해야 합니다.");
+              return;
+          }
+
+          $.ajax({
+              url: '/api/projects/' + projectId + '/labels',
+              type: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify({
+                  categoryId: parseInt(categoryId),
+                  name: name,
+                  color: color
+              }),
+              success: function(result) {
+                  alert("라벨이 추가되었습니다.");
+                  $("#labelName").val('');
+                  loadLabels();
+              },
+              error: function(xhr, status, error) {
+                  alert("라벨 추가 실패: " + xhr.responseText);
+              }
+          });
+      });
+
+      // 4. 카테고리 삭제
+      $(document).on("click", ".delete-category-btn", function() {
+          var catId = $(this).data("id");
+          if (confirm("정말 이 카테고리를 삭제하시겠습니까? 관련 라벨들도 함께 영향을 받을 수 있습니다.")) {
+              $.ajax({
+                  url: '/api/projects/' + projectId + '/labels/categories/' + catId,
+                  type: 'DELETE',
+                  success: function(result) {
+                      alert("카테고리가 삭제되었습니다.");
+                      loadLabels();
+                  },
+                  error: function(xhr, status, error) {
+                      alert("카테고리 삭제 실패: " + xhr.responseText);
+                  }
+              });
+          }
+      });
+
+      // 5. 라벨 삭제
+      $(document).on("click", ".delete-label-btn", function() {
+          var labelId = $(this).data("id");
+          if (confirm("정말 이 라벨을 삭제하시겠습니까?")) {
+              $.ajax({
+                  url: '/api/projects/' + projectId + '/labels/' + labelId,
+                  type: 'DELETE',
+                  success: function(result) {
+                      alert("라벨이 삭제되었습니다.");
+                      loadLabels();
+                  },
+                  error: function(xhr, status, error) {
+                      alert("라벨 삭제 실패: " + xhr.responseText);
+                  }
+              });
+          }
+      });
+  });
+</script>
+</body>
+</html>

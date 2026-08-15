@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head(|${project.name} - 커밋 상세|)}">
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <div th:replace="~{site/layout :: gnb}"></div>
+
+  <div class="site-breadcrumb-outer">
+    <div class="site-breadcrumb-inner">
+      <div class="title_area">
+        <ul class="nav nav-tabs" style="margin-bottom:20px;">
+          <li>
+            <a th:href="@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}" th:text="#{code.files}">Files</a>
+          </li>
+          <li class="active">
+            <a th:href="@{/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}" th:text="#{code.commits}">Commits</a>
+          </li>
+          <li th:if="${project.vcs == 'GIT'}">
+            <a th:href="@{/{owner}/{name}/branches(owner=${project.owner}, name=${project.name})}" th:text="#{title.branches}">Branches</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-wrap-outer">
+    <div class="project-page-wrap">
+      <div class="codediff-wrap">
+        <div class="diffs-wrap">
+          <!-- Commit Info -->
+          <div class="commitInfo" style="background-color: #fafbfc; border: 1px solid #d1d5da; padding: 15px; border-radius: 3px; margin-bottom: 20px;">
+            <div class="commitAuthor">
+              <span class="avatar-wrap smaller">
+                <img src="/images/default-avatar-128.png" width="32" height="32">
+              </span>
+              <strong th:text="${commit.authorName}">Author Name</strong>
+              <span class="ago" th:text="${commit.authorDate != null ? #dates.format(commit.authorDate, 'yyyy-MM-dd HH:mm') : ''}">Date</span>
+            </div>
+            <div class="commitMsg-wrap" style="margin-top: 10px;">
+              <pre style="background: none; border: none; padding: 0; margin: 0; font-family: inherit; font-size: inherit; white-space: pre-wrap;" th:text="${commit.message}">Commit Message</pre>
+            </div>
+            <div class="commitId-wrap" style="margin-top: 10px; font-family: monospace;">
+              <strong class="commitId" th:text="'@' + ${commit.id}">Commit ID</strong>
+            </div>
+          </div>
+
+          <!-- Diff Body -->
+          <div class="diff-body">
+            <div class="diff-partial-outer" th:each="diff : ${fileDiffs}" th:id="${diff.pathB != null ? diff.pathB : diff.pathA}">
+              <div class="diff-partial-inner">
+                <div class="diff-partial-meta clearfix" style="background-color: #fafbfc; border: 1px solid #d1d5da; border-bottom: none; padding: 10px; border-top-left-radius: 3px; border-top-right-radius: 3px; font-family: monospace;">
+                  <span th:text="${diff.pathB != null ? diff.pathB : diff.pathA}">파일명</span>
+                </div>
+                <div class="diff-partial-code" style="border: 1px solid #d1d5da; border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; overflow: auto; margin-bottom: 20px;">
+                  <table class="diff-container show-comments" style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 12px;">
+                    <!-- ADD -->
+                    <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).ADD}">
+                      <tr th:each="i : ${#numbers.sequence(0, diff.b.size() - 1)}" class="add diff-line-tr" style="background-color: #e6ffed;">
+                        <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'+' + ${diff.b.getString(i)}"></pre></td>
+                      </tr>
+                    </th:block>
+                    <!-- DELETE -->
+                    <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).DELETE}">
+                      <tr th:each="i : ${#numbers.sequence(0, diff.a.size() - 1)}" class="remove diff-line-tr" style="background-color: #ffeef0;">
+                        <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'-' + ${diff.a.getString(i)}"></pre></td>
+                      </tr>
+                    </th:block>
+                    <!-- MODIFY / RENAME -->
+                    <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).MODIFY or diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).RENAME}">
+                      <th:block th:if="${!diff.isBinaryA and !diff.isBinaryB and diff.getHunks() != null}" th:each="hunk : ${diff.getHunks()}">
+                        <tr th:each="line : ${hunk.lines}" class="diff-line-tr"
+                            th:style="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? 'background-color: #e6ffed;' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? 'background-color: #ffeef0;' : '')}">
+                          <td class="code" style="padding-left: 10px;">
+                            <pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;"
+                                 th:text="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? '+' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? '-' : ' ')} + ${line.content}"></pre>
+                          </td>
+                        </tr>
+                      </th:block>
+                    </th:block>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer th:replace="~{site/layout :: footer}"></footer>
+</div>
+</body>
+</html>

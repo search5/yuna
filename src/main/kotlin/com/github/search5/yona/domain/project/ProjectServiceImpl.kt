@@ -1,0 +1,310 @@
+package com.github.search5.yona.domain.project
+
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
+import com.github.search5.yona.domain.vcs.RepositoryService
+import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.role.RoleRepository
+import com.github.search5.yona.domain.role.RoleType
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.security.SecureRandom
+import java.util.Optional
+
+@Service
+@Transactional(readOnly = true)
+class ProjectServiceImpl(
+    private val projectRepository: ProjectRepository,
+    private val projectUserRepository: ProjectUserRepository,
+    private val repositoryService: RepositoryService,
+    private val userRepository: UserRepository,
+    private val projectTransferRepository: ProjectTransferRepository,
+    private val roleRepository: RoleRepository
+) : ProjectService {
+
+    override fun findByOwnerAndName(owner: String, name: String): Project? {
+        return projectRepository.findByOwnerAndName(owner, name).orElse(null)
+    }
+
+    override fun findProjectsByOwner(owner: String): List<Project> {
+        return projectRepository.findByOwner(owner)
+    }
+
+    @Transactional
+    override fun createProject(project: Project, creator: User): Project {
+        if (exists(project.owner ?: "", project.name)) {
+            throw IllegalArgumentException("Already exists project name: ${project.owner}/${project.name}")
+        }
+        project.createdDate = Instant.now()
+        project.siteurl = "http://localhost:9000/${project.name}"
+        val savedProject = projectRepository.save(project)
+        roleRepository.findById(RoleType.MANAGER.roleType).ifPresent { managerRole ->
+            val projectUser = ProjectUser(
+                project = savedProject,
+                user = creator,
+                role = managerRole
+            )
+            projectUserRepository.save(projectUser)
+            savedProject.projectUsers.add(projectUser)
+        }
+        return savedProject
+    }
+
+    override fun exists(owner: String, name: String): Boolean {
+        return projectRepository.findByOwnerAndName(owner, name).isPresent
+    }
+
+    override fun isMember(projectId: Long, loginId: String): Boolean {
+        val project = projectRepository.findById(projectId).orElse(null) ?: return false
+        val user = userRepository.findByLoginId(loginId).orElse(null)
+        if (user != null && user.isSiteManager) return true
+        if (project.owner == loginId) return true
+        return projectUserRepository.existsByProjectIdAndUserLoginId(projectId, loginId)
+    }
+
+    @Transactional
+    override fun updateProject(projectId: Long, param: UpdateProjectParam): Project {
+        val project = projectRepository.findById(projectId)
+            .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
+        project.overview = param.overview
+        project.projectScope = param.projectScope
+        project.isCodeAccessibleMemberOnly = param.isCodeAccessibleMemberOnly
+        project.isUsingReviewerCount = param.isUsingReviewerCount
+        project.defaultReviewerCount = param.defaultReviewerCount
+        
+        project.isCodeEnabled = param.isCodeEnabled
+        project.isIssueEnabled = param.isIssueEnabled
+        project.isPullRequestEnabled = param.isPullRequestEnabled
+        project.isReviewEnabled = param.isReviewEnabled
+        project.isMilestoneEnabled = param.isMilestoneEnabled
+        project.isBoardEnabled = param.isBoardEnabled
+
+        if (!param.defaultBranch.isNullOrBlank()) {
+            try {
+                val repository = repositoryService.getRepository(project)
+                repository.setDefaultBranch("refs/heads/${param.defaultBranch}")
+            } catch (e: Exception) {
+                // 저장소 기본 브랜치 세팅 에러 방어
+            }
+        }
+
+        return projectRepository.save(project)
+    }
+
+    @Transactional
+    override fun deleteProject(projectId: Long) {
+        val project = projectRepository.findById(projectId)
+            .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
+        
+        // 연관 멤버 삭제
+        val members = projectUserRepository.findByProjectId(projectId)
+        projectUserRepository.deleteAll(members)
+
+        projectRepository.delete(project)
+    }
+
+    @Transactional
+    override fun requestNewTransfer(projectId: Long, senderId: Long, destination: String): ProjectTransfer {
+        val project = projectRepository.findById(projectId)
+            .orElseThrow { IllegalArgumentException("Project not found") }
+        val sender = userRepository.findById(senderId)
+            .orElseThrow { IllegalArgumentException("Sender not found") }
+
+        // destination 적격성 검증 (유저 로그인 ID 또는 조직 이름)
+        val destUser = userRepository.findByLoginId(destination)
+        val destOrg = projectRepository.findByOwner(destination) // 기존에 조직 등으로 존재하거나 owner로 식별 가능한지
+        
+        val key = (1..50).map { (('a'..'z') + ('A'..'Z') + ('0'..'9')).random() }.joinToString("")
+        val newProjName = project.name // 단순 1:1 이관 이름 매핑
+
+        val existing = projectTransferRepository.findByProjectAndSenderAndDestination(project, sender, destination)
+        return if (existing.isPresent) {
+            val pt = existing.get()
+            pt.requested = Instant.now()
+            pt.confirmKey = key
+            projectTransferRepository.save(pt)
+        } else {
+            val pt = ProjectTransfer(
+                project = project,
+                sender = sender,
+                destination = destination,
+                confirmKey = key,
+                newProjectName = newProjName,
+                requested = Instant.now()
+            )
+            projectTransferRepository.save(pt)
+        }
+    }
+
+    @Transactional
+    override fun acceptTransfer(transferId: Long, confirmKey: String, acceptorId: Long) {
+        val limit = Instant.now().minusSeconds(86400) // 24시간 전 유효
+        val pt = projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(transferId, false, limit)
+            .orElseThrow { IllegalArgumentException("Invalid or expired transfer request") }
+
+        if (pt.confirmKey != confirmKey) {
+            throw IllegalArgumentException("Confirm key mismatch")
+        }
+
+        val project = pt.project
+        val originalOwner = project.owner ?: ""
+        val originalName = project.name
+        val newOwner = pt.destination
+        val newName = pt.newProjectName
+        val senderId = pt.sender.id!!
+
+        // 물리 저장소 폴더명 이동
+        val baseDir = if (project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN") {
+            "/tmp/yuna/svn" // 기본경로 활용
+        } else {
+            "/tmp/yuna/git"
+        }
+        val sourceDir = File(baseDir, "$originalOwner/$originalName.git")
+        val targetDir = File(baseDir, "$newOwner/$newName.git")
+        if (sourceDir.exists()) {
+            targetDir.parentFile.mkdirs()
+            sourceDir.renameTo(targetDir)
+        }
+
+        // DB 메타데이터 변경 반영
+        project.owner = newOwner
+        project.name = newName
+        projectRepository.save(project)
+
+        // 권한(Role) 변경 처리
+        // 1. 보낸 사람이 MANAGER였다면 MEMBER로 강등
+        val senderProjectUser = projectUserRepository.findByProjectIdAndUserId(project.id!!, senderId).orElse(null)
+        if (senderProjectUser != null && senderProjectUser.role.id == RoleType.MANAGER.roleType) {
+            val memberRole = roleRepository.findById(RoleType.MEMBER.roleType)
+                .orElseThrow { IllegalStateException("MEMBER role not found") }
+            senderProjectUser.role = memberRole
+            projectUserRepository.save(senderProjectUser)
+        }
+
+        // 2. 이관 목적지(destination) 사용자가 존재한다면 MANAGER 권한 부여
+        val newOwnerUser = userRepository.findByLoginId(newOwner).orElse(null)
+        if (newOwnerUser != null) {
+            val newOwnerProjectUser = projectUserRepository.findByProjectIdAndUserId(project.id!!, newOwnerUser.id!!).orElse(null)
+            val managerRole = roleRepository.findById(RoleType.MANAGER.roleType)
+                .orElseThrow { IllegalStateException("MANAGER role not found") }
+            if (newOwnerProjectUser != null) {
+                newOwnerProjectUser.role = managerRole
+                projectUserRepository.save(newOwnerProjectUser)
+            } else {
+                val projectUser = ProjectUser(
+                    project = project,
+                    user = newOwnerUser,
+                    role = managerRole
+                )
+                projectUserRepository.save(projectUser)
+            }
+        }
+
+        pt.accepted = true
+        projectTransferRepository.save(pt)
+    }
+
+    @Transactional
+    override fun forkProject(
+        projectId: Long,
+        forkerId: Long,
+        destinationOwner: String,
+        destinationName: String
+    ): Project {
+        val original = projectRepository.findById(projectId)
+            .orElseThrow { IllegalArgumentException("Original project not found") }
+        val forker = userRepository.findById(forkerId)
+            .orElseThrow { IllegalArgumentException("Forker user not found") }
+
+        val destOwner = if (destinationOwner.isNotBlank()) destinationOwner else forker.loginId
+        val destName = if (destinationName.isNotBlank()) destinationName else original.name
+
+        // 포크 대상 껍데기 프로젝트 엔티티 복제 생성
+        val forked = Project(
+            name = destName,
+            overview = original.overview,
+            vcs = original.vcs,
+            siteurl = "http://localhost:9000/$destName",
+            owner = destOwner,
+            projectScope = original.projectScope,
+            originalProject = original
+        )
+        val savedFork = projectRepository.save(forked)
+
+        // 포크 유저를 자식 프로젝트의 MANAGER 멤버로 매핑
+        val managerRole = roleRepository.findById(RoleType.MANAGER.roleType)
+            .orElseThrow { IllegalStateException("MANAGER role not found") }
+        val projectUser = ProjectUser(
+            project = savedFork,
+            user = forker,
+            role = managerRole
+        )
+        projectUserRepository.save(projectUser)
+
+        // 물리 Bare 깃 저장소를 하드링크(Hard Link) 방식으로 무복사 복제
+        val baseDir = if (original.vcs?.uppercase() == "SUBVERSION" || original.vcs?.uppercase() == "SVN") {
+            "/tmp/yuna/svn"
+        } else {
+            "/tmp/yuna/git"
+        }
+        val sourceDir = File(baseDir, "${original.owner}/${original.name}.git")
+        val targetDir = File(baseDir, "$destOwner/$destName.git")
+
+        if (sourceDir.exists()) {
+            cloneHardLinkedRepository(sourceDir, targetDir)
+        }
+
+        return savedFork
+    }
+
+    /**
+     * 원본 저장소를 하드링크 기반으로 무복사 복제합니다.
+     * 
+     * [제약 사항 및 한계 상황]:
+     * - 이 기능은 파일 시스템 수준의 하드링크(Hard Link)를 생성하므로, 원본 디렉토리와 대상 디렉토리가
+     *   물리적으로 동일한 디스크 파티션/볼륨에 위치해야만 정상 작동합니다.
+     * - 서로 다른 볼륨(Cross-device) 간 포크 시에는 java.nio.file.FileSystemException (EXDEV)이 발생하게 되며,
+     *   이 예외에 대한 별도의 런타임 물리 복사(Files.copy) 폴백 처리는 의도적으로 생략되었습니다.
+     */
+    private fun cloneHardLinkedRepository(source: File, target: File) {
+        if (!target.exists()) {
+            target.mkdirs()
+        }
+        source.listFiles()?.forEach { file ->
+            val targetFile = File(target, file.name)
+            if (file.isDirectory) {
+                cloneHardLinkedRepository(file, targetFile)
+            } else {
+                Files.createLink(targetFile.toPath(), file.toPath())
+            }
+        }
+    }
+
+    @Transactional
+    override fun changeVCS(projectId: Long): Project {
+        val project = projectRepository.findById(projectId).orElseThrow { IllegalArgumentException("Project not found") }
+
+        for (fork in project.forkingProjects) {
+            fork.originalProject = null
+            projectRepository.save(fork)
+        }
+        project.forkingProjects.clear()
+
+        try {
+            repositoryService.getRepository(project).delete()
+        } catch (e: Exception) {
+            // ignore
+        }
+
+        val currentVcs = project.vcs?.uppercase() ?: "GIT"
+        project.vcs = if (currentVcs == "GIT") "SUBVERSION" else "GIT"
+
+        repositoryService.getRepository(project).create()
+
+        return projectRepository.save(project)
+    }
+}
+

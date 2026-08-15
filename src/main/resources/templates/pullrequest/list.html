@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${project.name} + ' - 풀 리퀘스트 목록'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .label-branch {
+      background-color: #e6ebf1;
+      color: #24292e;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-family: monospace;
+      border-radius: 3px;
+      border: 1px solid #d1d5da;
+  }
+  .state-open {
+      color: #28a745;
+      font-weight: bold;
+  }
+  .state-closed {
+      color: #cb2431;
+      font-weight: bold;
+  }
+  .state-merged {
+      color: #6f42c1;
+      font-weight: bold;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="row">
+      <div class="col-md-12">
+        <div class="pull-right" style="margin-bottom: 15px;">
+          <a th:href="@{/{owner}/{projectName}/pull/new(owner=${project.owner}, projectName=${project.name})}" class="btn btn-success">새 풀 리퀘스트</a>
+        </div>
+
+        <ul class="nav nav-tabs" style="margin-bottom: 20px;">
+          <li th:classappend="${state == 'open'} ? 'active'">
+            <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name}, state='open')}">열림</a>
+          </li>
+          <li th:classappend="${state == 'closed'} ? 'active'">
+            <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name}, state='closed')}">닫힘</a>
+          </li>
+          <li th:classappend="${state == 'all'} ? 'active'">
+            <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name}, state='all')}">전체</a>
+          </li>
+        </ul>
+
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th style="width: 80px;">번호</th>
+              <th>제목</th>
+              <th style="width: 150px;">브랜치 정보</th>
+              <th style="width: 120px;">보낸이</th>
+              <th style="width: 100px;">상태</th>
+              <th style="width: 130px;">등록일</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="pr : ${prPage.content}">
+              <td th:text="'#' + ${pr.number}">#1</td>
+              <td>
+                <a th:href="@{/{owner}/{projectName}/pull/{number}(owner=${project.owner}, projectName=${project.name}, number=${pr.number})}" 
+                   th:text="${pr.title}" style="font-weight: bold;">PR 제목</a>
+                <span th:if="${pr.isConflict}" class="label label-danger" style="margin-left: 5px;">충돌</span>
+              </td>
+              <td>
+                <span class="label-branch" th:text="${pr.fromBranch}">feature</span>
+                <i class="yobicon-arrow-right" style="font-size: 10px; margin: 0 3px; color: #999;"></i>
+                <span class="label-branch" th:text="${pr.toBranch}">master</span>
+              </td>
+              <td th:text="${pr.contributor.name}">보낸 사람</td>
+              <td>
+                <!-- PR의 상태 출력 -->
+                <span th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).OPEN}" class="state-open">열림</span>
+                <span th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).CLOSED}" class="state-closed">닫힘</span>
+                <span th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).MERGED}" class="state-merged">병합됨</span>
+              </td>
+              <td th:title="${@templateHelper.getDateString(pr.created)}" th:text="${@templateHelper.agoOrDateString(pr.created)}">2026-06-08</td>
+            </tr>
+            <tr th:if="${prPage.content.isEmpty()}">
+              <td colspan="6" class="text-center" style="padding: 40px; color: #999;">등록된 풀 리퀘스트가 없습니다.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- 페이징 -->
+        <div class="text-center" th:if="${prPage.totalPages > 1}">
+          <ul class="pagination">
+            <li th:classappend="${prPage.first} ? 'disabled'">
+              <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name}, state=${state}, page=${prPage.number - 1})}">&laquo;</a>
+            </li>
+            <li th:each="i : ${#numbers.sequence(0, prPage.totalPages - 1)}" th:classappend="${i == prPage.number} ? 'active'">
+              <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name}, state=${state}, page=${i})}" th:text="${i + 1}">1</a>
+            </li>
+            <li th:classappend="${prPage.last} ? 'disabled'">
+              <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name}, state=${state}, page=${prPage.number + 1})}">&raquo;</a>
+            </li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

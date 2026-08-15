@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head(${project.name} + ' - 코드 브라우저')}">
+<style>
+  .code-browse-wrap {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 25px;
+  }
+  .code-browse-header {
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+  }
+  .code-breadcrumb-wrap {
+      font-size: 16px;
+      font-weight: bold;
+  }
+  .code-breadcrumb-wrap a {
+      margin: 0 5px;
+      text-decoration: none;
+  }
+  .list-wrap {
+      border: 1px solid #eaecef;
+      border-radius: 3px;
+  }
+  .listhead {
+      background-color: #f6f8fa;
+      padding: 10px;
+      border-bottom: 1px solid #eaecef;
+      font-weight: bold;
+      display: flex;
+  }
+  .listitem {
+      padding: 10px;
+      border-bottom: 1px solid #eaecef;
+      display: flex;
+      align-items: center;
+  }
+  .listitem:last-child {
+      border-bottom: none;
+  }
+  .filename {
+      flex: 3;
+      display: flex;
+      align-items: center;
+  }
+  .commitMsg {
+      flex: 5;
+      color: #586069;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+  }
+  .commitDate {
+      flex: 2;
+      text-align: right;
+      color: #6a737d;
+  }
+  .file-wrap {
+      border: 1px solid #d1d5da;
+      border-radius: 3px;
+      background: #fff;
+  }
+  .file-header {
+      background-color: #f6f8fa;
+      border-bottom: 1px solid #d1d5da;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+  }
+  .file-info {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+  }
+  .code-wrap {
+      margin: 0;
+      border: none;
+      background-color: #fafbfc;
+      min-height: 300px;
+      font-family: monospace;
+  }
+  .markdown-wrap {
+      padding: 30px;
+  }
+  .avatar-img {
+      border-radius: 50%;
+      margin-right: 5px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <div th:replace="~{site/layout :: gnb}"></div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header" style="background-color: #f8f9fa; padding: 20px; border-bottom: 1px solid #e9ecef; margin-bottom: 20px;">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="code-browse-wrap">
+      <!-- 상단 탭 메뉴 -->
+      <ul class="nav nav-tabs" style="margin-bottom:20px;">
+        <li class="active">
+          <a th:href="@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}">파일</a>
+        </li>
+        <li>
+          <a th:href="@{/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}">커밋</a>
+        </li>
+        <li th:if="${project.vcs == 'GIT'}">
+          <a th:href="@{/projects/{owner}/{name}/branches(owner=${project.owner}, name=${project.name})}">브랜치</a>
+        </li>
+      </ul>
+
+      <!-- 브라우저 헤더 (브랜치 선택 및 브레드크럼) -->
+      <div class="code-browse-header">
+        <div style="display: flex; align-items: center; gap: 15px;">
+          <!-- 브랜치 선택 셀렉트 박스 -->
+          <select id="branches" class="form-control" style="width: 150px;">
+            <option th:each="branchName : ${branches}" 
+                    th:value="${branchName}" 
+                    th:text="${branchName}"
+                    th:selected="${branchName == branch}"></option>
+          </select>
+          
+          <!-- 브레드크럼 -->
+          <div class="code-breadcrumb-wrap" id="breadcrumbs">
+            <a th:href="@{/{owner}/{projectName}/code/{branch}(owner=${project.owner}, projectName=${project.name}, branch=${branch})}" th:text="${project.name}">project</a>
+            <th:block th:if="${path != null && !path.isEmpty()}">
+               <span th:each="segment, iterStat : ${#strings.arraySplit(path, '/')}">
+                 / <a th:href="@{/{owner}/{projectName}/code/{branch}/{subPath}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, subPath=${#strings.substring(path, 0, #strings.indexOf(path, segment) + segment.length())})}" th:text="${segment}">segment</a>
+               </span>
+            </th:block>
+          </div>
+        </div>
+
+        <div class="pull-right" th:if="${project.vcs == 'GIT'}">
+          <a th:href="@{/{owner}/{projectName}/code/download/{branch}(owner=${project.owner}, projectName=${project.name}, branch=${branch})}" class="btn btn-default btn-sm">
+             ZIP 다운로드
+          </a>
+        </div>
+      </div>
+
+      <!-- 리포지토리 파일/폴더/파일내용 뷰어 영역 -->
+      <div class="code-viewer-wrap">
+        <th:block th:each="fileInfo : ${recursiveData}">
+          
+          <!-- Case 1: Folder View -->
+          <div th:if="${fileInfo.get('type').asText() == 'folder'}" class="list-wrap" data-type="folder">
+            <div class="listhead">
+              <div class="filename">파일명</div>
+              <div class="commitMsg">최신 커밋 메시지</div>
+              <div class="commitDate">작성일</div>
+            </div>
+            
+            <div class="alert alert-warning" th:if="${!fileInfo.get('data').fieldNames().hasNext()}">
+               폴더 내 파일이 존재하지 않습니다.
+            </div>
+
+            <!-- 하위 파일 목록 렌더링 -->
+            <div class="listitem" th:each="fileName : ${#lists.sort(fileInfo.get('data').fieldNames())}" th:with="file=${fileInfo.get('data').get(fileName)}">
+              <div class="filename">
+                <i th:class="${file.get('type').asText() == 'folder' ? 'icon-folder-open' : 'icon-file'}" style="margin-right: 8px;"></i>
+                <a th:href="@{/{owner}/{projectName}/code/{branch}/{subPath}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, subPath=${path == null || path.isEmpty() ? fileName : path + '/' + fileName})}"
+                   th:text="${fileName}">fileName</a>
+              </div>
+              <div class="commitMsg">
+                <span class="ml5" th:text="${file.get('msg')?.asText()}">Commit message</span>
+              </div>
+              <div class="commitDate" th:text="${file.get('createdDate')?.asText()}">Date</div>
+            </div>
+          </div>
+
+          <!-- Case 2: File View -->
+          <div th:if="${fileInfo.get('type').asText() == 'file'}" class="file-wrap" data-type="file">
+            <div class="file-header">
+              <div class="file-info">
+                <span class="commiter">
+                  <strong>작성자: </strong>
+                  <span th:text="${fileInfo.get('author')?.asText()}">Author</span>
+                </span>
+                <span class="commitDate" th:text="${fileInfo.get('createdDate')?.asText()}">Date</span>
+                <span class="revision">
+                  <strong>커밋 ID: </strong>
+                  <span style="font-family: monospace;" th:text="${#strings.substring(fileInfo.get('commitId').asText(), 0, 7)}">commitId</span>
+                </span>
+                <span class="commitMsg" th:text="${fileInfo.get('commitMessage')?.asText()}">Commit message</span>
+              </div>
+              <div class="pull-right">
+                <a th:href="@{/{owner}/{projectName}/rawcode/{branch}/{path}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, path=${path})}" class="btn btn-default btn-sm" target="_blank">
+                  Raw 보기
+                </a>
+              </div>
+            </div>
+
+            <!-- 파일 내용 본문 -->
+            <div>
+              <!-- 이미지 파일인 경우 -->
+              <div th:if="${fileInfo.get('mimeType')?.asText()?.startsWith('image/')}" style="text-align: center; padding: 20px;">
+                <img th:src="@{/{owner}/{projectName}/rawcode/{branch}/{path}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, path=${path})}" style="max-width: 100%; border: 1px solid #ddd;"/>
+              </div>
+
+              <!-- 일반 소스 코드 텍스트인 경우 -->
+              <div th:if="${!fileInfo.get('mimeType')?.asText()?.startsWith('image/')}" style="position: relative;">
+                <pre class="code-wrap"><code id="code-content" th:text="${fileInfo.get('data')?.asText()}">Code content</code></pre>
+              </div>
+            </div>
+          </div>
+
+        </th:block>
+      </div>
+
+    </div>
+  </div>
+
+  <footer th:replace="~{site/layout :: footer}"></footer>
+</div>
+
+<div th:replace="~{site/layout :: scripts}"></div>
+<script th:inline="javascript">
+  $(document).ready(function(){
+      var owner = /*[[${project.owner}]]*/ '';
+      var projectName = /*[[${project.name}]]*/ '';
+      var path = /*[[${path}]]*/ '';
+      
+      $("#branches").on("change", function(){
+          var selectedBranch = encodeURIComponent($(this).val());
+          var targetUrl = "/" + owner + "/" + projectName + "/code/" + selectedBranch;
+          if (path) {
+              targetUrl += "/" + path;
+          }
+          location.href = targetUrl;
+      });
+  });
+</script>
+</body>
+</html>

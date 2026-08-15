@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${project.name} + ' - 웹훅 설정'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .webhook-container {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 20px;
+  }
+  .form-wrap {
+      padding: 15px;
+      background: #fdfdfd;
+      border: 1px dashed #e1e4e8;
+      border-radius: 5px;
+      margin-bottom: 20px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="row">
+      <div class="col-md-9">
+        <div class="webhook-container">
+          <div th:replace="~{project/setting_menu :: menu(${project}, 'webhooks')}"></div>
+          <h3 style="margin-top: 0; margin-bottom: 20px;">웹훅 설정</h3>
+
+          <!-- 새 웹훅 등록 폼 -->
+          <form id="formNewWebhook" th:action="@{/projects/{owner}/{name}/webhooks(owner=${project.owner}, name=${project.name})}" method="post" class="form-horizontal form-wrap">
+            <h4 style="margin-top: 0; margin-bottom: 15px;">새로운 웹훅 추가</h4>
+            
+            <div class="form-group">
+              <label class="col-sm-2 control-label" for="payloadUrl">Payload URL</label>
+              <div class="col-sm-10">
+                <input type="url" id="payloadUrl" name="payloadUrl" class="form-control" placeholder="https://example.com/post-receive" required maxlength="2000" autocomplete="off">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="col-sm-2 control-label" for="secret">Secret Token</label>
+              <div class="col-sm-10">
+                <input type="text" id="secret" name="secret" class="form-control" placeholder="비밀 서명 값 (선택 사항)" maxlength="250" autocomplete="off">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="col-sm-2 control-label">웹훅 타입</label>
+              <div class="col-sm-10">
+                <label class="radio-inline">
+                  <input type="radio" name="webhookType" value="SIMPLE" checked> SIMPLE (텍스트 전송)
+                </label>
+                <label class="radio-inline">
+                  <input type="radio" name="webhookType" value="DETAIL_SLACK"> Slack (상세 포맷)
+                </label>
+                <label class="radio-inline">
+                  <input type="radio" name="webhookType" value="DETAIL_HANGOUT_CHAT"> Google Chat (스레드 연동)
+                </label>
+                <label class="radio-inline">
+                  <input type="radio" name="webhookType" value="JSON"> JSON (CI 도구/푸시 전용)
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div class="col-sm-offset-2 col-sm-10">
+                <div class="checkbox">
+                  <label>
+                    <input type="checkbox" id="gitPush" name="gitPush"> Git Push 이벤트 포함 여부
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+              <div class="col-sm-offset-2 col-sm-10">
+                <button type="submit" class="btn btn-primary">웹훅 추가</button>
+              </div>
+            </div>
+          </form>
+
+          <!-- 웹훅 목록 -->
+          <h4 style="margin-top: 30px; margin-bottom: 15px;">등록된 웹훅 목록</h4>
+          <div th:if="${#lists.isEmpty(webhooks)}" class="alert alert-info">
+            등록된 웹훅이 없습니다.
+          </div>
+          <table th:if="${!#lists.isEmpty(webhooks)}" class="table table-striped">
+            <thead>
+              <tr>
+                <th>Payload URL</th>
+                <th>Secret Token</th>
+                <th>타입</th>
+                <th class="text-center">Git Push</th>
+                <th class="text-center">관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="webhook : ${webhooks}">
+                <td style="word-break: break-all;" th:text="${webhook.payloadUrl}">https://example.com/webhook</td>
+                <td th:text="${#strings.isEmpty(webhook.secret) ? 'NONE' : webhook.secret}">NONE</td>
+                <td th:text="${webhook.webhookType}">SIMPLE</td>
+                <td class="text-center">
+                  <span th:if="${webhook.gitPush}" class="label label-success">Y</span>
+                  <span th:if="${!webhook.gitPush}" class="label label-default">N</span>
+                </td>
+                <td class="text-center">
+                  <button type="button" class="btn btn-xs btn-danger delete-webhook-btn" th:data-webhook-id="${webhook.id}">삭제</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script th:inline="javascript">
+  $(document).ready(function() {
+      // JSON 타입 선택 시 Git Push 이벤트를 필수로 체크하게끔 동적 제어
+      $('input[type=radio][name=webhookType]').change(function() {
+          if (this.value == 'JSON') {
+              $("#gitPush").prop('checked', true);
+              $("#gitPush").attr('onclick', 'return false;');
+          } else {
+              $("#gitPush").attr('onclick', '');
+              $("#gitPush").prop('checked', false);
+          }
+      });
+
+      // 웹훅 비동기 삭제
+      $(".delete-webhook-btn").click(function() {
+          var webhookId = $(this).data("webhook-id");
+          var owner = [[${project.owner}]];
+          var projectName = [[${project.name}]];
+
+          if (confirm("정말 이 웹훅을 완전히 삭제하시겠습니까?")) {
+              $.ajax({
+                  url: '/projects/' + owner + '/' + projectName + '/webhooks/' + webhookId,
+                  type: 'DELETE',
+                  success: function(result) {
+                      alert("웹훅이 삭제되었습니다.");
+                      window.location.reload();
+                  },
+                  error: function(xhr, status, error) {
+                      alert("삭제 실패: " + xhr.responseText);
+                  }
+              });
+          }
+      });
+  });
+</script>
+</body>
+</html>

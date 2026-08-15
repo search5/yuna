@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${project.name} + ' - 새 풀 리퀘스트 생성'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .form-container {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 20px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="row">
+      <div class="col-md-9">
+        <div class="form-container">
+          <h3 style="margin-top: 0; margin-bottom: 20px;">새 풀 리퀘스트 요청</h3>
+          
+          <div th:if="${branches.isEmpty()}" class="alert alert-danger">
+            프로젝트 저장소에 브랜치가 존재하지 않아 풀 리퀘스트를 생성할 수 없습니다.
+          </div>
+
+          <form id="pr-form" th:if="${!branches.isEmpty()}">
+            <!-- 브랜치 매핑 선택 -->
+            <div class="row" style="margin-bottom: 20px;">
+              <div class="col-md-5">
+                <label for="fromBranch">보낼 브랜치 (Source)</label>
+                <select id="fromBranch" name="fromBranch" class="form-control" required>
+                  <option th:each="br : ${branches}" th:value="${br}" th:text="${br}"></option>
+                </select>
+              </div>
+              <div class="col-md-2 text-center" style="padding-top: 30px;">
+                <i class="yobicon-arrow-right" style="font-size: 20px; color: #999;"></i>
+              </div>
+              <div class="col-md-5">
+                <label for="toBranch">받을 브랜치 (Target)</label>
+                <select id="toBranch" name="toBranch" class="form-control" required>
+                  <option th:each="br : ${branches}" th:value="${br}" th:text="${br}" th:selected="${br == defaultBranch}"></option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="title">풀 리퀘스트 제목</label>
+              <input type="text" id="title" name="title" class="form-control" placeholder="제목을 입력하세요" required maxlength="250">
+            </div>
+
+            <div class="form-group">
+              <label for="body">상세 설명</label>
+              <textarea id="body" name="body" class="form-control" rows="8" placeholder="상세 변경 사항 및 코드 설명 등을 작성하세요" style="resize: vertical;"></textarea>
+            </div>
+
+            <div style="margin-top: 25px;">
+              <button type="submit" class="btn btn-success">생성</button>
+              <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name})}" class="btn btn-default">취소</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script th:inline="javascript">
+  $(document).ready(function() {
+      $("#pr-form").submit(function(e) {
+          e.preventDefault();
+          
+          var projectId = [[${project.id}]];
+          var owner = [[${project.owner}]];
+          var projectName = [[${project.name}]];
+          
+          var title = $("#title").val();
+          var body = $("#body").val();
+          var fromBranch = $("#fromBranch").val();
+          var toBranch = $("#toBranch").val();
+          
+          var requestData = {
+              title: title,
+              body: body,
+              fromProjectId: projectId, // 일단 본인 프로젝트 내 병합으로 설정
+              fromBranch: fromBranch,
+              toBranch: toBranch
+          };
+          
+          $.ajax({
+              url: '/api/projects/' + projectId + '/pullrequests',
+              type: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify(requestData),
+              success: function(result) {
+                  alert("풀 리퀘스트가 생성되었습니다.");
+                  window.location.href = '/' + owner + '/' + projectName + '/pulls';
+              },
+              error: function(xhr, status, error) {
+                  alert("생성 실패: " + xhr.responseText);
+              }
+          });
+      });
+  });
+</script>
+</body>
+</html>

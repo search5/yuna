@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${org.name} + ' - 조직원 관리'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .org-header {
+      background-color: #f8f9fa;
+      padding: 30px 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 30px;
+  }
+  .members-container {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 20px;
+  }
+  .member-avatar {
+      border-radius: 50%;
+      margin-right: 10px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 조직 헤더 -->
+  <div class="org-header">
+    <div class="container">
+      <h2 th:text="${org.name}">조직 이름</h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="row">
+      <div class="col-md-9">
+        <!-- 설정 서브 탭 메뉴 삽입 -->
+        <div th:replace="~{organization/partial_settingmenu :: menu(${org}, 'members')}"></div>
+
+        <div class="members-container">
+          <h3 style="margin-top: 0; margin-bottom: 20px;">조직원 관리</h3>
+
+          <!-- 조직원 추가 폼 -->
+          <form id="add-member-form" class="form-inline" style="margin-bottom: 30px;">
+            <div class="form-group">
+              <input type="text" id="userLoginId" class="form-control" placeholder="추가할 사용자 ID" required>
+            </div>
+            <div class="form-group">
+              <select id="roleId" class="form-control" required>
+                <option value="7">ORG_MEMBER (조직원)</option>
+                <option value="6">ORG_ADMIN (조직 관리자)</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary">조직원 추가</button>
+          </form>
+
+          <!-- 조직원 리스트 -->
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>사용자</th>
+                <th>아이디</th>
+                <th>역할</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="ou : ${orgUsers}">
+                <td style="display: flex; align-items: center;">
+                  <img th:src="${ou.user.avatarUrl != null ? ou.user.avatarUrl : '/images/default-avatar-34.png'}" class="member-avatar" width="28" height="28" alt="avatar"/>
+                  <span th:text="${ou.user.name}">홍길동</span>
+                </td>
+                <td th:text="${ou.user.loginId}">loginId</td>
+                <td th:text="${ou.role.id == 6 ? 'Admin' : 'Member'}">Member</td>
+                <td>
+                  <!-- 관리 권한에 의해 조직원 제외 처리 -->
+                  <button class="btn btn-xs btn-danger delete-member-btn" th:data-user-id="${ou.user.id}" th:text="제거"></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 가입 신청자 리스트 -->
+          <div th:if="${!org.enrolledUsers.isEmpty()}" style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
+            <h4 style="margin-bottom: 15px;">가입 신청 대기자 목록 (<span th:text="${org.enrolledUsers.size()}">0</span>)</h4>
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>사용자</th>
+                  <th>아이디</th>
+                  <th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr th:each="user : ${org.enrolledUsers}">
+                  <td style="display: flex; align-items: center;">
+                    <img th:src="${user.avatarUrl != null ? user.avatarUrl : '/images/default-avatar-34.png'}" class="member-avatar" width="28" height="28" alt="avatar"/>
+                    <span th:text="${user.name}">홍길동</span>
+                  </td>
+                  <td th:text="${user.loginId}">loginId</td>
+                  <td>
+                    <button class="btn btn-xs btn-success accept-enroll-btn" th:data-user-login-id="${user.loginId}">승인</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <a th:href="@{/org/{orgName}(orgName=${org.name})}" class="btn btn-default">조직 홈으로</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script th:inline="javascript">
+  $(document).ready(function() {
+      // 조직원 추가
+      $("#add-member-form").submit(function(e) {
+          e.preventDefault();
+          var orgId = [[${org.id}]];
+          var userLoginId = $("#userLoginId").val();
+          var roleId = $("#roleId").val();
+
+          $.ajax({
+              url: '/api/organizations/' + orgId + '/members',
+              type: 'POST',
+              data: {
+                  userLoginId: userLoginId,
+                  roleId: roleId
+              },
+              success: function(result) {
+                  alert("조직원이 성공적으로 추가되었습니다.");
+                  window.location.reload();
+              },
+              error: function(xhr, status, error) {
+                  alert("추가 실패: " + xhr.responseText);
+              }
+          });
+      });
+
+      // 조직원 제거
+      $(".delete-member-btn").click(function() {
+          var userId = $(this).data("user-id");
+          var orgId = [[${org.id}]];
+
+          if (confirm("정말 이 조직원을 조직에서 제거하시겠습니까?")) {
+              $.ajax({
+                  url: '/api/organizations/' + orgId + '/members/' + userId,
+                  type: 'DELETE',
+                  success: function(result) {
+                      alert("조직원이 제거되었습니다.");
+                      window.location.reload();
+                  },
+                  error: function(xhr, status, error) {
+                      alert("제거 실패: " + xhr.responseText);
+                  }
+              });
+          }
+      });
+
+      // 가입 신청 승인
+      $(document).on("click", ".accept-enroll-btn", function() {
+          var userLoginId = $(this).data("user-login-id");
+          var orgId = [[${org.id}]];
+
+          $.ajax({
+              url: '/api/organizations/' + orgId + '/members',
+              type: 'POST',
+              data: {
+                  userLoginId: userLoginId,
+                  roleId: 7 // ORG_MEMBER
+              },
+              success: function(result) {
+                  alert("가입 신청이 승인되었습니다.");
+                  window.location.reload();
+              },
+              error: function(xhr, status, error) {
+                  alert("승인 실패: " + xhr.responseText);
+              }
+          });
+      });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head(${project.name} + ' - 커밋 내역')}">
+<style>
+  .code-browse-wrap {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 25px;
+  }
+  .commit-wrap {
+      margin-top: 15px;
+  }
+  .code-table {
+      width: 100%;
+      border-collapse: collapse;
+  }
+  .code-table th, .code-table td {
+      padding: 10px;
+      border-bottom: 1px solid #eaecef;
+  }
+  .code-table th {
+      background-color: #f6f8fa;
+      font-weight: bold;
+      text-align: left;
+  }
+  .commit-id-col {
+      width: 120px;
+      font-family: monospace;
+      font-weight: bold;
+  }
+  .commit-id-col a {
+      color: #0366d6;
+      text-decoration: none;
+  }
+  .commit-msg-col {
+      color: #333;
+  }
+  .commit-date-col {
+      width: 180px;
+      color: #6a737d;
+  }
+  .commit-author-col {
+      width: 120px;
+      color: #586069;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <div th:replace="~{site/layout :: gnb}"></div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header" style="background-color: #f8f9fa; padding: 20px; border-bottom: 1px solid #e9ecef; margin-bottom: 20px;">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="code-browse-wrap">
+      <!-- 상단 탭 메뉴 -->
+      <ul class="nav nav-tabs" style="margin-bottom:20px;">
+        <li>
+          <a th:href="@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}">파일</a>
+        </li>
+        <li class="active">
+          <a th:href="@{/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}">커밋</a>
+        </li>
+        <li th:if="${project.vcs == 'GIT'}">
+          <a th:href="@{/projects/{owner}/{name}/branches(owner=${project.owner}, name=${project.name})}">브랜치</a>
+        </li>
+      </ul>
+
+      <!-- 브랜치 선택 및 브레드크럼 -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+        <select id="branches" class="form-control" style="width: 150px;">
+          <option th:each="branchName : ${branches}" 
+                  th:value="${branchName}" 
+                  th:text="${branchName}"
+                  th:selected="${branchName == branch}"></option>
+        </select>
+        
+        <div class="code-breadcrumb-wrap" style="font-size: 16px; font-weight: bold;">
+          <span th:text="${project.name}">project</span> / 커밋 히스토리
+        </div>
+      </div>
+
+      <!-- 커밋 내역 리스트 -->
+      <div id="history" class="commit-wrap">
+        <table class="code-table">
+          <thead>
+            <tr>
+              <th class="commit-id-col">커밋 ID</th>
+              <th class="commit-msg-col">커밋 메시지</th>
+              <th class="commit-date-col">작성일</th>
+              <th class="commit-author-col">작성자</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr th:each="commit : ${commits}">
+              <td class="commit-id-col">
+                <button type="button" class="btn btn-default btn-xs btn-copy-commitId" 
+                        th:data-commit-id="${commit.id}" title="커밋 ID 복사" style="margin-right: 5px; padding: 1px 5px;">
+                  <i class="yobicon-copy"></i>
+                </button>
+                <!-- 상세 커밋 조회 페이지가 준비되면 링크로 기능하도록 설정 -->
+                <span th:text="${commit.shortId}">shortId</span>
+              </td>
+              <td class="commit-msg-col" th:text="${commit.shortMessage}">Commit message</td>
+              <td class="commit-date-col" th:text="${commit.authorDate != null ? #dates.format(commit.authorDate, 'yyyy-MM-dd HH:mm') : ''}">Date</td>
+              <td class="commit-author-col" th:text="${commit.authorName}">Author</td>
+            </tr>
+            <tr th:if="${commits.isEmpty()}">
+              <td colspan="4" class="text-center" style="padding: 40px; color: #999;">커밋 내역이 존재하지 않습니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 페이징 버튼 -->
+      <div class="clearfix" style="margin-top: 20px;">
+        <a th:if="${page > 0}" th:href="@{/{owner}/{projectName}/commits/{branch}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, page=${page - 1})}" class="btn btn-default pull-left">이전 커밋</a>
+        <a th:if="${!commits.isEmpty() && commits.size() >= 25}" th:href="@{/{owner}/{projectName}/commits/{branch}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, page=${page + 1})}" class="btn btn-default pull-right">이전 커밋 더보기</a>
+      </div>
+
+    </div>
+  </div>
+
+  <footer th:replace="~{site/layout :: footer}"></footer>
+</div>
+
+<div th:replace="~{site/layout :: scripts}"></div>
+<script th:inline="javascript">
+  $(document).ready(function(){
+      var owner = /*[[${project.owner}]]*/ '';
+      var projectName = /*[[${project.name}]]*/ '';
+      
+      $("#branches").on("change", function(){
+          var selectedBranch = encodeURIComponent($(this).val());
+          location.href = "/" + owner + "/" + projectName + "/commits/" + selectedBranch;
+      });
+
+      // 커밋 ID 클립보드 복사 이벤트
+      $(".btn-copy-commitId").click(function() {
+          var commitId = $(this).data("commit-id");
+          navigator.clipboard.writeText(commitId).then(function() {
+              alert("커밋 ID가 복사되었습니다: " + commitId);
+          }, function(err) {
+              alert("복사 실패: " + err);
+          });
+      });
+  });
+</script>
+</body>
+</html>

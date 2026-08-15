@@ -1,0 +1,250 @@
+package com.github.search5.yona.domain.organization
+
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.notification.NotificationEvent
+import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.role.RoleRepository
+import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserRepository
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
+
+@Service
+@Transactional(readOnly = true)
+class OrganizationServiceImpl(
+    private val organizationRepository: OrganizationRepository,
+    private val organizationUserRepository: OrganizationUserRepository,
+    private val userRepository: UserRepository,
+    private val roleRepository: RoleRepository,
+    private val notificationEventRepository: NotificationEventRepository
+) : OrganizationService {
+
+    override fun findByName(name: String): Organization? {
+        return organizationRepository.findByName(name).orElse(null)
+    }
+
+    @Transactional
+    override fun createOrganization(organization: Organization): Organization {
+        organization.created = Instant.now()
+        return organizationRepository.save(organization)
+    }
+
+    override fun isNameExist(name: String): Boolean {
+        return organizationRepository.findByName(name).isPresent
+    }
+
+    @Transactional
+    override fun createOrganization(name: String, descr: String?, creatorId: Long): Organization {
+        if (isNameExist(name)) {
+            throw IllegalArgumentException("Organization name already exists: $name")
+        }
+        if (userRepository.findByLoginId(name).isPresent) {
+            throw IllegalArgumentException("User with this name already exists: $name")
+        }
+
+        val creator = userRepository.findById(creatorId)
+            .orElseThrow { IllegalArgumentException("User with ID $creatorId not found") }
+
+        val organization = Organization(
+            name = name,
+            descr = descr,
+            created = Instant.now()
+        )
+        val savedOrg = organizationRepository.save(organization)
+
+        val adminRole = roleRepository.findById(RoleType.ORG_ADMIN.roleType)
+            .orElseThrow { IllegalStateException("ORG_ADMIN role not found") }
+
+        val orgUser = OrganizationUser(
+            organization = savedOrg,
+            user = creator,
+            role = adminRole
+        )
+        organizationUserRepository.save(orgUser)
+
+        return savedOrg
+    }
+
+    @Transactional
+    override fun updateOrganizationSettings(orgId: Long, name: String, descr: String?, updaterId: Long) {
+        val organization = organizationRepository.findById(orgId)
+            .orElseThrow { IllegalArgumentException("Organization with ID $orgId not found") }
+
+        if (organization.name != name) {
+            if (isNameExist(name) || userRepository.findByLoginId(name).isPresent) {
+                throw IllegalArgumentException("Target name already exists: $name")
+            }
+            organization.name = name
+        }
+        organization.descr = descr
+        organizationRepository.save(organization)
+    }
+
+    @Transactional
+    override fun addOrganizationMember(orgId: Long, userLoginId: String, roleId: Long, updaterId: Long) {
+        val organization = organizationRepository.findById(orgId)
+            .orElseThrow { IllegalArgumentException("Organization with ID $orgId not found") }
+
+        val targetUser = userRepository.findByLoginId(userLoginId)
+            .orElseThrow { IllegalArgumentException("User with login ID $userLoginId not found") }
+
+        if (organizationUserRepository.existsByOrganizationIdAndUserId(orgId, targetUser.id!!)) {
+            throw IllegalArgumentException("User is already a member of this organization")
+        }
+
+        val role = roleRepository.findById(roleId)
+            .orElseThrow { IllegalArgumentException("Role with ID $roleId not found") }
+
+        val orgUser = OrganizationUser(
+            organization = organization,
+            user = targetUser,
+            role = role
+        )
+        organizationUserRepository.save(orgUser)
+
+        // 만약 가입 대기자 목록에 해당 유저가 있었다면 제거
+        if (targetUser.enrolledOrganizations.contains(organization)) {
+            targetUser.cancelEnroll(organization)
+            userRepository.save(targetUser)
+        }
+
+        // 가입 완료 알림 생성
+        val notiEvent = NotificationEvent(
+            title = "${organization.name} 조직에 멤버로 추가되었습니다.",
+            senderId = updaterId,
+            receivers = mutableSetOf(targetUser),
+            created = Instant.now(),
+            resourceType = ResourceType.ORGANIZATION,
+            resourceId = orgId.toString(),
+            eventType = EventType.ORGANIZATION_MEMBER_ENROLL_ACCEPT,
+            newValue = "ACCEPT",
+            oldValue = "NONE"
+        )
+        notificationEventRepository.save(notiEvent)
+    }
+
+    @Transactional
+    override fun removeOrganizationMember(orgId: Long, userId: Long, removerId: Long) {
+        val organization = organizationRepository.findById(orgId)
+            .orElseThrow { IllegalArgumentException("Organization with ID $orgId not found") }
+
+        val targetOrgUser = organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId)
+            .orElseThrow { IllegalArgumentException("User is not a member of this organization") }
+
+        // 마지막 관리자(ORG_ADMIN)인 경우 삭제 불가
+        if (targetOrgUser.role.id == RoleType.ORG_ADMIN.roleType) {
+            val adminCount = organizationUserRepository.countByOrganizationIdAndRoleId(orgId, RoleType.ORG_ADMIN.roleType)
+            if (adminCount <= 1) {
+                throw IllegalArgumentException("At least one admin must remain in the organization")
+            }
+        }
+
+        organizationUserRepository.deleteByOrganizationIdAndUserId(orgId, userId)
+    }
+
+    @Transactional
+    override fun updateOrganizationMemberRole(orgId: Long, userId: Long, newRoleId: Long, updaterId: Long) {
+        val organization = organizationRepository.findById(orgId)
+            .orElseThrow { IllegalArgumentException("Organization with ID $orgId not found") }
+
+        val targetOrgUser = organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId)
+            .orElseThrow { IllegalArgumentException("User is not a member of this organization") }
+
+        val newRole = roleRepository.findById(newRoleId)
+            .orElseThrow { IllegalArgumentException("Role with ID $newRoleId not found") }
+
+        // 관리자 강등 시, 마지막 관리자(ORG_ADMIN)가 자신뿐인지 검사
+        if (targetOrgUser.role.id == RoleType.ORG_ADMIN.roleType && newRoleId != RoleType.ORG_ADMIN.roleType) {
+            val adminCount = organizationUserRepository.countByOrganizationIdAndRoleId(orgId, RoleType.ORG_ADMIN.roleType)
+            if (adminCount <= 1) {
+                throw IllegalArgumentException("At least one admin must remain in the organization")
+            }
+        }
+
+        targetOrgUser.role = newRole
+        organizationUserRepository.save(targetOrgUser)
+    }
+
+    @Transactional
+    override fun deleteOrganization(orgId: Long, deleterId: Long) {
+        val organization = organizationRepository.findById(orgId)
+            .orElseThrow { IllegalArgumentException("Organization with ID $orgId not found") }
+
+        // 하위 프로젝트가 존재하는 경우 삭제 불가
+        if (organization.projects.isNotEmpty()) {
+            throw IllegalArgumentException("Cannot delete organization: projects still exist")
+        }
+
+        organizationRepository.delete(organization)
+    }
+
+    @Transactional
+    override fun enroll(orgName: String, userId: Long) {
+        val organization = organizationRepository.findByName(orgName)
+            .orElseThrow { IllegalArgumentException("Organization not found: $orgName") }
+        val user = userRepository.findById(userId)
+            .orElseThrow { IllegalArgumentException("User not found: $userId") }
+
+        // 이미 멤버인지 검사
+        if (organizationUserRepository.existsByOrganizationIdAndUserId(organization.id!!, user.id!!)) {
+            throw IllegalArgumentException("User is already a member of this organization")
+        }
+
+        user.enroll(organization)
+        userRepository.save(user)
+
+        // 조직 관리자들 조회
+        val admins = organizationUserRepository.findByOrganizationIdAndRoleId(organization.id!!, RoleType.ORG_ADMIN.roleType)
+            .map { it.user }
+            .toMutableSet()
+
+        if (admins.isNotEmpty()) {
+            val notiEvent = NotificationEvent(
+                title = "${user.name}(@${user.loginId})님이 ${organization.name} 조직에 가입 신청을 했습니다.",
+                senderId = userId,
+                receivers = admins,
+                created = Instant.now(),
+                resourceType = ResourceType.ORGANIZATION,
+                resourceId = organization.id.toString(),
+                eventType = EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST,
+                newValue = "REQUEST",
+                oldValue = "NONE"
+            )
+            notificationEventRepository.save(notiEvent)
+        }
+    }
+
+    @Transactional
+    override fun cancelEnroll(orgName: String, userId: Long) {
+        val organization = organizationRepository.findByName(orgName)
+            .orElseThrow { IllegalArgumentException("Organization not found: $orgName") }
+        val user = userRepository.findById(userId)
+            .orElseThrow { IllegalArgumentException("User not found: $userId") }
+
+        user.cancelEnroll(organization)
+        userRepository.save(user)
+
+        // 조직 관리자들 조회
+        val admins = organizationUserRepository.findByOrganizationIdAndRoleId(organization.id!!, RoleType.ORG_ADMIN.roleType)
+            .map { it.user }
+            .toMutableSet()
+
+        if (admins.isNotEmpty()) {
+            val notiEvent = NotificationEvent(
+                title = "${user.name}(@${user.loginId})님이 ${organization.name} 조직 가입 신청을 취소했습니다.",
+                senderId = userId,
+                receivers = admins,
+                created = Instant.now(),
+                resourceType = ResourceType.ORGANIZATION,
+                resourceId = organization.id.toString(),
+                eventType = EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST,
+                newValue = "CANCEL",
+                oldValue = "NONE"
+            )
+            notificationEventRepository.save(notiEvent)
+        }
+    }
+}

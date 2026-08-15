@@ -1,0 +1,288 @@
+package com.github.search5.yona.web
+
+import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.RepositoryService
+import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
+import org.springframework.security.core.Authentication
+import org.springframework.stereotype.Controller
+import org.springframework.ui.Model
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.RequestParam
+import java.net.URLEncoder
+import java.nio.file.Files
+import org.springframework.http.HttpHeaders
+import org.springframework.http.CacheControl
+import java.util.concurrent.TimeUnit
+
+@Controller
+class CodeViewController(
+    private val projectRepository: ProjectRepository,
+    private val projectUserRepository: ProjectUserRepository,
+    private val userRepository: UserRepository,
+    private val repositoryService: RepositoryService
+) {
+
+    @GetMapping("/{owner}/{projectName}/code")
+    fun codeBrowser(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (project.projectScope != ProjectScope.PUBLIC) {
+            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+                return "error/403"
+            }
+        }
+
+        val repository = repositoryService.getRepository(project)
+        if (repository.isEmpty()) {
+            model.addAttribute("project", project)
+            return if (project.vcs == "SUBVERSION") "code/nohead_svn" else "code/nohead"
+        }
+
+        val headBranch = repository.getHeadBranch()
+        val defaultBranch = headBranch?.shortName ?: "master"
+        val encodedBranch = URLEncoder.encode(defaultBranch, "UTF-8")
+
+        return "redirect:/$owner/$projectName/code/$encodedBranch"
+    }
+
+    @GetMapping("/{owner}/{projectName}/code/{branch}")
+    fun codeBrowserWithBranchRoot(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable branch: String,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        return codeBrowserWithBranch(owner, projectName, branch, "", authentication, model)
+    }
+
+    @GetMapping("/{owner}/{projectName}/code/{branch}/{*path}")
+    fun codeBrowserWithBranch(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable branch: String,
+        @PathVariable path: String,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (project.projectScope != ProjectScope.PUBLIC) {
+            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+                return "error/403"
+            }
+        }
+
+        val decodedBranch = java.net.URLDecoder.decode(branch, "UTF-8")
+        val normalizedPath = path.removePrefix("/")
+
+        val repository = repositoryService.getRepository(project)
+        val branches = repository.getRefNames()
+        val recursiveData = repositoryService.getMetaDataFromAncestorDirectories(repository, decodedBranch, normalizedPath)
+            ?: return "error/404"
+
+        model.addAttribute("project", project)
+        model.addAttribute("branches", branches)
+        model.addAttribute("recursiveData", recursiveData)
+        model.addAttribute("branch", decodedBranch)
+        model.addAttribute("path", normalizedPath)
+        model.addAttribute("currentUser", loginUser)
+
+        return "code/view"
+    }
+
+    @GetMapping("/{owner}/{projectName}/rawcode/{rev}/{*path}")
+    fun showRawFile(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable rev: String,
+        @PathVariable path: String,
+        authentication: Authentication?
+    ): ResponseEntity<ByteArray> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (project.projectScope != ProjectScope.PUBLIC) {
+            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+            }
+        }
+
+        val decodedRev = java.net.URLDecoder.decode(rev, "UTF-8")
+        val normalizedPath = path.removePrefix("/")
+
+        val rawData = repositoryService.getFileAsRaw(owner, projectName, decodedRev, normalizedPath)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+
+        val headers = HttpHeaders()
+        
+        // MIME Type 감지
+        val mimeType = try {
+            val fileTmp = Files.createTempFile("yuna-view-mime", null)
+            Files.write(fileTmp, rawData)
+            val detected = Files.probeContentType(fileTmp)
+            Files.delete(fileTmp)
+            detected ?: "text/plain"
+        } catch (e: Exception) {
+            "text/plain"
+        }
+
+        headers.contentType = MediaType.parseMediaType(mimeType)
+        headers.set(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"${normalizedPath.substringAfterLast('/')}\"")
+
+        return ResponseEntity(rawData, headers, HttpStatus.OK)
+    }
+
+    @GetMapping("/{owner}/{projectName}/image/{rev}/{*path}")
+    fun showImageFile(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable rev: String,
+        @PathVariable path: String,
+        authentication: Authentication?
+    ): ResponseEntity<ByteArray> {
+        return showRawFile(owner, projectName, rev, path, authentication)
+    }
+
+    @GetMapping("/{owner}/{projectName}/files/{rev}/{*path}")
+    fun openFile(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable rev: String,
+        @PathVariable path: String,
+        authentication: Authentication?
+    ): ResponseEntity<ByteArray> {
+        return showRawFile(owner, projectName, rev, path, authentication)
+    }
+
+    @GetMapping("/{owner}/{projectName}/commits")
+    fun historyUntilHead(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam(required = false, defaultValue = "0") page: Int,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        return history(owner, projectName, "HEAD", null, page, authentication, model)
+    }
+
+    @GetMapping(value = ["/{owner}/{projectName}/commits/{branch}", "/{owner}/{projectName}/commits/{branch}/{*path}"])
+    fun history(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable branch: String,
+        @PathVariable(required = false) path: String?,
+        @RequestParam(required = false, defaultValue = "0") page: Int,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (project.projectScope != ProjectScope.PUBLIC) {
+            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+                return "error/403"
+            }
+        }
+
+        val decodedBranch = java.net.URLDecoder.decode(branch, "UTF-8")
+        val decodedPath = path?.let { java.net.URLDecoder.decode(it, "UTF-8") }?.removePrefix("/")
+
+        val repository = repositoryService.getRepository(project)
+        val branches = repository.getRefNames()
+        
+        val commits = repository.getHistory(page, 25, decodedBranch, decodedPath)
+
+        model.addAttribute("project", project)
+        model.addAttribute("branches", branches)
+        model.addAttribute("branch", decodedBranch)
+        model.addAttribute("path", decodedPath ?: "")
+        model.addAttribute("commits", commits)
+        model.addAttribute("page", page)
+        model.addAttribute("currentUser", loginUser)
+
+        return "code/history"
+    }
+
+    @GetMapping("/{owner}/{projectName}/commit/{commitId}")
+    fun showCommit(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable commitId: String,
+        @RequestParam(required = false, defaultValue = "HEAD") branch: String,
+        @RequestParam(required = false, defaultValue = "") path: String,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (project.projectScope != ProjectScope.PUBLIC) {
+            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+                return "error/403"
+            }
+        }
+
+        val repository = repositoryService.getRepository(project)
+        val commit = try {
+            repository.getCommit(commitId)
+        } catch (e: Exception) {
+            null
+        } ?: return "error/404"
+
+        val parentCommit = try {
+            repository.getParentCommitOf(commitId)
+        } catch (e: Exception) {
+            null
+        }
+
+        model.addAttribute("project", project)
+        model.addAttribute("commit", commit)
+        model.addAttribute("parentCommit", parentCommit)
+        model.addAttribute("selectedBranch", branch)
+        model.addAttribute("path", path)
+        model.addAttribute("currentUser", loginUser)
+
+        return if (project.vcs == "SUBVERSION") {
+            val patch = try {
+                repository.getPatch(commitId)
+            } catch (e: Exception) {
+                ""
+            }
+            model.addAttribute("patch", patch)
+            model.addAttribute("comments", emptyList<Any>())
+            "code/svnDiff"
+        } else {
+            val fileDiffs = try {
+                repository.getDiff(commitId)
+            } catch (e: Exception) {
+                null
+            }
+            if (fileDiffs == null) {
+                return "error/404"
+            }
+            model.addAttribute("fileDiffs", fileDiffs)
+            model.addAttribute("comments", emptyList<Any>())
+            "code/diff"
+        }
+    }
+}
+

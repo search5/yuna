@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head(title=${post.title} + ' - Yona')}">
+</head>
+<body class="theme-default prj" id="html-body">
+<div id="main" class="main">
+    <div th:replace="~{site/layout :: gnb}"></div>
+    <div th:replace="~{site/layout :: projectHeader}"></div>
+    <div th:replace="~{site/layout :: projectMenu('BOARD')}"></div>
+
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap board-view">
+            <!-- Post Info -->
+            <div class="board-header issue">
+                <div class="pull-right mr10 mt10 hide-in-mobile">
+                    <div class="date" th:title="${templateHelper.getDateString(post.createdDate)}" th:text="${templateHelper.agoOrDateString(post.createdDate)}">
+                        작성일
+                    </div>
+                </div>
+                <div class="title">
+                    <strong class="board-id" th:text="'#' + ${post.number}">#1</strong>
+                    <span th:text="${post.title}">게시글 제목</span>
+                </div>
+            </div>
+
+            <!-- Content body -->
+            <div class="board-body row-fluid">
+                <div class="span9 span-left-pane">
+                    <div class="author-info">
+                        <a href="javascript:void(0);" class="usf-group">
+                            <span class="avatar-wrap smaller">
+                                <img src="/images/default-avatar-128.png" width="20" height="20">
+                            </span>
+                            <strong class="name" th:text="${post.authorName != null ? post.authorName : post.authorLoginId}">작성자</strong>
+                            <span class="loginid"> <strong>@</strong><span th:text="${post.authorLoginId}">loginId</span></span>
+                        </a>
+                    </div>
+                    
+                    <div th:id="'post-' + ${post.number}" class="hide">
+                        <form th:action="@{/api/{owner}/{projectName}/posts/{number}/content(owner=${project.owner}, projectName=${project.name}, number=${post.number})}">
+                            <textarea th:text="${post.body}"></textarea>
+                        </form>
+                    </div>
+                    <div th:id="'post-body-' + ${post.number}">
+                        <div class="content markdown-wrap" th:data-allowed-update="${isAllowedUpdate}" th:utext="${markdownService.render(post.body, true, project)}">본문 내용</div>
+                    </div>
+                    
+                    <div class="attachments" id="attachments" th:data-attachments="${attachmentsJson}"></div>
+                    
+                    <div class="board-actrow right-txt">
+                        <div class="pull-left">
+                            <div>
+                                <button id="watch-button" type="button" class="ybtn" th:classappend="${isWatching ? 'ybtn-watching' : ''}"
+                                        data-toggle="tooltip" data-placement="top" th:title="#{issue.watch.description}" th:data-watching="${isWatching}"
+                                        th:text="${isWatching ? #messages.msg('post.unwatch') : #messages.msg('post.watch')}">
+                                    지켜보기
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="button" id="translate" class="icon btn-transparent-with-fontsize-lineheight ml10" data-toggle="tooltip" th:title="#{button.translation}"><i class="yobicon-lang"></i></button>
+
+                        <span class="act-row">
+                            <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:onclick="|window.location='/${project.owner}/${project.name}/post/${post.number}/editform'|"><i class="yobicon-edit-2"></i></button>
+                            <a th:if="${!isAllowedUpdate}" th:href="@{/{owner}/{projectName}/post/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${post.number})}">
+                                <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.show.original}"><i class="yobicon-edit-2"></i></button>
+                            </a>
+                            <th:block th:if="${isAllowedUpdate}">
+                                <a href="#deleteConfirm" data-toggle="modal">
+                                    <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml6" data-toggle="tooltip" th:title="#{button.delete}"><i class="yobicon-trash"></i></button>
+                                </a>
+                            </th:block>
+                        </span>
+                    </div>
+
+                    <div id="comments" class="board-comment-wrap">
+                        <div id="timeline">
+                            <div class="timeline-list">
+                                <div th:each="comment : ${comments}" class="comment" th:id="'comment-' + ${comment.id}">
+                                    <div class="comment-body">
+                                        <div class="author-info">
+                                            <strong class="name" th:text="${comment.authorName != null ? comment.authorName : comment.authorLoginId}">댓글작성자</strong>
+                                            <span class="date" th:text="${templateHelper.agoOrDateString(comment.createdDate)}">작성일</span>
+                                        </div>
+                                        <div class="content markdown-wrap" th:utext="${markdownService.render(comment.contents, true, project)}">댓글내용</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Pane -->
+                <div class="span3 span-right-pane mb20">
+                    <div class="issue-info board-labels">
+                        <dl>
+                            <dd class="project-btn-item">
+                                <a th:href="@{/{owner}/{projectName}/post/new(owner=${project.owner}, projectName=${project.name})}" class="ybtn ybtn-success" th:text="#{post.write}">글쓰기</a>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm to delete post -->
+    <div id="deleteConfirm" class="modal hide fade">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal">×</button>
+            <h3 th:text="#{post.delete}">글 삭제</h3>
+        </div>
+        <div class="modal-body">
+            <p th:text="#{post.delete.confirm}">정말 이 글을 삭제하시겠습니까?</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="ybtn ybtn-danger" data-request-method="delete" th:data-request-uri="@{/api/projects/{projectId}/posts/{number}(projectId=${project.id}, number=${post.number})}">네</button>
+            <button type="button" class="ybtn" data-dismiss="modal">아니요</button>
+        </div>
+    </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
+</div>
+
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
+<script type="text/javascript">
+    $(function(){
+        $yobi.loadModule("board.View", {
+            "postId"  : "[[${post.id}]]",
+            "urls"     : {
+                "watch"     : "/watch",
+                "unwatch"   : "/unwatch"
+            }
+        });
+
+        $('[data-request-method="delete"]').click(function(){
+            var uri = $(this).data("requestUri");
+            $.ajax({
+                url: uri,
+                type: "DELETE",
+                success: function() {
+                    window.location = "[[@{/{owner}/{projectName}/posts(owner=${project.owner}, projectName=${project.name})}]]";
+                }
+            });
+        });
+    });
+</script>
+</body>
+</html>
