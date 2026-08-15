@@ -6,9 +6,10 @@ import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.springframework.stereotype.Controller
 import org.springframework.web.bind.annotation.*
 
-@RestController
+@Controller
 class ReviewApiController(
     private val projectRepository: ProjectRepository,
     private val pullRequestRepository: PullRequestRepository,
