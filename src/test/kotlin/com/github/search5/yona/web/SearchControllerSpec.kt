@@ -56,6 +56,29 @@ class SearchControllerSpec : DescribeSpec({
                 .andExpect(model().attributeExists("keyword", "searchResult", "currentUser"))
         }
 
+        it("GET /search - 익명 사용자가 전역 검색 시 200 OK와 search/list 뷰를 반환해야 한다") {
+            every { searchService.searchInAll("yona", SearchType.ISSUE, null, any()) } returns searchResult
+
+            mockMvc.perform(
+                get("/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isOk)
+                .andExpect(view().name("search/list"))
+                .andExpect(model().attributeExists("keyword", "searchResult"))
+                .andExpect(model().attribute("currentUser", null))
+        }
+
+        it("GET /search - 검색어가 비어있을 때 400 Bad Request를 반환해야 한다") {
+            mockMvc.perform(
+                get("/search")
+                    .param("keyword", " ")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isBadRequest)
+        }
+
         it("GET /org/{organizationName}/search - 조직 검색 시 200 OK와 search/list 뷰를 반환해야 한다") {
             val org = Organization(id = 5L, name = "testorg")
             every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
@@ -64,6 +87,23 @@ class SearchControllerSpec : DescribeSpec({
 
             mockMvc.perform(
                 get("/org/testorg/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isOk)
+                .andExpect(view().name("search/list"))
+                .andExpect(model().attributeExists("keyword", "searchResult", "currentUser", "org"))
+        }
+
+        it("GET /organizations/{organizationName}/search - 조직 검색 (전체 URL) 시 200 OK와 search/list 뷰를 반환해야 한다") {
+            val org = Organization(id = 5L, name = "testorg")
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+            every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+            every { searchService.searchInAGroup("yona", SearchType.ISSUE, user, org, any()) } returns searchResult
+
+            mockMvc.perform(
+                get("/organizations/testorg/search")
                     .param("keyword", "yona")
                     .param("searchType", "issue")
                     .principal(userAuth)

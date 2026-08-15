@@ -1,447 +1,375 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title>검색 결과 - Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .search-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .search-category-wrap li.empty a {
-      color: #999;
-      background-color: transparent !important;
-  }
-  .search-list-wrap {
-      list-style: none;
-      padding-left: 0;
-  }
-  .search-list-item {
-      padding: 15px 0;
-      border-bottom: 1px solid #eaecef;
-  }
-  .search-list-item .title-wrap {
-      font-size: 16px;
-      font-weight: bold;
-      margin-bottom: 5px;
-  }
-  .search-list-item .post-id {
-      color: #586069;
-      margin-right: 5px;
-  }
-  .search-list-item .search-content {
-      margin-bottom: 8px;
-  }
-  .search-list-item .search-content-body {
-      font-size: 13px;
-      color: #444;
-      line-height: 1.5;
-      margin: 3px 0;
-  }
-  .search-list-item .search-meta-info {
-      font-size: 12px;
-      color: #6a737d;
-  }
-  .search-list-item .search-meta-info a {
-      color: #6a737d;
-      margin-right: 10px;
-  }
-  .search-list-item .search-meta-info a:hover {
-      color: #0366d6;
-      text-decoration: none;
-  }
-  .search-list-item .meta-item {
-      margin-right: 10px;
-  }
-  .empty-result {
-      padding: 50px;
-      text-align: center;
-      color: #777;
-      font-size: 14px;
-      background: #fafbfc;
-      border: 1px solid #e1e4e8;
-      border-radius: 3px;
-  }
-  strong.keyword {
-      color: #d9534f;
-      background-color: #fcf8e3;
-      padding: 1px 3px;
-      border-radius: 2px;
-  }
-</style>
+<head th:replace="~{site/layout :: head(#{title.search})}">
 </head>
-<body class="theme-default">
+<body class="theme-default" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
+  <!-- GNB -->
+  <div th:replace="~{site/layout :: gnb}"></div>
+
+  <!-- 프로젝트 내 검색일 경우 프로젝트 헤더와 메뉴 -->
+  <div th:if="${project != null}">
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'none')}"></div>
+  </div>
+
+  <!-- 조직 내 검색일 경우 조직 헤더 -->
+  <div th:if="${org != null and project == null}" class="org-header">
+    <div class="container">
+      <h2><a th:href="@{/org/{orgName}(orgName=${org.name})}" th:text="${org.name}" style="text-decoration: none; color: inherit;">조직 이름</a></h2>
+      <p th:text="${org.descr != null && !org.descr.isEmpty() ? org.descr : '조직 설명이 등록되지 않았습니다.'}" style="color: #666; font-size: 15px; margin-top: 10px;"></p>
     </div>
   </div>
 
-  <!-- 검색 헤더 -->
-  <div class="search-header">
-    <div class="container">
-      <h2>통합 검색</h2>
+  <!-- 검색 상단 브레드크럼 (프로젝트/조직 없을 때만 노출) -->
+  <div th:if="${project == null and org == null}" class="site-breadcrumb-outer">
+    <div class="site-breadcrumb-inner">
+      <h3 th:text="#{title.search}">통합 검색</h3>
     </div>
   </div>
 
   <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <!-- 좌측 검색 카테고리 탭 -->
-      <div class="col-md-3">
-        <ul class="nav nav-pills nav-stacked search-category-wrap">
-          <!-- 이슈 -->
-          <li th:classappend="${searchResult.searchType.name() == 'ISSUE'} ? 'active' : (${searchResult.issuesCount == 0} ? 'empty' : '')">
-            <a href="#" class="category-link" data-type="issue">
-              이슈
-              <span class="badge pull-right" th:text="${searchResult.issuesCount}">0</span>
-            </a>
-          </li>
-          <!-- 사용자 -->
-          <li th:classappend="${searchResult.searchType.name() == 'USER'} ? 'active' : (${searchResult.usersCount == 0} ? 'empty' : '')">
-            <a href="#" class="category-link" data-type="user">
-              사용자
-              <span class="badge pull-right" th:text="${searchResult.usersCount}">0</span>
-            </a>
-          </li>
-          <!-- 프로젝트 (프로젝트 내부 검색일 때는 숨김) -->
-          <li th:if="${project == null}" th:classappend="${searchResult.searchType.name() == 'PROJECT'} ? 'active' : (${searchResult.projectsCount == 0} ? 'empty' : '')">
-            <a href="#" class="category-link" data-type="project">
-              프로젝트
-              <span class="badge pull-right" th:text="${searchResult.projectsCount}">0</span>
-            </a>
-          </li>
-          <!-- 게시글 -->
-          <li th:classappend="${searchResult.searchType.name() == 'POST'} ? 'active' : (${searchResult.postsCount == 0} ? 'empty' : '')">
-            <a href="#" class="category-link" data-type="post">
-              게시물
-              <span class="badge pull-right" th:text="${searchResult.postsCount}">0</span>
-            </a>
-          </li>
-          <!-- 마일스톤 -->
-          <li th:classappend="${searchResult.searchType.name() == 'MILESTONE'} ? 'active' : (${searchResult.milestonesCount == 0} ? 'empty' : '')">
-            <a href="#" class="category-link" data-type="milestone">
-              마일스톤
-              <span class="badge pull-right" th:text="${searchResult.milestonesCount}">0</span>
-            </a>
-          </li>
-          <!-- 이슈 댓글 -->
-          <li th:classappend="${searchResult.searchType.name() == 'ISSUE_COMMENT'} ? 'active' : (${searchResult.issueCommentsCount == 0} ? 'empty' : '')">
-            <a href="#" class="category-link" data-type="issue_comment">
-              이슈 댓글
-              <span class="badge pull-right" th:text="${searchResult.issueCommentsCount}">0</span>
-            </a>
-          </li>
-          <!-- 게시글 댓글 -->
-          <li th:classappend="${searchResult.searchType.name() == 'POST_COMMENT'} ? 'active' : (${searchResult.postCommentsCount == 0} ? 'empty' : '')">
-            <a href="#" class="category-link" data-type="post_comment">
-              게시물 댓글
-              <span class="badge pull-right" th:text="${searchResult.postCommentsCount}">0</span>
-            </a>
-          </li>
-          <!-- 리뷰 댓글 -->
-          <li th:classappend="${searchResult.searchType.name() == 'REVIEW'} ? 'active' : (${searchResult.reviewsCount == 0} ? 'empty' : '')">
-            <a href="#" class="category-link" data-type="review">
-              리뷰 댓글
-              <span class="badge pull-right" th:text="${searchResult.reviewsCount}">0</span>
-            </a>
-          </li>
-        </ul>
-      </div>
-
-      <!-- 우측 검색 결과 영역 -->
-      <div class="col-md-9">
-        <!-- 검색창 -->
-        <div style="margin-bottom: 25px;">
-          <form id="searchInnerForm" method="get" class="form-inline"
-                th:action="${project != null} ? @{/{owner}/{projectName}/search(owner=${project.owner}, projectName=${project.name})} : (${org != null} ? @{/org/{orgName}/search(orgName=${org.name})} : @{/search})">
-            <input type="hidden" name="searchType" id="searchTypeInput" th:value="${searchResult.searchType.type}">
-            <div class="form-group" style="width: 80%;">
-              <input type="text" id="searchKeyword" name="keyword" class="form-control" th:value="${keyword}" placeholder="검색어를 입력해 주세요" style="width: 100%;" required>
-            </div>
-            <button type="submit" class="btn btn-primary">검색</button>
-          </form>
+  <div class="page-wrap-outer">
+    <div class="project-page-wrap">
+      <div class="row-fluid">
+        <!-- 좌측 카테고리 탭 (span2) -->
+        <div class="span2">
+          <ul class="lst-stacked unstyled search-category-wrap">
+            <!-- 이슈 -->
+            <li th:classappend="(${searchResult.searchType.name() == 'ISSUE'} ? 'active ' : '') + (${searchResult.issuesCount == 0} ? 'empty' : '')">
+              <a href="#" data-toggle="search-category" data-type="issue">
+                <span th:text="#{search.menu.issues}">이슈</span>
+                <span class="num-badge pull-right" th:text="${searchResult.issuesCount}">0</span>
+              </a>
+            </li>
+            <!-- 사용자 -->
+            <li th:classappend="(${searchResult.searchType.name() == 'USER'} ? 'active ' : '') + (${searchResult.usersCount == 0} ? 'empty' : '')">
+              <a href="#" data-toggle="search-category" data-type="user">
+                <span th:text="#{search.menu.users}">사용자</span>
+                <span class="num-badge pull-right" th:text="${searchResult.usersCount}">0</span>
+              </a>
+            </li>
+            <!-- 프로젝트 (프로젝트 내부 검색일 때는 숨김) -->
+            <li th:if="${project == null}" th:classappend="(${searchResult.searchType.name() == 'PROJECT'} ? 'active ' : '') + (${searchResult.projectsCount == 0} ? 'empty' : '')">
+              <a href="#" data-toggle="search-category" data-type="project">
+                <span th:text="#{search.menu.projects}">프로젝트</span>
+                <span class="num-badge pull-right" th:text="${searchResult.projectsCount}">0</span>
+              </a>
+            </li>
+            <!-- 게시물 -->
+            <li th:classappend="(${searchResult.searchType.name() == 'POST'} ? 'active ' : '') + (${searchResult.postsCount == 0} ? 'empty' : '')">
+              <a href="#" data-toggle="search-category" data-type="post">
+                <span th:text="#{search.menu.boards}">게시판</span>
+                <span class="num-badge pull-right" th:text="${searchResult.postsCount}">0</span>
+              </a>
+            </li>
+            <!-- 마일스톤 -->
+            <li th:classappend="(${searchResult.searchType.name() == 'MILESTONE'} ? 'active ' : '') + (${searchResult.milestonesCount == 0} ? 'empty' : '')">
+              <a href="#" data-toggle="search-category" data-type="milestone">
+                <span th:text="#{search.menu.milestones}">마일스톤</span>
+                <span class="num-badge pull-right" th:text="${searchResult.milestonesCount}">0</span>
+              </a>
+            </li>
+            <!-- 이슈 댓글 -->
+            <li th:classappend="(${searchResult.searchType.name() == 'ISSUE_COMMENT'} ? 'active ' : '') + (${searchResult.issueCommentsCount == 0} ? 'empty' : '')">
+              <a href="#" data-toggle="search-category" data-type="issue_comment">
+                <span th:text="#{search.menu.issue.comments}">이슈 댓글</span>
+                <span class="num-badge pull-right" th:text="${searchResult.issueCommentsCount}">0</span>
+              </a>
+            </li>
+            <!-- 게시물 댓글 -->
+            <li th:classappend="(${searchResult.searchType.name() == 'POST_COMMENT'} ? 'active ' : '') + (${searchResult.postCommentsCount == 0} ? 'empty' : '')">
+              <a href="#" data-toggle="search-category" data-type="post_comment">
+                <span th:text="#{search.menu.board.comments}">게시글 댓글</span>
+                <span class="num-badge pull-right" th:text="${searchResult.postCommentsCount}">0</span>
+              </a>
+            </li>
+            <!-- 리뷰 댓글 -->
+            <li th:classappend="(${searchResult.searchType.name() == 'REVIEW'} ? 'active ' : '') + (${searchResult.reviewsCount == 0} ? 'empty' : '')">
+              <a href="#" data-toggle="search-category" data-type="review">
+                <span th:text="#{search.menu.reviews}">리뷰 댓글</span>
+                <span class="num-badge pull-right" th:text="${searchResult.reviewsCount}">0</span>
+              </a>
+            </li>
+          </ul>
         </div>
 
-        <hr>
-
-        <!-- 결과 리스트 -->
-        <div class="search-result-wrap">
-
-          <!-- 1. 이슈 결과 -->
-          <div th:if="${searchResult.searchType.name() == 'ISSUE'}">
-            <div th:if="${searchResult.issues.content.isEmpty()}" class="empty-result">검색 결과가 존재하지 않습니다.</div>
-            <ul class="search-list-wrap" th:if="${!searchResult.issues.content.isEmpty()}">
-              <li th:each="issue : ${searchResult.issues.content}" class="search-list-item">
-                <div class="title-wrap">
-                  <span class="post-id" th:text="'#' + ${issue.number}">#1</span>
-                  <a th:href="@{/api/projects/{projectId}/issues/{issueId}(projectId=${issue.project.id}, issueId=${issue.id})}" class="title" th:text="${issue.title}">이슈 제목</a>
-                </div>
-                <div class="search-content">
-                  <p th:each="snippet : ${searchResult.makeSnippets(issue.body, 40)}" class="search-content-body" th:text="${snippet}"></p>
-                </div>
-                <div class="search-meta-info">
-                  <a th:if="${project == null}" th:href="@{/projects/{owner}/{name}(owner=${issue.project.owner}, name=${issue.project.name})}" class="meta-item" th:text="${issue.project.owner} + ' / ' + ${issue.project.name}">프로젝트명</a>
-                  <span class="meta-item" th:text="${issue.authorName != null ? issue.authorName : '작성자 없음'}">작성자</span>
-                  <span class="meta-item" th:text="${issue.createdDate != null ? #temporals.format(issue.createdDate, 'yyyy-MM-dd HH:mm') : ''}">등록일</span>
-                </div>
-              </li>
-            </ul>
-            <!-- 이슈 페이징 -->
-            <div class="text-center" th:if="${searchResult.issues.totalPages > 1}">
-              <ul class="pagination">
-                <li th:classappend="${searchResult.issues.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.issues.number}">&laquo;</a></li>
-                <li th:each="i : ${#numbers.sequence(0, searchResult.issues.totalPages - 1)}" th:classappend="${i == searchResult.issues.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
-                <li th:classappend="${searchResult.issues.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.issues.number + 2}">&raquo;</a></li>
-              </ul>
-            </div>
+        <!-- 우측 검색 결과 영역 (span10) -->
+        <div class="span10">
+          <!-- 검색창 -->
+          <div class="search-box-wrap">
+            <form id="searchInnerForm" method="get" class="form-inline"
+                  th:action="${project != null} ? @{/{owner}/{projectName}/search(owner=${project.owner}, projectName=${project.name})} : (${org != null} ? @{/org/{orgName}/search(orgName=${org.name})} : @{/search})">
+              <input type="hidden" name="searchType" id="searchTypeInput" th:value="${searchResult.searchType.type}">
+              <input type="text" id="searchKeyword" name="keyword" class="span11" th:value="${keyword}" th:placeholder="#{title.search}" required autocomplete="off">
+              <button type="submit" class="ybtn" th:text="#{title.search}">검색</button>
+            </form>
+            
+            <h3 class="search-result-title" th:with="
+                searchCount=${
+                  searchResult.searchType.name() == 'ISSUE' ? searchResult.issuesCount : (
+                  searchResult.searchType.name() == 'USER' ? searchResult.usersCount : (
+                  searchResult.searchType.name() == 'PROJECT' ? searchResult.projectsCount : (
+                  searchResult.searchType.name() == 'POST' ? searchResult.postsCount : (
+                  searchResult.searchType.name() == 'MILESTONE' ? searchResult.milestonesCount : (
+                  searchResult.searchType.name() == 'ISSUE_COMMENT' ? searchResult.issueCommentsCount : (
+                  searchResult.searchType.name() == 'POST_COMMENT' ? searchResult.postCommentsCount : (
+                  searchResult.searchType.name() == 'REVIEW' ? searchResult.reviewsCount : 0
+                  )))))))
+                },
+                searchTypeName=${
+                  searchResult.searchType.name() == 'ISSUE' ? #messages.msg('search.menu.issues') : (
+                  searchResult.searchType.name() == 'USER' ? #messages.msg('search.menu.users') : (
+                  searchResult.searchType.name() == 'PROJECT' ? #messages.msg('search.menu.projects') : (
+                  searchResult.searchType.name() == 'POST' ? #messages.msg('search.menu.boards') : (
+                  searchResult.searchType.name() == 'MILESTONE' ? #messages.msg('search.menu.milestones') : (
+                  searchResult.searchType.name() == 'ISSUE_COMMENT' ? #messages.msg('search.menu.issue.comments') : (
+                  searchResult.searchType.name() == 'POST_COMMENT' ? #messages.msg('search.menu.board.comments') : (
+                  searchResult.searchType.name() == 'REVIEW' ? #messages.msg('search.menu.reviews') : ''
+                  )))))))
+                }
+            " th:utext="${#messages.msg('search.result.title', searchCount, searchTypeName)}">
+              '<strong>0</strong>'개의 <strong>이슈</strong> 검색 결과
+            </h3>
           </div>
 
-          <!-- 2. 사용자 결과 -->
-          <div th:if="${searchResult.searchType.name() == 'USER'}">
-            <div th:if="${searchResult.users.content.isEmpty()}" class="empty-result">검색 결과가 존재하지 않습니다.</div>
-            <ul class="search-list-wrap" th:if="${!searchResult.users.content.isEmpty()}">
-              <li th:each="user : ${searchResult.users.content}" class="search-list-item">
-                <div class="title-wrap">
-                  <a th:href="@{/user/{loginId}(loginId=${user.loginId})}" class="title" th:text="${user.name} + ' (@' + ${user.loginId} + ')'">이름 (아이디)</a>
-                </div>
-                <div class="search-meta-info">
-                  <span class="meta-item" th:text="'가입일: ' + ${user.createdDate != null ? #temporals.format(user.createdDate, 'yyyy-MM-dd') : ''}">가입일</span>
-                </div>
-              </li>
-            </ul>
-            <!-- 사용자 페이징 -->
-            <div class="text-center" th:if="${searchResult.users.totalPages > 1}">
-              <ul class="pagination">
-                <li th:classappend="${searchResult.users.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.users.number}">&laquo;</a></li>
-                <li th:each="i : ${#numbers.sequence(0, searchResult.users.totalPages - 1)}" th:classappend="${i == searchResult.users.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
-                <li th:classappend="${searchResult.users.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.users.number + 2}">&raquo;</a></li>
-              </ul>
-            </div>
-          </div>
+          <div class="search-result-wrap">
 
-          <!-- 3. 프로젝트 결과 -->
-          <div th:if="${searchResult.searchType.name() == 'PROJECT'}">
-            <div th:if="${searchResult.projects.content.isEmpty()}" class="empty-result">검색 결과가 존재하지 않습니다.</div>
-            <ul class="search-list-wrap" th:if="${!searchResult.projects.content.isEmpty()}">
-              <li th:each="p : ${searchResult.projects.content}" class="search-list-item">
-                <div class="title-wrap">
-                  <a th:href="@{/projects/{owner}/{name}(owner=${p.owner}, name=${p.name})}" class="title" th:text="${p.owner} + ' / ' + ${p.name}">소유자 / 프로젝트명</a>
-                </div>
-                <div class="search-content">
-                  <p th:each="snippet : ${searchResult.makeSnippets(p.overview, 40)}" class="search-content-body" th:text="${snippet}"></p>
-                </div>
-                <div class="search-meta-info">
-                  <span class="meta-item" th:text="'생성일: ' + ${p.createdDate != null ? #temporals.format(p.createdDate, 'yyyy-MM-dd') : ''}">생성일</span>
-                </div>
-              </li>
-            </ul>
-            <!-- 프로젝트 페이징 -->
-            <div class="text-center" th:if="${searchResult.projects.totalPages > 1}">
-              <ul class="pagination">
-                <li th:classappend="${searchResult.projects.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.projects.number}">&laquo;</a></li>
-                <li th:each="i : ${#numbers.sequence(0, searchResult.projects.totalPages - 1)}" th:classappend="${i == searchResult.projects.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
-                <li th:classappend="${searchResult.projects.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.projects.number + 2}">&raquo;</a></li>
+            <!-- 1. 이슈 결과 -->
+            <div th:if="${searchResult.searchType.name() == 'ISSUE'}">
+              <div th:if="${searchResult.issues.content.isEmpty()}" class="empty-result"></div>
+              <ul class="unstyled" th:if="${!searchResult.issues.content.isEmpty()}">
+                <li th:each="issue : ${searchResult.issues.content}" class="search-list-item">
+                  <div class="title-wrap">
+                    <span class="post-id" th:text="'#' + ${issue.number}">#1</span>
+                    <a th:href="@{/{owner}/{name}/issue/{issueNumber}(owner=${issue.project.owner}, name=${issue.project.name}, issueNumber=${issue.number})}" class="title" th:text="${issue.title}">이슈 제목</a>
+                  </div>
+                  <div class="search-content">
+                    <p th:each="snippet : ${searchResult.makeSnippets(issue.body, 40)}" class="search-content-body" th:text="${snippet}"></p>
+                  </div>
+                  <div class="search-meta-info">
+                    <a th:if="${project == null}" th:href="@{/{owner}/{name}(owner=${issue.project.owner}, name=${issue.project.name})}" class="project-link meta-item" th:text="${issue.project.owner} + ' / ' + ${issue.project.name}">프로젝트명</a>
+                    <span class="meta-item" th:text="${issue.authorName != null ? issue.authorName : '작성자 없음'}">작성자</span>
+                    <span class="meta-item" th:text="${issue.createdDate != null ? #temporals.format(issue.createdDate, 'yyyy-MM-dd HH:mm') : ''}">등록일</span>
+                  </div>
+                </li>
               </ul>
+              <!-- 이슈 페이징 -->
+              <div class="text-center" th:if="${searchResult.issues.totalPages > 1}">
+                <ul class="pagination">
+                  <li th:classappend="${searchResult.issues.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.issues.number}">&laquo;</a></li>
+                  <li th:each="i : ${#numbers.sequence(0, searchResult.issues.totalPages - 1)}" th:classappend="${i == searchResult.issues.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
+                  <li th:classappend="${searchResult.issues.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.issues.number + 2}">&raquo;</a></li>
+                </ul>
+              </div>
             </div>
-          </div>
 
-          <!-- 4. 게시글 결과 -->
-          <div th:if="${searchResult.searchType.name() == 'POST'}">
-            <div th:if="${searchResult.posts.content.isEmpty()}" class="empty-result">검색 결과가 존재하지 않습니다.</div>
-            <ul class="search-list-wrap" th:if="${!searchResult.posts.content.isEmpty()}">
-              <li th:each="post : ${searchResult.posts.content}" class="search-list-item">
-                <div class="title-wrap">
-                  <span class="post-id" th:text="'#' + ${post.number}">#1</span>
-                  <a th:href="@{/api/projects/{projectId}/postings/{postingId}(projectId=${post.project.id}, postingId=${post.id})}" class="title" th:text="${post.title}">게시글 제목</a>
-                </div>
-                <div class="search-content">
-                  <p th:each="snippet : ${searchResult.makeSnippets(post.body, 40)}" class="search-content-body" th:text="${snippet}"></p>
-                </div>
-                <div class="search-meta-info">
-                  <a th:if="${project == null}" th:href="@{/projects/{owner}/{name}(owner=${post.project.owner}, name=${post.project.name})}" class="meta-item" th:text="${post.project.owner} + ' / ' + ${post.project.name}">프로젝트명</a>
-                  <span class="meta-item" th:text="${post.authorName != null ? post.authorName : '작성자 없음'}">작성자</span>
-                  <span class="meta-item" th:text="${post.createdDate != null ? #temporals.format(post.createdDate, 'yyyy-MM-dd HH:mm') : ''}">등록일</span>
-                </div>
-              </li>
-            </ul>
-            <!-- 게시글 페이징 -->
-            <div class="text-center" th:if="${searchResult.posts.totalPages > 1}">
-              <ul class="pagination">
-                <li th:classappend="${searchResult.posts.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.posts.number}">&laquo;</a></li>
-                <li th:each="i : ${#numbers.sequence(0, searchResult.posts.totalPages - 1)}" th:classappend="${i == searchResult.posts.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
-                <li th:classappend="${searchResult.posts.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.posts.number + 2}">&raquo;</a></li>
+            <!-- 2. 사용자 결과 -->
+            <div th:if="${searchResult.searchType.name() == 'USER'}">
+              <div th:if="${searchResult.users.content.isEmpty()}" class="empty-result"></div>
+              <ul class="unstyled" th:if="${!searchResult.users.content.isEmpty()}">
+                <li th:each="user : ${searchResult.users.content}" class="search-list-item">
+                  <div class="title-wrap">
+                    <a th:href="@{/user/{loginId}(loginId=${user.loginId})}" class="title" th:text="${user.name} + ' (@' + ${user.loginId} + ')'">이름 (아이디)</a>
+                  </div>
+                  <div class="search-meta-info">
+                    <span class="meta-item" th:text="'가입일: ' + ${user.createdDate != null ? #temporals.format(user.createdDate, 'yyyy-MM-dd') : ''}">가입일</span>
+                  </div>
+                </li>
               </ul>
+              <!-- 사용자 페이징 -->
+              <div class="text-center" th:if="${searchResult.users.totalPages > 1}">
+                <ul class="pagination">
+                  <li th:classappend="${searchResult.users.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.users.number}">&laquo;</a></li>
+                  <li th:each="i : ${#numbers.sequence(0, searchResult.users.totalPages - 1)}" th:classappend="${i == searchResult.users.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
+                  <li th:classappend="${searchResult.users.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.users.number + 2}">&raquo;</a></li>
+                </ul>
+              </div>
             </div>
-          </div>
 
-          <!-- 5. 마일스톤 결과 -->
-          <div th:if="${searchResult.searchType.name() == 'MILESTONE'}">
-            <div th:if="${searchResult.milestones.content.isEmpty()}" class="empty-result">검색 결과가 존재하지 않습니다.</div>
-            <ul class="search-list-wrap" th:if="${!searchResult.milestones.content.isEmpty()}">
-              <li th:each="milestone : ${searchResult.milestones.content}" class="search-list-item">
-                <div class="title-wrap">
-                  <a th:href="@{/{owner}/{projectName}/milestone/{milestoneId}(owner=${milestone.project.owner}, projectName=${milestone.project.name}, milestoneId=${milestone.id})}" class="title" th:text="${milestone.title}">마일스톤 제목</a>
-                </div>
-                <div class="search-content">
-                  <p th:each="snippet : ${searchResult.makeSnippets(milestone.contents, 40)}" class="search-content-body" th:text="${snippet}"></p>
-                </div>
-                <div class="search-meta-info">
-                  <a th:if="${project == null}" th:href="@{/projects/{owner}/{name}(owner=${milestone.project.owner}, name=${milestone.project.name})}" class="meta-item" th:text="${milestone.project.owner} + ' / ' + ${milestone.project.name}">프로젝트명</a>
-                  <span class="meta-item" th:text="${milestone.dueDate != null ? '기한: ' + #temporals.format(milestone.dueDate, 'yyyy-MM-dd') : '기한 없음'}">기한</span>
-                </div>
-              </li>
-            </ul>
-            <!-- 마일스톤 페이징 -->
-            <div class="text-center" th:if="${searchResult.milestones.totalPages > 1}">
-              <ul class="pagination">
-                <li th:classappend="${searchResult.milestones.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.milestones.number}">&laquo;</a></li>
-                <li th:each="i : ${#numbers.sequence(0, searchResult.milestones.totalPages - 1)}" th:classappend="${i == searchResult.milestones.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
-                <li th:classappend="${searchResult.milestones.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.milestones.number + 2}">&raquo;</a></li>
+            <!-- 3. 프로젝트 결과 -->
+            <div th:if="${searchResult.searchType.name() == 'PROJECT'}">
+              <div th:if="${searchResult.projects.content.isEmpty()}" class="empty-result"></div>
+              <ul class="unstyled" th:if="${!searchResult.projects.content.isEmpty()}">
+                <li th:each="p : ${searchResult.projects.content}" class="search-list-item">
+                  <div class="title-wrap">
+                    <a th:href="@{/{owner}/{name}(owner=${p.owner}, name=${p.name})}" class="title" th:text="${p.owner} + ' / ' + ${p.name}">소유자 / 프로젝트명</a>
+                  </div>
+                  <div class="search-content">
+                    <p th:each="snippet : ${searchResult.makeSnippets(p.overview, 40)}" class="search-content-body" th:text="${snippet}"></p>
+                  </div>
+                  <div class="search-meta-info">
+                    <span class="meta-item" th:text="'생성일: ' + ${p.createdDate != null ? #temporals.format(p.createdDate, 'yyyy-MM-dd') : ''}">생성일</span>
+                  </div>
+                </li>
               </ul>
+              <!-- 프로젝트 페이징 -->
+              <div class="text-center" th:if="${searchResult.projects.totalPages > 1}">
+                <ul class="pagination">
+                  <li th:classappend="${searchResult.projects.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.projects.number}">&laquo;</a></li>
+                  <li th:each="i : ${#numbers.sequence(0, searchResult.projects.totalPages - 1)}" th:classappend="${i == searchResult.projects.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
+                  <li th:classappend="${searchResult.projects.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.projects.number + 2}">&raquo;</a></li>
+                </ul>
+              </div>
             </div>
-          </div>
 
-          <!-- 6. 이슈 댓글 결과 -->
-          <div th:if="${searchResult.searchType.name() == 'ISSUE_COMMENT'}">
-            <div th:if="${searchResult.issueComments.content.isEmpty()}" class="empty-result">검색 결과가 존재하지 않습니다.</div>
-            <ul class="search-list-wrap" th:if="${!searchResult.issueComments.content.isEmpty()}">
-              <li th:each="ic : ${searchResult.issueComments.content}" class="search-list-item">
-                <div class="title-wrap">
-                  <span class="post-id" th:text="'#' + ${ic.issue.number}">#1</span>
-                  <a th:href="@{/api/projects/{projectId}/issues/{issueId}(projectId=${ic.issue.project.id}, issueId=${ic.issue.id})}" class="title" th:text="${ic.issue.title} + ' 에 달린 댓글'">이슈 댓글의 이슈 제목</a>
-                </div>
-                <div class="search-content">
-                  <p th:each="snippet : ${searchResult.makeSnippets(ic.contents, 40)}" class="search-content-body" th:text="${snippet}"></p>
-                </div>
-                <div class="search-meta-info">
-                  <a th:if="${project == null}" th:href="@{/projects/{owner}/{name}(owner=${ic.issue.project.owner}, name=${ic.issue.project.name})}" class="meta-item" th:text="${ic.issue.project.owner} + ' / ' + ${ic.issue.project.name}">프로젝트명</a>
-                  <span class="meta-item" th:text="${ic.authorName != null ? ic.authorName : '작성자 없음'}">작성자</span>
-                  <span class="meta-item" th:text="${ic.createdDate != null ? #temporals.format(ic.createdDate, 'yyyy-MM-dd HH:mm') : ''}">댓글 등록일</span>
-                </div>
-              </li>
-            </ul>
-            <!-- 이슈 댓글 페이징 -->
-            <div class="text-center" th:if="${searchResult.issueComments.totalPages > 1}">
-              <ul class="pagination">
-                <li th:classappend="${searchResult.issueComments.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.issueComments.number}">&laquo;</a></li>
-                <li th:each="i : ${#numbers.sequence(0, searchResult.issueComments.totalPages - 1)}" th:classappend="${i == searchResult.issueComments.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
-                <li th:classappend="${searchResult.issueComments.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.issueComments.number + 2}">&raquo;</a></li>
+            <!-- 4. 게시글 결과 -->
+            <div th:if="${searchResult.searchType.name() == 'POST'}">
+              <div th:if="${searchResult.posts.content.isEmpty()}" class="empty-result"></div>
+              <ul class="unstyled" th:if="${!searchResult.posts.content.isEmpty()}">
+                <li th:each="post : ${searchResult.posts.content}" class="search-list-item">
+                  <div class="title-wrap">
+                    <span class="post-id" th:text="'#' + ${post.number}">#1</span>
+                    <a th:href="@{/{owner}/{name}/post/{postNumber}(owner=${post.project.owner}, name=${post.project.name}, postNumber=${post.number})}" class="title" th:text="${post.title}">게시글 제목</a>
+                  </div>
+                  <div class="search-content">
+                    <p th:each="snippet : ${searchResult.makeSnippets(post.body, 40)}" class="search-content-body" th:text="${snippet}"></p>
+                  </div>
+                  <div class="search-meta-info">
+                    <a th:if="${project == null}" th:href="@{/{owner}/{name}(owner=${post.project.owner}, name=${post.project.name})}" class="project-link meta-item" th:text="${post.project.owner} + ' / ' + ${post.project.name}">프로젝트명</a>
+                    <span class="meta-item" th:text="${post.authorName != null ? post.authorName : '작성자 없음'}">작성자</span>
+                    <span class="meta-item" th:text="${post.createdDate != null ? #temporals.format(post.createdDate, 'yyyy-MM-dd HH:mm') : ''}">등록일</span>
+                  </div>
+                </li>
               </ul>
+              <!-- 게시글 페이징 -->
+              <div class="text-center" th:if="${searchResult.posts.totalPages > 1}">
+                <ul class="pagination">
+                  <li th:classappend="${searchResult.posts.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.posts.number}">&laquo;</a></li>
+                  <li th:each="i : ${#numbers.sequence(0, searchResult.posts.totalPages - 1)}" th:classappend="${i == searchResult.posts.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
+                  <li th:classappend="${searchResult.posts.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.posts.number + 2}">&raquo;</a></li>
+                </ul>
+              </div>
             </div>
-          </div>
 
-          <!-- 7. 게시글 댓글 결과 -->
-          <div th:if="${searchResult.searchType.name() == 'POST_COMMENT'}">
-            <div th:if="${searchResult.postComments.content.isEmpty()}" class="empty-result">검색 결과가 존재하지 않습니다.</div>
-            <ul class="search-list-wrap" th:if="${!searchResult.postComments.content.isEmpty()}">
-              <li th:each="pc : ${searchResult.postComments.content}" class="search-list-item">
-                <div class="title-wrap">
-                  <span class="post-id" th:text="'#' + ${pc.posting.number}">#1</span>
-                  <a th:href="@{/api/projects/{projectId}/postings/{postingId}(projectId=${pc.posting.project.id}, postingId=${pc.posting.id})}" class="title" th:text="${pc.posting.title} + ' 에 달린 댓글'">게시글 댓글의 게시글 제목</a>
-                </div>
-                <div class="search-content">
-                  <p th:each="snippet : ${searchResult.makeSnippets(pc.contents, 40)}" class="search-content-body" th:text="${snippet}"></p>
-                </div>
-                <div class="search-meta-info">
-                  <a th:if="${project == null}" th:href="@{/projects/{owner}/{name}(owner=${pc.posting.project.owner}, name=${pc.posting.project.name})}" class="meta-item" th:text="${pc.posting.project.owner} + ' / ' + ${pc.posting.project.name}">프로젝트명</a>
-                  <span class="meta-item" th:text="${pc.authorName != null ? pc.authorName : '작성자 없음'}">작성자</span>
-                  <span class="meta-item" th:text="${pc.createdDate != null ? #temporals.format(pc.createdDate, 'yyyy-MM-dd HH:mm') : ''}">댓글 등록일</span>
-                </div>
-              </li>
-            </ul>
-            <!-- 게시글 댓글 페이징 -->
-            <div class="text-center" th:if="${searchResult.postComments.totalPages > 1}">
-              <ul class="pagination">
-                <li th:classappend="${searchResult.postComments.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.postComments.number}">&laquo;</a></li>
-                <li th:each="i : ${#numbers.sequence(0, searchResult.postComments.totalPages - 1)}" th:classappend="${i == searchResult.postComments.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
-                <li th:classappend="${searchResult.postComments.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.postComments.number + 2}">&raquo;</a></li>
+            <!-- 5. 마일스톤 결과 -->
+            <div th:if="${searchResult.searchType.name() == 'MILESTONE'}">
+              <div th:if="${searchResult.milestones.content.isEmpty()}" class="empty-result"></div>
+              <ul class="unstyled" th:if="${!searchResult.milestones.content.isEmpty()}">
+                <li th:each="milestone : ${searchResult.milestones.content}" class="search-list-item">
+                  <div class="title-wrap">
+                    <a th:href="@{/{owner}/{projectName}/milestone/{milestoneId}(owner=${milestone.project.owner}, projectName=${milestone.project.name}, milestoneId=${milestone.id})}" class="title" th:text="${milestone.title}">마일스톤 제목</a>
+                  </div>
+                  <div class="search-content">
+                    <p th:each="snippet : ${searchResult.makeSnippets(milestone.contents, 40)}" class="search-content-body" th:text="${snippet}"></p>
+                  </div>
+                  <div class="search-meta-info">
+                    <a th:if="${project == null}" th:href="@{/{owner}/{name}(owner=${milestone.project.owner}, name=${milestone.project.name})}" class="project-link meta-item" th:text="${milestone.project.owner} + ' / ' + ${milestone.project.name}">프로젝트명</a>
+                    <span class="meta-item" th:text="${milestone.dueDate != null ? '기한: ' + #temporals.format(milestone.dueDate, 'yyyy-MM-dd') : '기한 없음'}">기한</span>
+                  </div>
+                </li>
               </ul>
+              <!-- 마일스톤 페이징 -->
+              <div class="text-center" th:if="${searchResult.milestones.totalPages > 1}">
+                <ul class="pagination">
+                  <li th:classappend="${searchResult.milestones.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.milestones.number}">&laquo;</a></li>
+                  <li th:each="i : ${#numbers.sequence(0, searchResult.milestones.totalPages - 1)}" th:classappend="${i == searchResult.milestones.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
+                  <li th:classappend="${searchResult.milestones.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.milestones.number + 2}">&raquo;</a></li>
+                </ul>
+              </div>
             </div>
-          </div>
 
-          <!-- 8. 리뷰 댓글 결과 -->
-          <div th:if="${searchResult.searchType.name() == 'REVIEW'}">
-            <div th:if="${searchResult.reviews.content.isEmpty()}" class="empty-result">검색 결과가 존재하지 않습니다.</div>
-            <ul class="search-list-wrap" th:if="${!searchResult.reviews.content.isEmpty()}">
-              <li th:each="rc : ${searchResult.reviews.content}" class="search-list-item">
-                <div class="title-wrap">
-                  <span class="post-id" th:text="'#' + ${rc.thread.pullRequest.number}">#1</span>
-                  <a th:href="@{/api/projects/{projectId}/pullrequests/{pullrequestId}(projectId=${rc.thread.project.id}, pullrequestId=${rc.thread.pullRequest.id})}" class="title" th:text="${rc.thread.pullRequest.title} + ' 에 달린 리뷰 댓글'">리뷰 댓글의 풀리퀘 제목</a>
-                </div>
-                <div class="search-content">
-                  <p th:each="snippet : ${searchResult.makeSnippets(rc.contents, 40)}" class="search-content-body" th:text="${snippet}"></p>
-                </div>
-                <div class="search-meta-info">
-                  <a th:if="${project == null}" th:href="@{/projects/{owner}/{name}(owner=${rc.thread.project.owner}, name=${rc.thread.project.name})}" class="meta-item" th:text="${rc.thread.project.owner} + ' / ' + ${rc.thread.project.name}">프로젝트명</a>
-                  <span class="meta-item" th:text="${rc.author != null ? rc.author.name : '작성자 없음'}">작성자</span>
-                  <span class="meta-item" th:text="${rc.createdDate != null ? #dates.format(rc.createdDate, 'yyyy-MM-dd HH:mm') : ''}">댓글 등록일</span>
-                </div>
-              </li>
-            </ul>
-            <!-- 리뷰 댓글 페이징 -->
-            <div class="text-center" th:if="${searchResult.reviews.totalPages > 1}">
-              <ul class="pagination">
-                <li th:classappend="${searchResult.reviews.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.reviews.number}">&laquo;</a></li>
-                <li th:each="i : ${#numbers.sequence(0, searchResult.reviews.totalPages - 1)}" th:classappend="${i == searchResult.reviews.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
-                <li th:classappend="${searchResult.reviews.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.reviews.number + 2}">&raquo;</a></li>
+            <!-- 6. 이슈 댓글 결과 -->
+            <div th:if="${searchResult.searchType.name() == 'ISSUE_COMMENT'}">
+              <div th:if="${searchResult.issueComments.content.isEmpty()}" class="empty-result"></div>
+              <ul class="unstyled" th:if="${!searchResult.issueComments.content.isEmpty()}">
+                <li th:each="ic : ${searchResult.issueComments.content}" class="search-list-item">
+                  <div class="title-wrap">
+                    <span class="post-id" th:text="'#' + ${ic.issue.number}">#1</span>
+                    <a th:href="@{/{owner}/{name}/issue/{issueNumber}(owner=${ic.issue.project.owner}, name=${ic.issue.project.name}, issueNumber=${ic.issue.number})}" class="title" th:text="${ic.issue.title} + ' 에 달린 댓글'">이슈 댓글의 이슈 제목</a>
+                  </div>
+                  <div class="search-content">
+                    <p th:each="snippet : ${searchResult.makeSnippets(ic.contents, 40)}" class="search-content-body" th:text="${snippet}"></p>
+                  </div>
+                  <div class="search-meta-info">
+                    <a th:if="${project == null}" th:href="@{/{owner}/{name}(owner=${ic.issue.project.owner}, name=${ic.issue.project.name})}" class="project-link meta-item" th:text="${ic.issue.project.owner} + ' / ' + ${ic.issue.project.name}">프로젝트명</a>
+                    <span class="meta-item" th:text="${ic.authorName != null ? ic.authorName : '작성자 없음'}">작성자</span>
+                    <span class="meta-item" th:text="${ic.createdDate != null ? #temporals.format(ic.createdDate, 'yyyy-MM-dd HH:mm') : ''}">댓글 등록일</span>
+                  </div>
+                </li>
               </ul>
+              <!-- 이슈 댓글 페이징 -->
+              <div class="text-center" th:if="${searchResult.issueComments.totalPages > 1}">
+                <ul class="pagination">
+                  <li th:classappend="${searchResult.issueComments.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.issueComments.number}">&laquo;</a></li>
+                  <li th:each="i : ${#numbers.sequence(0, searchResult.issueComments.totalPages - 1)}" th:classappend="${i == searchResult.issueComments.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
+                  <li th:classappend="${searchResult.issueComments.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.issueComments.number + 2}">&raquo;</a></li>
+                </ul>
+              </div>
             </div>
-          </div>
 
+            <!-- 7. 게시글 댓글 결과 -->
+            <div th:if="${searchResult.searchType.name() == 'POST_COMMENT'}">
+              <div th:if="${searchResult.postComments.content.isEmpty()}" class="empty-result"></div>
+              <ul class="unstyled" th:if="${!searchResult.postComments.content.isEmpty()}">
+                <li th:each="pc : ${searchResult.postComments.content}" class="search-list-item">
+                  <div class="title-wrap">
+                    <span class="post-id" th:text="'#' + ${pc.posting.number}">#1</span>
+                    <a th:href="@{/{owner}/{name}/post/{postNumber}(owner=${pc.posting.project.owner}, name=${pc.posting.project.name}, postNumber=${pc.posting.number})}" class="title" th:text="${pc.posting.title} + ' 에 달린 댓글'">게시글 댓글의 게시글 제목</a>
+                  </div>
+                  <div class="search-content">
+                    <p th:each="snippet : ${searchResult.makeSnippets(pc.contents, 40)}" class="search-content-body" th:text="${snippet}"></p>
+                  </div>
+                  <div class="search-meta-info">
+                    <a th:if="${project == null}" th:href="@{/{owner}/{name}(owner=${pc.posting.project.owner}, name=${pc.posting.project.name})}" class="project-link meta-item" th:text="${pc.posting.project.owner} + ' / ' + ${pc.posting.project.name}">프로젝트명</a>
+                    <span class="meta-item" th:text="${pc.authorName != null ? pc.authorName : '작성자 없음'}">작성자</span>
+                    <span class="meta-item" th:text="${pc.createdDate != null ? #temporals.format(pc.createdDate, 'yyyy-MM-dd HH:mm') : ''}">댓글 등록일</span>
+                  </div>
+                </li>
+              </ul>
+              <!-- 게시글 댓글 페이징 -->
+              <div class="text-center" th:if="${searchResult.postComments.totalPages > 1}">
+                <ul class="pagination">
+                  <li th:classappend="${searchResult.postComments.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.postComments.number}">&laquo;</a></li>
+                  <li th:each="i : ${#numbers.sequence(0, searchResult.postComments.totalPages - 1)}" th:classappend="${i == searchResult.postComments.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
+                  <li th:classappend="${searchResult.postComments.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.postComments.number + 2}">&raquo;</a></li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- 8. 리뷰 댓글 결과 -->
+            <div th:if="${searchResult.searchType.name() == 'REVIEW'}">
+              <div th:if="${searchResult.reviews.content.isEmpty()}" class="empty-result"></div>
+              <ul class="unstyled" th:if="${!searchResult.reviews.content.isEmpty()}">
+                <li th:each="rc : ${searchResult.reviews.content}" class="search-list-item">
+                  <div class="title-wrap">
+                    <span class="post-id" th:text="'#' + ${rc.thread.pullRequest.number}">#1</span>
+                    <a th:href="@{/{owner}/{name}/pullRequest/{number}(owner=${rc.thread.project.owner}, name=${rc.thread.project.name}, number=${rc.thread.pullRequest.number})}" class="title" th:text="${rc.thread.pullRequest.title} + ' 에 달린 리뷰 댓글'">리뷰 댓글의 풀리퀘 제목</a>
+                  </div>
+                  <div class="search-content">
+                    <p th:each="snippet : ${searchResult.makeSnippets(rc.contents, 40)}" class="search-content-body" th:text="${snippet}"></p>
+                  </div>
+                  <div class="search-meta-info">
+                    <a th:if="${project == null}" th:href="@{/{owner}/{name}(owner=${rc.thread.project.owner}, name=${rc.thread.project.name})}" class="project-link meta-item" th:text="${rc.thread.project.owner} + ' / ' + ${rc.thread.project.name}">프로젝트명</a>
+                    <span class="meta-item" th:text="${rc.author != null ? rc.author.name : '작성자 없음'}">작성자</span>
+                    <span class="meta-item" th:text="${rc.createdDate != null ? #dates.format(rc.createdDate, 'yyyy-MM-dd HH:mm') : ''}">댓글 등록일</span>
+                  </div>
+                </li>
+              </ul>
+              <!-- 리뷰 댓글 페이징 -->
+              <div class="text-center" th:if="${searchResult.reviews.totalPages > 1}">
+                <ul class="pagination">
+                  <li th:classappend="${searchResult.reviews.first} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.reviews.number}">&laquo;</a></li>
+                  <li th:each="i : ${#numbers.sequence(0, searchResult.reviews.totalPages - 1)}" th:classappend="${i == searchResult.reviews.number} ? 'active'"><a href="#" class="page-link" th:data-page="${i + 1}" th:text="${i + 1}">1</a></li>
+                  <li th:classappend="${searchResult.reviews.last} ? 'disabled'"><a href="#" class="page-link" th:data-page="${searchResult.reviews.number + 2}">&raquo;</a></li>
+                </ul>
+              </div>
+            </div>
+
+          </div>
         </div>
       </div>
     </div>
   </div>
+  
+  <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="/bootstrap/js/bootstrap.js"></script>
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
 <script th:inline="javascript">
   $(document).ready(function() {
       // 카테고리 탭 클릭 이벤트
-      $(".category-link").click(function(e) {
+      $(".search-category-wrap").on("click", 'a[data-toggle="search-category"]', function(e) {
           e.preventDefault();
           var type = $(this).data("type");
           $("#searchTypeInput").val(type);
@@ -453,7 +381,6 @@
           e.preventDefault();
           var page = $(this).data("page");
           if (page) {
-              // 폼에 pageNum 값을 추가하여 서브밋
               var form = $("#searchInnerForm");
               $("<input>").attr({
                   type: 'hidden',
@@ -473,7 +400,6 @@
           var regex = new RegExp(escapeRegExp(keyword), "ig");
           $(".search-content-body, .title").each(function() {
               var html = $(this).html();
-              // HTML 태그 내부의 글자들은 치환하지 않도록 방지하기 위해 간단히 처리
               html = html.replace(regex, function(match) {
                   return "<strong class='keyword'>" + match + "</strong>";
               });

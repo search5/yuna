@@ -88,5 +88,65 @@ class SearchServiceSpec : DescribeSpec({
             result.postsCount shouldBe 2
             result.searchType shouldBe SearchType.POST
         }
+
+        it("전역 검색 시 프로젝트 검색 타입일 경우 프로젝트 리포지토리를 호출해야 한다") {
+            every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(1L, 2L)
+            every { userRepository.countSearchUsers("%test%") } returns 0
+            every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 3
+            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%") } returns 0
+            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
+            every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%") } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%") } returns 0
+
+            val expectedProjects: Page<Project> = PageImpl(emptyList())
+            every { projectRepository.searchProjects(listOf(1L, 2L), "%test%", pageable) } returns expectedProjects
+
+            val result = searchService.searchInAll("test", SearchType.PROJECT, loginUser, pageable)
+
+            result.projectsCount shouldBe 3
+            result.searchType shouldBe SearchType.PROJECT
+        }
+
+        it("전역 검색 시 사용자 검색 타입일 경우 사용자 리포지토리를 호출해야 한다") {
+            every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(1L, 2L)
+            every { userRepository.countSearchUsers("%test%") } returns 5
+            every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 0
+            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%") } returns 0
+            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
+            every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%") } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%") } returns 0
+
+            val expectedUsers: Page<User> = PageImpl(emptyList())
+            every { userRepository.searchUsers("%test%", pageable) } returns expectedUsers
+
+            val result = searchService.searchInAll("test", SearchType.USER, loginUser, pageable)
+
+            result.usersCount shouldBe 5
+            result.searchType shouldBe SearchType.USER
+        }
+
+        it("전역 검색 시 마일스톤 검색 타입일 경우 마일스톤 리포지토리를 호출해야 한다") {
+            every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(1L, 2L)
+            every { userRepository.countSearchUsers("%test%") } returns 0
+            every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 0
+            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%") } returns 0
+            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
+            every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 1
+            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%") } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%") } returns 0
+
+            val expectedMilestones: Page<com.github.search5.yona.domain.milestone.Milestone> = PageImpl(emptyList())
+            every { milestoneRepository.searchMilestones(listOf(1L, 2L), "%test%", pageable) } returns expectedMilestones
+
+            val result = searchService.searchInAll("test", SearchType.MILESTONE, loginUser, pageable)
+
+            result.milestonesCount shouldBe 1
+            result.searchType shouldBe SearchType.MILESTONE
+        }
     }
 })
