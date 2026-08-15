@@ -73,7 +73,7 @@ class TranslationControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
                 every { translationService.translate(any()) } returns "Translated Title\n\nTranslated Body"
-                every { markdownService.render("Translated Title\n\nTranslated Body") } returns "<p>Translated Title</p><p>Translated Body</p>"
+                every { markdownService.render("Translated Title\n\nTranslated Body", true, project) } returns "<p>Translated Title</p><p>Translated Body</p>"
 
                 val requestJson = """
                     {
@@ -128,7 +128,7 @@ class TranslationControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
                 every { issueCommentRepository.findById(200L) } returns Optional.of(comment)
                 every { translationService.translate("댓글 내용") } returns "Translated Comment"
-                every { markdownService.render("Translated Comment") } returns "<p>Translated Comment</p>"
+                every { markdownService.render("Translated Comment", true, project) } returns "<p>Translated Comment</p>"
 
                 val requestJson = """
                     {

@@ -35,7 +35,7 @@ class MarkdownControllerSpec : DescribeSpec({
 
         it("마크다운 렌더링 API 요청 시 200 OK와 렌더링된 HTML을 반환해야 한다 (TDD Red 예상)") {
             every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
-            every { markdownService.render("## 테스트 마크다운", true) } returns "<h2>테스트 마크다운</h2>\n"
+            every { markdownService.render("## 테스트 마크다운", true, project) } returns "<h2>테스트 마크다운</h2>\n"
 
             val requestJson = """
                 {
