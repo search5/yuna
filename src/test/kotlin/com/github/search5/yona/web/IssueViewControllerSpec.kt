@@ -31,6 +31,7 @@ import com.github.search5.yona.domain.attachment.AttachmentRepository
 
 import com.github.search5.yona.domain.project.RecentProjectRepository
 import com.github.search5.yona.domain.project.ProjectService
+import com.github.search5.yona.domain.vcs.RepositoryService
 
 class IssueViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -49,6 +50,7 @@ class IssueViewControllerSpec : DescribeSpec({
     val issueService = mockk<com.github.search5.yona.domain.issue.IssueService>()
     val templateHelper = mockk<com.github.search5.yona.config.TemplateHelper>()
     val issueExcelService = mockk<com.github.search5.yona.domain.issue.IssueExcelService>()
+    val repositoryService = mockk<RepositoryService>()
 
     val issueViewController = IssueViewController(
         projectRepository,
@@ -66,7 +68,8 @@ class IssueViewControllerSpec : DescribeSpec({
         recentProjectRepository,
         issueService,
         templateHelper,
-        issueExcelService
+        issueExcelService,
+        repositoryService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -76,7 +79,7 @@ class IssueViewControllerSpec : DescribeSpec({
         io.mockk.clearMocks(
             projectRepository, projectService, issueRepository, projectUserRepository, userRepository, issueCommentRepository,
             watchService, milestoneService, issueLabelRepository, favoriteIssueRepository, attachmentRepository,
-            messageSource, recentProjectRepository, issueService, templateHelper, issueExcelService
+            messageSource, recentProjectRepository, issueService, templateHelper, issueExcelService, repositoryService
         )
     }
 
@@ -137,6 +140,38 @@ class IssueViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("issue/view"))
                     .andExpect(model().attributeExists("project", "issue", "comments", "currentUser", "isWatching", "isWatchingProject"))
+            }
+        }
+        describe("GET /user/issues/new") {
+            it("commentId가 주어지면 해당 댓글을 조회하고 레퍼런스 본문 및 ISSUE_TEMPLATE을 포함하여 200 OK를 반환해야 한다") {
+                val recentProject = com.github.search5.yona.domain.project.RecentProject(id = 1L, userId = 10L, projectId = 1L)
+                every { recentProjectRepository.findByUserIdOrderByVisitedDateDesc(10L) } returns listOf(recentProject)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+
+                val mockComment = mockk<com.github.search5.yona.domain.issue.IssueComment>()
+                every { mockComment.id } returns 200L
+                every { mockComment.contents } returns "댓글 원본 내용"
+                every { mockComment.authorLoginId } returns "commenter"
+                every { mockComment.issue } returns issue
+                every { issueCommentRepository.findById(200L) } returns Optional.of(mockComment)
+
+                val mockPlayRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                every { repositoryService.getRepository(project) } returns mockPlayRepo
+                every { mockPlayRepo.getRawFile("HEAD", "ISSUE_TEMPLATE.md") } returns "템플릿 내용".toByteArray()
+
+                every { milestoneService.getMilestones(1L, State.OPEN) } returns emptyList()
+                every { projectUserRepository.findByProjectId(1L) } returns emptyList()
+                every { projectUserRepository.findByUserId(10L) } returns emptyList()
+                every { issueLabelRepository.findByProject(project) } returns emptyList()
+                every { issueRepository.findByProjectAndState(project, State.OPEN) } returns emptyList()
+
+                mockMvc.perform(get("/user/issues/new").param("commentId", "200").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("issue/create"))
+                    .andExpect(model().attributeExists("project", "issueTemplate"))
             }
         }
     }

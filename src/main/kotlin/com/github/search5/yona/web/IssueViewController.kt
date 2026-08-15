@@ -33,6 +33,7 @@ import com.github.search5.yona.domain.user.User
 import java.time.Instant
 import java.time.ZoneId
  
+import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.issue.IssueSpecification
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.config.TemplateHelper
@@ -55,7 +56,8 @@ class IssueViewController(
     private val recentProjectRepository: RecentProjectRepository,
     private val issueService: IssueService,
     private val templateHelper: TemplateHelper,
-    private val issueExcelService: IssueExcelService
+    private val issueExcelService: IssueExcelService,
+    private val repositoryService: RepositoryService
 ) {
 
     @GetMapping("/{owner}/{projectName}/issues")
@@ -281,6 +283,7 @@ class IssueViewController(
         @PathVariable projectName: String,
         @RequestParam(required = false) parentIssueId: Long?,
         @RequestParam(required = false, defaultValue = "false") isFromGlobalMenuNew: Boolean,
+        @RequestParam(required = false) bodyText: String? = null,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -319,6 +322,9 @@ class IssueViewController(
         val parentIssue = parentIssueId?.let { id ->
             issueRepository.findById(id).orElse(null)
         }
+
+        val issueTemplate = bodyText ?: getIssueTemplate(project)
+        model.addAttribute("issueTemplate", issueTemplate)
 
         model.addAttribute("project", project)
         model.addAttribute("milestones", milestones)
@@ -477,12 +483,23 @@ class IssueViewController(
             val allUserProjects = projectUsers.map { it.project }
             project = allUserProjects.sortedByDescending { it.createdDate }.firstOrNull()
         }
+
+        var bodyText: String? = null
+        if (project != null && commentId != -1L) {
+            val comment = issueCommentRepository.findById(commentId).orElse(null)
+            if (comment != null) {
+                bodyText = comment.contents + "\n\n_Originally posted by @" + comment.authorLoginId + " in " +
+                        "/${project.owner}/${project.name}/issue/${comment.issue.number}#comment-${comment.id}_"
+            }
+        }
+
         return if (project != null) {
             createIssueForm(
                 owner = project.owner!!,
                 projectName = project.name!!,
                 parentIssueId = null,
                 isFromGlobalMenuNew = true,
+                bodyText = bodyText,
                 authentication = authentication,
                 model = model
             )
@@ -634,6 +651,15 @@ class IssueViewController(
         }
 
         return "redirect:/$owner/$projectName/issues"
+    }
+
+    private fun getIssueTemplate(project: com.github.search5.yona.domain.project.Project): String {
+        return try {
+            val bytes = repositoryService.getRepository(project).getRawFile("HEAD", "ISSUE_TEMPLATE.md")
+            if (bytes != null) String(bytes, java.nio.charset.StandardCharsets.UTF_8) else ""
+        } catch (e: Exception) {
+            ""
+        }
     }
 }
 
