@@ -72,7 +72,7 @@
           <a th:href="@{/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}">커밋</a>
         </li>
         <li th:if="${project.vcs == 'GIT'}">
-          <a th:href="@{/projects/{owner}/{name}/branches(owner=${project.owner}, name=${project.name})}">브랜치</a>
+          <a th:href="@{/{owner}/{name}/branches(owner=${project.owner}, name=${project.name})}">브랜치</a>
         </li>
       </ul>
 
