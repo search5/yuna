@@ -1,4 +1,4 @@
-package com.github.search5.yona.web
+package com.github.search5.yona.service
 
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -21,24 +21,17 @@ import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
-import org.springframework.security.core.Authentication
-import org.springframework.stereotype.Controller
-import org.springframework.ui.Model
-import org.springframework.web.bind.annotation.*
-import org.springframework.web.client.RestTemplate
-import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.stereotype.Service
 import org.springframework.util.LinkedMultiValueMap
-import java.time.LocalDateTime
+import org.springframework.web.client.RestTemplate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@Controller
-@RequestMapping("/migration")
-class MigrationController(
+@Service
+class MigrationService(
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
@@ -58,12 +51,11 @@ class MigrationController(
     private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneId.systemDefault())
     private val yonaServer = "/"
 
-    private fun getLoginUser(authentication: Authentication?): User? {
-        if (authentication == null) return null
-        return userRepository.findByLoginId(authentication.name).orElse(null)
+    fun isAllowMigration(): Boolean {
+        return allowMigration
     }
 
-    private fun getOAuthToken(code: String): String {
+    fun getOAuthToken(code: String): String {
         val restTemplate = RestTemplate()
         val url = "https://github.com/login/oauth/access_token"
         val headers = HttpHeaders()
@@ -85,38 +77,7 @@ class MigrationController(
         }
     }
 
-    // 1. 마이그레이션 홈 화면
-    @GetMapping
-    fun migrationHome(
-        @RequestParam(value = "code", required = false) code: String?,
-        authentication: Authentication?,
-        model: Model
-    ): String {
-        if (!allowMigration) {
-            return "error/403"
-        }
-
-        val currentUser = getLoginUser(authentication) ?: return "redirect:/users/loginform"
-        model.addAttribute("currentUser", currentUser)
-
-        if (!code.isNullOrBlank()) {
-            val token = getOAuthToken(code)
-            model.addAttribute("token", token)
-            model.addAttribute("code", code)
-        } else {
-            model.addAttribute("token", "")
-            model.addAttribute("code", "")
-        }
-
-        return "migration/home"
-    }
-
-    // 2. 권한 있는 프로젝트 목록 조회 API
-    @GetMapping("/projects")
-    @ResponseBody
-    fun getMigrationProjects(authentication: Authentication?): ResponseEntity<Any> {
-        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-
+    fun getMigrationProjects(user: User): List<Map<String, Any>> {
         val sourceProjects = mutableSetOf<Project>()
 
         // 사용자가 MANAGER인 프로젝트들
@@ -132,7 +93,7 @@ class MigrationController(
         }
 
         val sortedList = sourceProjects.sortedWith(compareBy({ it.owner }, { it.name }))
-        val projectsJson = sortedList.map { p ->
+        return sortedList.map { p ->
             mapOf(
                 "owner" to (p.owner ?: ""),
                 "projectName" to p.name,
@@ -141,22 +102,10 @@ class MigrationController(
                 "full_name" to "${p.owner}/${p.name}"
             )
         }
-
-        return ResponseEntity.ok(projectsJson)
     }
 
-    // 3. 개별 프로젝트 상세 카운트 및 담당자 목록 조회
-    @GetMapping("/{owner}/projects/{projectName}")
-    @ResponseBody
-    fun getMigrationProjectDetail(
-        @PathVariable owner: String,
-        @PathVariable projectName: String,
-        authentication: Authentication?
-    ): ResponseEntity<Any> {
-        getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
-            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    fun getMigrationProjectDetail(owner: String, projectName: String): Map<String, Any>? {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null) ?: return null
 
         val assignees = project.projectUsers.map { pu ->
             mapOf(
@@ -170,7 +119,7 @@ class MigrationController(
         val postCount = postingRepository.countByProject(project)
         val milestoneCount = milestoneRepository.countByProject(project)
 
-        val result = mapOf(
+        return mapOf(
             "owner" to (project.owner ?: ""),
             "projectName" to project.name,
             "full_name" to "${project.owner}/${project.name}",
@@ -180,22 +129,10 @@ class MigrationController(
             "postCount" to postCount,
             "milestoneCount" to milestoneCount
         )
-
-        return ResponseEntity.ok(result)
     }
 
-    // 4. 프로젝트 라벨 조회
-    @GetMapping("/{owner}/projects/{projectName}/labels")
-    @ResponseBody
-    fun exportLabels(
-        @PathVariable owner: String,
-        @PathVariable projectName: String,
-        authentication: Authentication?
-    ): ResponseEntity<Any> {
-        getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
-            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    fun exportLabels(owner: String, projectName: String): Map<String, Any>? {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null) ?: return null
 
         val labelList = issueLabelRepository.findByProject(project)
         val labelsMap = labelList.associate { label ->
@@ -207,21 +144,11 @@ class MigrationController(
             )
         }
 
-        return ResponseEntity.ok(mapOf("labels" to labelsMap))
+        return mapOf("labels" to labelsMap)
     }
 
-    // 5. 이슈 라벨 매핑 조회
-    @GetMapping("/{owner}/projects/{projectName}/issuelabel")
-    @ResponseBody
-    fun exportIssueLabelPairs(
-        @PathVariable owner: String,
-        @PathVariable projectName: String,
-        authentication: Authentication?
-    ): ResponseEntity<Any> {
-        getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
-            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    fun exportIssueLabelPairs(owner: String, projectName: String): Map<String, Any>? {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null) ?: return null
 
         val issues = issueRepository.findByProject(project)
         val pairs = mutableListOf<Map<String, Any>>()
@@ -236,24 +163,14 @@ class MigrationController(
             }
         }
 
-        return ResponseEntity.ok(mapOf("issueLabelPairs" to pairs))
+        return mapOf("issueLabelPairs" to pairs)
     }
 
-    // 6. 마일스톤 조회
-    @GetMapping("/{owner}/projects/{projectName}/milestones")
-    @ResponseBody
-    fun exportMilestones(
-        @PathVariable owner: String,
-        @PathVariable projectName: String,
-        authentication: Authentication?
-    ): ResponseEntity<Any> {
-        getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
-            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    fun exportMilestones(owner: String, projectName: String): List<Map<String, Any>>? {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null) ?: return null
 
         val milestones = milestoneRepository.findByProject(project)
-        val milestonesJson = milestones.map { m ->
+        return milestones.map { m ->
             val node = mutableMapOf<String, Any?>()
             node["id"] = m.id
             node["title"] = m.title
@@ -266,26 +183,13 @@ class MigrationController(
 
             mapOf("milestone" to node)
         }
-
-        return ResponseEntity.ok(mapOf("milestones" to milestonesJson))
     }
 
-    // 7. 이슈 조회
-    @GetMapping("/{owner}/projects/{projectName}/issues")
-    @ResponseBody
-    fun exportIssues(
-        @PathVariable owner: String,
-        @PathVariable projectName: String,
-        @RequestParam(value = "withWikiCommit", defaultValue = "false") withWikiCommit: Boolean,
-        authentication: Authentication?
-    ): ResponseEntity<Any> {
-        getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
-            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    fun exportIssues(owner: String, projectName: String, withWikiCommit: Boolean): List<Map<String, Any>>? {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null) ?: return null
 
         val issues = issueRepository.findByProject(project)
-        val issuesJson = issues.map { issue ->
+        return issues.map { issue ->
             val node = mutableMapOf<String, Any?>()
             node["id"] = issue.id
             node["title"] = issue.title
@@ -365,26 +269,13 @@ class MigrationController(
                 "comments" to comments
             )
         }
-
-        return ResponseEntity.ok(mapOf("issues" to issuesJson))
     }
 
-    // 8. 게시판 포스팅 조회
-    @GetMapping("/{owner}/projects/{projectName}/posts")
-    @ResponseBody
-    fun exportPosts(
-        @PathVariable owner: String,
-        @PathVariable projectName: String,
-        @RequestParam(value = "withWikiCommit", defaultValue = "false") withWikiCommit: Boolean,
-        authentication: Authentication?
-    ): ResponseEntity<Any> {
-        getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
-            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    fun exportPosts(owner: String, projectName: String, withWikiCommit: Boolean): List<Map<String, Any>>? {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null) ?: return null
 
         val postings = postingRepository.findByProject(project)
-        val postsJson = postings.map { post ->
+        return postings.map { post ->
             val node = mutableMapOf<String, Any?>()
             node["title"] = post.title
 
@@ -459,8 +350,6 @@ class MigrationController(
                 "comments" to comments
             )
         }
-
-        return ResponseEntity.ok(mapOf("issues" to postsJson))
     }
 
     private fun addOriginalAuthorName(
