@@ -3,6 +3,8 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import org.springframework.http.HttpStatus
@@ -25,7 +27,9 @@ class CodeViewController(
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
-    private val repositoryService: RepositoryService
+    private val repositoryService: RepositoryService,
+    private val commentThreadRepository: CommentThreadRepository,
+    private val commitCommentRepository: CommitCommentRepository
 ) {
 
     @GetMapping("/{owner}/{projectName}/code")
@@ -261,14 +265,29 @@ class CodeViewController(
         model.addAttribute("path", path)
         model.addAttribute("currentUser", loginUser)
 
-        return if (project.vcs == "SUBVERSION") {
+        val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"
+        val commentThreads = if (isSvn) {
+            emptyList()
+        } else {
+            commentThreadRepository.findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(project, commitId)
+        }
+        val comments = if (isSvn) {
+            commitCommentRepository.findByProjectAndCommitIdOrderByCreatedDateAsc(project, commitId)
+        } else {
+            emptyList()
+        }
+
+        model.addAttribute("commentThreads", commentThreads)
+        model.addAttribute("commitB", commit)
+
+        return if (isSvn) {
             val patch = try {
                 repository.getPatch(commitId)
             } catch (e: Exception) {
                 ""
             }
             model.addAttribute("patch", patch)
-            model.addAttribute("comments", emptyList<Any>())
+            model.addAttribute("comments", comments)
             "code/svnDiff"
         } else {
             val fileDiffs = try {
@@ -280,7 +299,7 @@ class CodeViewController(
                 return "error/404"
             }
             model.addAttribute("fileDiffs", fileDiffs)
-            model.addAttribute("comments", emptyList<Any>())
+            model.addAttribute("comments", comments)
             "code/diff"
         }
     }

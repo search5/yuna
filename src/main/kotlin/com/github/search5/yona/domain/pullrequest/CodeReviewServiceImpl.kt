@@ -24,6 +24,7 @@ class CodeReviewServiceImpl(
     private val repositoryService: RepositoryService,
     private val userRepository: UserRepository,
     private val notificationEventRepository: NotificationEventRepository,
+    private val commitCommentRepository: CommitCommentRepository,
     private val eventPublisher: ApplicationEventPublisher
 ) : CodeReviewService {
 
@@ -117,6 +118,35 @@ class CodeReviewServiceImpl(
         if (remainingComments.isEmpty()) {
             commentThreadRepository.delete(thread)
         }
+    }
+
+    override fun createCommitComment(
+        project: Project,
+        commitId: String,
+        contents: String,
+        path: String?,
+        line: Int?,
+        side: CodeRange.Side?,
+        currentUser: User
+    ): CommitComment {
+        val userIdent = UserIdent(currentUser)
+        val commitComment = CommitComment(
+            project = project,
+            commitId = commitId,
+            contents = contents,
+            path = path,
+            line = line,
+            side = side,
+            createdDate = Instant.now(),
+            author = userIdent
+        )
+        return commitCommentRepository.save(commitComment)
+    }
+
+    override fun deleteCommitComment(commentId: Long, currentUser: User) {
+        val comment = commitCommentRepository.findById(commentId)
+            .orElseThrow { IllegalArgumentException("CommitComment not found for id: $commentId") }
+        commitCommentRepository.delete(comment)
     }
 
     override fun updateThreadState(
