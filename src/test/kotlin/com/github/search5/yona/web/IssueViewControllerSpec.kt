@@ -100,8 +100,13 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { issueRepository.findByProjectAndState(project, State.OPEN, any<Pageable>()) } returns PageImpl(listOf(issue), pageRequest, 1)
+                every { issueRepository.findAll(any<org.springframework.data.jpa.domain.Specification<Issue>>(), any<Pageable>()) } returns PageImpl(listOf(issue), pageRequest, 1)
+                every { issueRepository.count(any<org.springframework.data.jpa.domain.Specification<Issue>>()) } returns 1L
                 every { issueRepository.countByProjectAndState(project, State.OPEN) } returns 1L
                 every { issueRepository.countByProjectAndState(project, State.CLOSED) } returns 0L
+                every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
+                every { projectUserRepository.findByProjectId(any<Long>()) } returns emptyList()
+                every { issueLabelRepository.findByProject(any<Project>()) } returns emptyList()
 
                 mockMvc.perform(get("/owner/TestProj/issues").principal(userAuth))
                     .andExpect(status().isOk)
