@@ -28,14 +28,28 @@ class AuthControllerSpec : DescribeSpec({
 
     describe("AuthController") {
         describe("GET /login") {
-            it("로그인 페이지가 정상 반환되어야 한다") {
+            it("로그인 폼 페이지로 리다이렉트되어야 한다") {
                 mockMvc.perform(get("/login"))
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/users/loginform"))
+            }
+
+            it("에러가 있을 경우 에러 파라미터를 담아 리다이렉트되어야 한다") {
+                mockMvc.perform(get("/login").param("error", "true"))
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/users/loginform?error=true"))
+            }
+        }
+
+        describe("GET /users/loginform") {
+            it("로그인 페이지가 정상 반환되어야 한다") {
+                mockMvc.perform(get("/users/loginform"))
                     .andExpect(status().isOk)
                     .andExpect(view().name("login"))
             }
 
             it("에러가 있을 경우 에러 메시지가 모델에 적재되어야 한다") {
-                mockMvc.perform(get("/login").param("error", "true"))
+                mockMvc.perform(get("/users/loginform").param("error", "true"))
                     .andExpect(status().isOk)
                     .andExpect(model().attributeExists("loginError"))
                     .andExpect(view().name("login"))
