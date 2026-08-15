@@ -114,7 +114,7 @@
               <table class="diff-container show-comments" style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 12px;">
                 <tbody>
                   <!-- 1. 신규 파일 추가인 경우 (ADD) -->
-                  <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).ADD}">
+                  <th:block th:if="${diff.changeType.name == 'ADD'}">
                     <tr class="range">
                       <td colspan="3" class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
                           th:text="'@@ -0,0 +1,' + ${diff.b.size()} + ' @@'"></td>
@@ -124,20 +124,20 @@
                           th:data-path="${diff.pathB}"
                           th:data-line-num-b="${i}"
                           data-kind="ADD">
-                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" class="add-comment-btn-cell">+</td>
+                        <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;">+</td>
                         <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
                         <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'+' + ${diff.b.getString(i)}"></pre></td>
                       </tr>
                       
                       <!-- 해당 라인에 달린 댓글 스레드 렌더링 -->
-                      <th:block th:with="lineVal=${i}, pathVal=${diff.pathB}, sideVal='B'">
+                      <th:block th:with="lineVal=${i}, pathVal="${diff.pathB}", sideVal='B'">
                         <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
                       </th:block>
                     </th:block>
                   </th:block>
 
                   <!-- 2. 파일 삭제인 경우 (DELETE) -->
-                  <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).DELETE}">
+                  <th:block th:if="${diff.changeType.name == 'DELETE'}">
                     <tr class="range">
                       <td colspan="3" class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
                           th:text="'@@ -1,' + ${diff.a.size()} + ' +0,0 @@'"></td>
@@ -148,19 +148,19 @@
                           th:data-line-num-a="${i}"
                           data-kind="REMOVE">
                         <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
-                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" class="add-comment-btn-cell">+</td>
+                        <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;">+</td>
                         <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'-' + ${diff.a.getString(i)}"></pre></td>
                       </tr>
 
                       <!-- 해당 라인에 달린 댓글 스레드 렌더링 -->
-                      <th:block th:with="lineVal=${i}, pathVal=${diff.pathA}, sideVal='A'">
+                      <th:block th:with="lineVal=${i}, pathVal="${diff.pathA}", sideVal='A'">
                         <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
                       </th:block>
                     </th:block>
                   </th:block>
 
                   <!-- 3. 수정/이동인 경우 (MODIFY, RENAME 등) -->
-                  <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).MODIFY or diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).RENAME or diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).COPY}">
+                  <th:block th:if="${diff.changeType.name == 'MODIFY' or diff.changeType.name == 'RENAME' or diff.changeType.name == 'COPY'}">
                     <!-- 바이너리 파일 예외 처리 -->
                     <tr th:if="${diff.isBinaryA or diff.isBinaryB}">
                       <td colspan="3" class="isBinary" style="padding: 10px; color: #666; font-style: italic;">이진(Binary) 파일이 변경되었습니다.</td>
@@ -178,18 +178,18 @@
                       <!-- 라인 출력 루프 -->
                       <th:block th:each="line : ${hunk.lines}">
                         <tr class="diff-line-tr" 
-                            th:style="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? 'background-color: #e6ffed;' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? 'background-color: #ffeef0;' : '')}"
-                            th:data-path="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? diff.pathA : diff.pathB}"
+                            th:style="${line.kind.name == 'ADD' ? 'background-color: #e6ffed;' : (line.kind.name == 'REMOVE' ? 'background-color: #ffeef0;' : '')}"
+                            th:data-path="${line.kind.name == 'REMOVE' ? diff.pathA : diff.pathB}"
                             th:data-line-num-a="${line.numA}"
                             th:data-line-num-b="${line.numB}"
                             th:data-kind="${line.kind}">
-                          <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" 
-                              th:text="${line.numA != null ? line.numA + 1 : '+'}" class="add-comment-btn-cell"></td>
+                          <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" 
+                              th:text="${line.numA != null ? line.numA + 1 : '+'}"></td>
                           <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" 
                               th:text="${line.numB != null ? line.numB + 1 : '+'}"></td>
                           <td class="code" style="padding-left: 10px;">
                             <pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" 
-                                 th:text="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? '+' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? '-' : ' ')} + ${line.content}"></pre>
+                                 th:text="${line.kind.name == 'ADD' ? '+' : (line.kind.name == 'REMOVE' ? '-' : ' ')} + ${line.content}"></pre>
                           </td>
                         </tr>
 
@@ -214,9 +214,9 @@
 <!-- Thymeleaf Fragment: Line Comments Renderer -->
 <th:block th:fragment="renderLineComments(threads, diff, lineNum, side)">
   <th:block th:if="${threads != null}" th:each="thread : ${threads}">
-    <th:block th:if="${thread instanceof T(com.github.search5.yona.domain.pullrequest.CodeCommentThread) && thread.codeRange.isFor(diff) && 
-                      ((side == 'A' && thread.codeRange.endSide == T(com.github.search5.yona.domain.support.CodeRange.Side).A && thread.codeRange.endLine == lineNum) ||
-                       (side == 'B' && thread.codeRange.endSide == T(com.github.search5.yona.domain.support.CodeRange.Side).B && thread.codeRange.endLine == lineNum))}">
+    <th:block th:if="${thread.class.simpleName == 'CodeCommentThread' && thread.codeRange.isFor(diff) && 
+                      ((side == 'A' && thread.codeRange.endSide.name == 'A' && thread.codeRange.endLine == lineNum) ||
+                       (side == 'B' && thread.codeRange.endSide.name == 'B' && thread.codeRange.endLine == lineNum))}">
       <tr class="comments board-comment-wrap" th:data-commit-id="${thread.commitId}">
         <td colspan="3" style="padding: 10px; background-color: #fafbfc; border-top: 1px solid #e1e4e8; border-bottom: 1px solid #e1e4e8;">
           <div th:id="'thread-' + ${thread.id}" 
@@ -226,7 +226,7 @@
             
             <div class="thread-header" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
               <span th:class="'badge state ' + ${thread.state.toString().toLowerCase()}" 
-                    th:text="${thread.state == T(com.github.search5.yona.domain.pullrequest.CommentThread.ThreadState).OPEN ? '열림' : '닫힘'}"
+                    th:text="${thread.state.name == 'OPEN' ? '열림' : '닫힘'}"
                     style="font-size: 11px;">상태</span>
             </div>
 
@@ -266,7 +266,7 @@
                             th:data-thread-id="${thread.id}" 
                             th:data-current-state="${thread.state}" 
                             style="font-size: 11px; padding: 2px 6px;"
-                            th:text="${thread.state == T(com.github.search5.yona.domain.pullrequest.CommentThread.ThreadState).OPEN ? '닫기' : '열기'}">닫기</button>
+                            th:text="${thread.state.name == 'OPEN' ? '닫기' : '열기'}">닫기</button>
                   </div>
                 </div>
               </form>

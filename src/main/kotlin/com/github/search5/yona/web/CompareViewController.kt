@@ -21,7 +21,7 @@ class CompareViewController(
     private val commentThreadRepository: CommentThreadRepository
 ) {
 
-    @GetMapping("/{owner}/{projectName}/compare/{revA}..{revB}")
+    @GetMapping("/{owner}/{projectName}/compare/{revA:.+}..{revB:.+}")
     fun compare(
         @PathVariable owner: String,
         @PathVariable projectName: String,
@@ -60,11 +60,11 @@ class CompareViewController(
 
         val vcsType = project.vcs?.uppercase() ?: "GIT"
         return if (vcsType == "SUBVERSION" || vcsType == "SVN") {
-            val patch = repository.getPatch(revA, revB)
+            val patch = repository.getPatch(revA, revB) ?: return "error/404"
             model.addAttribute("patch", patch)
             "code/compare_svn"
         } else {
-            val diffs = repository.getDiff(revA, revB)
+            val diffs = repository.getDiff(revA, revB) ?: return "error/404"
             model.addAttribute("diffs", diffs)
             "code/compare"
         }
