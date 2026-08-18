@@ -19,5 +19,27 @@ interface CommentService {
         parentCommentId: Long? = null
     ): PostingComment
 
+    fun updateIssueComment(
+        commentId: Long,
+        contents: String,
+        author: User
+    ): IssueComment
+
+    fun deleteIssueComment(
+        commentId: Long,
+        author: User
+    )
+
+    fun updatePostingComment(
+        commentId: Long,
+        contents: String,
+        author: User
+    ): PostingComment
+
+    fun deletePostingComment(
+        commentId: Long,
+        author: User
+    )
+
     fun extractMentionedUsers(contents: String): Set<User>
 }
