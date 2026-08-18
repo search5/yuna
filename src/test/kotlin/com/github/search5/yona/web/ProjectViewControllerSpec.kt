@@ -201,5 +201,30 @@ class ProjectViewControllerSpec : DescribeSpec({
                     .andExpect(status().isNoContent)
             }
         }
+
+        describe("GET /{owner}/{projectName}/code/{branch}/download") {
+            val memberOnlyProject = Project(id = 4L, owner = "owner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+
+            it("[Test-12-5-1] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns false
+
+                mockMvc.perform(get("/owner/memberonly-project/code/main/download").principal(userAuth))
+                    .andExpect(status().isForbidden)
+            }
+
+            it("[Test-12-5-2] 공개 프로젝트이며 isCodeAccessibleMemberOnly가 true이고 멤버인 경우 200 OK와 올바른 zip 출력을 해야 한다") {
+                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                every { projectRepository.findByOwnerAndName("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns true
+                every { repositoryService.getRepository(memberOnlyProject) } returns playRepo
+                every { playRepo.getArchive(any(), "main") } returns Unit
+
+                mockMvc.perform(get("/owner/memberonly-project/code/main/download").principal(userAuth))
+                    .andExpect(status().isOk)
+            }
+        }
     }
 })

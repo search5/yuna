@@ -43,7 +43,7 @@ class CodeViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
+        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
                 return "error/403"
             }
@@ -86,7 +86,7 @@ class CodeViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
+        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
                 return "error/403"
             }
@@ -122,7 +122,7 @@ class CodeViewController(
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
+        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
             }
@@ -200,7 +200,7 @@ class CodeViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
+        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
                 return "error/403"
             }
@@ -239,7 +239,7 @@ class CodeViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
+        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
                 return "error/403"
             }
