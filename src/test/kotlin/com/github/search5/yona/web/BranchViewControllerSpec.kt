@@ -61,6 +61,17 @@ class BranchViewControllerSpec : DescribeSpec({
                 verify { playRepository.getBranches() }
                 verify { playRepository.getHeadBranch() }
             }
+
+            it("[Test-12-4] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 브랜치 조회를 403 Forbidden 차단해야 한다") {
+                val memberOnlyProject = Project(id = 4L, owner = "owner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+                every { projectRepository.findByOwnerAndName("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+
+                mockMvc.perform(
+                    get("/owner/memberonly-project/branches")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
         }
     }
 })

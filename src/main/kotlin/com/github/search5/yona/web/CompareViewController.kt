@@ -35,8 +35,8 @@ class CompareViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         
-        // 권한 검증 (비공개 프로젝트 체크)
-        if (project.projectScope != ProjectScope.PUBLIC) {
+        // 권한 검증
+        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
                 return "error/403"
             }

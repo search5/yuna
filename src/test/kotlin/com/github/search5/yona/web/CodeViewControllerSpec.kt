@@ -78,6 +78,15 @@ class CodeViewControllerSpec : DescribeSpec({
                     .andExpect(status().is3xxRedirection)
                     .andExpect(redirectedUrl("/testowner/testproject/code/main"))
             }
+
+            it("[Test-12-2] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 403 Forbidden을 반환해야 한다") {
+                val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+
+                mockMvc.perform(get("/testowner/memberonly-project/code"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
         }
 
         describe("GET /{owner}/{projectName}/code/{branch}/{*path}") {
@@ -99,6 +108,15 @@ class CodeViewControllerSpec : DescribeSpec({
                     .andExpect(model().attribute("branch", "main"))
                     .andExpect(model().attribute("path", "src/Main.kt"))
             }
+
+            it("[Test-12-2-1] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 상세 경로 접근 시 403 Forbidden을 반환해야 한다") {
+                val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+
+                mockMvc.perform(get("/testowner/memberonly-project/code/main/src/Main.kt"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
         }
 
         describe("GET /{owner}/{projectName}/rawcode/{rev}/{*path}") {
@@ -112,6 +130,14 @@ class CodeViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(header().string("Content-Disposition", "inline; filename=\"Main.kt\""))
                     .andExpect(content().bytes(rawBytes))
+            }
+
+            it("[Test-12-3] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 rawcode 다운로드 시 403 Forbidden을 반환해야 한다") {
+                val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+
+                mockMvc.perform(get("/testowner/memberonly-project/rawcode/main/src/Main.kt"))
+                    .andExpect(status().isForbidden)
             }
         }
     }

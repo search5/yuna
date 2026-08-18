@@ -412,7 +412,7 @@ class ProjectViewController(
             ?: throw org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
+        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
                 throw org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied")
             }

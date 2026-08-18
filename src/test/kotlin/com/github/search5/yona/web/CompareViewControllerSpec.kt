@@ -77,6 +77,42 @@ class CompareViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("error/403"))
             }
 
+            it("[Test-12-1-1] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비로그인 익명 유저가 접근 시 403 Forbidden을 반환해야 한다") {
+                val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+
+                mockMvc.perform(get("/testowner/memberonly-project/compare/aaaaaaa..bbbbbbb"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
+
+            it("[Test-12-1-2] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 프로젝트 비멤버가 로그인 상태로 접근 시 403 Forbidden을 반환해야 한다") {
+                val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns false
+
+                mockMvc.perform(get("/testowner/memberonly-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
+
+            it("[Test-12-1-3] 공개 프로젝트이며 isCodeAccessibleMemberOnly가 true이고 프로젝트 멤버가 접근 시 정상 200 OK를 반환해야 한다") {
+                val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns true
+                every { repositoryService.getRepository(memberOnlyProject) } returns playRepository
+                every { playRepository.getCommit("aaaaaaa") } returns commitA
+                every { playRepository.getCommit("bbbbbbb") } returns commitB
+                every { playRepository.getDiff("aaaaaaa", "bbbbbbb") } returns emptyList()
+                every { commentThreadRepository.findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(memberOnlyProject, "bbbbbbb") } returns emptyList()
+
+                mockMvc.perform(get("/testowner/memberonly-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/compare"))
+            }
+
             it("공개 프로젝트이며 Git 저장소일 때 200 OK와 code/compare 뷰를 반환해야 한다") {
                 every { projectRepository.findByOwnerAndName("testowner", "public-project") } returns Optional.of(publicProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
