@@ -13,6 +13,8 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.role.RoleType
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -29,7 +31,8 @@ class CommentServiceImpl(
     private val userRepository: UserRepository,
     private val notificationEventRepository: NotificationEventRepository,
     private val eventPublisher: ApplicationEventPublisher,
-    private val watchService: WatchService
+    private val watchService: WatchService,
+    private val projectUserRepository: ProjectUserRepository
 ) : CommentService {
 
     private val mentionPattern = Pattern.compile("@([a-zA-Z0-9_\\\\-\\\\.]+) ")
@@ -160,5 +163,52 @@ class CommentServiceImpl(
             }
         }
         return users
+    }
+
+    override fun updateIssueComment(commentId: Long, contents: String, author: User): IssueComment {
+        val comment = issueCommentRepository.findById(commentId)
+            .orElseThrow { IllegalArgumentException("IssueComment not found: $commentId") }
+        if (!hasPermission(comment.projectId, comment.authorId, author.id)) {
+            throw IllegalArgumentException("Permission denied")
+        }
+        comment.contents = contents
+        return issueCommentRepository.save(comment)
+    }
+
+    override fun deleteIssueComment(commentId: Long, author: User) {
+        val comment = issueCommentRepository.findById(commentId)
+            .orElseThrow { IllegalArgumentException("IssueComment not found: $commentId") }
+        if (!hasPermission(comment.projectId, comment.authorId, author.id)) {
+            throw IllegalArgumentException("Permission denied")
+        }
+        issueCommentRepository.delete(comment)
+    }
+
+    override fun updatePostingComment(commentId: Long, contents: String, author: User): PostingComment {
+        val comment = postingCommentRepository.findById(commentId)
+            .orElseThrow { IllegalArgumentException("PostingComment not found: $commentId") }
+        if (!hasPermission(comment.projectId, comment.authorId, author.id)) {
+            throw IllegalArgumentException("Permission denied")
+        }
+        comment.contents = contents
+        return postingCommentRepository.save(comment)
+    }
+
+    override fun deletePostingComment(commentId: Long, author: User) {
+        val comment = postingCommentRepository.findById(commentId)
+            .orElseThrow { IllegalArgumentException("PostingComment not found: $commentId") }
+        if (!hasPermission(comment.projectId, comment.authorId, author.id)) {
+            throw IllegalArgumentException("Permission denied")
+        }
+        postingCommentRepository.delete(comment)
+    }
+
+    private fun hasPermission(projectId: Long?, commentAuthorId: Long?, requestUserId: Long?): Boolean {
+        if (requestUserId == null) return false
+        if (commentAuthorId == requestUserId) return true
+        if (projectId == null) return false
+        return projectUserRepository.findByProjectIdAndUserId(projectId, requestUserId)
+            .map { it.role.id == RoleType.MANAGER.roleType }
+            .orElse(false)
     }
 }
