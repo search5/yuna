@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delet
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.view
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
 
@@ -144,6 +145,21 @@ class ReviewViewControllerSpec : DescribeSpec({
             verify { codeReviewService.deleteReviewComment(300L, user) }
         }
 
+        it("[Test-13-1-4] 타인의 Git 커밋 댓글 삭제 시 error/403 뷰를 반환해야 한다") {
+            val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
+            
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { codeReviewService.deleteReviewComment(300L, user) } throws IllegalArgumentException("Permission denied")
+
+            mockMvc.perform(
+                delete("/gildong/yona-project/commit/abc1234/comments/300/delete")
+                    .principal(auth)
+            )
+                .andExpect(status().isOk)
+                .andExpect(view().name("error/403"))
+        }
+
         it("SVN 프로젝트의 커밋 댓글 삭제 시 deleteCommitComment가 호출되어야 한다") {
             val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "SUBVERSION")
 
@@ -159,6 +175,21 @@ class ReviewViewControllerSpec : DescribeSpec({
                 .andExpect(redirectedUrl("/gildong/yona-project/commit/abc1234"))
 
             verify { codeReviewService.deleteCommitComment(400L, user) }
+        }
+
+        it("[Test-13-1-5] 타인의 SVN 커밋 댓글 삭제 시 error/403 뷰를 반환해야 한다") {
+            val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "SUBVERSION")
+
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { codeReviewService.deleteCommitComment(400L, user) } throws IllegalArgumentException("Permission denied")
+
+            mockMvc.perform(
+                delete("/gildong/yona-project/commit/abc1234/comments/400/delete")
+                    .principal(auth)
+            )
+                .andExpect(status().isOk)
+                .andExpect(view().name("error/403"))
         }
     }
 })

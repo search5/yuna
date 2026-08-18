@@ -10,6 +10,9 @@ import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.role.RoleType
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -25,7 +28,9 @@ class CodeReviewServiceImpl(
     private val userRepository: UserRepository,
     private val notificationEventRepository: NotificationEventRepository,
     private val commitCommentRepository: CommitCommentRepository,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val projectUserRepository: ProjectUserRepository,
+    private val attachmentService: AttachmentService
 ) : CodeReviewService {
 
     override fun createReviewComment(
@@ -110,6 +115,11 @@ class CodeReviewServiceImpl(
 
         val thread = comment.thread ?: throw IllegalStateException("Comment has no associated thread.")
         val threadId = thread.id ?: throw IllegalStateException("Thread has no id.")
+        val projectId = thread.project?.id ?: thread.pullRequest?.toProject?.id
+
+        if (!hasPermission(projectId, comment.author?.id, currentUser.id)) {
+            throw IllegalArgumentException("Permission denied")
+        }
 
         thread.removeComment(comment)
         reviewCommentRepository.delete(comment)
@@ -140,13 +150,34 @@ class CodeReviewServiceImpl(
             createdDate = Instant.now(),
             author = userIdent
         )
-        return commitCommentRepository.save(commitComment)
+        val saved = commitCommentRepository.save(commitComment)
+        attachmentService.moveAll(
+            ResourceType.USER,
+            currentUser.id.toString(),
+            ResourceType.COMMIT_COMMENT,
+            saved.id.toString()
+        )
+        return saved
     }
 
     override fun deleteCommitComment(commentId: Long, currentUser: User) {
         val comment = commitCommentRepository.findById(commentId)
             .orElseThrow { IllegalArgumentException("CommitComment not found for id: $commentId") }
+
+        if (!hasPermission(comment.project?.id, comment.author?.id, currentUser.id)) {
+            throw IllegalArgumentException("Permission denied")
+        }
+
         commitCommentRepository.delete(comment)
+    }
+
+    private fun hasPermission(projectId: Long?, commentAuthorId: Long?, requestUserId: Long?): Boolean {
+        if (requestUserId == null) return false
+        if (commentAuthorId == requestUserId) return true
+        if (projectId == null) return false
+        return projectUserRepository.findByProjectIdAndUserId(projectId, requestUserId)
+            .map { it.role.id == RoleType.MANAGER.roleType }
+            .orElse(false)
     }
 
     override fun updateThreadState(

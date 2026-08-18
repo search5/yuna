@@ -117,10 +117,17 @@ class ReviewViewController(
             ?: return "error/404"
 
         val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"
-        if (isSvn) {
-            codeReviewService.deleteCommitComment(id, user)
-        } else {
-            codeReviewService.deleteReviewComment(id, user)
+        try {
+            if (isSvn) {
+                codeReviewService.deleteCommitComment(id, user)
+            } else {
+                codeReviewService.deleteReviewComment(id, user)
+            }
+        } catch (e: IllegalArgumentException) {
+            if (e.message == "Permission denied") {
+                return "error/403"
+            }
+            throw e
         }
         return "redirect:/$owner/$projectName/commit/$commitId"
     }
