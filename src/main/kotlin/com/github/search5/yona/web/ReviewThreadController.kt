@@ -1,8 +1,12 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.support.ReviewSearchCondition
 import com.github.search5.yona.domain.support.ReviewThreadService
+import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpHeaders
@@ -21,7 +25,8 @@ import java.nio.charset.StandardCharsets
 class ReviewThreadController(
     private val projectRepository: ProjectRepository,
     private val reviewThreadService: ReviewThreadService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val projectUserRepository: ProjectUserRepository
 ) {
 
     @GetMapping("/{owner}/{projectName}/reviews")
@@ -37,6 +42,11 @@ class ReviewThreadController(
             ?: return "error/404"
 
         val currentUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+
+        val isCodeAccessible = checkCodeAccessibility(project, currentUser)
+        if (!isCodeAccessible) {
+            return "error/403"
+        }
 
         if (format == "xls") {
             val threads = reviewThreadService.getReviewThreads(project, condition)
@@ -152,5 +162,17 @@ class ReviewThreadController(
         cellFormat.alignment = jxl.format.Alignment.CENTRE
         cellFormat.verticalAlignment = jxl.format.VerticalAlignment.TOP
         return cellFormat
+    }
+
+    private fun checkCodeAccessibility(project: Project, user: User?): Boolean {
+        if (project.projectScope != ProjectScope.PUBLIC) {
+            if (user == null) return false
+            return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+        }
+        if (project.isCodeAccessibleMemberOnly == true) {
+            if (user == null) return false
+            return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+        }
+        return true
     }
 }

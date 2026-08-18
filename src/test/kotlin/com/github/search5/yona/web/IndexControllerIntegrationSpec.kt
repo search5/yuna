@@ -13,8 +13,12 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.context.WebApplicationContext
 
+import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.User
+
 class IndexControllerIntegrationSpec @Autowired constructor(
-    private val wac: WebApplicationContext
+    private val wac: WebApplicationContext,
+    private val userRepository: UserRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -39,6 +43,10 @@ class IndexControllerIntegrationSpec @Autowired constructor(
 
             it("로그인한 사용자가 메인 홈(/) 접근 시, 대시보드 화면과 사용자명이 노출되어야 한다") {
                 // Given
+                if (!userRepository.findByLoginId("gildong").isPresent) {
+                    userRepository.save(User(loginId = "gildong", name = "길동", email = "gildong@yona.io"))
+                }
+
                 val userDetails = YonaUserDetails(
                     id = 1L,
                     loginId = "gildong",
