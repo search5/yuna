@@ -95,6 +95,17 @@ class ReviewApiControllerSpec : DescribeSpec({
             verify { codeReviewService.deleteReviewComment(200L, user) }
         }
 
+        it("[Test-13-1-1] 타인의 REVIEW_COMMENT 삭제 API 호출 시 403 Forbidden을 반환해야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { codeReviewService.deleteReviewComment(200L, user) } throws IllegalArgumentException("Permission denied")
+
+            mockMvc.perform(
+                delete("/comments/REVIEW_COMMENT/200")
+                    .principal(auth)
+            )
+                .andExpect(status().isForbidden)
+        }
+
         it("COMMIT_COMMENT 삭제 API 호출 시 status ok와 deleteCommitComment 서비스 메소드가 정상 호출되어야 한다") {
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
             every { codeReviewService.deleteCommitComment(200L, user) } returns Unit
@@ -106,6 +117,17 @@ class ReviewApiControllerSpec : DescribeSpec({
                 .andExpect(status().isOk)
 
             verify { codeReviewService.deleteCommitComment(200L, user) }
+        }
+
+        it("[Test-13-1-2] 타인의 COMMIT_COMMENT 삭제 API 호출 시 403 Forbidden을 반환해야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { codeReviewService.deleteCommitComment(200L, user) } throws IllegalArgumentException("Permission denied")
+
+            mockMvc.perform(
+                delete("/comments/COMMIT_COMMENT/200")
+                    .principal(auth)
+            )
+                .andExpect(status().isForbidden)
         }
     }
 })

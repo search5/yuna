@@ -26,10 +26,17 @@ class ReviewApiController(
         val user = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return ResponseEntity.status(401).build()
 
-        if (type.uppercase() == "COMMIT_COMMENT") {
-            codeReviewService.deleteCommitComment(id, user)
-        } else if (type.uppercase() == "REVIEW_COMMENT") {
-            codeReviewService.deleteReviewComment(id, user)
+        try {
+            if (type.uppercase() == "COMMIT_COMMENT") {
+                codeReviewService.deleteCommitComment(id, user)
+            } else if (type.uppercase() == "REVIEW_COMMENT") {
+                codeReviewService.deleteReviewComment(id, user)
+            }
+        } catch (e: IllegalArgumentException) {
+            if (e.message == "Permission denied") {
+                return ResponseEntity.status(403).build()
+            }
+            throw e
         }
         return ResponseEntity.ok().build()
     }

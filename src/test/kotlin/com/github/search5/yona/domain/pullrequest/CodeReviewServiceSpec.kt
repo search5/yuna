@@ -27,6 +27,8 @@ class CodeReviewServiceSpec @Autowired constructor(
             lateinit var user: User
             lateinit var pullRequest: PullRequest
 
+            lateinit var otherUser: User
+
             beforeEach {
                 reviewCommentRepository.deleteAll()
                 commentThreadRepository.deleteAll()
@@ -36,6 +38,9 @@ class CodeReviewServiceSpec @Autowired constructor(
 
                 user = userRepository.save(
                     User(loginId = "tester", name = "테스터", email = "tester@yona.io")
+                )
+                otherUser = userRepository.save(
+                    User(loginId = "other", name = "타인", email = "other@yona.io")
                 )
                 project = projectRepository.save(
                     Project(name = "test-repo", owner = "owner-x", vcs = "GIT")
@@ -153,7 +158,7 @@ class CodeReviewServiceSpec @Autowired constructor(
                 updatedThread.state shouldBe CommentThread.ThreadState.CLOSED
             }
 
-            it("4. 마지막 댓글이 삭제되면 스레드도 함께 삭제되어야 한다") {
+             it("4. 마지막 댓글이 삭제되면 스레드도 함께 삭제되어야 한다") {
                 val codeRange = CodeRange(
                     path = "src/main/kotlin/App.kt",
                     startSide = CodeRange.Side.B,
@@ -181,6 +186,35 @@ class CodeReviewServiceSpec @Autowired constructor(
 
                 reviewCommentRepository.findById(commentId).isPresent shouldBe false
                 commentThreadRepository.findById(threadId).isPresent shouldBe false
+            }
+
+            it("[Test-13-1-6] 타인이 다른 유저의 리뷰 댓글 삭제 시 Permission denied 예외가 발생해야 한다") {
+                val codeRange = CodeRange(
+                    path = "src/main/kotlin/App.kt",
+                    startSide = CodeRange.Side.B,
+                    startLine = 10,
+                    startColumn = 0,
+                    endSide = CodeRange.Side.B,
+                    endLine = 10,
+                    endColumn = 0
+                )
+
+                val comment = codeReviewService.createReviewComment(
+                    project = project,
+                    pullRequest = pullRequest,
+                    commitId = "1234567890abcdef",
+                    contents = "첫번째 리뷰",
+                    codeRange = codeRange,
+                    threadId = null,
+                    currentUser = user
+                )
+
+                val commentId = comment.id!!
+
+                val exception = io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                    codeReviewService.deleteReviewComment(commentId, otherUser)
+                }
+                exception.message shouldBe "Permission denied"
             }
         }
     }
