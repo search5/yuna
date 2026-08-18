@@ -187,7 +187,8 @@ class UserController(
                 return ResponseEntity.badRequest().body(mapOf("error" to "이미 사용 중인 이메일 주소입니다."))
             }
 
-            user.name = name.trim()
+            val escapedName = org.springframework.web.util.HtmlUtils.htmlEscape(name.trim())
+            user.name = escapedName
             user.email = email.trim()
             userRepository.save(user)
 

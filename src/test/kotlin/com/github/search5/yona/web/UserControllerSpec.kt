@@ -5,6 +5,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserService
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -147,6 +148,30 @@ class UserControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
+            }
+
+            it("[Test-18-1-2] 프로필 수정 시 이름에 HTML 스크립트가 유입되면 htmlEscape 처리되어 저장되어야 한다") {
+                // Given
+                val dirtyName = "<script>alert('XSS')</script>길동"
+                val expectedCleanName = "&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;길동"
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userRepository.findById(1L) } returns Optional.of(testUser)
+                every { userService.isEmailExist("new-mail@example.com") } returns false
+
+                val capturedUser = io.mockk.slot<User>()
+                every { userRepository.save(capture(capturedUser)) } answers { capturedUser.captured }
+
+                // When & Then
+                mockMvc.perform(
+                    post("/api/users/profile/update")
+                        .param("name", dirtyName)
+                        .param("email", "new-mail@example.com")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.status").value("success"))
+
+                capturedUser.captured.name shouldBe expectedCleanName
             }
         }
 
