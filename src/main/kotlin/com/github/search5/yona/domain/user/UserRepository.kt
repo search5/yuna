@@ -13,7 +13,7 @@ interface UserRepository : JpaRepository<User, Long> {
 
     @Query("""
         SELECT u FROM User u 
-        WHERE u.state = com.github.search5.yona.domain.user.UserState.ACTIVE 
+        WHERE u.state IN (com.github.search5.yona.domain.user.UserState.ACTIVE, com.github.search5.yona.domain.user.UserState.SITE_ADMIN) 
           AND (u.name LIKE :keyword 
                OR u.loginId LIKE :keyword
                OR u.englishName LIKE :keyword)
@@ -22,7 +22,7 @@ interface UserRepository : JpaRepository<User, Long> {
 
     @Query("""
         SELECT COUNT(u) FROM User u 
-        WHERE u.state = com.github.search5.yona.domain.user.UserState.ACTIVE 
+        WHERE u.state IN (com.github.search5.yona.domain.user.UserState.ACTIVE, com.github.search5.yona.domain.user.UserState.SITE_ADMIN) 
           AND (u.name LIKE :keyword 
                OR u.loginId LIKE :keyword
                OR u.englishName LIKE :keyword)

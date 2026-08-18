@@ -148,7 +148,7 @@ class SiteService(
     }
 
     fun getNoAvatarUsers(): List<Map<String, String>> {
-        val activeUsers = userRepository.findAll().filter { it.state == UserState.ACTIVE }
+        val activeUsers = userRepository.findAll().filter { it.state == UserState.ACTIVE || it.state == UserState.SITE_ADMIN }
         return activeUsers.map {
             mapOf(
                 "loginId" to it.loginId,
