@@ -9,6 +9,7 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectUserRepository
 import org.springframework.context.MessageSource
 import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.stereotype.Component
@@ -25,7 +26,8 @@ class TemplateHelper(
     private val attachmentRepository: AttachmentRepository,
     private val issueRepository: IssueRepository,
     private val pullRequestRepository: PullRequestRepository,
-    private val postingRepository: PostingRepository
+    private val postingRepository: PostingRepository,
+    private val projectUserRepository: ProjectUserRepository
 ) {
 
     fun agoOrDateString(instant: Instant?): String {
@@ -217,6 +219,20 @@ class TemplateHelper(
         val names = list.joinToString("<br>") { it.name ?: it.loginId }
         val hasMore = voters.size > fromIndex + size
         return if (hasMore) "$names<br>&hellip;" else names
+    }
+
+    fun isMember(project: Project?, user: com.github.search5.yona.domain.user.User?): Boolean {
+        if (project == null || user == null) return false
+        if (project.id == null || user.id == null) return false
+        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+    }
+
+    fun isManager(project: Project?, user: com.github.search5.yona.domain.user.User?): Boolean {
+        if (project == null || user == null) return false
+        if (project.id == null || user.id == null) return false
+        return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
+            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .orElse(false)
     }
 }
 

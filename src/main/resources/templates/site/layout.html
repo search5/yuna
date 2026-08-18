@@ -408,7 +408,8 @@
   </div>
 
   <!-- Project Menu fragment -->
-  <div th:fragment="projectMenu(menuType)" th:if="${project != null}" class="project-menu-outer">
+  <div th:fragment="projectMenu(menuType)" th:if="${project != null}" class="project-menu-outer"
+       th:with="isMember=${templateHelper.isMember(project, currentUser)}, isManager=${templateHelper.isManager(project, currentUser)}">
     <div class="project-menu-inner">
         <ul class="project-menu-nav project-menu-gruop">
             <li th:class="${menuType == 'HOME' ? 'active' : ''}">
@@ -416,7 +417,7 @@
                     <span class="menu-name" th:text="#{menu.home}">Project home</span><span class="short-menu">H</span>
                 </a>
             </li>
-            <li th:class="${menuType == 'CODE' ? 'active' : ''}">
+            <li th:if="${project.isCodeAccessibleMemberOnly != true or isMember}" th:class="${menuType == 'CODE' ? 'active' : ''}">
                 <a th:href="@{/{owner}/{projectName}/code(owner=${project.owner}, projectName=${project.name})}">
                     <span class="menu-name" th:text="#{menu.code}">Code</span><span class="short-menu">C</span>
                 </a>
@@ -427,10 +428,15 @@
                     <span th:if="${templateHelper.countIssues(project) > 0}" class="project-menu-count" th:text="${templateHelper.countIssues(project)}">0</span>
                 </a>
             </li>
-            <li th:class="${menuType == 'PULL_REQUEST' ? 'active' : ''}">
+            <li th:if="${project.isCodeAccessibleMemberOnly != true or isMember}" th:class="${menuType == 'PULL_REQUEST' ? 'active' : ''}">
                 <a th:href="@{/{owner}/{projectName}/pullRequests(owner=${project.owner}, projectName=${project.name})}">
                     <span class="menu-name" th:text="#{menu.pullRequest}">Pull request</span><span class="short-menu">P</span> 
                     <span th:if="${templateHelper.countPullRequests(project) > 0}" class="project-menu-count" th:text="${templateHelper.countPullRequests(project)}">0</span>
+                </a>
+            </li>
+            <li th:if="${project.isCodeAccessibleMemberOnly != true or isMember}" th:class="${menuType == 'REVIEW' ? 'active' : ''}">
+                <a th:href="@{/{owner}/{projectName}/reviews(owner=${project.owner}, projectName=${project.name})}">
+                    <span class="menu-name" th:text="#{menu.review}">Review</span><span class="short-menu">R</span>
                 </a>
             </li>
             <li th:class="${menuType == 'MILESTONE' ? 'active' : ''}">
@@ -445,6 +451,18 @@
                 </a>
             </li>
         </ul>
+        <div class="project-setting" th:if="${isManager}">
+            <ul class="project-menu-nav">
+                <li th:class="${menuType == 'PROJECT_SETTING' ? 'active' : ''}">
+                    <a th:href="@{/{owner}/{projectName}/setting(owner=${project.owner}, projectName=${project.name})}">
+                        <i class="yobicon-cog"></i>
+                        <span class="blind"><span class="menu-name" th:text="#{menu.admin}">Setting</span></span>
+                        <span th:if="${project.enrolledUsers != null and !project.enrolledUsers.isEmpty()}" 
+                              class="project-menu-count" th:text="${project.enrolledUsers.size()}">0</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
     </div>
   </div>
 
