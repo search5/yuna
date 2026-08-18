@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <body>
-<div th:fragment="menu(project, activeMenu)" class="project-menu-outer">
+<div th:fragment="menu(project, activeMenu)" class="project-menu-outer"
+     th:with="isMember=${@templateHelper.isMember(project, currentUser)}">
     <div class="project-menu-inner">
         <ul class="project-menu-nav project-menu-gruop">
             <li th:class="${activeMenu == 'home' ? 'active' : ''}">
@@ -9,7 +10,7 @@
                     <span class="menu-name" th:text="#{title.projectHome}">Project home</span><span class="short-menu">H</span>
                 </a>
             </li>
-            <th:block th:if="${project.isCodeEnabled}">
+            <th:block th:if="${project.isCodeEnabled and (project.isCodeAccessibleMemberOnly != true or isMember)}">
                 <li class="code-menu" th:classappend="${activeMenu == 'code' ? 'active' : ''}">
                     <a th:href="@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}">
                         <span class="menu-name" th:text="#{menu.code}">Code</span><span class="short-menu">C</span>
@@ -22,13 +23,13 @@
                     <span th:if="${templateHelper.countIssues(project) > 0}" class="project-menu-count" th:text="${templateHelper.countIssues(project)}">0</span>
                 </a>
             </li>
-            <li th:if="${project.isPullRequestEnabled}" th:class="${activeMenu == 'pullRequest' ? 'active' : ''}">
+            <li th:if="${project.isPullRequestEnabled and (project.isCodeAccessibleMemberOnly != true or isMember)}" th:class="${activeMenu == 'pullRequest' ? 'active' : ''}">
                 <a th:href="@{/{owner}/{name}/pulls(owner=${project.owner}, name=${project.name})}">
                     <span class="menu-name" th:text="#{menu.pullRequest}">Pull request</span><span class="short-menu">P</span>
                     <span th:if="${templateHelper.countPullRequests(project) > 0}" class="project-menu-count" th:text="${templateHelper.countPullRequests(project)}">0</span>
                 </a>
             </li>
-            <li th:if="${project.isReviewEnabled}" th:class="${activeMenu == 'review' ? 'active' : ''}">
+            <li th:if="${project.isReviewEnabled and (project.isCodeAccessibleMemberOnly != true or isMember)}" th:class="${activeMenu == 'review' ? 'active' : ''}">
                 <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name})}">
                     <span class="menu-name" th:text="#{menu.review}">Review</span><span class="short-menu">R</span>
                 </a>
