@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.mail
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.enumeration.ResourceType
@@ -21,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional
  * 검증 가능하다.
  *
  * 의도적으로 다루지 않는 범위(follow-up, docs/PARITY_BACKLOG.md 참고):
- *  - MIME multipart/HTML 본문 파싱, 첨부파일, cid 이미지 치환 (텍스트 본문만 처리)
+ *  - MIME multipart/HTML 본문 파싱, cid 이미지 치환 (텍스트 본문만 처리 — 첨부파일 저장은 P1-29에서 구현됨)
  *  - 코드리뷰/커밋 댓글 스레드로의 답장(REVIEW_COMMENT, COMMENT_THREAD)
  *  - "help" 자동응답, 수신 거부 사유 회신 메일
  *  - 수신 주소 detail에 리소스 경로를 직접 명시하는 방식(owner/project/issue/5)
@@ -36,6 +37,7 @@ class IncomingMailProcessingService(
     private val postingRepository: PostingRepository,
     private val issueService: IssueService,
     private val commentService: CommentService,
+    private val attachmentService: AttachmentService,
     @Value("\${yuna.mailbox.imap.address:}")
     private val inboundBaseAddress: String
 ) {
@@ -95,10 +97,37 @@ class IncomingMailProcessingService(
         }
 
         val thread = threads.firstOrNull { it.projectId == project.id }
-        return if (thread != null) {
+        val outcome = if (thread != null) {
             createComment(thread, sender, message.textBody)
         } else {
             createIssue(project, owner, projectName, sender, message)
+        }
+        attachAttachments(outcome, message.attachments, sender)
+        return outcome
+    }
+
+    // yona CreationViaEmail.saveAttachments() 대응 (P1-29). cid 이미지 치환은 다루지 않고
+    // 첨부파일을 생성된 리소스에 그대로 연결하는 것까지만 구현한다.
+    private fun attachAttachments(outcome: IncomingMailOutcome, attachments: List<InboundAttachment>, sender: User) {
+        if (attachments.isEmpty()) return
+        val (resourceType, resourceId) = when (outcome) {
+            is IncomingMailOutcome.IssueCreated -> ResourceType.ISSUE_POST to outcome.issueId.toString()
+            is IncomingMailOutcome.IssueCommentCreated -> ResourceType.ISSUE_POST to outcome.issueId.toString()
+            is IncomingMailOutcome.PostingCommentCreated -> ResourceType.BOARD_POST to outcome.postingId.toString()
+            else -> return
+        }
+        for (attachment in attachments) {
+            try {
+                attachmentService.store(
+                    attachment.bytes.inputStream(),
+                    attachment.fileName,
+                    resourceType,
+                    resourceId,
+                    sender.loginId
+                )
+            } catch (e: Exception) {
+                logger.warn("메일 첨부파일 저장 실패: fileName=${attachment.fileName}", e)
+            }
         }
     }
 

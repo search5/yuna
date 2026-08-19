@@ -13,5 +13,13 @@ data class InboundEmailMessage(
     val recipientAddresses: List<String>,
     val inReplyTo: String?,
     val references: String?,
-    val textBody: String
+    val textBody: String,
+    val attachments: List<InboundAttachment> = emptyList()
+)
+
+// yona CreationViaEmail.saveAttachment()/saveAttachments() 대응 (P1-29 — 첨부파일 부분만 범위에 포함).
+data class InboundAttachment(
+    val fileName: String,
+    val contentType: String,
+    val bytes: ByteArray
 )
