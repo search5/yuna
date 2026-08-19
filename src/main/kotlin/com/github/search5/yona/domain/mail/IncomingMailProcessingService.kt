@@ -33,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional
  *    메일로 만들어진 리뷰/커밋 댓글에 대한 재답장) 체인은 동작하지만, UI에서 만든 리뷰/커밋 댓글의
  *    "첫 알림 메일"에 대한 답장은 아직 스레드로 연결되지 않는다.
  *  - "help" 자동응답, 수신 거부 사유 회신 메일은 P1-31에서 구현됨
- *  - 수신 주소 detail에 리소스 경로를 직접 명시하는 방식(owner/project/issue/5)
+ *  - 수신 주소 detail에 리소스 경로를 직접 명시하는 방식(owner/project/issue_post/5)은 P1-32에서 구현됨
  *  - 한 이메일이 여러 프로젝트로 발송된 경우, OriginalEmail은 최초 성공 리소스 1건만 기록
  */
 @Service
@@ -78,7 +78,7 @@ class IncomingMailProcessingService(
             return emptyList()
         }
 
-        val threads = resolveThreads(message)
+        val threads = resolveThreads(message) + targets.mapNotNull { resolveDirectResource(it) }
         val outcomes = targets.map { target -> processTarget(target, threads, sender, message) }
 
         outcomes.firstOrNull { it.isCreated() }?.let { saveOriginalEmail(message.messageId, it) }
@@ -203,6 +203,24 @@ class IncomingMailProcessingService(
                 ResolvedThread(originalEmail.resourceType, originalEmail.resourceId, projectId)
             }
         }
+    }
+
+    // yona EmailHandler.getResourceFromDetail() 대응 (P1-32). detail이
+    // "owner/project/<resourceType>/<resourceId>" 형식(resourceType은 ResourceType.getValue()가
+    // 받는 전체 문자열, 예: issue_post)이면 In-Reply-To/References 없이도 그 리소스를 바로 스레드로 취급한다.
+    private fun resolveDirectResource(target: EmailAddressDetail): ResolvedThread? {
+        val segments = target.detail.split("/")
+        if (segments.size < 4) return null
+
+        val resourceType = try {
+            ResourceType.getValue(segments[2])
+        } catch (e: IllegalArgumentException) {
+            return null
+        }
+        val resourceId = segments[3]
+
+        val projectId = resolveResourceProject(resourceType, resourceId) ?: return null
+        return ResolvedThread(resourceType, resourceId, projectId)
     }
 
     private fun resolveResourceProject(resourceType: ResourceType, resourceId: String): Long? {
