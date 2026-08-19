@@ -11,7 +11,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.event.PullRequestMergeEvent
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.watch.WatchService
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.*
@@ -35,7 +35,7 @@ class PullRequestServiceImpl(
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
     private val eventPublisher: ApplicationEventPublisher,
-    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationEventRecorder: NotificationEventRecorder,
     private val pullRequestEventRepository: PullRequestEventRepository,
     private val watchService: WatchService
 ) : PullRequestService {
@@ -365,8 +365,7 @@ class PullRequestServiceImpl(
         receivers.removeIf { it.id == contributor.id }
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         recordPullRequestEvent(saved, EventType.NEW_PULL_REQUEST, contributor.loginId, null, saved.body)
 
@@ -414,11 +413,23 @@ class PullRequestServiceImpl(
             resourceId = saved.id.toString(),
             eventType = EventType.PULL_REQUEST_STATE_CHANGED,
             oldValue = oldState.toString(),
-            newValue = state.toString(),
-            receivers = mutableSetOf(saved.contributor).apply { removeIf { it.id == updater?.id } }
+            newValue = state.toString()
         )
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        // yona NotificationEvent.getReceivers(sender, pullRequest)(=pullRequest.getWatchers() - sender) 대응.
+        // 기존에는 contributor 한 명만 고정 수신자였는데, PR을 실제로 감시 중인 다른 사용자에게는
+        // 전혀 알림이 가지 않는 누락이 있었다.
+        val receivers = watchService.findActualWatchers(
+            baseWatchers = setOf(saved.contributor),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = saved.id.toString(),
+            projectId = saved.toProject.id,
+            eventType = notificationEvent.eventType
+        ).toMutableSet()
+        if (updater != null) {
+            receivers.removeIf { it.id == updater.id }
+        }
+        notificationEvent.receivers = receivers
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         recordPullRequestEvent(saved, EventType.PULL_REQUEST_STATE_CHANGED, updaterLoginId, oldState.toString(), state.toString())
 
@@ -482,6 +493,8 @@ class PullRequestServiceImpl(
             resourceType = ResourceType.PULL_REQUEST,
             resourceId = pullRequest.id.toString(),
             eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
+            // yona NotificationEvent.afterReviewed()의 oldValue = reviewAction.getOppositAction().name() 대응.
+            oldValue = if (newValue == "DONE") "CANCEL" else "DONE",
             newValue = newValue
         )
         val receivers = mutableSetOf(pullRequest.contributor)
@@ -489,8 +502,7 @@ class PullRequestServiceImpl(
         receivers.removeIf { it.id == reviewer.id }
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         recordPullRequestEvent(pullRequest, EventType.PULL_REQUEST_REVIEW_STATE_CHANGED, reviewer.loginId, null, newValue)
     }

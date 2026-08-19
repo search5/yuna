@@ -3,7 +3,7 @@ package com.github.search5.yona.domain.organization
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.ReservedWordsValidator
@@ -20,7 +20,7 @@ class OrganizationServiceImpl(
     private val organizationUserRepository: OrganizationUserRepository,
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
-    private val notificationEventRepository: NotificationEventRepository
+    private val notificationEventRecorder: NotificationEventRecorder
 ) : OrganizationService {
 
     override fun findByName(name: String): Organization? {
@@ -133,7 +133,7 @@ class OrganizationServiceImpl(
             newValue = "ACCEPT",
             oldValue = "NONE"
         )
-        notificationEventRepository.save(notiEvent)
+        notificationEventRecorder.record(notiEvent)
     }
 
     @Transactional
@@ -223,7 +223,7 @@ class OrganizationServiceImpl(
                 newValue = "REQUEST",
                 oldValue = "NONE"
             )
-            notificationEventRepository.save(notiEvent)
+            notificationEventRecorder.record(notiEvent)
         }
     }
 
@@ -254,7 +254,7 @@ class OrganizationServiceImpl(
                 newValue = "CANCEL",
                 oldValue = "NONE"
             )
-            notificationEventRepository.save(notiEvent)
+            notificationEventRecorder.record(notiEvent)
         }
     }
 }

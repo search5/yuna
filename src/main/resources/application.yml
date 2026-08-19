@@ -26,11 +26,27 @@ spring:
             client-secret: dummy-client-secret
             scope: user:email,read:user
 
+application:
+  noreferrer: "${YUNA_NOREFERRER:false}"
+
 yuna:
+  base-url: "${YUNA_BASE_URL:http://localhost:8080}"
+  hostname: "${YUNA_HOSTNAME:localhost}"
+  site-name: "${YUNA_SITE_NAME:Yona}"
   upload:
     base-dir: "${yona.data:data}/uploads"
   signup:
     allowed-email-domains: "${YUNA_SIGNUP_ALLOWED_EMAIL_DOMAINS:}"
+  notification:
+    bymail:
+      enabled: "${YUNA_NOTIFICATION_BYMAIL_ENABLED:true}"
+      hide-address: "${YUNA_NOTIFICATION_BYMAIL_HIDE_ADDRESS:true}"
+      recipient-limit: "${YUNA_NOTIFICATION_BYMAIL_RECIPIENT_LIMIT:0}"
+      initial-delay-ms: "${YUNA_NOTIFICATION_BYMAIL_INITDELAY_MS:5000}"
+      interval-ms: "${YUNA_NOTIFICATION_BYMAIL_INTERVAL_MS:60000}"
+      delay-ms: "${YUNA_NOTIFICATION_BYMAIL_DELAY_MS:180000}"
+      allowed-domains: "${YUNA_NOTIFICATION_BYMAIL_ALLOWED_DOMAINS:}"
+      keep-days: "${YUNA_NOTIFICATION_KEEP_DAYS:-1}"
   ldap:
     enabled: "${YUNA_LDAP_ENABLED:false}"
     host: "${YUNA_LDAP_HOST:127.0.0.1}"

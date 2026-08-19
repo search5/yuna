@@ -6,7 +6,7 @@ import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.board.PostingComment
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
@@ -29,7 +29,7 @@ class CommentServiceImpl(
     private val postingRepository: PostingRepository,
     private val postingCommentRepository: PostingCommentRepository,
     private val userRepository: UserRepository,
-    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
     private val watchService: WatchService,
     private val projectUserRepository: ProjectUserRepository
@@ -90,8 +90,7 @@ class CommentServiceImpl(
         receivers.addAll(mentionedUsers)
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         return savedComment
     }
@@ -152,8 +151,7 @@ class CommentServiceImpl(
         receivers.addAll(mentionedUsers)
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         return savedComment
     }

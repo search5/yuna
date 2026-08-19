@@ -1,7 +1,7 @@
 package com.github.search5.yona.domain.issue
 
 import com.github.search5.yona.domain.enumeration.EventType
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -24,7 +24,7 @@ class IssueShareServiceImplSpec : DescribeSpec({
     val issueRepository = mockk<IssueRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
-    val notificationEventRepository = mockk<NotificationEventRepository>()
+    val notificationEventRecorder = mockk<NotificationEventRecorder>()
     val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
     val issueEventRepository = mockk<IssueEventRepository>()
 
@@ -35,7 +35,7 @@ class IssueShareServiceImplSpec : DescribeSpec({
         issueRepository,
         projectUserRepository,
         organizationUserRepository,
-        notificationEventRepository,
+        notificationEventRecorder,
         eventPublisher,
         issueEventRepository
     )
@@ -48,7 +48,7 @@ class IssueShareServiceImplSpec : DescribeSpec({
     beforeTest {
         clearMocks(
             userRepository, projectRepository, issueSharerRepository, issueRepository,
-            projectUserRepository, organizationUserRepository, notificationEventRepository,
+            projectUserRepository, organizationUserRepository, notificationEventRecorder,
             issueEventRepository, answers = false
         )
     }
@@ -58,7 +58,7 @@ class IssueShareServiceImplSpec : DescribeSpec({
             every { issueSharerRepository.findByLoginIdAndIssueId("sharer1", 100L) } returns Optional.empty()
             every { issueSharerRepository.save(any()) } answers { firstArg() }
             every { userRepository.findByLoginId("sharer1") } returns Optional.of(sharerUser)
-            every { notificationEventRepository.save(any()) } answers { firstArg() }
+            every { notificationEventRecorder.record(any(), any()) } answers { firstArg() }
             every { issueEventRepository.findFirstByIssueAndCreatedAfterOrderByIdDesc(issue, any()) } returns null
 
             val captured = slot<IssueEvent>()

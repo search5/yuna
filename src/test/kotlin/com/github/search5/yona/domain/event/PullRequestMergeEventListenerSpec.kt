@@ -4,7 +4,7 @@ import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository
@@ -29,13 +29,13 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
     val issueRepository = mockk<IssueRepository>()
     val issueService = mockk<IssueService>()
     val pullRequestService = mockk<PullRequestService>()
-    val notificationEventRepository = mockk<NotificationEventRepository>()
+    val notificationEventRecorder = mockk<NotificationEventRecorder>()
     val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
     val pullRequestEventRepository = mockk<PullRequestEventRepository>(relaxed = true)
 
     val listener = PullRequestMergeEventListener(
         pullRequestRepository, pullRequestCommitRepository, issueRepository, issueService,
-        pullRequestService, notificationEventRepository, eventPublisher, pullRequestEventRepository
+        pullRequestService, notificationEventRecorder, eventPublisher, pullRequestEventRepository
     )
 
     val project = Project(id = 1L, name = "yona-project", owner = "gildong")
@@ -51,9 +51,9 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
     beforeTest {
         io.mockk.clearMocks(
             pullRequestRepository, pullRequestCommitRepository, issueRepository, issueService,
-            pullRequestService, notificationEventRepository, eventPublisher, pullRequestEventRepository, answers = false
+            pullRequestService, notificationEventRecorder, eventPublisher, pullRequestEventRepository, answers = false
         )
-        every { notificationEventRepository.save(any()) } answers { firstArg() }
+        every { notificationEventRecorder.record(any()) } answers { firstArg() }
     }
 
     describe("PullRequestMergeEventListener.handlePullRequestMergeEvent") {

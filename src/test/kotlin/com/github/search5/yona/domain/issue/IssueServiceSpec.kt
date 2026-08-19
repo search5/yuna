@@ -8,6 +8,10 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.watch.Watch
+import com.github.search5.yona.domain.watch.WatchRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.assertions.throwables.shouldThrow
@@ -26,12 +30,14 @@ class IssueServiceSpec @Autowired constructor(
     private val issueEventRepository: IssueEventRepository,
     private val milestoneRepository: com.github.search5.yona.domain.milestone.MilestoneRepository,
     private val issueLabelRepository: IssueLabelRepository,
-    private val issueLabelCategoryRepository: IssueLabelCategoryRepository
+    private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
+    private val watchRepository: WatchRepository
 ) : AbstractIntegrationTest() {
 
     init {
         describe("IssueService 비즈니스 테스트") {
             beforeEach {
+                watchRepository.deleteAll()
                 issueEventRepository.deleteAll()
                 notificationEventRepository.deleteAll()
                 issueCommentRepository.deleteAll()
@@ -49,8 +55,13 @@ class IssueServiceSpec @Autowired constructor(
                     User(loginId = "tester", name = "테스터", email = "tester@yona.io")
                 )
                 val project = projectRepository.save(
-                    Project(name = "test-project", owner = "tester")
+                    Project(name = "test-project", owner = "tester", projectScope = ProjectScope.PUBLIC)
                 )
+                // NotificationEventRecorder(P1-27)는 legacy와 동일하게 수신자가 없으면 저장하지 않으므로
+                // (본인이 본인 이슈 상태를 바꾸면 본인은 수신자에서 제외된다), 실제 수신자가 될 프로젝트
+                // 감시자를 한 명 둔다.
+                val watcher = userRepository.save(User(loginId = "watcher", name = "감시자", email = "watcher@yona.io"))
+                watchRepository.save(Watch(user = watcher, resourceType = ResourceType.PROJECT, resourceId = project.id.toString()))
 
                 val issue = Issue(
                     title = "수정할 버그",

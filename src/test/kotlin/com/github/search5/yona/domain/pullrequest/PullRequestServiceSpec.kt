@@ -12,6 +12,9 @@ import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.event.PullRequestMergeEventListener
 import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.watch.Watch
+import com.github.search5.yona.domain.watch.WatchRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.eclipse.jgit.api.Git
@@ -33,7 +36,8 @@ class PullRequestServiceSpec @Autowired constructor(
     private val issueService: IssueService,
     private val pullRequestMergeEventListener: PullRequestMergeEventListener,
     private val pullRequestEventRepository: PullRequestEventRepository,
-    private val notificationEventRepository: NotificationEventRepository
+    private val notificationEventRepository: NotificationEventRepository,
+    private val watchRepository: WatchRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -44,6 +48,7 @@ class PullRequestServiceSpec @Autowired constructor(
             lateinit var fromProject: Project
 
             beforeEach {
+                watchRepository.deleteAll()
                 pullRequestEventRepository.deleteAll()
                 notificationEventRepository.deleteAll()
                 pullRequestCommitRepository.deleteAll()
@@ -62,7 +67,7 @@ class PullRequestServiceSpec @Autowired constructor(
                 )
 
                 toProject = projectRepository.save(
-                    Project(name = "to-repo-$uniqueSuffix", owner = "owner-a", vcs = "GIT")
+                    Project(name = "to-repo-$uniqueSuffix", owner = "owner-a", vcs = "GIT", projectScope = com.github.search5.yona.domain.project.ProjectScope.PUBLIC)
                 )
                 fromProject = projectRepository.save(
                     Project(name = "from-repo-$uniqueSuffix", owner = "owner-b", vcs = "GIT")
@@ -570,6 +575,10 @@ class PullRequestServiceSpec @Autowired constructor(
             }
 
             it("PR을 생성하면 NotificationEvent(NEW_PULL_REQUEST)와 PullRequestEvent가 모두 생성되어야 한다(P1-39)") {
+                // NotificationEventRecorder(P1-27)는 legacy와 동일하게 수신자가 없으면 저장하지 않으므로
+                // (contributor 본인은 수신자에서 제외된다), 실제 수신자가 될 프로젝트 감시자를 한 명 둔다.
+                watchRepository.save(Watch(user = receiver, resourceType = ResourceType.PROJECT, resourceId = toProject.id.toString()))
+
                 val created = pullRequestService.createPullRequest(
                     title = "신규 PR 이벤트 테스트",
                     body = "본문 내용",
@@ -592,6 +601,11 @@ class PullRequestServiceSpec @Autowired constructor(
             }
 
             it("PR 상태를 변경하면 NotificationEvent와 PullRequestEvent가 모두 생성되어야 한다") {
+                // NotificationEventRecorder(P1-27) + PULL_REQUEST_STATE_CHANGED의 실제 감시자 알림 보강
+                // (legacy NotificationEvent.getReceivers(sender, pullRequest)) 대응 — contributor 본인이
+                // 상태를 바꾸면 본인은 수신자에서 빠지므로, 실제 수신자가 될 프로젝트 감시자를 한 명 둔다.
+                watchRepository.save(Watch(user = receiver, resourceType = ResourceType.PROJECT, resourceId = toProject.id.toString()))
+
                 val pr = pullRequestRepository.save(
                     PullRequest(
                         title = "상태 변경 테스트 PR", body = "...",

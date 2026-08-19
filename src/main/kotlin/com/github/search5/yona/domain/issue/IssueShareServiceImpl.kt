@@ -3,7 +3,7 @@ package com.github.search5.yona.domain.issue
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -26,7 +26,7 @@ class IssueShareServiceImpl(
     private val issueRepository: IssueRepository,
     private val projectUserRepository: ProjectUserRepository,
     private val organizationUserRepository: OrganizationUserRepository,
-    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
     private val issueEventRepository: IssueEventRepository
 ) : IssueShareService {
@@ -223,8 +223,9 @@ class IssueShareServiceImpl(
             newValue = if (action == "add") sharerLoginId else ""
         )
         notificationEvent.receivers = receivers
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        // yona NotificationEvent.afterIssueSharerChanged()는 addWithoutSkipEvent()(skipWaypoint=false)를
+        // 쓴다 — 중간 지점은 남기고 정확히 원상복구된 경우만 상쇄한다.
+        notificationEventRecorder.record(notificationEvent, skipWaypoint = false)?.let { eventPublisher.publishEvent(it) }
 
         // 이슈 타임라인(IssueEvent) 기록 (P1-37)
         val issueEvent = IssueEvent(

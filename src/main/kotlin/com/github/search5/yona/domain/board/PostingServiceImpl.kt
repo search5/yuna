@@ -5,7 +5,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.enumeration.EventType
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
@@ -26,7 +26,7 @@ class PostingServiceImpl(
     private val attachmentService: AttachmentService,
     private val postingCommentRepository: PostingCommentRepository,
     private val watchService: WatchService,
-    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher
 ) : PostingService {
 
@@ -57,8 +57,7 @@ class PostingServiceImpl(
         receivers.removeIf { it.id == actor.id }
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
     }
 
     override fun getPostings(projectId: Long, pageable: Pageable): Page<Posting> {
@@ -169,8 +168,7 @@ class PostingServiceImpl(
                 receivers.removeIf { it.id == updater.id }
                 notificationEvent.receivers = receivers
 
-                notificationEventRepository.save(notificationEvent)
-                eventPublisher.publishEvent(notificationEvent)
+                notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
             }
         }
 

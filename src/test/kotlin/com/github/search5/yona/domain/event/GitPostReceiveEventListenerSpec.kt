@@ -6,7 +6,7 @@ import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueEventRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.project.GitService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
@@ -49,7 +49,7 @@ private fun testCommit(message: String): RevCommit {
 
 class GitPostReceiveEventListenerSpec : DescribeSpec({
     val gitService = mockk<GitService>()
-    val notificationEventRepository = mockk<NotificationEventRepository>(relaxed = true)
+    val notificationEventRecorder = mockk<NotificationEventRecorder>(relaxed = true)
     val issueRepository = mockk<IssueRepository>()
     val issueEventRepository = mockk<IssueEventRepository>()
     val webhookService = mockk<WebhookService>(relaxed = true)
@@ -57,7 +57,7 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
     val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
 
     val listener = GitPostReceiveEventListener(
-        gitService, notificationEventRepository, issueRepository, issueEventRepository, webhookService,
+        gitService, notificationEventRecorder, issueRepository, issueEventRepository, webhookService,
         watchService, eventPublisher
     )
 
@@ -65,7 +65,7 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
     val sender = User(id = 9L, loginId = "gildong", name = "길동", email = "gildong@example.com")
 
     beforeTest {
-        io.mockk.clearMocks(issueRepository, issueEventRepository, webhookService, notificationEventRepository, watchService, eventPublisher, answers = false)
+        io.mockk.clearMocks(issueRepository, issueEventRepository, webhookService, notificationEventRecorder, watchService, eventPublisher, answers = false)
         every {
             watchService.findActualWatchers(
                 baseWatchers = emptySet(),
@@ -125,7 +125,7 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
         it("push된 커밋이 있으면 NotificationEvent를 저장하고 NEW_COMMIT 웹훅을 발송해야 한다") {
             val commit = testCommit("fix bug")
             val savedNotification = slot<NotificationEvent>()
-            every { notificationEventRepository.save(capture(savedNotification)) } answers { firstArg() }
+            every { notificationEventRecorder.record(capture(savedNotification)) } answers { firstArg() }
 
             listener.processCommitsNotification(listOf(commit), listOf("refs/heads/master"), project, sender)
 
@@ -140,7 +140,7 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
         it("push된 커밋이 없으면 알림도 웹훅도 발생시키지 않아야 한다") {
             listener.processCommitsNotification(emptyList(), listOf("refs/heads/master"), project, sender)
 
-            verify(exactly = 0) { notificationEventRepository.save(any()) }
+            verify(exactly = 0) { notificationEventRecorder.record(any()) }
             verify(exactly = 0) { webhookService.sendWebhook(any(), any(), any(), any()) }
         }
 
@@ -158,7 +158,7 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
 
             val commit = testCommit("fix bug")
             val savedNotification = slot<NotificationEvent>()
-            every { notificationEventRepository.save(capture(savedNotification)) } answers { firstArg() }
+            every { notificationEventRecorder.record(capture(savedNotification)) } answers { firstArg() }
 
             listener.processCommitsNotification(listOf(commit), listOf("refs/heads/master"), project, sender)
 

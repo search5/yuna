@@ -5,7 +5,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.support.HistoryUtil
 import com.github.search5.yona.domain.user.User
@@ -24,7 +24,7 @@ class IssueServiceImpl(
     private val milestoneRepository: MilestoneRepository,
     private val projectRepository: ProjectRepository,
     private val issueLabelRepository: IssueLabelRepository,
-    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
     private val issueCommentRepository: IssueCommentRepository,
     private val watchService: WatchService,
@@ -87,8 +87,7 @@ class IssueServiceImpl(
         receivers.removeIf { it.id == author.id }
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         return savedIssue
     }
@@ -146,6 +145,35 @@ class IssueServiceImpl(
 
         if (oldBody != body) {
             recordIssueEvent(savedIssue, EventType.ISSUE_BODY_CHANGED, updater.loginId!!, oldBody, body)
+
+            // yona NotificationEvent.afterIssueBodyChanged() 대응 — 지금까지 yuna는 ISSUE_BODY_CHANGED를
+            // IssueEvent(타임라인)에만 기록하고 알림 메일은 보내지 않고 있었다(PostingServiceImpl의
+            // POSTING_BODY_CHANGED와 달리 누락돼 있던 부분). getMandatoryReceivers()의 "본문에서 새로
+            // @멘션된 사용자 추가" 세부 로직은 이 파일의 다른 이슈 이벤트들과 마찬가지로 watcher 기반
+            // 통지로 단순화한다(멘션 감지는 댓글 쪽(CommentServiceImpl)에만 있고 이슈 본문 수정에는
+            // 아직 없다 — 별도 항목).
+            val bodyChangedTitle = "[${savedIssue.project.name}] 이슈 #${savedIssue.number} 본문 수정: ${savedIssue.title}"
+            val bodyChangedEvent = NotificationEvent(
+                title = bodyChangedTitle,
+                senderId = updater.id,
+                created = Instant.now(),
+                resourceType = ResourceType.ISSUE_POST,
+                resourceId = savedIssue.id.toString(),
+                eventType = EventType.ISSUE_BODY_CHANGED,
+                oldValue = oldBody,
+                newValue = body
+            )
+            val bodyChangedReceivers = watchService.findActualWatchers(
+                baseWatchers = setOf(updater),
+                resourceType = ResourceType.ISSUE_POST,
+                resourceId = savedIssue.id.toString(),
+                projectId = savedIssue.project.id,
+                eventType = bodyChangedEvent.eventType
+            ).toMutableSet()
+            bodyChangedReceivers.removeIf { it.id == updater.id }
+            bodyChangedEvent.receivers = bodyChangedReceivers
+
+            notificationEventRecorder.record(bodyChangedEvent)?.let { eventPublisher.publishEvent(it) }
         }
 
         val newLabelNames = savedIssue.labels.map { it.name }.sorted()
@@ -202,8 +230,7 @@ class IssueServiceImpl(
         }
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         recordIssueEvent(savedIssue, EventType.ISSUE_STATE_CHANGED, updaterLoginId, oldState.toString(), newState.toString())
 
@@ -253,8 +280,7 @@ class IssueServiceImpl(
         }
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         recordIssueEvent(savedIssue, EventType.ISSUE_ASSIGNEE_CHANGED, updaterLoginId, oldAssignee?.name, newAssigneeUser?.name)
 
@@ -305,8 +331,7 @@ class IssueServiceImpl(
         }
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         recordIssueEvent(savedIssue, EventType.ISSUE_MILESTONE_CHANGED, updaterLoginId, oldMilestone?.title, issue.milestone?.title)
 

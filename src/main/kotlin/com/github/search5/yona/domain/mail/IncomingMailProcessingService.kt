@@ -31,11 +31,13 @@ import org.springframework.transaction.annotation.Transactional
  * 의도적으로 다루지 않는 범위(follow-up, docs/PARITY_BACKLOG.md 참고):
  *  - MIME multipart/HTML 본문 파싱, cid 이미지 치환 (텍스트 본문만 처리 — 첨부파일 저장은 P1-29에서 구현됨)
  *  - 코드리뷰(COMMENT_THREAD)/커밋(COMMIT_COMMENT) 댓글 스레드로의 답장 라우팅은 P1-30에서 구현됨.
- *    다만 이 경로가 실제로 동작하려면 그 리소스에 대한 최초 알림 메일의 Message-ID가 OriginalEmail로
- *    추적돼 있어야 하는데, NotificationMailEventListener(P1-28)는 아직 발신 메일의 Message-ID를
- *    추적하지 않는다(P1-28은 프로젝트 단위 Reply-To 라우팅까지만 구현) — 그래서 "답장에 답장"(이미
- *    메일로 만들어진 리뷰/커밋 댓글에 대한 재답장) 체인은 동작하지만, UI에서 만든 리뷰/커밋 댓글의
- *    "첫 알림 메일"에 대한 답장은 아직 스레드로 연결되지 않는다.
+ *    NotificationMailDigestScheduler(P1-27)가 발신 메일에 결정론적 Message-ID(Resource.getMessageId()
+ *    포맷 대응)를 붙이지만, In-Reply-To/References 기반 라우팅(resolveThreads())은 그 Message-ID가
+ *    OriginalEmail 테이블에 기록돼 있어야 매칭되는데 발신 메일은 OriginalEmail을 남기지 않는다.
+ *    다만 Reply-To 헤더 자체가 이미 리소스 상세 주소(owner/project/<resourceType>/<resourceId>,
+ *    resolveDirectResource() 대응)로 설정되므로, 답장은 In-Reply-To 매칭 없이도 수신 주소만으로
+ *    올바른 스레드를 찾는다 — 다만 REVIEW_COMMENT/COMMIT_COMMENT는 아직 알림을 생성하는 곳이 없어
+ *    (docs/PARITY_BACKLOG.md 참고) 이 경로 자체가 아직 발신 쪽에서 쓰이지 않는다.
  *  - "help" 자동응답, 수신 거부 사유 회신 메일은 P1-31에서 구현됨
  *  - 수신 주소 detail에 리소스 경로를 직접 명시하는 방식(owner/project/issue_post/5)은 P1-32에서 구현됨
  *  - 한 이메일이 여러 프로젝트로 발송된 경우, OriginalEmail은 최초 성공 리소스 1건만 기록
