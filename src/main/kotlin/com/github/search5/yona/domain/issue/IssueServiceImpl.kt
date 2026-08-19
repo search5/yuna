@@ -80,7 +80,8 @@ class IssueServiceImpl(
             baseWatchers = setOf(author),
             resourceType = ResourceType.ISSUE_POST,
             resourceId = savedIssue.id.toString(),
-            projectId = project.id
+            projectId = project.id,
+            eventType = notificationEvent.eventType
         ).toMutableSet()
         receivers.removeIf { it.id == author.id }
         notificationEvent.receivers = receivers
@@ -159,7 +160,8 @@ class IssueServiceImpl(
             baseWatchers = baseWatchers,
             resourceType = ResourceType.ISSUE_POST,
             resourceId = savedIssue.id.toString(),
-            projectId = issue.project.id
+            projectId = issue.project.id,
+            eventType = notificationEvent.eventType
         ).toMutableSet()
         if (updater != null) {
             receivers.removeIf { it.id == updater.id }
@@ -209,7 +211,8 @@ class IssueServiceImpl(
             baseWatchers = baseWatchers,
             resourceType = ResourceType.ISSUE_POST,
             resourceId = savedIssue.id.toString(),
-            projectId = issue.project.id
+            projectId = issue.project.id,
+            eventType = notificationEvent.eventType
         ).toMutableSet()
         if (updater != null) {
             receivers.removeIf { it.id == updater.id }
@@ -260,7 +263,8 @@ class IssueServiceImpl(
             baseWatchers = baseWatchers,
             resourceType = ResourceType.ISSUE_POST,
             resourceId = savedIssue.id.toString(),
-            projectId = issue.project.id
+            projectId = issue.project.id,
+            eventType = notificationEvent.eventType
         ).toMutableSet()
         if (updater != null) {
             receivers.removeIf { it.id == updater.id }

@@ -50,7 +50,8 @@ class PostingServiceImpl(
             baseWatchers = setOf(actor),
             resourceType = ResourceType.BOARD_POST,
             resourceId = posting.id.toString(),
-            projectId = posting.project.id
+            projectId = posting.project.id,
+            eventType = eventType
         ).toMutableSet()
         receivers.removeIf { it.id == actor.id }
         notificationEvent.receivers = receivers

@@ -20,6 +20,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.UserProjectNotification
+import com.github.search5.yona.domain.notification.UserProjectNotificationRepository
 import com.github.search5.yona.domain.enumeration.EventType
 
 @org.springframework.transaction.annotation.Transactional
@@ -34,7 +36,8 @@ class WatchServiceSpec @Autowired constructor(
     private val unwatchRepository: UnwatchRepository,
     private val issueService: IssueService,
     private val commentService: CommentService,
-    private val notificationEventRepository: NotificationEventRepository
+    private val notificationEventRepository: NotificationEventRepository,
+    private val userProjectNotificationRepository: UserProjectNotificationRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -48,6 +51,7 @@ class WatchServiceSpec @Autowired constructor(
 
             beforeEach {
                 notificationEventRepository.deleteAll()
+                userProjectNotificationRepository.deleteAll()
                 watchRepository.deleteAll()
                 unwatchRepository.deleteAll()
                 issueRepository.deleteAll()
@@ -239,6 +243,82 @@ class WatchServiceSpec @Autowired constructor(
                     )
 
                     watchers.map { it.loginId }.toSet() shouldBe setOf("user2")
+                }
+            }
+
+            describe("프로젝트별 알림 뮤트 토글 (P1-22, yona NotificationEvent.filterReceivers()의 UserProjectNotification 대응)") {
+                it("프로젝트 감시자가 특정 이벤트타입을 뮤트했으면 그 이벤트에서는 실제 감시자에서 제외되어야 한다") {
+                    watchService.watch(user2, ResourceType.PROJECT, project.id.toString())
+                    userProjectNotificationRepository.save(
+                        UserProjectNotification(
+                            user = user2,
+                            project = project,
+                            notificationType = EventType.ISSUE_STATE_CHANGED,
+                            allowed = false
+                        )
+                    )
+
+                    val watchers = watchService.findActualWatchers(
+                        baseWatchers = setOf(user1),
+                        resourceType = ResourceType.ISSUE_POST,
+                        resourceId = issue.id.toString(),
+                        projectId = project.id,
+                        eventType = EventType.ISSUE_STATE_CHANGED
+                    )
+
+                    watchers.map { it.loginId }.toSet() shouldBe setOf("user1")
+                }
+
+                it("뮤트 설정이 없으면(기본값) 프로젝트 감시자는 계속 알림을 받아야 한다") {
+                    watchService.watch(user2, ResourceType.PROJECT, project.id.toString())
+
+                    val watchers = watchService.findActualWatchers(
+                        baseWatchers = setOf(user1),
+                        resourceType = ResourceType.ISSUE_POST,
+                        resourceId = issue.id.toString(),
+                        projectId = project.id,
+                        eventType = EventType.ISSUE_STATE_CHANGED
+                    )
+
+                    watchers.map { it.loginId }.toSet() shouldBe setOf("user1", "user2")
+                }
+
+                it("NEW_COMMENT는 프로젝트 감시만으로는 기본적으로 알림을 받지 않아야 한다(yona isNotifiedByDefault)") {
+                    watchService.watch(user2, ResourceType.PROJECT, project.id.toString())
+
+                    val watchers = watchService.findActualWatchers(
+                        baseWatchers = setOf(user1),
+                        resourceType = ResourceType.ISSUE_POST,
+                        resourceId = issue.id.toString(),
+                        projectId = project.id,
+                        eventType = EventType.NEW_COMMENT
+                    )
+
+                    watchers.map { it.loginId }.toSet() shouldBe setOf("user1")
+                }
+
+                it("이슈에 직접 명시적으로 감시를 건 사용자는 프로젝트 뮤트와 무관하게 항상 포함되어야 한다") {
+                    watchService.watch(user2, ResourceType.PROJECT, project.id.toString())
+                    userProjectNotificationRepository.save(
+                        UserProjectNotification(
+                            user = user2,
+                            project = project,
+                            notificationType = EventType.NEW_COMMENT,
+                            allowed = false
+                        )
+                    )
+                    // user2가 이슈 자체도 명시적으로 감시
+                    watchService.watch(user2, ResourceType.ISSUE_POST, issue.id.toString())
+
+                    val watchers = watchService.findActualWatchers(
+                        baseWatchers = setOf(user1),
+                        resourceType = ResourceType.ISSUE_POST,
+                        resourceId = issue.id.toString(),
+                        projectId = project.id,
+                        eventType = EventType.NEW_COMMENT
+                    )
+
+                    watchers.map { it.loginId }.toSet() shouldBe setOf("user1", "user2")
                 }
             }
         }
