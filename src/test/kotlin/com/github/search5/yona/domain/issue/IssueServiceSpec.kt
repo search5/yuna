@@ -212,6 +212,85 @@ class IssueServiceSpec @Autowired constructor(
                 issueEvents.first().newValue shouldBe "버그"
             }
 
+            it("같은 사용자가 30초 내에 상태를 연속 변경(A->B->C)하면 IssueEvent가 A->C 하나로 병합돼야 한다(P1-38)") {
+                val author = userRepository.save(User(loginId = "tester7", name = "테스터7", email = "tester7@yona.io"))
+                val project = projectRepository.save(Project(name = "merge-test-project", owner = "tester7"))
+                val issue = Issue(
+                    title = "상태 병합 테스트", body = "본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                issueService.changeState(savedIssue.id!!, State.CLOSED, "tester7")
+                issueService.changeState(savedIssue.id!!, State.REJECTED, "tester7")
+
+                val issueEvents = issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue)
+                issueEvents.size shouldBe 1
+                issueEvents.first().eventType shouldBe EventType.ISSUE_STATE_CHANGED
+                issueEvents.first().oldValue shouldBe State.OPEN.toString()
+                issueEvents.first().newValue shouldBe State.REJECTED.toString()
+            }
+
+            it("같은 사용자가 30초 내에 상태를 원래대로 되돌리면(A->B->A) IssueEvent가 모두 상쇄돼야 한다(P1-38)") {
+                val author = userRepository.save(User(loginId = "tester8", name = "테스터8", email = "tester8@yona.io"))
+                val project = projectRepository.save(Project(name = "cancel-test-project", owner = "tester8"))
+                val issue = Issue(
+                    title = "상태 상쇄 테스트", body = "본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                issueService.changeState(savedIssue.id!!, State.CLOSED, "tester8")
+                issueService.changeState(savedIssue.id!!, State.OPEN, "tester8")
+
+                issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue).size shouldBe 0
+            }
+
+            it("updateIssue로 라벨을 30초 내에 연속 변경하면 중간 지점은 남기되 정확히 되돌리는 경우만 상쇄돼야 한다(P1-38)") {
+                val author = userRepository.save(User(loginId = "tester9", name = "테스터9", email = "tester9@yona.io"))
+                val project = projectRepository.save(Project(name = "label-merge-project", owner = "tester9"))
+                val category = issueLabelCategoryRepository.save(
+                    IssueLabelCategory(name = "종류", isExclusive = false, project = project)
+                )
+                val bugLabel = issueLabelRepository.save(
+                    IssueLabel(category = category, color = "red", name = "버그", project = project)
+                )
+                val featureLabel = issueLabelRepository.save(
+                    IssueLabel(category = category, color = "blue", name = "기능", project = project)
+                )
+                val issue = Issue(
+                    title = "라벨 연속 변경 테스트", body = "본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                // 1) 라벨 없음 -> [버그]
+                issueService.updateIssue(
+                    issueId = savedIssue.id!!, title = savedIssue.title, body = savedIssue.body ?: "",
+                    updater = author, assigneeUser = null, milestoneId = null,
+                    labelIds = listOf(bugLabel.id!!)
+                )
+                // 2) [버그] -> [버그, 기능] (중간 지점, 되돌리는 게 아니므로 남아야 함)
+                issueService.updateIssue(
+                    issueId = savedIssue.id!!, title = savedIssue.title, body = savedIssue.body ?: "",
+                    updater = author, assigneeUser = null, milestoneId = null,
+                    labelIds = listOf(bugLabel.id!!, featureLabel.id!!)
+                )
+                // 3) [버그, 기능] -> [버그] (2번을 정확히 되돌림 -> 2, 3번 모두 상쇄)
+                issueService.updateIssue(
+                    issueId = savedIssue.id!!, title = savedIssue.title, body = savedIssue.body ?: "",
+                    updater = author, assigneeUser = null, milestoneId = null,
+                    labelIds = listOf(bugLabel.id!!)
+                )
+
+                val issueEvents = issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue)
+                issueEvents.size shouldBe 1
+                issueEvents.first().newValue shouldBe "버그"
+            }
+
             it("사용자가 이슈에 투표를 던지거나 취소할 수 있어야 한다") {
                 // Given
                 val author = userRepository.save(

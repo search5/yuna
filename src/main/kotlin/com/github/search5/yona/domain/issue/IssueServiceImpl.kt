@@ -142,7 +142,8 @@ class IssueServiceImpl(
                 EventType.ISSUE_LABEL_CHANGED,
                 updater.loginId!!,
                 oldLabelNames.joinToString(", "),
-                newLabelNames.joinToString(", ")
+                newLabelNames.joinToString(", "),
+                skipWaypoint = false
             )
         }
 
@@ -299,8 +300,15 @@ class IssueServiceImpl(
         return savedIssue
     }
 
-    // yona models/IssueEvent.java 대응(간소화 - draft-time 병합/취소 최적화는 제외, P1-07).
-    private fun recordIssueEvent(issue: Issue, eventType: EventType, senderLoginId: String, oldValue: String?, newValue: String?) {
+    // yona models/IssueEvent.java의 add()/addWithoutSkipEvent() 대응(draft-time 병합/취소, P1-38).
+    private fun recordIssueEvent(
+        issue: Issue,
+        eventType: EventType,
+        senderLoginId: String,
+        oldValue: String?,
+        newValue: String?,
+        skipWaypoint: Boolean = true
+    ) {
         val issueEvent = IssueEvent(
             issue = issue,
             senderLoginId = senderLoginId,
@@ -310,7 +318,7 @@ class IssueServiceImpl(
             created = Instant.now(),
             eventType = eventType
         )
-        issueEventRepository.save(issueEvent)
+        issueEventRepository.recordWithDraftMerge(issueEvent, skipWaypoint)
     }
 
     override fun voteIssue(issueId: Long, user: User) {
