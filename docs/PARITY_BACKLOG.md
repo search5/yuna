@@ -24,7 +24,7 @@
 | P0-04 | [x] | 웹훅 gitPush 필터 로직 반전 | `models/NotificationEvent.java:604-680` | `domain/webhook/WebhookServiceImpl.kt` | **완료** |
 | P0-05 | [x] | 이슈 생성 시 첨부파일 연결 안 됨 | `AbstractPostingApp.java:224` | `web/IssueViewController.kt` | **완료** — `temporaryUploadFiles` 파라미터 추가, MilestoneViewController와 동일 패턴 |
 | P0-06 | [x] | 게시글 생성 시 첨부파일 연결 안 됨 | `AbstractPostingApp.java:241` | `web/BoardViewController.kt` | **완료** — `PostingForm.temporaryUploadFiles` 추가, 동일 패턴 |
-| P0-07 | [ ] | 사이트 백업/복원 데이터 유실 | `app/data/DataService.java` (44 Exchanger) | `web/SiteApiController.kt:222-302` | users/projects만 포함 → 이슈·댓글·라벨 등 확장 필요 |
+| P0-07 | [x] | 사이트 백업/복원 데이터 유실 | `app/data/DataService.java` (44 Exchanger) | `domain/site/DataBackupService{,Impl}.kt`(신규) | **완료** — 테이블 자동 탐지 방식으로 전체 DB 커버 |
 | P0-08 | [x] | 마크다운 새니타이저 XSS 약화 | `utils/Markdown.java` (OWASP allowlist) | `domain/support/MarkdownServiceImpl.kt` | **완료** — OWASP java-html-sanitizer allowlist 정책으로 교체, 11개 테스트 |
 | P0-09 | [x] | 프로젝트 이전 수락 인가 검증 누락 | `ProjectApp.java:657` | `domain/project/ProjectServiceImpl.kt` | **완료** — `ProjectServiceImplSpec.kt` 5개 테스트, `acceptTransfer` 인가 로직 커버 |
 | P0-10 | [x] | git push 예약 ref 보호 훅 부재 | `RejectPushToReservedRefs.java` | `domain/vcs/GitPushHooks.kt`, `config/GitServletConfig.kt` | **완료** |
@@ -71,6 +71,8 @@
 | P1-30 | [ ] | 리뷰 댓글/커밋 댓글 스레드로의 메일 답장 미지원 | `EmailHandler.java getThreads` (COMMENT_THREAD/REVIEW_COMMENT 분기) | `domain/mail/IncomingMailProcessingService.kt resolveResourceProject` | P0-02에서 범위 분리 — ISSUE_POST/BOARD_POST 스레드만 인식, PR 코드리뷰 댓글 스레드는 미지원(조용히 스킵) |
 | P1-31 | [ ] | "help" 자동응답 및 실패 사유 회신 메일 없음 | `EmailHandler.java getHelpMessage/reply` | `domain/mail/IncomingMailProcessingService.kt` | P0-02에서 범위 분리 — Rejected/UnknownSender 결과가 로그로만 남고 발신자에게 회신되지 않음 |
 | P1-32 | [ ] | 수신 주소 detail에 리소스 경로 직접 명시 방식 미지원 | `EmailHandler.java getResourceFromDetail` (owner/project/issue/5 형태) | `domain/mail/IncomingMailProcessingService.kt` | P0-02에서 범위 분리 — detail은 owner/project까지만 해석, 그 뒤 경로 세그먼트는 무시됨 |
+| P1-33 | [ ] | 복원 후 auto-increment 채번이 백업된 PK와 충돌할 수 있음 | (해당 없음, yuna 자체 설계 이슈) | `domain/site/DataBackupServiceImpl.kt` | P0-07에서 식별 — DELETE 후 백업된 PK 그대로 INSERT하므로, 이후 신규 행 채번 시퀀스가 백업 최댓값보다 낮으면 PK 충돌 가능. MariaDB는 AUTO_INCREMENT가 INSERT된 값을 보고 자동으로 다음 채번을 올리므로(실측상 문제 재현 안 됨) 우선순위를 낮춰 P1로 분류, 운영 배포 전 재확인 권장 |
+| P1-34 | [ ] | PostgreSQL 방언 경로는 통합테스트로 검증되지 않음 | (해당 없음) | `domain/site/DataBackupServiceImpl.kt` (`Dialect.POSTGRES`) | P0-07에서 식별 — 코드는 존재하나(`session_replication_role`), Testcontainers Postgres로 실제 검증한 테스트는 아직 없음(MariaDB만 검증됨) |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -125,6 +127,15 @@
   - **`ImapMailboxPoller`(신규, 글루 코드)**: yona `MailboxService.java`+`IMAPMessageUtil.java` 대응. yona의 IDLE 명령+커스텀 lastSeenUID 추적 대신, **IMAP `\Seen` 플래그를 북마크로 쓰는 폴링 전용 방식으로 단순화**(`@Scheduled`, 기본 5분 주기). `yuna.mailbox.imap.enabled=false`가 기본값이라 IMAP 미설정 환경(테스트 등)에서는 로드되지 않음(`@ConditionalOnProperty`). 실제 IMAP 연결이 필요한 순수 배선이라 이 저장소의 다른 `*Config` 클래스들과 동일하게 단위테스트 대상에서 제외 — 비즈니스 로직은 전부 `IncomingMailProcessingService`로 위임되어 있어 그쪽에서 커버됨.
   - **범위 조정(P1-29~32로 분리)**: MIME multipart/HTML 본문 파싱과 첨부파일·cid 이미지 치환, 코드리뷰/커밋 댓글 스레드로의 답장, "help" 자동응답 및 실패 회신 메일, 수신 주소 detail의 직접 리소스 경로 지정(`owner/project/issue/5`)은 미구현. 텍스트 본문만 처리하고 ISSUE_POST/BOARD_POST 스레드만 인식하는 범위로 핵심 요구사항(메일로 이슈/댓글이 실제로 생성되는가)을 우선 충족했다.
   - 테스트: `EmailAddressDetailSpec.kt`(7), `MessageIdParserSpec.kt`(4), `IncomingMailProcessingServiceSpec.kt`(9) 총 20 tests 전체 통과. 전체 Spring 컨텍스트 로딩 테스트(`YonaApplicationTests`)로 신규 엔티티/빈 배선 이상 없음 확인. 커버리지: `IncomingMailProcessingService` INSTRUCTION 92%(549/595)·BRANCH 76%(44/58), `EmailAddressDetail`/`MessageIdParser` 100%.
+
+- **2026-08-19 — P0-07**: `SiteApiController.exportData/importData`가 users/projects 두 테이블만 손으로 필드 매핑해 백업하던 문제(이슈·댓글·라벨·마일스톤·PR·첨부 등 대부분 데이터가 재해복구 시 유실) 해결.
+  - yona는 44개의 손으로 나열한 Exchanger 클래스로 테이블별 raw JDBC export/import를 하지만, yuna는 **DB 메타데이터(`DatabaseMetaData.getTables`)로 테이블 목록을 스스로 찾아내는 범용 방식**을 택해 신규 엔티티가 추가돼도 서비스 코드 수정이 필요 없게 설계.
+  - `exportAll()`: 발견된 모든 테이블에 대해 `SELECT * FROM table`을 실행해 JSON으로 직렬화.
+  - `importAll()`: MySQL/MariaDB는 `SET FOREIGN_KEY_CHECKS=0`, PostgreSQL은 `SET session_replication_role='replica'`로 FK 제약을 끈 뒤, 테이블별로 `DELETE FROM table` 후 백업된 행을 그대로 `INSERT`(전체 교체 방식) — yona처럼 순수 insert만 하는 것보다 실제 "복원" 의미에 더 부합하도록 개선.
+  - `SiteApiController`가 이 서비스로 위임하도록 교체, 기존 `/site/export`/`/site/import` 라우트·시그니처는 그대로 유지.
+  - 테스트: **실제 MariaDB(Testcontainers) 통합테스트**(`DataBackupServiceIntegrationSpec.kt`, 2 tests) — 순수 목으로는 "실제 DB 스키마/방언에서 동작하는가"를 검증할 수 없어 통합테스트로 작성. 데이터 추가 → 이전 시점 백업으로 복원 → 추가분 소실 확인 + 원본 데이터 보존 확인까지 실제 DB로 검증. 컨트롤러 위임 테스트는 `SiteControllerSpec.kt`에 추가(export/import 각 1건, 기존 export 테스트는 새 구조에 맞게 갱신).
+  - 커버리지: `DataBackupServiceImpl` INSTRUCTION 88.8%(342/385)·BRANCH 60%(15/25) — 미커버 분기는 주로 PostgreSQL 방언 경로(P1-34로 별도 추적, MariaDB만 실제 검증됨).
+  - 식별된 후속 리스크(P1-33/34로 분리): 복원 후 auto-increment 채번 충돌 가능성(MariaDB 실측상 문제 없었음), PostgreSQL 경로 미검증.
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

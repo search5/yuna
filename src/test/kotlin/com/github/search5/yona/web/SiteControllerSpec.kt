@@ -55,6 +55,7 @@ class SiteControllerSpec : DescribeSpec({
     val objectMapper = ObjectMapper()
 
     val siteService = mockk<SiteService>()
+    val dataBackupService = mockk<com.github.search5.yona.domain.site.DataBackupService>()
 
     val siteViewController = SiteViewController(
         userRepository,
@@ -72,6 +73,7 @@ class SiteControllerSpec : DescribeSpec({
         projectRepository,
         mailService,
         yonaUpdateService,
+        dataBackupService,
         objectMapper,
         environment
     )
@@ -404,10 +406,9 @@ class SiteControllerSpec : DescribeSpec({
         }
 
         describe("GET /site/export") {
-            it("로그인한 주체가 관리자일 때 JSON 백업 데이터를 파일로 내려주어야 한다") {
+            it("로그인한 주체가 관리자일 때 DataBackupService가 만든 전체 DB 백업을 파일로 내려주어야 한다") {
                 every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
-                every { userRepository.findAll() } returns listOf(adminUser, normalUser)
-                every { projectRepository.findAll() } returns emptyList()
+                every { dataBackupService.exportAll() } returns "{\"n4user\":[]}".toByteArray()
 
                 mockMvcApi.perform(
                     get("/site/export")
@@ -415,6 +416,28 @@ class SiteControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
                     .andExpect(content().contentType("application/json"))
+
+                verify(exactly = 1) { dataBackupService.exportAll() }
+            }
+        }
+
+        describe("POST /site/import") {
+            it("로그인한 주체가 관리자이고 파일이 있으면 DataBackupService로 전체 DB를 복원해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { dataBackupService.importAll(any()) } returns Unit
+
+                val file = org.springframework.mock.web.MockMultipartFile(
+                    "data", "backup.json", "application/json", "{\"n4user\":[]}".toByteArray()
+                )
+
+                mockMvcApi.perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/site/import")
+                        .file(file)
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify(exactly = 1) { dataBackupService.importAll(any()) }
             }
         }
 
