@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.*
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.issue.IssueEvent
+import com.github.search5.yona.domain.issue.IssueEventRepository
 
 @RestController
 @RequestMapping("/api/projects/{projectId}/issues")
@@ -32,7 +34,8 @@ class IssueController(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val attachmentService: AttachmentService,
-    private val issueCommentRepository: IssueCommentRepository
+    private val issueCommentRepository: IssueCommentRepository,
+    private val issueEventRepository: IssueEventRepository
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -100,6 +103,27 @@ class IssueController(
         }
 
         return ResponseEntity.ok(issue)
+    }
+
+    // yona Issue.getTimeline() / conf/routes "issue/$number/timeline" 대응 (P1-07)
+    @GetMapping("/{number}/timeline")
+    fun getTimeline(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<List<IssueEvent>> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!checkReadPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        return ResponseEntity.ok(issueEventRepository.findByIssueOrderByCreatedAsc(issue))
     }
 
     @PostMapping

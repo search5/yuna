@@ -45,7 +45,7 @@
 | P1-04 | [x] | 이메일 도메인 allowlist 미시행 | `UserApp.java:385-499` | `domain/user/EmailDomainValidator.kt`(신규), `web/AuthController.kt`, `config/oauth2/CustomOAuth2UserService.kt` | **완료** |
 | P1-05 | [x] | Related-PR 재병합 로직 스텁 | `RelatedPullRequestMergingActor.java` | `domain/event/PullRequestMergeEventListener.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-06 | [x] | 커밋→이슈 자동 참조 리스너가 로깅만 함 | `IssueReferredFromCommitEventActor.java` | `domain/event/GitPostReceiveEventListener.kt` | **완료** — `IssueEvent` 최소 엔티티 신설(P1-07 선행 작업) |
-| P1-07 | [ ] | 이슈 타임라인(IssueEvent) 부재 | `models/IssueEvent.java` | `domain/issue/IssueEvent.kt`(엔티티는 P1-06에서 신설됨) | 엔티티/리포지토리는 있음. 상태·담당자·마일스톤·라벨 변경 시 `IssueServiceImpl`에서 기록하는 로직과 타임라인 조회 API/화면은 아직 없음 |
+| P1-07 | [x] | 이슈 타임라인(IssueEvent) 부재 | `models/IssueEvent.java` | `domain/issue/IssueServiceImpl.kt`, `web/IssueController.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-08 | [ ] | PR 타임라인(PullRequestEvent) 부재 | `models/PullRequestEvent.java` | `domain/pullrequest/` |
 | P1-09 | [ ] | RecentIssue(최근 본 이슈) 부재 | `models/RecentIssue.java` | (해당 없음) |
 | P1-10 | [ ] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` |
@@ -75,6 +75,8 @@
 | P1-34 | [ ] | PostgreSQL 방언 경로는 통합테스트로 검증되지 않음 | (해당 없음) | `domain/site/DataBackupServiceImpl.kt` (`Dialect.POSTGRES`) | P0-07에서 식별 — 코드는 존재하나(`session_replication_role`), Testcontainers Postgres로 실제 검증한 테스트는 아직 없음(MariaDB만 검증됨) |
 | P1-35 | [ ] | PR 수정 화면(editPullRequestForm/editPullRequest) 미구현 | `PullRequestApp.java:510-554`, `views/pullrequest/edit.scala.html` | `web/PullRequestViewController.kt`(없음), `templates/pullrequest/`(edit.html 없음) | P0-14에서 범위 분리 — REST `PUT /api/projects/{id}/pullrequests/{number}`(`updatePullRequest`)로 API 레벨 수정은 이미 가능하지만, 서버 렌더링 수정 폼 페이지가 없음. 신규 Thymeleaf 템플릿 작성이 필요해 프론트엔드 작업 포함 |
 | P1-36 | [ ] | doClone 전용 라우트 없음(기능은 forkProject로 커버) | `PullRequestApp.java:115-157` | `web/ProjectController.kt forkProject`, `ProjectViewController.kt fork` | P0-14에서 범위 분리 — 감사에서 이미 "부분 커버"로 확인됨. URL 경로만 다르고 포크 기능 자체는 동작하므로 우선순위 낮음, 템플릿이 옛 URL을 참조하는지만 별도 확인 필요 |
+| P1-37 | [ ] | 이슈 타임라인에 라벨/본문/이동/공유자 변경 이벤트 기록 없음 | `models/IssueEvent.java`(ISSUE_LABEL_CHANGED 등) | `domain/issue/IssueServiceImpl.kt`, `IssueShareServiceImpl.kt` | P1-07에서 범위 분리 — 상태/담당자/마일스톤/커밋참조 4종만 기록됨. `EventType.ISSUE_LABEL_CHANGED`/`ISSUE_BODY_CHANGED`/`ISSUE_MOVED`/`ISSUE_SHARER_CHANGED`는 enum엔 있으나 IssueEvent로 기록되지 않음 |
+| P1-38 | [ ] | IssueEvent draft-time 병합/취소 최적화 없음 | `models/IssueEvent.java` `add()/addWithoutSkipEvent()` | `domain/issue/IssueServiceImpl.kt recordIssueEvent` | P1-07에서 범위 분리 — yona는 30초 내 연속된 동일 타입 변경을 병합(A→B→C를 A→C로)하거나 상쇄(A→B→A를 삭제)해 타임라인 잡음을 줄이지만, yuna는 매 변경을 그대로 기록 |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -186,6 +188,10 @@
   - `IssueReferenceParser`(순수 함수)로 커밋 메시지에서 `#123` 형태의 이슈 참조를 추출(yona `Issue.ISSUE_PATTERN` 대응).
   - 참조된 이슈가 프로젝트에 실제로 존재하면 `IssueEvent(eventType=ISSUE_REFERRED_FROM_COMMIT)`를 저장, 존재하지 않으면 조용히 스킵.
   - 테스트: `IssueReferenceParserSpec.kt`(신규) 5 tests, `GitPostReceiveEventListenerSpec.kt`(신규) 4 tests. 전체 컨텍스트 로딩으로 신규 엔티티/빈 배선 확인.
+
+- **2026-08-19 — P1-07**: 이슈 상태/담당자/마일스톤이 바뀌어도 변경 이력이 어디에도 남지 않던 문제 해결(엔티티 자체는 P1-06에서 신설). `IssueServiceImpl.changeState/changeAssignee/changeMilestone`이 이미 만들고 있던 `NotificationEvent`(알림용, oldValue/newValue 포함)와 같은 데이터로 `IssueEvent`(이력용)도 함께 저장하도록 `recordIssueEvent()` 공통 헬퍼 추가. `IssueController`에 `GET /api/projects/{projectId}/issues/{number}/timeline` 조회 API 추가(yona `Issue.getTimeline()` 대응).
+  - **범위 조정(P1-37/38로 분리)**: 라벨/본문/이슈이동/공유자 변경은 아직 IssueEvent로 기록되지 않음(해당 EventType은 enum에 존재하나 미사용). yona의 30초 draft-time 병합/취소 최적화(연속 변경 시 잡음 감소)도 이식하지 않음 — 매 변경이 그대로 별도 항목으로 쌓인다.
+  - 테스트: `IssueServiceSpec.kt`(실제 MariaDB 통합테스트) 기존 1건 확장 + 신규 2건(담당자/마일스톤 변경 시 IssueEvent 생성) = 총 5 tests. `IssueControllerSpec.kt` +2(타임라인 조회 성공/404). 전체 컴파일 확인.
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

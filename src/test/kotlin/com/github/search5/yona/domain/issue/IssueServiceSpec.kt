@@ -22,15 +22,19 @@ class IssueServiceSpec @Autowired constructor(
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
     private val notificationEventRepository: NotificationEventRepository,
-    private val issueCommentRepository: IssueCommentRepository
+    private val issueCommentRepository: IssueCommentRepository,
+    private val issueEventRepository: IssueEventRepository,
+    private val milestoneRepository: com.github.search5.yona.domain.milestone.MilestoneRepository
 ) : AbstractIntegrationTest() {
 
     init {
         describe("IssueService 비즈니스 테스트") {
             beforeEach {
+                issueEventRepository.deleteAll()
                 notificationEventRepository.deleteAll()
                 issueCommentRepository.deleteAll()
                 issueRepository.deleteAll()
+                milestoneRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
             }
@@ -70,6 +74,55 @@ class IssueServiceSpec @Autowired constructor(
                 event.oldValue shouldBe State.OPEN.toString()
                 event.newValue shouldBe State.CLOSED.toString()
                 event.senderId shouldBe author.id
+
+                // 이슈 타임라인(IssueEvent) 생성 검증 (P1-07)
+                val issueEvents = issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue)
+                issueEvents.size shouldBe 1
+                issueEvents.first().eventType shouldBe EventType.ISSUE_STATE_CHANGED
+                issueEvents.first().oldValue shouldBe State.OPEN.toString()
+                issueEvents.first().newValue shouldBe State.CLOSED.toString()
+                issueEvents.first().senderLoginId shouldBe "tester"
+            }
+
+            it("담당자를 변경하면 IssueEvent 타임라인 항목이 생성되어야 한다") {
+                val author = userRepository.save(User(loginId = "tester2", name = "테스터2", email = "tester2@yona.io"))
+                val assignee = userRepository.save(User(loginId = "assignee1", name = "담당자", email = "assignee1@yona.io"))
+                val project = projectRepository.save(Project(name = "assignee-test-project", owner = "tester2"))
+                val issue = Issue(
+                    title = "담당자 배정 테스트", body = "...", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                issueService.changeAssignee(savedIssue.id!!, assignee, "tester2")
+
+                val issueEvents = issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue)
+                issueEvents.size shouldBe 1
+                issueEvents.first().eventType shouldBe EventType.ISSUE_ASSIGNEE_CHANGED
+                issueEvents.first().newValue shouldBe assignee.name
+            }
+
+            it("마일스톤을 변경하면 IssueEvent 타임라인 항목이 생성되어야 한다") {
+                val author = userRepository.save(User(loginId = "tester3", name = "테스터3", email = "tester3@yona.io"))
+                val project = projectRepository.save(Project(name = "milestone-test-project", owner = "tester3"))
+                val milestone = milestoneRepository.save(
+                    com.github.search5.yona.domain.milestone.Milestone(title = "1.0 출시", project = project)
+                )
+                val issue = Issue(
+                    title = "마일스톤 배정 테스트", body = "...", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                val updated = issueService.changeMilestone(savedIssue.id!!, milestone.id, "tester3")
+                updated.milestone?.id shouldBe milestone.id
+
+                val issueEvents = issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue)
+                issueEvents.size shouldBe 1
+                issueEvents.first().eventType shouldBe EventType.ISSUE_MILESTONE_CHANGED
+                issueEvents.first().newValue shouldBe "1.0 출시"
             }
 
             it("사용자가 이슈에 투표를 던지거나 취소할 수 있어야 한다") {

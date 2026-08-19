@@ -39,6 +39,7 @@ class IssueControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val attachmentService = mockk<com.github.search5.yona.domain.attachment.AttachmentService>()
     val issueCommentRepository = mockk<IssueCommentRepository>()
+    val issueEventRepository = mockk<com.github.search5.yona.domain.issue.IssueEventRepository>()
 
     val issueController = IssueController(
         issueService,
@@ -47,14 +48,15 @@ class IssueControllerSpec : DescribeSpec({
         projectUserRepository,
         userRepository,
         attachmentService,
-        issueCommentRepository
+        issueCommentRepository,
+        issueEventRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(issueService, issueRepository, projectRepository, projectUserRepository, userRepository, attachmentService, issueCommentRepository)
+        io.mockk.clearMocks(issueService, issueRepository, projectRepository, projectUserRepository, userRepository, attachmentService, issueCommentRepository, issueEventRepository)
     }
 
     describe("IssueController 웹 API 테스트") {
@@ -118,6 +120,32 @@ class IssueControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/projects/1/issues/5").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.title").value("이슈 제목"))
+            }
+        }
+
+        describe("GET /api/projects/{projectId}/issues/{issueId}/timeline") {
+            it("권한이 있는 유저가 조회하면 이슈의 변경 이력을 시간순으로 반환해야 한다") {
+                val issueEvent = com.github.search5.yona.domain.issue.IssueEvent(
+                    id = 1L, issue = issue, eventType = com.github.search5.yona.domain.enumeration.EventType.ISSUE_STATE_CHANGED,
+                    oldValue = "OPEN", newValue = "CLOSED"
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { issueEventRepository.findByIssueOrderByCreatedAsc(issue) } returns listOf(issueEvent)
+
+                mockMvc.perform(get("/api/projects/1/issues/5/timeline").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0].eventType").value("ISSUE_STATE_CHANGED"))
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(get("/api/projects/1/issues/999/timeline").principal(userAuth))
+                    .andExpect(status().isNotFound)
             }
         }
 
