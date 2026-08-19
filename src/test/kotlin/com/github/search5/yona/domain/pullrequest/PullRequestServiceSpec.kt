@@ -375,6 +375,34 @@ class PullRequestServiceSpec @Autowired constructor(
                 prAfterRemove.reviewers.size shouldBe 0
             }
 
+            it("리뷰어 추가/해제 시 NotificationEvent와 PullRequestEvent가 발행되어야 한다(P1-49)") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "리뷰어 알림 테스트 PR",
+                        body = "리뷰어 추가/해제 알림 검증용 PR",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature",
+                        contributor = contributor,
+                        receiver = receiver,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                pullRequestService.addReviewer(pr.id!!, receiver)
+
+                val notiEventsAfterAdd = notificationEventRepository.findAll()
+                notiEventsAfterAdd.size shouldBe 1
+                notiEventsAfterAdd.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+                notiEventsAfterAdd.first().newValue shouldBe "DONE"
+
+                val prEventsAfterAdd = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
+                prEventsAfterAdd.size shouldBe 1
+                prEventsAfterAdd.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+            }
+
             it("5. 최소 리뷰어 수 미달 시 머지 실패 검증") {
                 // 프로젝트 설정 변경: 리뷰어 수 제한 설정 활성화, 최소 리뷰어 수 1명 요구
                 toProject.isUsingReviewerCount = true
