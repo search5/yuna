@@ -17,6 +17,9 @@
                     <h3 style="margin-top: 0;">
                         <span th:text="'#' + ${pr.number}" style="color: #999;">#1</span>
                         <span th:text="${pr.title}">풀 리퀘스트 제목</span>
+                        <a class="pull-right" style="font-size: 13px;"
+                           th:if="${currentUser != null && pr.contributor?.id == currentUser.id}"
+                           th:href="@{/{owner}/{projectName}/pull/{number}/edit(owner=${project.owner}, projectName=${project.name}, number=${pr.number})}">수정</a>
                     </h3>
                     
                     <div style="font-size: 13px; color: #666; margin-bottom: 15px;">

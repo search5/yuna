@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head>
+<meta charset="utf-8">
+<title th:text="${project.name} + ' - 풀 리퀘스트 수정'">Yona</title>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
+<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
+<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<style>
+  .gnb-wrap {
+      background-color: #1a1c22;
+      border-bottom: 1px solid #2d3038;
+      padding: 10px 20px;
+  }
+  .gnb-brand {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff !important;
+      text-decoration: none;
+  }
+  .gnb-menu {
+      float: right;
+  }
+  .gnb-menu a {
+      color: #ccc;
+      margin-left: 15px;
+      text-decoration: none;
+  }
+  .gnb-menu a:hover {
+      color: #fff;
+  }
+  .project-header {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-bottom: 1px solid #e9ecef;
+      margin-bottom: 20px;
+  }
+  .form-container {
+      background: #fff;
+      border: 1px solid #d8dee2;
+      border-radius: 3px;
+      padding: 20px;
+      margin-bottom: 20px;
+  }
+</style>
+</head>
+<body class="theme-default">
+<div id="main" class="main">
+  <!-- GNB (상단 바) -->
+  <div class="gnb-wrap clearfix">
+    <a href="/" class="gnb-brand">Yona</a>
+    <div class="gnb-menu">
+      <span sec:authorize="isAnonymous()">
+        <a th:href="@{/login}">로그인</a>
+        <a th:href="@{/signup}">회원가입</a>
+      </span>
+      <span sec:authorize="isAuthenticated()">
+        <span style="color: #fff;" sec:authentication="name">사용자</span>님
+        <a th:href="@{/logout}">로그아웃</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- 프로젝트 헤더 -->
+  <div class="project-header">
+    <div class="container">
+      <h2>
+        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
+      </h2>
+    </div>
+  </div>
+
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="container">
+    <div class="row">
+      <div class="col-md-9">
+        <div class="form-container">
+          <h3 style="margin-top: 0; margin-bottom: 20px;">풀 리퀘스트 수정</h3>
+
+          <form id="pr-edit-form">
+            <div class="form-group">
+              <label for="title">풀 리퀘스트 제목</label>
+              <input type="text" id="title" name="title" class="form-control" th:value="${pr.title}" required maxlength="250">
+            </div>
+
+            <div class="form-group">
+              <label for="body">상세 설명</label>
+              <textarea id="body" name="body" class="form-control" rows="8" style="resize: vertical;" th:text="${pr.body}"></textarea>
+            </div>
+
+            <div style="margin-top: 25px;">
+              <button type="submit" class="btn btn-success">저장</button>
+              <a th:href="@{/{owner}/{projectName}/pull/{number}(owner=${project.owner}, projectName=${project.name}, number=${pr.number})}" class="btn btn-default">취소</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script th:inline="javascript">
+  $(document).ready(function() {
+      $("#pr-edit-form").submit(function(e) {
+          e.preventDefault();
+
+          var projectId = [[${project.id}]];
+          var owner = [[${project.owner}]];
+          var projectName = [[${project.name}]];
+          var number = [[${pr.number}]];
+
+          var title = $("#title").val();
+          var body = $("#body").val();
+
+          var requestData = {
+              title: title,
+              body: body
+          };
+
+          $.ajax({
+              url: '/api/projects/' + projectId + '/pullrequests/' + number,
+              type: 'PUT',
+              contentType: 'application/json',
+              data: JSON.stringify(requestData),
+              success: function(result) {
+                  alert("풀 리퀘스트가 수정되었습니다.");
+                  window.location.href = '/' + owner + '/' + projectName + '/pull/' + number;
+              },
+              error: function(xhr, status, error) {
+                  alert("수정 실패: " + xhr.responseText);
+              }
+          });
+      });
+  });
+</script>
+</body>
+</html>

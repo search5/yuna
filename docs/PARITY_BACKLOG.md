@@ -73,7 +73,7 @@
 | P1-32 | [x] | 수신 주소 detail에 리소스 경로 직접 명시 방식 미지원 | `EmailHandler.java getResourceFromDetail` (owner/project/issue/5 형태) | `domain/mail/IncomingMailProcessingService.kt` | **완료** |
 | P1-33 | [x] | 복원 후 auto-increment 채번이 백업된 PK와 충돌할 수 있음 | (해당 없음, yuna 자체 설계 이슈) | `domain/site/DataBackupServiceImpl.kt` | **완료** — P1-34와 함께 해결(아래 참고) |
 | P1-34 | [x] | PostgreSQL 방언 경로는 통합테스트로 검증되지 않음 | (해당 없음) | `domain/site/DataBackupServiceImpl.kt` (`Dialect.POSTGRES`) | **완료** — P1-33 수정을 검증하며 함께 해결(아래 참고) |
-| P1-35 | [ ] | PR 수정 화면(editPullRequestForm/editPullRequest) 미구현 | `PullRequestApp.java:510-554`, `views/pullrequest/edit.scala.html` | `web/PullRequestViewController.kt`(없음), `templates/pullrequest/`(edit.html 없음) | P0-14에서 범위 분리 — REST `PUT /api/projects/{id}/pullrequests/{number}`(`updatePullRequest`)로 API 레벨 수정은 이미 가능하지만, 서버 렌더링 수정 폼 페이지가 없음. 신규 Thymeleaf 템플릿 작성이 필요해 프론트엔드 작업 포함 |
+| P1-35 | [x] | PR 수정 화면(editPullRequestForm/editPullRequest) 미구현 | `PullRequestApp.java:510-554`, `views/pullrequest/edit.scala.html` | `web/PullRequestViewController.kt editPullRequestForm`, `templates/pullrequest/edit.html` | **완료**(아래 참고) |
 | P1-36 | [ ] | doClone 전용 라우트 없음(기능은 forkProject로 커버) | `PullRequestApp.java:115-157` | `web/ProjectController.kt forkProject`, `ProjectViewController.kt fork` | P0-14에서 범위 분리 — 감사에서 이미 "부분 커버"로 확인됨. URL 경로만 다르고 포크 기능 자체는 동작하므로 우선순위 낮음, 템플릿이 옛 URL을 참조하는지만 별도 확인 필요 |
 | P1-37 | [ ] | 이슈 타임라인에 라벨/본문/이동/공유자 변경 이벤트 기록 없음 | `models/IssueEvent.java`(ISSUE_LABEL_CHANGED 등) | `domain/issue/IssueServiceImpl.kt`, `IssueShareServiceImpl.kt` | P1-07에서 범위 분리 — 상태/담당자/마일스톤/커밋참조 4종만 기록됨. `EventType.ISSUE_LABEL_CHANGED`/`ISSUE_BODY_CHANGED`/`ISSUE_MOVED`/`ISSUE_SHARER_CHANGED`는 enum엔 있으나 IssueEvent로 기록되지 않음 |
 | P1-38 | [ ] | IssueEvent draft-time 병합/취소 최적화 없음 | `models/IssueEvent.java` `add()/addWithoutSkipEvent()` | `domain/issue/IssueServiceImpl.kt recordIssueEvent` | P1-07에서 범위 분리 — yona는 30초 내 연속된 동일 타입 변경을 병합(A→B→C를 A→C로)하거나 상쇄(A→B→A를 삭제)해 타임라인 잡음을 줄이지만, yuna는 매 변경을 그대로 기록 |
@@ -101,6 +101,13 @@
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P1-35**: PR 수정 화면(`editPullRequestForm`/`editPullRequest`) 미구현 문제 해결. yona `PullRequestApp.java:508-554`를 확인한 결과, yuna는 이미 REST `PUT /api/projects/{id}/pullrequests/{number}`(`PullRequestController.updatePullRequest`)로 title/body API 레벨 수정을 완전히 지원하고 있었고, 빠진 부분은 서버 렌더링 수정 폼 페이지 하나뿐임을 확인 — 사전 조사 결과 "대규모 프론트엔드 작업"이 아니라 기존 `pull/new`(`createPullRequestForm`/`pullrequest/create.html`) 패턴을 그대로 재사용하면 되는 작은 작업으로 판단해 그대로 진행.
+  - `PullRequestViewController.kt`에 `editPullRequestForm`(GET `/{owner}/{projectName}/pull/{number}/edit`) 추가. 권한 체크는 `PullRequestController.isManagerOrContributor`와 동일한 로직(작성자 본인이거나 프로젝트 매니저)을 그대로 복제해 적용 — yona가 두 액션 모두에 동일한 `@IsAllowed(UPDATE, PULL_REQUEST)`를 걸어둔 것과 동치.
+  - 신규 `templates/pullrequest/edit.html` 추가 — `create.html` 구조(GNB/프로젝트 헤더/form-container)를 재사용하되, 브랜치 선택 UI는 제거(yona `updateWith()`도 title/body만 갱신)하고 기존 값을 `th:value`/`th:text`로 미리 채운 뒤, jQuery AJAX로 기존 REST `PUT` 엔드포인트에 제출하도록 구현. 별도의 `editPullRequest`(POST 처리) 액션은 추가하지 않음 — 이미 존재하는 REST PUT 엔드포인트가 그 역할을 완전히 대체.
+  - `pullrequest/view.html`에 PR 작성자에게만 보이는 "수정" 링크를 제목 옆에 추가(신규 edit 폼으로 연결) — 진입 경로가 없으면 새 화면이 죽은 코드가 되므로 함께 배선.
+  - 테스트: `PullRequestViewControllerSpec.kt` +4 tests(작성자 접근 허용/매니저 접근 허용/제3자 403/비로그인 403), 기존 `pull/new` 등 인접 테스트 포함 전체 재실행 회귀 없음, `PullRequestControllerSpec.kt`/`YonaApplicationTests` 재실행 이상 없음.
+  - 검증: `./gradlew compileKotlin compileTestKotlin`, `./gradlew test --tests "com.github.search5.yona.web.PullRequestViewControllerSpec" --tests "com.github.search5.yona.web.PullRequestControllerSpec" --tests "com.github.search5.yona.YonaApplicationTests"` 모두 통과.
 
 - **2026-08-19 — P0-13**: `YonaAuthenticationProvider`가 계정 상태(LOCKED/DELETED)를 확인하지 않고 비밀번호만 검증하던 문제 수정. `YonaUserDetails`에 `state` 필드 추가(`isAccountNonLocked`/`isEnabled`가 실제 상태 반영), `UserDetailsServiceImpl`이 `user.state` 전달, `YonaAuthenticationProvider.authenticate()`가 사전 검사로 `LockedException`/`DisabledException` 발생. 테스트: `config/YonaAuthenticationProviderSpec.kt` (5 tests, all pass). 커버리지: `YonaAuthenticationProvider` INSTRUCTION 94%(111/118) · BRANCH 100%(8/8), `YonaUserDetails` BRANCH 100%(4/4).
 - **2026-08-19 — P0-09**: `ProjectServiceImpl.acceptTransfer()`가 수락자(acceptorId)와 이관 목적지(destination)를 비교하지 않아 confirmKey만 알면 누구나 이전을 수락할 수 있던 문제 수정. `isAuthorizedToAcceptTransfer()` 추가 — 목적지가 사용자 loginId면 본인만, 조직명이면 해당 조직의 `ORG_ADMIN`만 허용. `OrganizationRepository`/`OrganizationUserRepository`를 생성자에 주입. 테스트: `domain/project/ProjectServiceImplSpec.kt` (신규 파일, 5 tests, all pass).

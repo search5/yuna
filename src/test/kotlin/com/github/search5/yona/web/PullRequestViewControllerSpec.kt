@@ -16,6 +16,9 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.project.ProjectUser
 import io.kotest.core.spec.style.DescribeSpec
 import io.mockk.every
 import io.mockk.mockk
@@ -228,6 +231,59 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("pullrequest/create"))
                     .andExpect(model().attributeExists("project", "branches", "defaultBranch"))
+            }
+        }
+
+        describe("GET /{owner}/{projectName}/pull/{number}/edit") {
+            it("PR 작성자(contributor)라면 200 OK와 pullrequest/edit 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+
+                mockMvc.perform(get("/owner/TestProj/pull/1/edit").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("pullrequest/edit"))
+                    .andExpect(model().attributeExists("project", "pr", "currentUser"))
+            }
+
+            it("프로젝트 매니저라면 작성자가 아니어도 200 OK와 pullrequest/edit 뷰를 반환해야 한다") {
+                val managerUser = User(id = 20L, loginId = "manager", name = "매니저")
+                val managerAuth = UsernamePasswordAuthenticationToken("manager", "password")
+                val managerRole = Role(id = RoleType.MANAGER.roleType)
+                val projectManagerUser = ProjectUser(id = 101L, user = managerUser, project = project, role = managerRole)
+
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("manager") } returns Optional.of(managerUser)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
+
+                mockMvc.perform(get("/owner/TestProj/pull/1/edit").principal(managerAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("pullrequest/edit"))
+            }
+
+            it("작성자도 매니저도 아니라면 403 Forbidden 뷰를 반환해야 한다") {
+                val otherUser = User(id = 30L, loginId = "other", name = "다른유저")
+                val otherAuth = UsernamePasswordAuthenticationToken("other", "password")
+                val memberRole = Role(id = RoleType.MEMBER.roleType)
+                val projectMemberUser = ProjectUser(id = 102L, user = otherUser, project = project, role = memberRole)
+
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("other") } returns Optional.of(otherUser)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.of(projectMemberUser)
+
+                mockMvc.perform(get("/owner/TestProj/pull/1/edit").principal(otherAuth))
+                    .andExpect(view().name("error/403"))
+            }
+
+            it("로그인하지 않았다면 403 Forbidden 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+
+                mockMvc.perform(get("/owner/TestProj/pull/1/edit"))
+                    .andExpect(view().name("error/403"))
             }
         }
     }

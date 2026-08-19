@@ -261,6 +261,46 @@ class PullRequestViewController(
         return "pullrequest/create"
     }
 
+    // yona PullRequestApp.editPullRequestForm 대응. 실제 제목/본문 수정은
+    // PullRequestController.updatePullRequest(PUT /api/.../pullrequests/{number})가 처리하므로,
+    // 여기서는 기존 값이 채워진 폼만 렌더링하고 동일한 권한 체크(작성자 또는 매니저)만 수행한다.
+    @GetMapping("/{owner}/{projectName}/pull/{number}/edit")
+    fun editPullRequestForm(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable number: Long,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: return "error/404"
+
+        if (!isManagerOrContributor(project, pullRequest.contributor.id, loginUser)) {
+            return "error/403"
+        }
+
+        model.addAttribute("project", project)
+        model.addAttribute("pr", pullRequest)
+        model.addAttribute("currentUser", loginUser)
+
+        return "pullrequest/edit"
+    }
+
+    private fun isManagerOrContributor(
+        project: com.github.search5.yona.domain.project.Project,
+        contributorId: Long?,
+        user: com.github.search5.yona.domain.user.User?
+    ): Boolean {
+        if (user == null) return false
+        if (contributorId == user.id) return true
+        return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
+            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .orElse(false)
+    }
+
     @GetMapping(value = [
         "/{owner}/{projectName}/pull/{number}/changes",
         "/{owner}/{projectName}/pullRequest/{number}/changes"
