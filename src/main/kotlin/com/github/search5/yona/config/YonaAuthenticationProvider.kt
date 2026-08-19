@@ -1,7 +1,11 @@
 package com.github.search5.yona.config
 
+import com.github.search5.yona.domain.user.LdapAuthResult
+import com.github.search5.yona.domain.user.LdapService
+import com.github.search5.yona.domain.user.LdapUserProvisioningService
 import com.github.search5.yona.domain.user.YonaUserDetails
 import org.springframework.security.authentication.AuthenticationProvider
+import org.springframework.security.authentication.AuthenticationServiceException
 import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.security.authentication.DisabledException
 import org.springframework.security.authentication.LockedException
@@ -14,29 +18,66 @@ import java.util.Base64
 
 @Component
 class YonaAuthenticationProvider(
-    private val userDetailsService: UserDetailsService
+    private val userDetailsService: UserDetailsService,
+    private val ldapService: LdapService,
+    private val ldapUserProvisioningService: LdapUserProvisioningService
 ) : AuthenticationProvider {
 
     override fun authenticate(authentication: Authentication): Authentication {
         val loginId = authentication.name
         val password = authentication.credentials.toString()
 
-        val userDetails = userDetailsService.loadUserByUsername(loginId) as YonaUserDetails
+        if (ldapService.enabled) {
+            return authenticateWithLdap(loginId, password)
+        }
 
+        return authenticateLocally(loginId, password)
+    }
+
+    private fun authenticateWithLdap(loginId: String, password: String): Authentication {
+        return when (val result = ldapService.authenticate(loginId, password)) {
+            is LdapAuthResult.Success -> {
+                val reconciledUser = ldapUserProvisioningService.reconcile(result.user, password)
+                val userDetails = userDetailsService.loadUserByUsername(reconciledUser.loginId) as YonaUserDetails
+                checkAccountState(userDetails)
+                UsernamePasswordAuthenticationToken(userDetails, password, userDetails.authorities)
+            }
+            is LdapAuthResult.InvalidCredentials -> {
+                if (ldapService.fallbackToLocalLogin) {
+                    authenticateLocally(loginId, password)
+                } else {
+                    throw BadCredentialsException("LDAP 인증에 실패했습니다.")
+                }
+            }
+            is LdapAuthResult.ConnectionFailed -> {
+                if (ldapService.fallbackToLocalLogin) {
+                    authenticateLocally(loginId, password)
+                } else {
+                    throw AuthenticationServiceException("LDAP 서버에 연결할 수 없습니다.", result.cause)
+                }
+            }
+        }
+    }
+
+    private fun authenticateLocally(loginId: String, password: String): Authentication {
+        val userDetails = userDetailsService.loadUserByUsername(loginId) as YonaUserDetails
+        checkAccountState(userDetails)
+
+        val hashedInput = hashPassword(password, userDetails.passwordSalt)
+        if (hashedInput != userDetails.password) {
+            throw BadCredentialsException("비밀번호가 일치하지 않습니다.")
+        }
+
+        return UsernamePasswordAuthenticationToken(userDetails, password, userDetails.authorities)
+    }
+
+    private fun checkAccountState(userDetails: YonaUserDetails) {
         if (!userDetails.isAccountNonLocked) {
             throw LockedException("계정이 잠겨 있습니다.")
         }
         if (!userDetails.isEnabled) {
             throw DisabledException("탈퇴한 계정입니다.")
         }
-
-        val hashedInput = hashPassword(password, userDetails.passwordSalt)
-
-        if (hashedInput != userDetails.password) {
-            throw BadCredentialsException("비밀번호가 일치하지 않습니다.")
-        }
-
-        return UsernamePasswordAuthenticationToken(userDetails, password, userDetails.authorities)
     }
 
     override fun supports(authentication: Class<*>): Boolean {

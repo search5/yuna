@@ -29,6 +29,22 @@ spring:
 yuna:
   upload:
     base-dir: "${yona.data:data}/uploads"
+  ldap:
+    enabled: "${YUNA_LDAP_ENABLED:false}"
+    host: "${YUNA_LDAP_HOST:127.0.0.1}"
+    port: "${YUNA_LDAP_PORT:389}"
+    protocol: "${YUNA_LDAP_PROTOCOL:ldap}"
+    base-dn: "${YUNA_LDAP_BASE_DN:}"
+    dn-postfix: "${YUNA_LDAP_DN_POSTFIX:}"
+    login-property: "${YUNA_LDAP_LOGIN_PROPERTY:sAMAccountName}"
+    display-name-property: "${YUNA_LDAP_DISPLAY_NAME_PROPERTY:displayName}"
+    user-name-property: "${YUNA_LDAP_USER_NAME_PROPERTY:CN}"
+    email-property: "${YUNA_LDAP_EMAIL_PROPERTY:mail}"
+    department-property: "${YUNA_LDAP_DEPARTMENT_PROPERTY:department}"
+    english-name-property: "${YUNA_LDAP_ENGLISH_NAME_PROPERTY:}"
+    use-email-base-login: "${YUNA_LDAP_USE_EMAIL_BASE_LOGIN:false}"
+    fallback-to-local-login: "${YUNA_LDAP_FALLBACK_TO_LOCAL_LOGIN:false}"
+    guest-login-id-prefix: "${YUNA_LDAP_GUEST_LOGIN_ID_PREFIX:}"
   mailbox:
     imap:
       enabled: "${YUNA_IMAP_ENABLED:false}"
