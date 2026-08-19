@@ -15,6 +15,7 @@ import java.time.Instant
 private const val RESERVED_REF = "refs/yobi"
 private const val RESERVED_REF_PREFIX = "refs/yobi/"
 private const val BRANCH_PREFIX = "refs/heads/"
+private val RECENTLY_PUSHED_WINDOW: java.time.Duration = java.time.Duration.ofHours(1)
 
 /**
  * yona의 playRepository/hooks/RejectPushToReservedRefs.java 대응.
@@ -44,6 +45,7 @@ class YunaPostReceiveHook(
     private val pusher: User,
     private val projectRepository: ProjectRepository,
     private val pullRequestRepository: PullRequestRepository,
+    private val pushedBranchRepository: PushedBranchRepository,
     private val eventPublisher: ApplicationEventPublisher
 ) : PostReceiveHook {
 
@@ -51,6 +53,7 @@ class YunaPostReceiveHook(
         updateLastPushedDate()
         notifyPushedCommits(commands)
         cleanupPullRequestsForDeletedBranches(commands)
+        updateRecentlyPushedBranches(commands)
     }
 
     private fun updateLastPushedDate() {
@@ -71,6 +74,60 @@ class YunaPostReceiveHook(
                 if (related.isNotEmpty()) {
                     pullRequestRepository.deleteAll(related)
                 }
+            }
+    }
+
+    // yona playRepository/hooks/UpdateRecentlyPushedBranch.java 대응 (P1-24)
+    private fun updateRecentlyPushedBranches(commands: Collection<ReceiveCommand>) {
+        removeOldPushedBranches()
+        saveRecentlyPushedBranches(commands)
+        removeDeletedPushedBranches(commands)
+    }
+
+    private fun removeOldPushedBranches() {
+        val cutoff = Instant.now().minus(RECENTLY_PUSHED_WINDOW)
+        val old = pushedBranchRepository.findByProjectAndPushedDateBefore(project, cutoff)
+        if (old.isNotEmpty()) {
+            pushedBranchRepository.deleteAll(old)
+        }
+    }
+
+    private fun saveRecentlyPushedBranches(commands: Collection<ReceiveCommand>) {
+        val pushedBranches = commands
+            .filter {
+                it.type == ReceiveCommand.Type.CREATE ||
+                    it.type == ReceiveCommand.Type.UPDATE ||
+                    it.type == ReceiveCommand.Type.UPDATE_NONFASTFORWARD
+            }
+            .filter { it.refName.startsWith(BRANCH_PREFIX) }
+            .map { it.refName.removePrefix(BRANCH_PREFIX) }
+            .toSet()
+
+        for (branch in pushedBranches) {
+            val existing = pushedBranchRepository.findByProjectAndName(project, branch).orElse(null)
+            if (existing != null) {
+                existing.pushedDate = Instant.now()
+                pushedBranchRepository.save(existing)
+                continue
+            }
+
+            // yona isNotExistsPushedBranch(): 이미 이 브랜치를 fromBranch로 하는 PR이 있으면
+            // 별도로 PushedBranch를 만들지 않는다(PR 자체가 이미 그 브랜치를 추적하므로).
+            if (pullRequestRepository.existsByFromProjectAndFromBranch(project, branch)) {
+                continue
+            }
+
+            pushedBranchRepository.save(PushedBranch(name = branch, pushedDate = Instant.now(), project = project))
+        }
+    }
+
+    private fun removeDeletedPushedBranches(commands: Collection<ReceiveCommand>) {
+        commands
+            .filter { it.type == ReceiveCommand.Type.DELETE && it.refName.startsWith(BRANCH_PREFIX) }
+            .map { it.refName.removePrefix(BRANCH_PREFIX) }
+            .forEach { branch ->
+                pushedBranchRepository.findByProjectAndName(project, branch)
+                    .ifPresent { pushedBranchRepository.delete(it) }
             }
     }
 }

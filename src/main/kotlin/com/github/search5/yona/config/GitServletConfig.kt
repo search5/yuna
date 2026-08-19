@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.PushedBranchRepository
 import com.github.search5.yona.domain.vcs.RejectPushToReservedRefsPreReceiveHook
 import com.github.search5.yona.domain.vcs.YunaPostReceiveHook
 import org.eclipse.jgit.http.server.GitServlet
@@ -35,6 +36,7 @@ class GitServletConfig(
     private val projectRepository: ProjectRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val userRepository: UserRepository,
+    private val pushedBranchRepository: PushedBranchRepository,
     private val eventPublisher: ApplicationEventPublisher
 ) {
     private val logger = LoggerFactory.getLogger(GitServletConfig::class.java)
@@ -64,7 +66,9 @@ class GitServletConfig(
                 val pusher = resolveCurrentUser()
                 if (project != null && pusher != null) {
                     receivePack.setPostReceiveHook(
-                        YunaPostReceiveHook(project, pusher, projectRepository, pullRequestRepository, eventPublisher)
+                        YunaPostReceiveHook(
+                            project, pusher, projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher
+                        )
                     )
                 } else {
                     logger.warn(

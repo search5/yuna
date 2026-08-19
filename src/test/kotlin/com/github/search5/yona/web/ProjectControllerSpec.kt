@@ -12,6 +12,8 @@ import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.PushedBranch
+import com.github.search5.yona.domain.vcs.PushedBranchRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.mockk.every
 import io.mockk.mockk
@@ -22,8 +24,10 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delet
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import java.time.Instant
 import java.util.Optional
 
 class ProjectControllerSpec : DescribeSpec({
@@ -31,17 +35,19 @@ class ProjectControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
+    val pushedBranchRepository = mockk<PushedBranchRepository>()
 
     val projectController = ProjectController(
         projectService,
         projectRepository,
         projectUserRepository,
-        userRepository
+        userRepository,
+        pushedBranchRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(projectController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectService, projectRepository, projectUserRepository, userRepository)
+        io.mockk.clearMocks(projectService, projectRepository, projectUserRepository, userRepository, pushedBranchRepository)
     }
 
     describe("ProjectController 웹 API 테스트") {
@@ -218,6 +224,72 @@ class ProjectControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isNotFound)
+            }
+        }
+
+        describe("GET/DELETE /api/{owner}/{projectName}/pushedBranches (P1-15/24)") {
+            val branchProject = Project(id = 40L, name = "bp", owner = "owner", projectScope = ProjectScope.PRIVATE)
+
+            it("비회원은 최근 push된 브랜치 목록 조회 시 403을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+
+                mockMvc.perform(get("/api/owner/bp/pushedBranches"))
+                    .andExpect(status().isForbidden)
+            }
+
+            it("프로젝트 멤버는 최근 push된 브랜치 목록을 조회할 수 있어야 한다") {
+                val branch = PushedBranch(id = 1L, name = "feature/x", pushedDate = Instant.now(), project = branchProject)
+                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns true
+                every { pushedBranchRepository.findByProjectAndPushedDateAfter(branchProject, any()) } returns listOf(branch)
+
+                mockMvc.perform(
+                    get("/api/owner/bp/pushedBranches").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0].name").value("feature/x"))
+            }
+
+            it("프로젝트 멤버는 push된 브랜치 기록을 삭제할 수 있어야 한다") {
+                val branch = PushedBranch(id = 2L, name = "feature/y", project = branchProject)
+                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns true
+                every { pushedBranchRepository.findById(2L) } returns Optional.of(branch)
+                every { pushedBranchRepository.delete(branch) } returns Unit
+
+                mockMvc.perform(
+                    delete("/api/owner/bp/pushedBranches/2").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify { pushedBranchRepository.delete(branch) }
+            }
+
+            it("존재하지 않는 id를 삭제해도 yona와 동일하게 200 OK를 반환해야 한다(404 아님)") {
+                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns true
+                every { pushedBranchRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/api/owner/bp/pushedBranches/999").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { pushedBranchRepository.delete(any()) }
+            }
+
+            it("프로젝트 멤버가 아니면 삭제 시 403을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns false
+
+                mockMvc.perform(
+                    delete("/api/owner/bp/pushedBranches/2").principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
             }
         }
     }

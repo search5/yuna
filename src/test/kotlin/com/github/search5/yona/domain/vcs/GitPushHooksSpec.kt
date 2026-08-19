@@ -15,6 +15,7 @@ import io.mockk.verify
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.transport.ReceiveCommand
 import org.springframework.context.ApplicationEventPublisher
+import java.util.Optional
 
 class GitPushHooksSpec : DescribeSpec({
 
@@ -53,15 +54,25 @@ class GitPushHooksSpec : DescribeSpec({
     describe("YunaPostReceiveHook") {
         val projectRepository = mockk<ProjectRepository>()
         val pullRequestRepository = mockk<PullRequestRepository>()
+        val pushedBranchRepository = mockk<PushedBranchRepository>()
         val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
         val project = Project(id = 1L, name = "yona-project", owner = "gildong")
         val pusher = User(id = 9L, loginId = "gildong", name = "길동")
 
-        fun newHook() = YunaPostReceiveHook(project, pusher, projectRepository, pullRequestRepository, eventPublisher)
+        fun newHook() = YunaPostReceiveHook(
+            project, pusher, projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher
+        )
 
         beforeTest {
-            io.mockk.clearMocks(projectRepository, pullRequestRepository, eventPublisher)
+            io.mockk.clearMocks(projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher)
             every { projectRepository.save(any()) } returns project
+            every { pushedBranchRepository.findByProjectAndPushedDateBefore(any(), any()) } returns emptyList()
+            every { pushedBranchRepository.findByProjectAndName(any(), any()) } returns Optional.empty()
+            every { pullRequestRepository.existsByFromProjectAndFromBranch(any(), any()) } returns false
+            every { pullRequestRepository.findRelatedPullRequests(any(), any()) } returns emptyList()
+            every { pushedBranchRepository.save(any()) } answers { it.invocation.args[0] as PushedBranch }
+            every { pushedBranchRepository.deleteAll(any<List<PushedBranch>>()) } returns Unit
+            every { pushedBranchRepository.delete(any()) } returns Unit
         }
 
         it("push가 일어나면 project.lastPushedDate가 갱신되어야 한다") {
@@ -110,6 +121,66 @@ class GitPushHooksSpec : DescribeSpec({
             newHook().onPostReceive(mockk(relaxed = true), listOf(updateCommand))
 
             verify(exactly = 0) { pullRequestRepository.findRelatedPullRequests(any(), any()) }
+        }
+
+        describe("최근 push된 브랜치 추적 (P1-24, yona UpdateRecentlyPushedBranch 대응)") {
+            it("새 브랜치가 push되면 PushedBranch가 새로 저장되어야 한다") {
+                val command = ReceiveCommand(zero, sha1, "refs/heads/feature/x")
+                val saved = slot<PushedBranch>()
+                every { pushedBranchRepository.save(capture(saved)) } answers { saved.captured }
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(command))
+
+                saved.captured.name shouldBe "feature/x"
+                saved.captured.project shouldBe project
+            }
+
+            it("이미 기록된 브랜치를 다시 push하면 새로 만들지 않고 pushedDate만 갱신해야 한다") {
+                val command = ReceiveCommand(sha1, sha2, "refs/heads/main")
+                val existing = PushedBranch(id = 5L, name = "main", project = project)
+                every { pushedBranchRepository.findByProjectAndName(project, "main") } returns Optional.of(existing)
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(command))
+
+                verify { pushedBranchRepository.save(existing) }
+            }
+
+            it("이 브랜치를 fromBranch로 하는 PullRequest가 이미 있으면 PushedBranch를 새로 만들지 않아야 한다") {
+                val command = ReceiveCommand(zero, sha1, "refs/heads/pr-branch")
+                every { pullRequestRepository.existsByFromProjectAndFromBranch(project, "pr-branch") } returns true
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(command))
+
+                verify(exactly = 0) { pushedBranchRepository.save(any()) }
+            }
+
+            it("태그 push(refs/tags/*)는 추적하지 않아야 한다") {
+                val command = ReceiveCommand(zero, sha1, "refs/tags/v1.0.0")
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(command))
+
+                verify(exactly = 0) { pushedBranchRepository.save(any()) }
+            }
+
+            it("push마다 1시간 이상 지난 오래된 PushedBranch를 정리해야 한다") {
+                val command = ReceiveCommand(zero, sha1, "refs/heads/main")
+                val old = PushedBranch(id = 1L, name = "old-branch", project = project)
+                every { pushedBranchRepository.findByProjectAndPushedDateBefore(project, any()) } returns listOf(old)
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(command))
+
+                verify { pushedBranchRepository.deleteAll(listOf(old)) }
+            }
+
+            it("브랜치가 삭제되면 해당 PushedBranch 레코드도 함께 삭제되어야 한다") {
+                val command = ReceiveCommand(sha1, zero, "refs/heads/feature/y")
+                val existing = PushedBranch(id = 7L, name = "feature/y", project = project)
+                every { pushedBranchRepository.findByProjectAndName(project, "feature/y") } returns Optional.of(existing)
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(command))
+
+                verify { pushedBranchRepository.delete(existing) }
+            }
         }
     }
 })

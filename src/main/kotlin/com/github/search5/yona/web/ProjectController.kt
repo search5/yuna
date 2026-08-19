@@ -8,6 +8,8 @@ import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.PushedBranchRepository
+import java.time.Instant
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -18,7 +20,8 @@ class ProjectController(
     private val projectService: ProjectService,
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val pushedBranchRepository: PushedBranchRepository
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -246,6 +249,50 @@ class ProjectController(
             return ResponseEntity.notFound().build()
         }
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build()
+    }
+
+    // yona ProjectApp.getRecentlyPushedBranches()/partial_recently_pushed_branches.scala.html 대응 (P1-15/24).
+    // yona 라우트 표에는 없지만(뷰에 임베드된 데이터), 삭제 API(P1-15) 단독으로는 사용할 방법이 없어
+    // 같은 데이터를 노출하는 조회용 엔드포인트를 함께 추가했다.
+    @GetMapping("/api/{owner}/{projectName}/pushedBranches")
+    fun getPushedBranches(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!checkReadPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        // yona Project.getRecentlyPushedBranches(): 최근 1시간 이내에 push된 것만 노출한다.
+        val cutoff = Instant.now().minus(java.time.Duration.ofHours(1))
+        val branches = pushedBranchRepository.findByProjectAndPushedDateAfter(project, cutoff)
+        return ResponseEntity.ok(branches)
+    }
+
+    // yona ProjectApp.deletePushedBranch() 대응 (P1-15). yona처럼 id가 이 프로젝트 소속인지는
+    // 별도로 검증하지 않고(원본 그대로), 존재하면 삭제·존재하지 않아도 200 OK를 반환한다.
+    @DeleteMapping("/api/{owner}/{projectName}/pushedBranches/{id}")
+    fun deletePushedBranch(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable id: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isProjectMember(project.id!!, user.id!!)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        pushedBranchRepository.findById(id).ifPresent { pushedBranchRepository.delete(it) }
+        return ResponseEntity.ok().build()
     }
 
     data class UpdateProjectRequest(
