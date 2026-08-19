@@ -19,7 +19,7 @@
 | # | 상태 | 제목 | yona 근거 | yuna 대상 | 비고 |
 |---|---|---|---|---|---|
 | P0-01 | [x] | 알림 메일 발송 파이프라인 부재 | `models/NotificationMail.java:99-575` | `domain/notification/NotificationMailEventListener.kt`(신규) | **완료(범위 조정, 아래 참고)** |
-| P0-02 | [ ] | IMAP 수신메일→이슈/댓글 생성 부재 | `app/mailbox/*` | (해당 없음) | 서브시스템 자체 신규 구축 필요 |
+| P0-02 | [x] | IMAP 수신메일→이슈/댓글 생성 부재 | `app/mailbox/*` | `domain/mail/{IncomingMailProcessingService,EmailAddressDetail,MessageIdParser,ImapMailboxPoller,OriginalEmail}.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P0-03 | [x] | 웹훅 발송 미연결 | `WebhookServiceImpl.kt:48-66` | `domain/webhook/WebhookNotificationEventListener.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P0-04 | [x] | 웹훅 gitPush 필터 로직 반전 | `models/NotificationEvent.java:604-680` | `domain/webhook/WebhookServiceImpl.kt` | **완료** |
 | P0-05 | [x] | 이슈 생성 시 첨부파일 연결 안 됨 | `AbstractPostingApp.java:224` | `web/IssueViewController.kt` | **완료** — `temporaryUploadFiles` 파라미터 추가, MilestoneViewController와 동일 패턴 |
@@ -66,7 +66,11 @@
 | P1-25 | [ ] | git push(NEW_COMMIT) 이벤트는 웹훅이 발송되지 않음 | `NotificationEvent.java:604-680`(push 부분) | `domain/event/GitPostReceiveEventListener.kt`, `domain/webhook/WebhookServiceImpl.kt` | P0-03에서 범위 분리 — 커밋은 DB 엔티티가 아니라 `resourceId`로 재조회 불가, `WebhookServiceImpl.getResourceType/getResourceId/buildPayload`에 COMMIT 케이스 추가 + `processCommitsNotification`에서 `eventPublisher.publishEvent(notificationEvent)` 호출 필요 |
 | P1-26 | [ ] | PULL_REQUEST 리소스 타입은 웹훅 payload를 만들 수 없음 | `Webhook.java:674-729`(PR 부분) | `domain/webhook/WebhookServiceImpl.kt` (`buildPayload`, `getResourceType`) | P0-03에서 범위 분리 — `CodeReviewServiceImpl`이 발행하는 PR 리뷰 NotificationEvent가 `WebhookNotificationEventListener`에서 조용히 스킵됨(PullRequest 조회/payload 케이스 미지원) |
 | P1-27 | [ ] | 알림 메일이 이벤트별 즉시 발송이며 다이제스트 병합/언어별 그룹핑이 없음 | `NotificationMail.java:99-188`(`mergeEvents`, 언어별 그룹핑) | `domain/notification/NotificationMailEventListener.kt` | P0-01에서 범위 분리 — yona는 `bymail.interval` 주기로 관련 이벤트를 병합해 한 통으로 보내지만, yuna는 이벤트 발생 즉시 개별 발송(스팸성 다건 메일 가능성). 사용자가 많은 프로젝트에서 체감 UX 저하 |
-| P1-28 | [ ] | 알림 메일에 IMAP 답장용 Reply-To 헤더 없음 | `NotificationMail.java:582 getReplyTo()` | `domain/notification/NotificationMailEventListener.kt` | P0-01/P0-02와 연동 — IMAP 수신메일 처리(P0-02) 자체가 없으므로 Reply-To를 넣어도 무의미하지만, P0-02 구현 시 함께 처리 필요 |
+| P1-28 | [ ] | 알림 메일에 IMAP 답장용 Reply-To 헤더 없음 | `NotificationMail.java:582 getReplyTo()` | `domain/notification/NotificationMailEventListener.kt` | P0-01/P0-02와 연동 — 이제 IMAP 처리(P0-02)가 생겼으니, 알림 메일에 `In-Reply-To`/`References`를 걸어 답장이 곧바로 스레드로 인식되게 연결 필요 |
+| P1-29 | [ ] | 수신메일 MIME multipart/HTML 본문·첨부파일·cid 이미지 치환 미지원 | `CreationViaEmail.java` `processPart/getContentWithAttachments/replaceCidWithAttachments` | `domain/mail/ImapMailboxPoller.kt extractTextBody` | P0-02에서 범위 분리 — 현재는 text/plain 우선 추출 + HTML은 jsoup으로 태그만 제거(서식·첨부 손실). 첨부파일 저장 로직 없음 |
+| P1-30 | [ ] | 리뷰 댓글/커밋 댓글 스레드로의 메일 답장 미지원 | `EmailHandler.java getThreads` (COMMENT_THREAD/REVIEW_COMMENT 분기) | `domain/mail/IncomingMailProcessingService.kt resolveResourceProject` | P0-02에서 범위 분리 — ISSUE_POST/BOARD_POST 스레드만 인식, PR 코드리뷰 댓글 스레드는 미지원(조용히 스킵) |
+| P1-31 | [ ] | "help" 자동응답 및 실패 사유 회신 메일 없음 | `EmailHandler.java getHelpMessage/reply` | `domain/mail/IncomingMailProcessingService.kt` | P0-02에서 범위 분리 — Rejected/UnknownSender 결과가 로그로만 남고 발신자에게 회신되지 않음 |
+| P1-32 | [ ] | 수신 주소 detail에 리소스 경로 직접 명시 방식 미지원 | `EmailHandler.java getResourceFromDetail` (owner/project/issue/5 형태) | `domain/mail/IncomingMailProcessingService.kt` | P0-02에서 범위 분리 — detail은 owner/project까지만 해석, 그 뒤 경로 세그먼트는 무시됨 |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -112,6 +116,15 @@
   - 이메일이 비어있는 수신자는 스킵, 한 수신자에게 발송 실패해도 나머지 수신자 발송은 계속 시도(개별 try/catch).
   - **범위 조정(P1-27/28로 분리)**: yona의 Akka 스케줄러 기반 다이제스트 병합(`mergeEvents`, `bymail.interval` 주기 배치, 언어별 그룹핑)과 IMAP 답장용 `Reply-To` 헤더는 구현하지 않음 — "이벤트마다 즉시 개별 발송"으로 단순화했다. 핵심 요구사항(메일이 실제로 발송되는가)은 충족하지만, 대규모 프로젝트에서 다건 이벤트 발생 시 메일이 병합되지 않고 각각 날아가는 UX 차이가 있다.
   - 테스트: `NotificationMailEventListenerSpec.kt`(신규) 6 tests, 관련 기존 스펙(`IssueServiceSpec`, `CommentServiceSpec`) 재실행으로 회귀 없음 확인. 커버리지: INSTRUCTION 98.5%(137/139).
+
+- **2026-08-19 — P0-02**: IMAP 수신메일→이슈/댓글 생성 기능이 yuna에 전혀 없던 문제(`app/mailbox/*` 전체 미이식)를 새 서브시스템으로 구축.
+  - **`OriginalEmail`(신규 엔티티+리포지토리)**: yona `models/OriginalEmail.java` 대응. 메일의 Message-ID ↔ 생성된 리소스를 연결해 (1) 중복 수신 처리 방지, (2) 답장의 In-Reply-To/References로 원본 리소스 역추적 두 가지에 사용.
+  - **`EmailAddressDetail`**: yona `EmailAddressWithDetail.java` 대응 — `yona+owner/project@domain` 형태의 plus-addressing 파싱.
+  - **`MessageIdParser`**: yona `EmailHandler.parseMessageIds` 대응 — In-Reply-To/References 헤더에서 message-id 목록 추출.
+  - **`IncomingMailProcessingService`(핵심 로직)**: yona `EmailHandler.createResources` + `CreationViaEmail.saveIssue/saveComment` 대응. 중복 검사 → 발신자 확인 → 수신 주소 detail로 대상 프로젝트 해석 → In-Reply-To/References로 기존 스레드 탐지 → 스레드 있으면 댓글, 없으면 새 이슈 생성 → 권한 검사(`AccessControl`) → 결과에 따라 `OriginalEmail` 저장. `jakarta.mail`에 의존하지 않는 순수 `InboundEmailMessage` DTO를 입력으로 받아 실제 메일 서버 없이 전부 단위테스트 가능하게 설계.
+  - **`ImapMailboxPoller`(신규, 글루 코드)**: yona `MailboxService.java`+`IMAPMessageUtil.java` 대응. yona의 IDLE 명령+커스텀 lastSeenUID 추적 대신, **IMAP `\Seen` 플래그를 북마크로 쓰는 폴링 전용 방식으로 단순화**(`@Scheduled`, 기본 5분 주기). `yuna.mailbox.imap.enabled=false`가 기본값이라 IMAP 미설정 환경(테스트 등)에서는 로드되지 않음(`@ConditionalOnProperty`). 실제 IMAP 연결이 필요한 순수 배선이라 이 저장소의 다른 `*Config` 클래스들과 동일하게 단위테스트 대상에서 제외 — 비즈니스 로직은 전부 `IncomingMailProcessingService`로 위임되어 있어 그쪽에서 커버됨.
+  - **범위 조정(P1-29~32로 분리)**: MIME multipart/HTML 본문 파싱과 첨부파일·cid 이미지 치환, 코드리뷰/커밋 댓글 스레드로의 답장, "help" 자동응답 및 실패 회신 메일, 수신 주소 detail의 직접 리소스 경로 지정(`owner/project/issue/5`)은 미구현. 텍스트 본문만 처리하고 ISSUE_POST/BOARD_POST 스레드만 인식하는 범위로 핵심 요구사항(메일로 이슈/댓글이 실제로 생성되는가)을 우선 충족했다.
+  - 테스트: `EmailAddressDetailSpec.kt`(7), `MessageIdParserSpec.kt`(4), `IncomingMailProcessingServiceSpec.kt`(9) 총 20 tests 전체 통과. 전체 Spring 컨텍스트 로딩 테스트(`YonaApplicationTests`)로 신규 엔티티/빈 배선 이상 없음 확인. 커버리지: `IncomingMailProcessingService` INSTRUCTION 92%(549/595)·BRANCH 76%(44/58), `EmailAddressDetail`/`MessageIdParser` 100%.
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

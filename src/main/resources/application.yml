@@ -29,6 +29,16 @@ spring:
 yuna:
   upload:
     base-dir: "${yona.data:data}/uploads"
+  mailbox:
+    imap:
+      enabled: "${YUNA_IMAP_ENABLED:false}"
+      host: "${YUNA_IMAP_HOST:}"
+      user: "${YUNA_IMAP_USER:}"
+      password: "${YUNA_IMAP_PASSWORD:}"
+      ssl: "${YUNA_IMAP_SSL:true}"
+      folder: "${YUNA_IMAP_FOLDER:inbox}"
+      address: "${YUNA_IMAP_ADDRESS:}"
+      polling-interval-ms: "${YUNA_IMAP_POLLING_INTERVAL_MS:300000}"
 
 yona:
   feedback-url: "${YONA_FEEDBACK_URL:https://github.com/yona-projects/yona/issues}"
