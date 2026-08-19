@@ -9,6 +9,9 @@ import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.pullrequest.CodeReviewService
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.slf4j.LoggerFactory
@@ -23,7 +26,12 @@ import org.springframework.transaction.annotation.Transactional
  *
  * 의도적으로 다루지 않는 범위(follow-up, docs/PARITY_BACKLOG.md 참고):
  *  - MIME multipart/HTML 본문 파싱, cid 이미지 치환 (텍스트 본문만 처리 — 첨부파일 저장은 P1-29에서 구현됨)
- *  - 코드리뷰/커밋 댓글 스레드로의 답장(REVIEW_COMMENT, COMMENT_THREAD)
+ *  - 코드리뷰(COMMENT_THREAD)/커밋(COMMIT_COMMENT) 댓글 스레드로의 답장 라우팅은 P1-30에서 구현됨.
+ *    다만 이 경로가 실제로 동작하려면 그 리소스에 대한 최초 알림 메일의 Message-ID가 OriginalEmail로
+ *    추적돼 있어야 하는데, NotificationMailEventListener(P1-28)는 아직 발신 메일의 Message-ID를
+ *    추적하지 않는다(P1-28은 프로젝트 단위 Reply-To 라우팅까지만 구현) — 그래서 "답장에 답장"(이미
+ *    메일로 만들어진 리뷰/커밋 댓글에 대한 재답장) 체인은 동작하지만, UI에서 만든 리뷰/커밋 댓글의
+ *    "첫 알림 메일"에 대한 답장은 아직 스레드로 연결되지 않는다.
  *  - "help" 자동응답, 수신 거부 사유 회신 메일
  *  - 수신 주소 detail에 리소스 경로를 직접 명시하는 방식(owner/project/issue/5)
  *  - 한 이메일이 여러 프로젝트로 발송된 경우, OriginalEmail은 최초 성공 리소스 1건만 기록
@@ -38,6 +46,9 @@ class IncomingMailProcessingService(
     private val issueService: IssueService,
     private val commentService: CommentService,
     private val attachmentService: AttachmentService,
+    private val commentThreadRepository: CommentThreadRepository,
+    private val commitCommentRepository: CommitCommentRepository,
+    private val codeReviewService: CodeReviewService,
     @Value("\${yuna.mailbox.imap.address:}")
     private val inboundBaseAddress: String
 ) {
@@ -76,7 +87,9 @@ class IncomingMailProcessingService(
 
     private fun IncomingMailOutcome.isCreated(): Boolean = this is IncomingMailOutcome.IssueCreated ||
         this is IncomingMailOutcome.IssueCommentCreated ||
-        this is IncomingMailOutcome.PostingCommentCreated
+        this is IncomingMailOutcome.PostingCommentCreated ||
+        this is IncomingMailOutcome.ReviewCommentCreated ||
+        this is IncomingMailOutcome.CommitCommentCreated
 
     private fun processTarget(
         target: EmailAddressDetail,
@@ -147,6 +160,8 @@ class IncomingMailProcessingService(
         return when (resourceType) {
             ResourceType.ISSUE_POST -> issueRepository.findById(id).orElse(null)?.project?.id
             ResourceType.BOARD_POST -> postingRepository.findById(id).orElse(null)?.project?.id
+            ResourceType.COMMENT_THREAD -> commentThreadRepository.findById(id).orElse(null)?.project?.id
+            ResourceType.COMMIT_COMMENT -> commitCommentRepository.findById(id).orElse(null)?.project?.id
             else -> {
                 logger.debug("아직 지원하지 않는 스레드 리소스 타입이라 스킵: $resourceType")
                 null
@@ -164,8 +179,37 @@ class IncomingMailProcessingService(
                 val comment = commentService.createPostingComment(thread.resourceId.toLong(), body, sender)
                 IncomingMailOutcome.PostingCommentCreated(comment.id!!, thread.resourceId.toLong())
             }
+            ResourceType.COMMENT_THREAD -> createReviewCommentReply(thread, sender, body)
+            ResourceType.COMMIT_COMMENT -> createCommitCommentReply(thread, sender, body)
             else -> IncomingMailOutcome.Rejected("지원하지 않는 스레드 타입: ${thread.resourceType}")
         }
+    }
+
+    // yona EmailHandler.getThreads()의 COMMENT_THREAD 분기(CreationViaEmail.saveReviewComment) 대응 (P1-30)
+    private fun createReviewCommentReply(thread: ResolvedThread, sender: User, body: String): IncomingMailOutcome {
+        val threadId = thread.resourceId.toLong()
+        val commentThread = commentThreadRepository.findById(threadId).orElse(null)
+            ?: return IncomingMailOutcome.Rejected("코드리뷰 스레드를 찾을 수 없습니다: $threadId")
+        val project = commentThread.project
+            ?: return IncomingMailOutcome.Rejected("코드리뷰 스레드에 프로젝트 정보가 없습니다: $threadId")
+
+        val comment = codeReviewService.createReviewComment(project, null, null, body, null, threadId, sender)
+        return IncomingMailOutcome.ReviewCommentCreated(comment.id!!, threadId)
+    }
+
+    // yona EmailHandler.getThreads()의 REVIEW_COMMENT->컨테이너 분기(커밋 댓글 부분) 대응 (P1-30).
+    // yuna는 커밋 댓글에 별도 스레드 개념이 없어(P0-16), 같은 커밋/경로/라인에 새 댓글을 추가하는 것으로 답장을 표현한다.
+    private fun createCommitCommentReply(thread: ResolvedThread, sender: User, body: String): IncomingMailOutcome {
+        val originalId = thread.resourceId.toLong()
+        val original = commitCommentRepository.findById(originalId).orElse(null)
+            ?: return IncomingMailOutcome.Rejected("커밋 댓글을 찾을 수 없습니다: $originalId")
+        val project = original.project
+            ?: return IncomingMailOutcome.Rejected("커밋 댓글에 프로젝트 정보가 없습니다: $originalId")
+
+        val comment = codeReviewService.createCommitComment(
+            project, original.commitId, body, original.path, original.line, original.side, sender
+        )
+        return IncomingMailOutcome.CommitCommentCreated(comment.id!!)
     }
 
     private fun createIssue(
@@ -189,6 +233,8 @@ class IncomingMailProcessingService(
             is IncomingMailOutcome.IssueCreated -> ResourceType.ISSUE_POST to outcome.issueId.toString()
             is IncomingMailOutcome.IssueCommentCreated -> ResourceType.ISSUE_COMMENT to outcome.commentId.toString()
             is IncomingMailOutcome.PostingCommentCreated -> ResourceType.NONISSUE_COMMENT to outcome.commentId.toString()
+            is IncomingMailOutcome.ReviewCommentCreated -> ResourceType.COMMENT_THREAD to outcome.threadId.toString()
+            is IncomingMailOutcome.CommitCommentCreated -> ResourceType.COMMIT_COMMENT to outcome.commentId.toString()
             else -> return
         }
         originalEmailRepository.save(OriginalEmail(messageId = messageId, resourceType = resourceType, resourceId = resourceId))
