@@ -29,6 +29,8 @@ spring:
 yuna:
   upload:
     base-dir: "${yona.data:data}/uploads"
+  signup:
+    allowed-email-domains: "${YUNA_SIGNUP_ALLOWED_EMAIL_DOMAINS:}"
   ldap:
     enabled: "${YUNA_LDAP_ENABLED:false}"
     host: "${YUNA_LDAP_HOST:127.0.0.1}"

@@ -1,14 +1,18 @@
 package com.github.search5.yona.config.oauth2
 
+import com.github.search5.yona.domain.user.EmailDomainValidator
 import com.github.search5.yona.domain.user.LinkedAccount
 import com.github.search5.yona.domain.user.LinkedAccountRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException
+import org.springframework.security.oauth2.core.OAuth2Error
 import org.springframework.security.oauth2.core.user.OAuth2User
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -24,7 +28,9 @@ import java.time.Instant
 class CustomOAuth2UserService(
     private val userRepository: UserRepository,
     private val linkedAccountRepository: LinkedAccountRepository,
-    private val delegate: DefaultOAuth2UserService = DefaultOAuth2UserService()
+    private val delegate: DefaultOAuth2UserService = DefaultOAuth2UserService(),
+    @Value("\${yuna.signup.allowed-email-domains:}")
+    private val allowedEmailDomains: String = ""
 ) : OAuth2UserService<OAuth2UserRequest, OAuth2User> {
 
     @Transactional
@@ -44,18 +50,27 @@ class CustomOAuth2UserService(
             existingLink.user
         } else {
             // 2) 처음 보는 provider 계정이면 이메일/loginId로 기존 가입 사용자를 찾아 "연결"하거나,
-            //    없으면 신규 가입 처리
+            //    없으면 신규 가입 처리 (신규 가입만 이메일 도메인 allowlist 적용 - yona와 동일하게
+            //    이미 존재하는 계정의 로그인은 도메인 정책 변경 후에도 계속 허용한다)
             val resolvedUser = userRepository.findByEmail(userInfo.email).orElse(null)
                 ?: userRepository.findByLoginId(userInfo.loginId).orElse(null)
-                ?: userRepository.save(
-                    User(
-                        name = userInfo.name,
-                        loginId = userInfo.loginId,
-                        email = userInfo.email,
-                        state = UserState.ACTIVE,
-                        createdDate = Instant.now()
+                ?: run {
+                    if (!EmailDomainValidator.isAllowed(userInfo.email, allowedEmailDomains)) {
+                        throw OAuth2AuthenticationException(
+                            OAuth2Error("unacceptable_email_domain"),
+                            "허용되지 않은 이메일 도메인입니다: ${userInfo.email}"
+                        )
+                    }
+                    userRepository.save(
+                        User(
+                            name = userInfo.name,
+                            loginId = userInfo.loginId,
+                            email = userInfo.email,
+                            state = UserState.ACTIVE,
+                            createdDate = Instant.now()
+                        )
                     )
-                )
+                }
 
             linkedAccountRepository.save(
                 LinkedAccount(user = resolvedUser, providerKey = registrationId, providerUserId = userInfo.id)

@@ -1,7 +1,9 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.user.EmailDomainValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserService
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.validation.BindingResult
@@ -12,7 +14,9 @@ import org.springframework.web.bind.annotation.RequestParam
 
 @Controller
 class AuthController(
-    private val userService: UserService
+    private val userService: UserService,
+    @Value("\${yuna.signup.allowed-email-domains:}")
+    private val allowedEmailDomains: String
 ) {
 
     @GetMapping("/login")
@@ -68,6 +72,10 @@ class AuthController(
         }
         if (user.password != retypedPassword) {
             model.addAttribute("passwordError", "비밀번호가 일치하지 않습니다.")
+            return "signup"
+        }
+        if (!EmailDomainValidator.isAllowed(user.email, allowedEmailDomains)) {
+            model.addAttribute("emailDomainError", "허용되지 않은 이메일 도메인입니다.")
             return "signup"
         }
         if (bindingResult.hasErrors()) {
