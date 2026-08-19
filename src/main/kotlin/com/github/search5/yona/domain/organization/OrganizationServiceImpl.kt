@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.user.ReservedWordsValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.stereotype.Service
@@ -43,6 +44,10 @@ class OrganizationServiceImpl(
         }
         if (userRepository.findByLoginId(name).isPresent) {
             throw IllegalArgumentException("User with this name already exists: $name")
+        }
+        // yona utils/ReservedWordsValidator.java 대응 (P2-01).
+        if (ReservedWordsValidator.isReserved(name)) {
+            throw IllegalArgumentException("Organization name is a reserved word: $name")
         }
 
         val creator = userRepository.findById(creatorId)

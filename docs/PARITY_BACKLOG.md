@@ -93,7 +93,7 @@
 
 | # | 상태 | 제목 | 비고 |
 |---|---|---|---|
-| P2-01 | [ ] | ReservedWordsValidator(예약어 검증) 없음 | 로그인ID/프로젝트명이 라우트 경로와 충돌 가능 |
+| P2-01 | [x] | ReservedWordsValidator(예약어 검증) 없음 | **완료** — 아래 완료 로그 참고 |
 | P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음. P1-19에서 재확인 — `AbstractPosting.history`/`AbstractPostingApp.addToHistory()`(yona `utils.diff_match_patch` 기반 워드단위 diff)도 이 항목과 동일한 미구현 의존성(diff_match_patch 라이브러리 포팅)이라 함께 묶임. yuna `Posting.history` 필드 자체는 이미 존재하나 실제로 채워지지 않음 |
 | P2-03 | [ ] | 사이트 관리자 아바타 지정 API가 빈 스텁 | `SiteApiController.kt:314-322` |
 | P2-04 | [ ] | 웹훅 JSON 페이로드 단순화 | 커밋 리스트 없이 event/sender/project만 포함 |
@@ -103,6 +103,13 @@
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P2-01**: 로그인ID/조직명이 정적 라우트 경로(`/new`, `/projects`, `/organizations` 등)와 충돌할 수 있는데도 예약어 검증이 없던 문제 수정. yona `utils/ReservedWordsValidator.java`를 확인한 결과 `User.loginId`와 `Organization.name`에만 `@ValidateWith`로 적용되고(`Project.name`은 두 번째 경로 세그먼트라 적용 안 됨), Play 라우트 테이블을 런타임에 스캔해 `/{loginId}` 패턴과 충돌하는 첫 경로 세그먼트를 자동 수집한 뒤 "new"/"projects"/"orgs"/"organizations" 4개를 수동 추가하는 방식이었다.
+  - 신규 `domain/user/ReservedWordsValidator.kt`: yona처럼 런타임에 Spring MVC 라우트를 스캔하는 대신(라우팅 프레임워크가 달라 등가 구현이 더 복잡하고 불확실함), 실제 컨트롤러들의 정적 최상위 경로를 직접 확인해 정적 집합으로 나열(`EmailDomainValidator`와 동일한 순수 object 스타일).
+  - `AuthController.signup()`에 로그인ID 예약어 검사 추가 — 기존 "아이디 중복" 체크와 동일한 방식(`bindingResult.rejectValue`)으로 폼에 남아있게 처리.
+  - `OrganizationServiceImpl.createOrganization(name, descr, creatorId)`에 조직명 예약어 검사 추가 — 기존 "이름 중복"/"동명 사용자 존재" 체크와 동일하게 `IllegalArgumentException`을 던진다(REST `OrganizationController`와 뷰 `OrganizationViewController` 양쪽 진입점이 모두 이 서비스 메서드로 수렴해 한 곳에서 커버됨).
+  - 테스트: 신규 `ReservedWordsValidatorSpec.kt`(3 tests), `OrganizationServiceSpec.kt` +1 test(예약어로 조직 생성 시 예외), `AuthControllerSpec.kt` +1 test(예약어 아이디로 가입 시도 시 폼 유지). 인접 회귀: `web/AuthControllerSpec`, `domain/organization/*`, `domain/user/*`, `YonaApplicationTests` 전체 재실행 통과.
+  - 검증: `./gradlew compileKotlin compileTestKotlin`, `./gradlew test --tests "com.github.search5.yona.web.AuthControllerSpec" --tests "com.github.search5.yona.domain.organization.*" --tests "com.github.search5.yona.domain.user.*" --tests "com.github.search5.yona.YonaApplicationTests"` 모두 통과.
 
 - **2026-08-20 — P1-49**: `PullRequestService.addReviewer/removeReviewer`(REST `PullRequestController`가 호출하는 경로)가 리뷰어 컬렉션만 갱신하고 알림/타임라인 기록이 전혀 없던 문제 수정. P1-39 작업 중 발견한 대로, 리뷰어 참여/해제가 `CodeReviewService`(→`ReviewApiController`)와 `PullRequestService`(→`PullRequestController`) 두 서비스에 중복 구현돼 있고 이번에 고친 건 전자뿐이었다.
   - `PullRequestServiceImpl.addReviewer/removeReviewer`에 `CodeReviewServiceImpl.addReviewer/removeReviewer`(P1-39/40에서 이미 완성)와 동일한 패턴의 `notifyReviewerChanged` 헬퍼를 추가 — `NotificationEvent(PULL_REQUEST_REVIEW_STATE_CHANGED)`를 발행(수신자=contributor+나머지 리뷰어, 본인 제외)하고, 기존 `recordPullRequestEvent`(P1-40의 draft-time 병합/취소 로직 포함)로 `PullRequestEvent`도 함께 기록. 이미 같은 사용자가 리뷰어로 등록/해제돼 있어 실제 변경이 없는 경우(`Set.add/remove`가 false 반환)는 기존처럼 알림을 발행하지 않도록 가드도 유지.

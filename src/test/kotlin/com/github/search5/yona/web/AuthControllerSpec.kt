@@ -132,6 +132,23 @@ class AuthControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { userService.createUser(any()) }
             }
+
+            it("아이디가 예약어면 회원가입이 거부되어야 한다(P2-01)") {
+                every { userService.isLoginIdExist("projects") } returns false
+
+                mockMvc.perform(
+                    post("/signup")
+                        .param("loginId", "projects")
+                        .param("name", "홍길동")
+                        .param("email", "gildong@example.com")
+                        .param("password", "pass123")
+                        .param("retypedPassword", "pass123")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("signup"))
+
+                verify(exactly = 0) { userService.createUser(any()) }
+            }
         }
     }
 })

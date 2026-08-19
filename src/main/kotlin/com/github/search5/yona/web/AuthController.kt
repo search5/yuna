@@ -1,6 +1,7 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.user.EmailDomainValidator
+import com.github.search5.yona.domain.user.ReservedWordsValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserService
 import org.springframework.beans.factory.annotation.Value
@@ -69,6 +70,9 @@ class AuthController(
     ): String {
         if (userService.isLoginIdExist(user.loginId)) {
             bindingResult.rejectValue("loginId", "duplicate", "이미 존재하는 아이디입니다.")
+        }
+        if (ReservedWordsValidator.isReserved(user.loginId)) {
+            bindingResult.rejectValue("loginId", "reservedWord", "사용할 수 없는 아이디입니다.")
         }
         if (user.password != retypedPassword) {
             model.addAttribute("passwordError", "비밀번호가 일치하지 않습니다.")

@@ -59,6 +59,12 @@ class OrganizationServiceSpec @Autowired constructor(
                 orgUser.role.id shouldBe RoleType.ORG_ADMIN.roleType
             }
 
+            it("예약어를 조직 이름으로 사용하려 하면 예외가 발생해야 한다(P2-01)") {
+                shouldThrow<IllegalArgumentException> {
+                    organizationService.createOrganization("projects", "설명", admin.id!!)
+                }
+            }
+
             it("2. 조직 멤버 추가 검증") {
                 val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
 
