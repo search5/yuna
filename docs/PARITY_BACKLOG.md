@@ -55,7 +55,7 @@
 | P1-14 | [x] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | `web/MentionController.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P1-15 | [x] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | `web/ProjectController.kt` | **완료(P1-24와 함께 구현, 아래 참고)** |
 | P1-16 | [x] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` | **완료** |
-| P1-17 | [ ] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` |
+| P1-17 | [x] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` | **완료** |
 | P1-18 | [ ] | 게시판 알림 미발송 | `BoardApp.java:255,360,386` | `domain/board/PostingServiceImpl.kt` |
 | P1-19 | [ ] | 게시판 편집이력/댓글수/라벨필터 저하 | `AbstractPostingApp.java:106-140` | `web/BoardViewController.kt`, `domain/board/PostingServiceImpl.kt` |
 | P1-20 | [ ] | CodeCommentThread.isOutdated() 없음 | `CodeCommentThread.java:76-123` | `domain/comment/CodeCommentThread.kt` |
@@ -263,3 +263,8 @@
   - `user.enrolledProjects.contains(project)`(참조 동등성) 대신 `.any { it.id == project.id }`(ID 동등성)를 사용 — 같은 트랜잭션이라도 `project`/`user.enrolledProjects`가 서로 다른 조회 경로로 로드된 별개 인스턴스일 수 있어 참조 비교는 신뢰할 수 없다.
   - 테스트: `ProjectUserServiceSpec.kt`(실제 MariaDB 통합테스트) +2(이미 멤버인 유저의 가입 신청은 예외, 중복 가입 신청 시 대기 목록/알림 모두 1건만 유지) — 기존 4건 포함 총 6 tests. `ProjectViewControllerIntegrationSpec`/`YonaApplicationTests` 재실행으로 회귀 없음 확인(기존 enroll 호출은 신규 유저의 최초 신청이라 새 가드에 영향받지 않음).
   - 검증: `./gradlew test --tests "ProjectUserServiceSpec" --tests "ProjectViewControllerIntegrationSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
+
+- **2026-08-20 — P1-17**: `OrganizationServiceImpl.addOrganizationMember()`가 대상 유저의 게스트(`isGuest`) 여부를 확인하지 않아, 게스트 계정도 조직 정식 멤버로 추가될 수 있던 문제 수정(yona `OrganizationApp.validateForAddMember()`의 `userToBeAdded.isGuest` 체크 대응). 중복 멤버 검사는 이미 구현돼 있었고 이 게스트 체크만 누락돼 있었다.
+  - 중복 멤버 검사보다 먼저 `targetUser.isGuest`를 확인해 `IllegalArgumentException`을 던지도록 추가(yona도 이 체크가 먼저다) — `OrganizationController.addOrganizationMember()`가 이미 예외를 400으로 매핑하고 있어 컨트롤러 수정 없이 자연히 동일한 응답이 된다.
+  - 테스트: `OrganizationServiceSpec.kt`(실제 MariaDB 통합테스트) +1(게스트 계정 추가 시도 시 예외+실제로 추가되지 않음 확인) — 기존 5건 포함 총 6 tests. `YonaApplicationTests` 재실행으로 회귀 없음 확인.
+  - 검증: `./gradlew test --tests "OrganizationServiceSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.

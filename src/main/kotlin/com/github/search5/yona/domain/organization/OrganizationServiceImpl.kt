@@ -91,6 +91,11 @@ class OrganizationServiceImpl(
         val targetUser = userRepository.findByLoginId(userLoginId)
             .orElseThrow { IllegalArgumentException("User with login ID $userLoginId not found") }
 
+        // yona OrganizationApp.validateForAddMember()의 게스트 계정 거부 대응 (P1-17)
+        if (targetUser.isGuest) {
+            throw IllegalArgumentException("게스트 계정은 조직 멤버로 추가할 수 없습니다.")
+        }
+
         if (organizationUserRepository.existsByOrganizationIdAndUserId(orgId, targetUser.id!!)) {
             throw IllegalArgumentException("User is already a member of this organization")
         }

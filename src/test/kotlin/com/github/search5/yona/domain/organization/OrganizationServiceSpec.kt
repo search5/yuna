@@ -128,6 +128,19 @@ class OrganizationServiceSpec @Autowired constructor(
                 organizationService.deleteOrganization(org.id!!, admin.id!!)
                 organizationRepository.findById(org.id!!).isPresent shouldBe false
             }
+
+            it("6. 게스트 계정은 조직 멤버로 추가할 수 없어야 한다 (P1-17)") {
+                val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
+                val guest = userRepository.save(
+                    User(loginId = "guest-user", name = "게스트", email = "guest@yona.io", isGuest = true)
+                )
+
+                shouldThrow<IllegalArgumentException> {
+                    organizationService.addOrganizationMember(org.id!!, guest.loginId, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                }
+
+                organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, guest.id!!) shouldBe false
+            }
         }
     }
 }
