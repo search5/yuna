@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.event.PullRequestMergeEvent
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.watch.WatchService
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.*
 import org.eclipse.jgit.merge.MergeStrategy
@@ -35,7 +36,8 @@ class PullRequestServiceImpl(
     private val projectRepository: ProjectRepository,
     private val eventPublisher: ApplicationEventPublisher,
     private val notificationEventRepository: NotificationEventRepository,
-    private val pullRequestEventRepository: PullRequestEventRepository
+    private val pullRequestEventRepository: PullRequestEventRepository,
+    private val watchService: WatchService
 ) : PullRequestService {
 
     @Transactional
@@ -341,6 +343,32 @@ class PullRequestServiceImpl(
         } catch (e: Exception) {
             // JGit merge 예외가 발생하더라도 PR 생성 자체는 허용
         }
+
+        // yona NotificationEvent.afterNewPullRequest 대응 (P1-39).
+        val title = "[${toProject.name}] 새 풀 리퀘스트: #${saved.number} ${saved.title}"
+        val notificationEvent = NotificationEvent(
+            title = title,
+            senderId = contributor.id,
+            created = Instant.now(),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = saved.id.toString(),
+            eventType = EventType.NEW_PULL_REQUEST,
+            newValue = saved.body
+        )
+        val receivers = watchService.findActualWatchers(
+            baseWatchers = setOf(contributor),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = saved.id.toString(),
+            projectId = toProject.id,
+            eventType = notificationEvent.eventType
+        ).toMutableSet()
+        receivers.removeIf { it.id == contributor.id }
+        notificationEvent.receivers = receivers
+
+        notificationEventRepository.save(notificationEvent)
+        eventPublisher.publishEvent(notificationEvent)
+
+        recordPullRequestEvent(saved, EventType.NEW_PULL_REQUEST, contributor.loginId, null, saved.body)
 
         return saved
     }

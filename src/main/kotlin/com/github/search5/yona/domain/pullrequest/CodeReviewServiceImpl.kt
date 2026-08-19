@@ -31,7 +31,8 @@ class CodeReviewServiceImpl(
     private val eventPublisher: ApplicationEventPublisher,
     private val projectUserRepository: ProjectUserRepository,
     private val attachmentService: AttachmentService,
-    private val pullRequestCommitRepository: PullRequestCommitRepository
+    private val pullRequestCommitRepository: PullRequestCommitRepository,
+    private val pullRequestEventRepository: PullRequestEventRepository
 ) : CodeReviewService {
 
     override fun createReviewComment(
@@ -221,6 +222,8 @@ class CodeReviewServiceImpl(
 
             notificationEventRepository.save(notificationEvent)
             eventPublisher.publishEvent(notificationEvent)
+
+            recordPullRequestEvent(pullRequest, reviewer.loginId, "DONE")
         }
     }
 
@@ -252,7 +255,21 @@ class CodeReviewServiceImpl(
 
             notificationEventRepository.save(notificationEvent)
             eventPublisher.publishEvent(notificationEvent)
+
+            recordPullRequestEvent(pullRequest, reviewer.loginId, "CANCEL")
         }
+    }
+
+    // yona models/PullRequestEvent.java 대응 (P1-39) — 리뷰어 참여/해제 시점을 PR 타임라인에 기록.
+    private fun recordPullRequestEvent(pullRequest: PullRequest, senderLoginId: String?, newValue: String) {
+        val event = PullRequestEvent(
+            pullRequest = pullRequest,
+            senderLoginId = senderLoginId,
+            eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
+            newValue = newValue,
+            created = Instant.now()
+        )
+        pullRequestEventRepository.save(event)
     }
 
     // yona CodeCommentThread.isOutdated() 대응 (P1-20)
