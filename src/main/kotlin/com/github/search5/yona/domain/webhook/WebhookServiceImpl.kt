@@ -79,7 +79,7 @@ class WebhookServiceImpl(
         return webhook.gitPush || webhook.webhookType == WebhookType.JSON
     }
 
-    private fun buildPayload(
+    internal fun buildPayload(
         webhook: Webhook,
         eventType: com.github.search5.yona.domain.enumeration.EventType,
         sender: User,
@@ -143,14 +143,18 @@ class WebhookServiceImpl(
                 objectMapper.writeValueAsString(root)
             }
             WebhookType.JSON -> {
-                // Raw JSON 포맷
-                val root = objectMapper.createObjectNode()
-                root.put("event", eventType.name)
-                root.put("sender", sender.name ?: "")
-                root.put("project", webhook.project?.name ?: "")
-                root.put("resourceId", getResourceId(resource))
-                root.put("resourceType", getResourceType(resource).name)
-                objectMapper.writeValueAsString(root)
+                if (resource is PushedCommits) {
+                    buildPushPayload(webhook, sender, resource)
+                } else {
+                    // Raw JSON 포맷
+                    val root = objectMapper.createObjectNode()
+                    root.put("event", eventType.name)
+                    root.put("sender", sender.name ?: "")
+                    root.put("project", webhook.project?.name ?: "")
+                    root.put("resourceId", getResourceId(resource))
+                    root.put("resourceType", getResourceType(resource).name)
+                    objectMapper.writeValueAsString(root)
+                }
             }
             else -> {
                 // WebhookType.SIMPLE
@@ -159,6 +163,66 @@ class WebhookServiceImpl(
                 objectMapper.writeValueAsString(root)
             }
         }
+    }
+
+    // yona Webhook.java의 push용 buildRequestBody(commits, refNames, sender) 대응 (P2-04).
+    // 커밋 목록이 빠진 채 event/sender/project만 담겨있던 단순 JSON 대신, GitHub 웹훅과 유사한
+    // ref/commits/head_commit/sender/pusher/repository 구조로 구성한다.
+    private fun buildPushPayload(webhook: Webhook, sender: User, pushed: PushedCommits): String {
+        val objectMapper = tools.jackson.databind.ObjectMapper()
+        val root = objectMapper.createObjectNode()
+
+        val refNodes = objectMapper.createArrayNode()
+        pushed.refNames.forEach { refNodes.add(it) }
+        root.set("ref", refNodes)
+
+        val commitNodes = objectMapper.createArrayNode()
+        for (commit in pushed.commits) {
+            val commitNode = objectMapper.createObjectNode()
+            commitNode.put("id", commit.name)
+            commitNode.put("message", commit.fullMessage)
+            commitNode.put("timestamp", commit.authorIdent?.`when`?.toInstant()?.toString() ?: "")
+            commitNode.put("url", "${webhook.project?.let { "/${it.owner}/${it.name}" } ?: ""}/commit/${commit.name}")
+
+            val authorNode = objectMapper.createObjectNode()
+            authorNode.put("name", commit.authorIdent?.name ?: "")
+            authorNode.put("email", commit.authorIdent?.emailAddress ?: "")
+            commitNode.set("author", authorNode)
+
+            val committerNode = objectMapper.createObjectNode()
+            committerNode.put("name", commit.committerIdent?.name ?: "")
+            committerNode.put("email", commit.committerIdent?.emailAddress ?: "")
+            commitNode.set("committer", committerNode)
+
+            commitNodes.add(commitNode)
+        }
+        root.set("commits", commitNodes)
+        if (commitNodes.size() > 0) {
+            root.set("head_commit", commitNodes.get(0))
+        }
+
+        val senderNode = objectMapper.createObjectNode()
+        senderNode.put("login", sender.loginId)
+        senderNode.put("id", sender.id ?: 0L)
+        senderNode.put("avatar_url", sender.avatarUrl)
+        senderNode.put("type", "User")
+        root.set("sender", senderNode)
+
+        val pusherNode = objectMapper.createObjectNode()
+        pusherNode.put("name", sender.name)
+        pusherNode.put("email", sender.email ?: "")
+        root.set("pusher", pusherNode)
+
+        val repositoryNode = objectMapper.createObjectNode()
+        val project = webhook.project
+        repositoryNode.put("id", project?.id ?: 0L)
+        repositoryNode.put("name", project?.name ?: "")
+        repositoryNode.put("owner", project?.owner ?: "")
+        repositoryNode.put("html_url", project?.let { "/${it.owner}/${it.name}" } ?: "")
+        repositoryNode.put("private", project?.projectScope != com.github.search5.yona.domain.project.ProjectScope.PUBLIC)
+        root.set("repository", repositoryNode)
+
+        return objectMapper.writeValueAsString(root)
     }
 
     private fun buildTextMessage(
