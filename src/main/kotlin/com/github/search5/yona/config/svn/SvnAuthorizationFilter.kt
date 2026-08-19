@@ -2,6 +2,7 @@ package com.github.search5.yona.config.svn
 
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectService
+import com.github.search5.yona.domain.user.UserRepository
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -12,7 +13,8 @@ import java.util.regex.Pattern
 
 @Component
 class SvnAuthorizationFilter(
-    private val projectService: ProjectService
+    private val projectService: ProjectService,
+    private val userRepository: UserRepository
 ) : OncePerRequestFilter() {
 
     private val svnUriPattern = Pattern.compile("^/svn/([^/]+)/([^/]+?)(?:/.*)?$")
@@ -47,8 +49,11 @@ class SvnAuthorizationFilter(
 
         val isWriteRequest = isWriteRequest(request)
 
-        val requiresAuth = project.projectScope == com.github.search5.yona.domain.project.ProjectScope.PRIVATE 
-                || project.isCodeAccessibleMemberOnly 
+        // yona AccessControl READ 규칙(project.isPublic() && !user.isGuest || user.isMemberOf(project) || ...)
+        // 대응 (P1-23): PROTECTED도 PUBLIC과 동일하게 인증 없이 열람 가능했던 것을 PRIVATE와 같이 인증을
+        // 요구하도록 수정. 조직 그룹멤버 우회(isAllowedIfGroupMember)는 이 저장소의 기존 관례대로 미구현.
+        val requiresAuth = project.projectScope != com.github.search5.yona.domain.project.ProjectScope.PUBLIC
+                || project.isCodeAccessibleMemberOnly
                 || isWriteRequest
 
         if (requiresAuth) {
@@ -63,6 +68,16 @@ class SvnAuthorizationFilter(
             if (!isMember(project, loginId)) {
                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden")
                 return
+            }
+        } else {
+            // yona의 "!user.isGuest" 대응: PUBLIC 프로젝트라도 게스트 계정으로 인증된 요청은 거부한다.
+            // (완전한 익명 요청은 애초에 guest로 분류되지 않으므로 영향받지 않는다.)
+            val authentication = SecurityContextHolder.getContext().authentication
+            if (authentication != null && authentication.isAuthenticated && !isAnonymous(authentication)) {
+                if (isGuestUser(authentication.name)) {
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden")
+                    return
+                }
             }
         }
 
@@ -82,5 +97,9 @@ class SvnAuthorizationFilter(
     private fun isMember(project: Project, loginId: String): Boolean {
         val projectId = project.id ?: return false
         return projectService.isMember(projectId, loginId)
+    }
+
+    private fun isGuestUser(loginId: String): Boolean {
+        return userRepository.findByLoginId(loginId).map { it.isGuest }.orElse(false)
     }
 }
