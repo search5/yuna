@@ -81,10 +81,11 @@ class CommentServiceImpl(
             baseWatchers = baseWatchers,
             resourceType = ResourceType.ISSUE_POST,
             resourceId = issue.id.toString(),
-            projectId = issue.project.id
+            projectId = issue.project.id,
+            eventType = notificationEvent.eventType
         ).toMutableSet()
         receivers.removeIf { it.id == author.id }
-        
+
         // 멘션된 사용자들 추가
         receivers.addAll(mentionedUsers)
         notificationEvent.receivers = receivers
@@ -143,7 +144,8 @@ class CommentServiceImpl(
             baseWatchers = baseWatchers,
             resourceType = ResourceType.BOARD_POST,
             resourceId = posting.id.toString(),
-            projectId = posting.project.id
+            projectId = posting.project.id,
+            eventType = notificationEvent.eventType
         ).toMutableSet()
         receivers.removeIf { it.id == author.id }
 
