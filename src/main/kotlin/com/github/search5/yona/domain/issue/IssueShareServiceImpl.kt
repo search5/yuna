@@ -27,7 +27,8 @@ class IssueShareServiceImpl(
     private val projectUserRepository: ProjectUserRepository,
     private val organizationUserRepository: OrganizationUserRepository,
     private val notificationEventRepository: NotificationEventRepository,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val issueEventRepository: IssueEventRepository
 ) : IssueShareService {
 
     private val maxFetchUsers = 50
@@ -224,6 +225,18 @@ class IssueShareServiceImpl(
         notificationEvent.receivers = receivers
         notificationEventRepository.save(notificationEvent)
         eventPublisher.publishEvent(notificationEvent)
+
+        // 이슈 타임라인(IssueEvent) 기록 (P1-37)
+        val issueEvent = IssueEvent(
+            issue = issue,
+            senderLoginId = currentUser.loginId!!,
+            senderEmail = currentUser.email,
+            oldValue = notificationEvent.oldValue,
+            newValue = notificationEvent.newValue,
+            created = Instant.now(),
+            eventType = EventType.ISSUE_SHARER_CHANGED
+        )
+        issueEventRepository.save(issueEvent)
     }
 
     private fun getAssignableUsersOfProjectInternal(project: Project, currentUser: User): List<User> {

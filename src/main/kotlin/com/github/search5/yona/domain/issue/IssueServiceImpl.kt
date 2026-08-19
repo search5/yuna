@@ -102,6 +102,9 @@ class IssueServiceImpl(
         labelIds: List<Long>?
     ): Issue {
         val issue = issueRepository.findById(issueId).orElseThrow { IllegalArgumentException("Issue not found") }
+        val oldBody = issue.body
+        val oldLabelNames = issue.labels.map { it.name }.sorted()
+
         issue.title = title
         issue.body = (body)
         issue.updatedDate = Instant.now()
@@ -126,7 +129,24 @@ class IssueServiceImpl(
             issue.labels.clear()
         }
 
-        return issueRepository.save(issue)
+        val savedIssue = issueRepository.save(issue)
+
+        if (oldBody != body) {
+            recordIssueEvent(savedIssue, EventType.ISSUE_BODY_CHANGED, updater.loginId!!, oldBody, body)
+        }
+
+        val newLabelNames = savedIssue.labels.map { it.name }.sorted()
+        if (oldLabelNames != newLabelNames) {
+            recordIssueEvent(
+                savedIssue,
+                EventType.ISSUE_LABEL_CHANGED,
+                updater.loginId!!,
+                oldLabelNames.joinToString(", "),
+                newLabelNames.joinToString(", ")
+            )
+        }
+
+        return savedIssue
     }
 
     override fun changeState(issueId: Long, newState: State, updaterLoginId: String): Issue {
