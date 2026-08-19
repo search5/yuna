@@ -49,6 +49,12 @@
                     </div>
 
                     <div class="actions">
+                        <span class="send-notification-check" th:if="${currentUser != null && post.authorId == currentUser.id && !post.readme}">
+                            <label class="checkbox inline">
+                                <input type="checkbox" name="sendNotificationMail" id="sendNotificationMail" checked="checked"/>
+                                <strong th:text="#{notification.send.mail}">수정 알림 메일 발송</strong>
+                            </label>
+                        </span>
                         <button type="submit" class="ybtn ybtn-info" tabindex="3" th:text="#{button.save}">저장</button>
                         <a href="javascript:history.back();" class="ybtn" tabindex="4" th:text="#{button.cancel}">취소</a>
                     </div>
@@ -87,12 +93,14 @@
             var title = $("#title").val();
             var body = $("#body").val();
             var notice = $("#notice").is(":checked");
-            
+            var sendNotificationMail = $("#sendNotificationMail").length ? $("#sendNotificationMail").is(":checked") : false;
+
             var requestData = {
                 title: title,
                 body: body,
                 notice: notice,
-                readme: false
+                readme: false,
+                sendNotificationMail: sendNotificationMail
             };
             
             $.ajax({

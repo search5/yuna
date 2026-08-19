@@ -113,10 +113,14 @@ class PostingServiceImpl(
         body: String,
         notice: Boolean,
         readme: Boolean,
-        authorId: Long
+        authorId: Long,
+        sendNotificationMail: Boolean
     ): Posting {
         val posting = getPosting(projectId, number)
             ?: throw IllegalArgumentException("포스팅을 찾을 수 없습니다.")
+
+        val originalBody = posting.body
+        val isAuthoredByUpdater = posting.authorId == authorId
 
         posting.title = title.trim()
         posting.body = body
@@ -124,7 +128,40 @@ class PostingServiceImpl(
         posting.readme = readme
         posting.updatedDate = Instant.now()
 
-        return postingRepository.save(posting)
+        val saved = postingRepository.save(posting)
+
+        // yona BoardApp.editPost의 isSelectedToSendNotificationMail() 대응 (P1-44).
+        // 본인 글이 아니면 옵션과 무관하게 항상 발송하고, 본인 글이면 체크박스를 선택했을 때만 발송한다.
+        if (sendNotificationMail || !isAuthoredByUpdater) {
+            val updater = userRepository.findById(authorId).orElse(null)
+            if (updater != null) {
+                val title2 = "[${saved.project.name}] 게시글 수정: ${saved.title}"
+                val notificationEvent = NotificationEvent(
+                    title = title2,
+                    senderId = updater.id,
+                    created = Instant.now(),
+                    resourceType = ResourceType.BOARD_POST,
+                    resourceId = saved.id.toString(),
+                    eventType = EventType.POSTING_BODY_CHANGED,
+                    oldValue = originalBody,
+                    newValue = saved.body
+                )
+                val receivers = watchService.findActualWatchers(
+                    baseWatchers = setOf(updater),
+                    resourceType = ResourceType.BOARD_POST,
+                    resourceId = saved.id.toString(),
+                    projectId = saved.project.id,
+                    eventType = notificationEvent.eventType
+                ).toMutableSet()
+                receivers.removeIf { it.id == updater.id }
+                notificationEvent.receivers = receivers
+
+                notificationEventRepository.save(notificationEvent)
+                eventPublisher.publishEvent(notificationEvent)
+            }
+        }
+
+        return saved
     }
 
     @Transactional

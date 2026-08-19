@@ -22,7 +22,9 @@ import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import io.mockk.verify
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.data.web.PageableHandlerMethodArgumentResolver
@@ -145,6 +147,45 @@ class BoardViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("board/create"))
                     .andExpect(model().attributeExists("project"))
+            }
+        }
+
+        describe("POST /{owner}/{projectName}/post/{number}/edit (P1-44)") {
+            it("sendNotificationMail 옵션을 postingService.updatePosting에 그대로 전달해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { postingService.updatePosting(1L, 1L, "수정 제목", "수정 본문", false, false, 10L, true) } returns posting
+
+                mockMvc.perform(
+                    post("/owner/TestProj/post/1/edit")
+                        .param("title", "수정 제목")
+                        .param("body", "수정 본문")
+                        .param("sendNotificationMail", "true")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify(exactly = 1) { postingService.updatePosting(1L, 1L, "수정 제목", "수정 본문", false, false, 10L, true) }
+            }
+
+            it("sendNotificationMail을 선택하지 않으면 false로 전달해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { postingService.updatePosting(1L, 1L, "수정 제목", "수정 본문", false, false, 10L, false) } returns posting
+
+                mockMvc.perform(
+                    post("/owner/TestProj/post/1/edit")
+                        .param("title", "수정 제목")
+                        .param("body", "수정 본문")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify(exactly = 1) { postingService.updatePosting(1L, 1L, "수정 제목", "수정 본문", false, false, 10L, false) }
             }
         }
 
