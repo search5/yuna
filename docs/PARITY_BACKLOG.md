@@ -56,7 +56,7 @@
 | P1-15 | [x] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | `web/ProjectController.kt` | **완료(P1-24와 함께 구현, 아래 참고)** |
 | P1-16 | [x] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` | **완료** |
 | P1-17 | [x] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` | **완료** |
-| P1-18 | [ ] | 게시판 알림 미발송 | `BoardApp.java:255,360,386` | `domain/board/PostingServiceImpl.kt` |
+| P1-18 | [x] | 게시판 알림 미발송 | `BoardApp.java:255,360,386` | `domain/board/PostingServiceImpl.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-19 | [ ] | 게시판 편집이력/댓글수/라벨필터 저하 | `AbstractPostingApp.java:106-140` | `web/BoardViewController.kt`, `domain/board/PostingServiceImpl.kt` |
 | P1-20 | [ ] | CodeCommentThread.isOutdated() 없음 | `CodeCommentThread.java:76-123` | `domain/comment/CodeCommentThread.kt` |
 | P1-21 | [ ] | Watch 권한 필터링(allowedWatchersOnly) 무시됨 | `models/Watch.java:160-187` | `domain/watch/WatchServiceImpl.kt:55-77` |
@@ -82,6 +82,7 @@
 | P1-41 | [ ] | 최근 본 이슈/게시글 조회 UI·엔드포인트, 탈퇴 시 정리 없음 | `models/RecentIssue.java getRecentIssues/deleteAll` | `domain/issue/RecentIssueService.kt` | P1-09에서 범위 분리 — 방문 시 기록(record)만 구현했고, 사용자가 자신의 최근 방문 목록을 실제로 조회하는 컨트롤러/화면과, 회원 탈퇴 시 `deleteAll(user)`로 데이터를 정리하는 배선이 아직 없음. `RecentIssueService.getRecentIssues()`는 준비돼 있어 연결만 하면 됨 |
 | P1-42 | [ ] | mentionList 추가 후보 소스(공유자/작성자·댓글러/워처, "@project all"·"@group all") 미지원 | `ProjectApp.java collectAuthorAndCommenter/addProjectAuthorsAndWatchersList/addSharers/addProjectNameToMentionList/addOrganizationNameToMentionList` | `web/MentionController.kt` | P1-14에서 범위 분리 — 현재는 프로젝트 멤버+조직 그룹멤버(또는 query 검색)만 후보로 삼는다. 이슈/게시글의 작성자·댓글 작성자·워처, 이슈 공유자, 그리고 "@project all:"/"@group all:" 특수 멘션 항목(이미지 URL 포함)은 미구현 |
 | P1-43 | [ ] | mentionListAtCommitDiff/mentionListAtPullRequest 엔드포인트 없음 | `ProjectApp.java:226-227`(mentionListAtCommitDiff/mentionListAtPullRequest) | (해당 없음) | P1-14에서 범위 분리 — 커밋 diff 화면/PR 화면 전용 멘션 후보(커밋 작성자, 코드댓글 작성자, PR 코멘트 작성자, PR contributor)를 추가하는 변형 엔드포인트 2개가 아직 없음. 기본 `mentionList`만으로도 프로젝트 멤버 멘션은 가능해 P1로 분류 |
+| P1-44 | [ ] | 게시글 수정 시 알림 미발송(옵션 체크박스 미연동) | `BoardApp.java:359-361`(`isSelectedToSendNotificationMail()`) | `web/BoardController.kt`, `domain/board/PostingServiceImpl.kt` | P1-18에서 범위 분리 — 신규글(P1-18에서 구현)/삭제(P1-18에서 구현) 알림은 붙었지만, 게시글 "수정" 시 알림은 yona도 무조건 보내지 않고 "알림메일 발송" 체크박스(본인 글이 아니면 체크 여부 무관하게 항상 발송)에 의존한다. yuna `updatePosting`엔 이 옵션을 받는 파라미터 자체가 없어 컨트롤러/폼까지 함께 손대야 함 |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -268,3 +269,11 @@
   - 중복 멤버 검사보다 먼저 `targetUser.isGuest`를 확인해 `IllegalArgumentException`을 던지도록 추가(yona도 이 체크가 먼저다) — `OrganizationController.addOrganizationMember()`가 이미 예외를 400으로 매핑하고 있어 컨트롤러 수정 없이 자연히 동일한 응답이 된다.
   - 테스트: `OrganizationServiceSpec.kt`(실제 MariaDB 통합테스트) +1(게스트 계정 추가 시도 시 예외+실제로 추가되지 않음 확인) — 기존 5건 포함 총 6 tests. `YonaApplicationTests` 재실행으로 회귀 없음 확인.
   - 검증: `./gradlew test --tests "OrganizationServiceSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
+
+- **2026-08-20 — P1-18**: `PostingServiceImpl`이 게시글 생성/수정/삭제 어디서도 `NotificationEvent`를 발행하지 않아, 이미 배선돼 있는 메일(P0-01)/웹훅(P0-03) 리스너가 게시판 이벤트에 대해서는 한 번도 동작하지 않던 문제 수정(yona `BoardApp.newPost`(255줄 `NotificationEvent.afterNewPost`)/`deletePost`(386줄 `afterResourceDeleted`) 대응).
+  - `IssueServiceImpl`이 이미 확립해 둔 패턴(NotificationEvent 생성 → `WatchService.findActualWatchers`로 수신자 계산 → 작성자 자신 제외 → `notificationEventRepository.save` + `eventPublisher.publishEvent`)을 그대로 재사용하는 `publishNotification()` 헬퍼를 추가.
+  - `createPosting()`: 저장 직후 `EventType.NEW_POSTING` 알림 발행.
+  - `deletePosting()`: yona와 동일하게 **실제 삭제(delete) 전에** `EventType.RESOURCE_DELETED` 알림을 발행(삭제 후에는 워처 계산에 필요한 리소스 연결 정보가 사라지므로).
+  - **범위 조정(P1-44로 분리)**: 게시글 "수정" 시 알림(yona `editPost`의 `isSelectedToSendNotificationMail() || !original.isAuthoredBy(currentUser)` 분기)은 다루지 않음 — 이건 폼의 "알림메일 발송" 체크박스 값에 의존하는데 yuna `updatePosting()`엔 그 파라미터 자체가 없어 컨트롤러/폼까지 함께 바꿔야 하는 별도 규모의 작업이라 분리했다. 참고로 `IssueServiceImpl.updateIssue()`(제목/본문 일반 수정)도 이 저장소에서 알림을 만들지 않는 것과 같은 기준.
+  - 테스트: `PostingServiceSpec.kt`(신규, 실제 MariaDB 통합테스트) 2 tests(신규 게시글 NEW_POSTING 알림 발행 확인, 삭제 시 RESOURCE_DELETED 알림 발행 확인). `BoardControllerSpec`/`BoardViewControllerSpec` 재실행으로 회귀 없음 확인(생성자 파라미터는 Spring 빈 자동 주입이라 기존 컨트롤러 목 테스트에 영향 없음).
+  - 검증: `./gradlew test --tests "PostingServiceSpec" --tests "BoardControllerSpec" --tests "BoardViewControllerSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
