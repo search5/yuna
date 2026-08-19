@@ -59,6 +59,7 @@ class IssueShareServiceImplSpec : DescribeSpec({
             every { issueSharerRepository.save(any()) } answers { firstArg() }
             every { userRepository.findByLoginId("sharer1") } returns Optional.of(sharerUser)
             every { notificationEventRepository.save(any()) } answers { firstArg() }
+            every { issueEventRepository.findFirstByIssueAndCreatedAfterOrderByIdDesc(issue, any()) } returns null
 
             val captured = slot<IssueEvent>()
             every { issueEventRepository.save(capture(captured)) } answers { firstArg() }

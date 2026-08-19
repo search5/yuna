@@ -236,7 +236,7 @@ class IssueShareServiceImpl(
             created = Instant.now(),
             eventType = EventType.ISSUE_SHARER_CHANGED
         )
-        issueEventRepository.save(issueEvent)
+        issueEventRepository.recordWithDraftMerge(issueEvent, skipWaypoint = true)
     }
 
     private fun getAssignableUsersOfProjectInternal(project: Project, currentUser: User): List<User> {
