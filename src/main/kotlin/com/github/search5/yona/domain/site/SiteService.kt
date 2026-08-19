@@ -1,5 +1,7 @@
 package com.github.search5.yona.domain.site
 
+import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectService
@@ -21,7 +23,8 @@ class SiteService(
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
     private val projectService: ProjectService,
-    private val recentIssueService: RecentIssueService
+    private val recentIssueService: RecentIssueService,
+    private val attachmentRepository: AttachmentRepository
 ) {
 
     @Transactional
@@ -152,14 +155,40 @@ class SiteService(
         return emails.toList().sorted()
     }
 
+    // yona SiteApp.noAvatarUsers() 대응 (P2-03). avatarId()가 null인(= USER_AVATAR 컨테이너에
+    // 첨부파일이 없는) 사용자만 걸러낸다.
     fun getNoAvatarUsers(): List<Map<String, String>> {
         val activeUsers = userRepository.findAll().filter { it.state == UserState.ACTIVE || it.state == UserState.SITE_ADMIN }
-        return activeUsers.map {
-            mapOf(
-                "loginId" to it.loginId,
-                "name" to it.name,
-                "email" to (it.email ?: "")
-            )
+        return activeUsers
+            .filter { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.USER_AVATAR, it.id.toString()).isEmpty() }
+            .map {
+                mapOf(
+                    "loginId" to it.loginId,
+                    "name" to it.name,
+                    "email" to (it.email ?: "")
+                )
+            }
+    }
+
+    // yona SiteApp.setAttachmentToUserAvatar() 대응 (P2-03). 지정한 이미지 첨부파일을
+    // 대상 사용자의 아바타(USER_AVATAR 컨테이너)로 옮기고, 기존 아바타 첨부파일은 제거한다.
+    @Transactional
+    fun setUserAvatar(avatarFileId: Long, email: String) {
+        val attachment = attachmentRepository.findById(avatarFileId).orElse(null)
+            ?: throw IllegalArgumentException("ATTACHMENT_NOT_FOUND")
+        val mimeType = attachment.mimeType ?: ""
+        if (!mimeType.startsWith("image", ignoreCase = true)) {
+            throw IllegalArgumentException("NOT_AN_IMAGE")
         }
+
+        val targetUser = userRepository.findByEmail(email).orElse(null)
+            ?: throw IllegalArgumentException("USER_NOT_FOUND")
+
+        val oldAvatars = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.USER_AVATAR, targetUser.id.toString())
+        attachmentRepository.deleteAll(oldAvatars)
+
+        attachment.containerType = ResourceType.USER_AVATAR
+        attachment.containerId = targetUser.id.toString()
+        attachmentRepository.save(attachment)
     }
 }
