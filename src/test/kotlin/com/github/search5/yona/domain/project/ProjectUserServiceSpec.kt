@@ -1,6 +1,8 @@
 package com.github.search5.yona.domain.project
 
 import com.github.search5.yona.AbstractIntegrationTest
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
@@ -22,6 +24,7 @@ class ProjectUserServiceSpec @Autowired constructor(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
+    private val notificationEventRepository: NotificationEventRepository,
     private val entityManager: EntityManager
 ) : AbstractIntegrationTest() {
 
@@ -124,6 +127,39 @@ class ProjectUserServiceSpec @Autowired constructor(
                 shouldThrow<IllegalArgumentException> {
                     projectUserService.removeMember(project.id!!, manager.id!!, manager.id!!)
                 }
+            }
+
+            it("5. 이미 프로젝트 멤버인 유저가 가입 신청하면 예외가 발생해야 한다 (P1-16)") {
+                // Given - member1은 이미 프로젝트 멤버
+                projectUserRepository.save(ProjectUser(project = project, user = member1, role = roleMember))
+
+                // When & Then
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.enroll(project.id!!, member1.id!!)
+                }
+            }
+
+            it("6. 이미 대기 중인 가입 신청이 있는 유저가 재신청해도 알림이 중복 발행되지 않아야 한다 (P1-16)") {
+                // Given - 최초 가입 신청
+                projectUserService.enroll(project.id!!, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                // When - 동일 유저가 다시 가입 신청(중복)
+                projectUserService.enroll(project.id!!, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                // Then - 대기 신청 목록엔 여전히 1건만 있고, 신청 알림도 1건만 발행돼야 한다
+                val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
+                updatedApplicant.enrolledProjects.count { it.id == project.id } shouldBe 1
+
+                val requestEvents = notificationEventRepository.findAll().filter {
+                    it.resourceId == project.id.toString() &&
+                        it.eventType == EventType.MEMBER_ENROLL_REQUEST &&
+                        it.newValue == "REQUEST"
+                }
+                requestEvents.size shouldBe 1
             }
         }
     }
