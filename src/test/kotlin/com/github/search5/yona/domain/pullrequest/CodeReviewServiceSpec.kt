@@ -6,10 +6,14 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import org.eclipse.jgit.api.Git
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
+import java.io.File
+import java.nio.file.Files
 
 @Transactional
 class CodeReviewServiceSpec @Autowired constructor(
@@ -18,7 +22,9 @@ class CodeReviewServiceSpec @Autowired constructor(
     private val reviewCommentRepository: ReviewCommentRepository,
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
-    private val pullRequestRepository: PullRequestRepository
+    private val pullRequestRepository: PullRequestRepository,
+    private val pullRequestCommitRepository: PullRequestCommitRepository,
+    private val repositoryService: RepositoryService
 ) : AbstractIntegrationTest() {
 
     init {
@@ -215,6 +221,150 @@ class CodeReviewServiceSpec @Autowired constructor(
                     codeReviewService.deleteReviewComment(commentId, otherUser)
                 }
                 exception.message shouldBe "Permission denied"
+            }
+
+            describe("isThreadOutdated (P1-20, yona CodeCommentThread.isOutdated() 대응)") {
+                fun createCommit(bareRepoDir: File, branch: String, filePath: String, content: String) {
+                    val tempWorkingDir = Files.createTempDirectory("yuna-outdated-test").toFile()
+                    try {
+                        val git = Git.init().setDirectory(tempWorkingDir).call()
+                        val config = git.repository.config
+                        config.setString("remote", "origin", "url", bareRepoDir.absolutePath)
+                        config.setString("remote", "origin", "fetch", "+refs/heads/*:refs/remotes/origin/*")
+                        config.save()
+
+                        try {
+                            git.fetch().setRemote("origin").call()
+                            val ref = git.repository.resolve("refs/remotes/origin/$branch")
+                            if (ref != null) {
+                                git.checkout().setCreateBranch(true).setName(branch).setStartPoint("origin/$branch").call()
+                            }
+                        } catch (e: Exception) {
+                            // 빈 저장소인 경우 checkout 생략
+                        }
+
+                        val file = File(tempWorkingDir, filePath)
+                        file.parentFile.mkdirs()
+                        file.writeText(content)
+
+                        git.add().addFilepattern(filePath).call()
+                        git.commit().setSign(false).setAuthor("tester", "tester@yona.io").setMessage("commit").call()
+                        git.push()
+                            .setRemote("origin")
+                            .setRefSpecs(org.eclipse.jgit.transport.RefSpec("HEAD:refs/heads/$branch"))
+                            .setForce(true)
+                            .call()
+
+                        git.repository.close()
+                        git.close()
+                    } finally {
+                        tempWorkingDir.deleteRecursively()
+                    }
+                }
+
+                it("병합 시점과 코멘트 시점의 코드가 동일하면 outdated가 아니어야 한다") {
+                    val outdatedProject = projectRepository.save(Project(name = "outdated-repo-1", owner = "owner-x", vcs = "GIT"))
+                    repositoryService.getRepository(outdatedProject).create()
+                    try {
+                        val bareDir = repositoryService.getRepository(outdatedProject).getDirectory()
+                        createCommit(bareDir, "master", "test.txt", "v1")
+                        val c1 = repositoryService.getRepository(outdatedProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+                        createCommit(bareDir, "master", "test.txt", "v2")
+                        val c2 = repositoryService.getRepository(outdatedProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+
+                        val pr = pullRequestRepository.save(
+                            PullRequest(
+                                title = "outdated 테스트 PR",
+                                toProject = outdatedProject,
+                                fromProject = outdatedProject,
+                                toBranch = "master",
+                                fromBranch = "feature",
+                                contributor = user,
+                                mergedCommitIdFrom = c1,
+                                mergedCommitIdTo = c2
+                            )
+                        )
+                        val thread = commentThreadRepository.save(
+                            CodeCommentThread(
+                                pullRequest = pr,
+                                project = outdatedProject,
+                                prevCommitId = c1,
+                                commitId = c2,
+                                codeRange = CodeRange(path = "test.txt", startLine = 1)
+                            )
+                        )
+
+                        codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                    } finally {
+                        try { repositoryService.getRepository(outdatedProject).delete() } catch (e: Exception) {}
+                    }
+                }
+
+                it("병합 이후 같은 경로에 추가 커밋이 들어오면 outdated여야 한다") {
+                    val outdatedProject = projectRepository.save(Project(name = "outdated-repo-2", owner = "owner-x", vcs = "GIT"))
+                    repositoryService.getRepository(outdatedProject).create()
+                    try {
+                        val bareDir = repositoryService.getRepository(outdatedProject).getDirectory()
+                        createCommit(bareDir, "master", "test.txt", "v1")
+                        val c1 = repositoryService.getRepository(outdatedProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+                        createCommit(bareDir, "master", "test.txt", "v2")
+                        val c2 = repositoryService.getRepository(outdatedProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+
+                        val pr = pullRequestRepository.save(
+                            PullRequest(
+                                title = "outdated 테스트 PR2",
+                                toProject = outdatedProject,
+                                fromProject = outdatedProject,
+                                toBranch = "master",
+                                fromBranch = "feature",
+                                contributor = user,
+                                mergedCommitIdFrom = c1,
+                                mergedCommitIdTo = c2
+                            )
+                        )
+                        val thread = commentThreadRepository.save(
+                            CodeCommentThread(
+                                pullRequest = pr,
+                                project = outdatedProject,
+                                prevCommitId = c1,
+                                commitId = c2,
+                                codeRange = CodeRange(path = "test.txt", startLine = 1)
+                            )
+                        )
+
+                        // 병합 이후 test.txt가 v3로 다시 바뀌고, PR의 mergedCommitIdTo도 그 시점으로 갱신됐다고 가정
+                        createCommit(bareDir, "master", "test.txt", "v3")
+                        val c3 = repositoryService.getRepository(outdatedProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+                        pr.mergedCommitIdTo = c3
+                        pullRequestRepository.save(pr)
+
+                        codeReviewService.isThreadOutdated(thread.id!!) shouldBe true
+                    } finally {
+                        try { repositoryService.getRepository(outdatedProject).delete() } catch (e: Exception) {}
+                    }
+                }
+
+                it("커밋 댓글(prevCommitId 없음)은 PullRequestCommit에 없으면 outdated여야 한다") {
+                    val thread = commentThreadRepository.save(
+                        CodeCommentThread(
+                            pullRequest = pullRequest,
+                            project = project,
+                            prevCommitId = "",
+                            commitId = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                            codeRange = CodeRange(path = "test.txt", startLine = 1)
+                        )
+                    )
+                    pullRequest.mergedCommitIdFrom = "a"
+                    pullRequest.mergedCommitIdTo = "b"
+                    pullRequestRepository.save(pullRequest)
+
+                    codeReviewService.isThreadOutdated(thread.id!!) shouldBe true
+                }
             }
         }
     }

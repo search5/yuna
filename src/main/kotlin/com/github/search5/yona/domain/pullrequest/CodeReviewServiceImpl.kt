@@ -30,7 +30,8 @@ class CodeReviewServiceImpl(
     private val commitCommentRepository: CommitCommentRepository,
     private val eventPublisher: ApplicationEventPublisher,
     private val projectUserRepository: ProjectUserRepository,
-    private val attachmentService: AttachmentService
+    private val attachmentService: AttachmentService,
+    private val pullRequestCommitRepository: PullRequestCommitRepository
 ) : CodeReviewService {
 
     override fun createReviewComment(
@@ -252,5 +253,58 @@ class CodeReviewServiceImpl(
             notificationEventRepository.save(notificationEvent)
             eventPublisher.publishEvent(notificationEvent)
         }
+    }
+
+    // yona CodeCommentThread.isOutdated() 대응 (P1-20)
+    override fun isThreadOutdated(threadId: Long): Boolean {
+        val thread = commentThreadRepository.findById(threadId).orElse(null) as? CodeCommentThread ?: return false
+        return computeOutdated(thread)
+    }
+
+    private fun computeOutdated(thread: CodeCommentThread): Boolean {
+        if (thread.codeRange.startLine == null || thread.commitId.isNullOrEmpty()) {
+            return false
+        }
+        if (!thread.isOnPullRequest()) {
+            return false
+        }
+        val pullRequest = thread.pullRequest!!
+        if (pullRequest.mergedCommitIdFrom == null || pullRequest.mergedCommitIdTo == null) {
+            return false
+        }
+
+        val commitId = thread.commitId!!
+
+        if (thread.isCommitComment()) {
+            return pullRequestCommitRepository
+                .findFirstByPullRequestAndCommitIdOrderByCreatedDesc(pullRequest, commitId) == null
+        }
+
+        var path = thread.codeRange.path ?: ""
+        if (path.startsWith("/")) {
+            path = path.substring(1)
+        }
+
+        val repository = repositoryService.getRepository(pullRequest.toProject)
+
+        return try {
+            val unchangedFromMergeBase = noChangesBetween(
+                repository, pullRequest.mergedCommitIdFrom!!, thread.prevCommitId, path
+            )
+            if (!unchangedFromMergeBase) {
+                true
+            } else {
+                !noChangesBetween(repository, pullRequest.mergedCommitIdTo!!, commitId, path)
+            }
+        } catch (e: Exception) {
+            // yona MissingObjectException 처리와 동일 — git 객체 조회 실패 시 outdated로 간주(안전한 기본값)
+            true
+        }
+    }
+
+    private fun noChangesBetween(repository: com.github.search5.yona.domain.vcs.PlayRepository, revA: String, revB: String, path: String): Boolean {
+        val blobA = repository.getBlobId(revA, path)
+        val blobB = repository.getBlobId(revB, path)
+        return blobA == blobB
     }
 }

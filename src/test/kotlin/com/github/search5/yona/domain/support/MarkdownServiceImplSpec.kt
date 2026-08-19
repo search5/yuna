@@ -121,6 +121,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 override fun move(srcProjectOwner: String, srcProjectName: String, destProjectOwner: String, destProjectName: String): Boolean = true
                 override fun getDirectory(): java.io.File = java.io.File("/tmp")
                 override fun getArchive(os: java.io.OutputStream, branchName: String) {}
+                override fun getBlobId(revision: String, path: String): String? = null
             }
 
             every { repositoryService.getRepository(any()) } returns playRepo

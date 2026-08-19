@@ -34,4 +34,7 @@ interface CodeReviewService {
     fun addReviewer(pullRequestId: Long, reviewerId: Long)
 
     fun removeReviewer(pullRequestId: Long, reviewerId: Long)
+
+    // yona CodeCommentThread.isOutdated() 대응 (P1-20)
+    fun isThreadOutdated(threadId: Long): Boolean
 }

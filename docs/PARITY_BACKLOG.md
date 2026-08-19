@@ -58,7 +58,7 @@
 | P1-17 | [x] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` | **완료** |
 | P1-18 | [x] | 게시판 알림 미발송 | `BoardApp.java:255,360,386` | `domain/board/PostingServiceImpl.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-19 | [x] | 게시판 편집이력/댓글수/라벨필터 저하 | `AbstractPostingApp.java:106-140` | `web/BoardViewController.kt`, `domain/board/PostingServiceImpl.kt` | **완료(범위 조정, 아래 참고)** |
-| P1-20 | [ ] | CodeCommentThread.isOutdated() 없음 | `CodeCommentThread.java:76-123` | `domain/comment/CodeCommentThread.kt` |
+| P1-20 | [x] | CodeCommentThread.isOutdated() 없음 | `CodeCommentThread.java:76-123` | `domain/comment/CodeCommentThread.kt` | **완료** — 실제 대상은 `domain/pullrequest/CodeCommentThread.kt`(이슈 라벨과 마찬가지로 백로그 원안 경로가 실제 패키지와 다름) |
 | P1-21 | [ ] | Watch 권한 필터링(allowedWatchersOnly) 무시됨 | `models/Watch.java:160-187` | `domain/watch/WatchServiceImpl.kt:55-77` |
 | P1-22 | [ ] | 프로젝트별 알림 뮤트 토글 미반영 | `models/NotificationEvent.java:486-511` | `domain/issue/IssueServiceImpl.kt`, `domain/comment/CommentServiceImpl.kt` |
 | P1-23 | [ ] | SVN 권한 모델 단순화 | `SvnApp.java:119-131` | `config/svn/SvnAuthorizationFilter.kt:48-67` |
@@ -284,3 +284,10 @@
   - **범위 조정(P2-02에 통합, 별도 신규 항목 만들지 않음)**: 편집이력(`AbstractPosting.history`, `AbstractPostingApp.addToHistory()`)은 yona `utils/diff_match_patch.java`(Google diff-match-patch 포팅본, 워드단위 diff 알고리즘)에 의존하는데, 이 라이브러리 자체가 yuna에 전혀 없다. 이미 같은 의존성 문제로 대기 중이던 P2-02("DiffUtil 워드단위 diff 하이라이팅 없음")와 사실상 동일한 선행 작업이 필요해 새 항목을 만드는 대신 P2-02 비고에 편집이력도 함께 묶여 있음을 명시했다. `Posting.history` 필드 자체는 이미 존재하므로, diff 라이브러리만 갖춰지면 연결은 어렵지 않다.
   - 테스트: `CommentServiceSpec.kt` +1(게시글 댓글 작성/삭제 시 `numOfComments` 정합성 확인). `BoardViewControllerSpec.kt` +1(`labelIds` 파라미터 시 라벨 필터 쿼리 사용, 기본 쿼리는 호출되지 않음 확인). 전체 board/comment 도메인 테스트 + `YonaApplicationTests` 재실행으로 회귀 없음 확인.
   - 검증: `./gradlew test --tests "com.github.search5.yona.domain.board.*" --tests "com.github.search5.yona.domain.comment.*" --tests "BoardControllerSpec" --tests "CommentControllerSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
+
+- **2026-08-20 — P1-20**: PR 코드리뷰 댓글 스레드가 "이 코드는 이후 커밋으로 이미 바뀌었다(outdated)"는 것을 판별할 방법이 yuna에 전혀 없던 문제 해결(yona `CodeCommentThread.isOutdated()` 대응, 실제로는 `domain/pullrequest/CodeCommentThread.kt`).
+  - **선행 작업**: `isOutdated()`는 같은 리포지토리 안에서 특정 경로의 blob(파일 내용) 해시를 두 리비전 사이에 비교하는 `PullRequest.noChangesBetween()`/`getBlobId()`(JGit `TreeWalk.forPath`)에 의존한다. `PlayRepository` 인터페이스에 `getBlobId(revision, path): String?` 신규 추가 — `GitRepository`는 JGit `RevWalk.parseTree` + `TreeWalk.forPath`로 구현, `SvnRepository`는 Git 전용 기능이라 `null`(no-op, `createBranch` 등 기존 SVN 미지원 패턴과 동일).
+  - `CodeReviewService`/`CodeReviewServiceImpl`에 `isThreadOutdated(threadId): Boolean` 추가 — yona 로직을 그대로 이식: (1) `codeRange.startLine`/`commitId`가 없거나 PR에 달린 스레드가 아니면 false, (2) PR이 아직 병합 전(`mergedCommitIdFrom/To` 없음)이면 false, (3) 커밋 댓글(`prevCommitId` 없음)이면 `PullRequestCommit`에 그 커밋이 존재하는지만 확인, (4) 그 외에는 `mergedCommitIdFrom↔prevCommitId`, `mergedCommitIdTo↔commitId` 두 구간의 blob을 비교해 하나라도 달라졌으면 outdated. yona `MissingObjectException`(git 객체 조회 실패) 처리도 동일하게 "안전하게 outdated로 간주"로 이식.
+  - `PullRequestCommitRepository`는 이미 있던 `findFirstByPullRequestAndCommitIdOrderByCreatedDesc`를 그대로 재사용(신규 쿼리 불필요).
+  - 테스트: `CodeReviewServiceSpec.kt` +3(실제 MariaDB + 실제 JGit bare 저장소 통합테스트 — 병합 전후 코드가 동일하면 outdated 아님, 병합 후 같은 경로에 추가 커밋이 들어오면 outdated, 커밋 댓글은 PullRequestCommit 미존재 시 outdated) — 기존 5건 포함 총 8 tests. `PlayRepository`의 새 추상 메서드 때문에 `MarkdownServiceImplSpec.kt`의 익명 구현체에도 `getBlobId` 스텁 추가(회귀 아님, 컴파일 요구사항).
+  - 검증: `./gradlew test --tests "CodeReviewServiceSpec" --tests "com.github.search5.yona.domain.pullrequest.*" --tests "MarkdownServiceImplSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
