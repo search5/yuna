@@ -7,7 +7,7 @@ import com.github.search5.yona.domain.user.UserIdent
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -26,7 +26,7 @@ class CodeReviewServiceImpl(
     private val pullRequestRepository: PullRequestRepository,
     private val repositoryService: RepositoryService,
     private val userRepository: UserRepository,
-    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationEventRecorder: NotificationEventRecorder,
     private val commitCommentRepository: CommitCommentRepository,
     private val eventPublisher: ApplicationEventPublisher,
     private val projectUserRepository: ProjectUserRepository,
@@ -211,6 +211,8 @@ class CodeReviewServiceImpl(
                 resourceType = ResourceType.PULL_REQUEST,
                 resourceId = pullRequestId.toString(),
                 eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
+                // yona NotificationEvent.afterReviewed()의 oldValue = reviewAction.getOppositAction().name() 대응.
+                oldValue = "CANCEL",
                 newValue = "DONE"
             )
 
@@ -220,8 +222,7 @@ class CodeReviewServiceImpl(
             receivers.removeIf { it.id == reviewerId }
             notificationEvent.receivers = receivers
 
-            notificationEventRepository.save(notificationEvent)
-            eventPublisher.publishEvent(notificationEvent)
+            notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
             recordPullRequestEvent(pullRequest, reviewer.loginId, "DONE")
         }
@@ -244,6 +245,7 @@ class CodeReviewServiceImpl(
                 resourceType = ResourceType.PULL_REQUEST,
                 resourceId = pullRequestId.toString(),
                 eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
+                oldValue = "DONE",
                 newValue = "CANCEL"
             )
 
@@ -253,8 +255,7 @@ class CodeReviewServiceImpl(
             receivers.removeIf { it.id == reviewerId }
             notificationEvent.receivers = receivers
 
-            notificationEventRepository.save(notificationEvent)
-            eventPublisher.publishEvent(notificationEvent)
+            notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
             recordPullRequestEvent(pullRequest, reviewer.loginId, "CANCEL")
         }

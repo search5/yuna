@@ -4,7 +4,7 @@ import com.github.search5.yona.domain.project.GitService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueEventRepository
 import com.github.search5.yona.domain.issue.IssueReferenceParser
@@ -31,7 +31,7 @@ import java.time.Instant
 @Component
 class GitPostReceiveEventListener(
     private val gitService: GitService,
-    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationEventRecorder: NotificationEventRecorder,
     private val issueRepository: IssueRepository,
     private val issueEventRepository: IssueEventRepository,
     private val webhookService: WebhookService,
@@ -129,8 +129,9 @@ class GitPostReceiveEventListener(
             newValue = title
         )
 
-        // yona NotificationEvent.java:604-680(push 메일 경로) 대응 (P1-46). 수신자를 계산하고 실제로
-        // publish해야 NotificationMailEventListener(P0-01)가 이 이벤트를 구독해 메일을 발송할 수 있다.
+        // yona NotificationEvent.java:604-680(push 메일 경로) 대응 (P1-46). 수신자를 계산해야
+        // NotificationEventRecorder(P1-27)가 NotificationMail 대기열에 올리고, WebhookNotificationEventListener가
+        // publish된 이벤트를 구독해 웹훅도 즉시 보낼 수 있다.
         val receivers = watchService.findActualWatchers(
             baseWatchers = emptySet(),
             resourceType = ResourceType.PROJECT,
@@ -141,8 +142,7 @@ class GitPostReceiveEventListener(
         receivers.removeIf { it.id == sender.id }
         notificationEvent.receivers = receivers
 
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
         logger.info("[NOTIFICATION] Pushed commits notification created and saved: '$title' by ${sender.name}")
 
         // yona Webhook.sendRequestToPayloadUrl(commits, refNames, sender) 대응 (P1-25).

@@ -116,8 +116,10 @@ class CodeReviewServiceSpec @Autowired constructor(
 
                 // 참여/해제 두 이벤트가 서로 상쇄돼 타임라인에는 아무것도 남지 않아야 한다(legacy 동작 그대로)
                 pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest).size shouldBe 0
-                // 알림(NotificationEvent)은 병합/취소 대상이 아니라 두 번 다 발송된다
-                notificationEventRepository.findAll().size shouldBe 2
+                // 알림(NotificationEvent)도 legacy NotificationEvent.afterReviewed()가 oldValue를
+                // opposite action으로 채워 add()(draft-time 병합)를 타므로, 정확히 원상복구된 A(DONE)->B(CANCEL)는
+                // 상쇄되어 아무 것도 저장되지 않는다(P1-27, NotificationEventRecorder).
+                notificationEventRepository.findAll().size shouldBe 0
             }
 
             it("같은 리뷰어가 30초 내에 참여/해제/참여를 반복하면 마지막 참여만 남아야 한다(P1-40)") {

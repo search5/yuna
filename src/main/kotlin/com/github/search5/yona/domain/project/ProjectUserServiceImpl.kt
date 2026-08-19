@@ -3,7 +3,7 @@ package com.github.search5.yona.domain.project
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
@@ -19,7 +19,7 @@ class ProjectUserServiceImpl(
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
-    private val notificationEventRepository: NotificationEventRepository
+    private val notificationEventRecorder: NotificationEventRecorder
 ) : ProjectUserService {
 
     override fun getProjectMembers(projectId: Long): List<ProjectUser> {
@@ -60,7 +60,7 @@ class ProjectUserServiceImpl(
             newValue = "REQUEST",
             oldValue = "CANCEL"
         )
-        notificationEventRepository.save(notiEvent)
+        notificationEventRecorder.record(notiEvent)
     }
 
     @Transactional
@@ -86,7 +86,7 @@ class ProjectUserServiceImpl(
             newValue = "CANCEL",
             oldValue = "REQUEST"
         )
-        notificationEventRepository.save(notiEvent)
+        notificationEventRecorder.record(notiEvent)
     }
 
     @Transactional
@@ -128,7 +128,7 @@ class ProjectUserServiceImpl(
             newValue = "ACCEPT",
             oldValue = "REQUEST"
         )
-        notificationEventRepository.save(notiEvent)
+        notificationEventRecorder.record(notiEvent)
     }
 
     @Transactional
@@ -181,7 +181,7 @@ class ProjectUserServiceImpl(
             newValue = "ACCEPT",
             oldValue = "NONE"
         )
-        notificationEventRepository.save(notiEvent)
+        notificationEventRecorder.record(notiEvent)
     }
 
     @Transactional

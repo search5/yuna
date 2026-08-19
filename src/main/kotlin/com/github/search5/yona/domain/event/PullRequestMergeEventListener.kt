@@ -8,7 +8,7 @@ import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.notification.NotificationEvent
-import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.pullrequest.PullRequestEvent
 import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
@@ -27,7 +27,7 @@ class PullRequestMergeEventListener(
     private val issueRepository: IssueRepository,
     private val issueService: IssueService,
     private val pullRequestService: PullRequestService,
-    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
     private val pullRequestEventRepository: PullRequestEventRepository
 ) {
@@ -173,8 +173,7 @@ class PullRequestMergeEventListener(
             newValue = title,
             receivers = mutableSetOf(pullRequest.contributor).apply { removeIf { it.id == sender.id } }
         )
-        notificationEventRepository.save(notificationEvent)
-        eventPublisher.publishEvent(notificationEvent)
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
 
         pullRequestEventRepository.save(
             PullRequestEvent(
