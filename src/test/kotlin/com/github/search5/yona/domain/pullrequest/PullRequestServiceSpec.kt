@@ -459,6 +459,82 @@ class PullRequestServiceSpec @Autowired constructor(
                 specificDiffs.size shouldNotBe 0
                 specificDiffs.any { it.pathB == "test3.txt" } shouldBe true
             }
+
+            it("병합된 PR의 원본 브랜치를 삭제하면 lastCommitId가 기록되고 브랜치가 사라져야 한다") {
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(fromBareDir, "feature-to-delete", "delete-me.txt", "content", "브랜치 삭제 테스트용 커밋")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "브랜치 삭제 테스트 PR",
+                        body = "...",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature-to-delete",
+                        contributor = contributor,
+                        receiver = receiver,
+                        created = Instant.now(),
+                        state = State.MERGED
+                    )
+                )
+
+                repositoryService.getRepository(fromProject).getBranches()
+                    .any { it.name == "refs/heads/feature-to-delete" } shouldBe true
+
+                val updated = pullRequestService.deleteFromBranch(pr.id!!)
+
+                updated.lastCommitId shouldNotBe null
+                repositoryService.getRepository(fromProject).getBranches()
+                    .any { it.name == "refs/heads/feature-to-delete" } shouldBe false
+            }
+
+            it("병합되지 않은 PR의 브랜치는 삭제할 수 없어야 한다") {
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(fromBareDir, "feature-open", "open.txt", "content", "미병합 PR 테스트용 커밋")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "미병합 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-open",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                io.kotest.assertions.throwables.shouldThrow<InvalidBranchOperationException> {
+                    pullRequestService.deleteFromBranch(pr.id!!)
+                }
+            }
+
+            it("삭제된 브랜치를 restoreFromBranch로 복원하면 동일한 커밋으로 다시 존재해야 한다") {
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(fromBareDir, "feature-to-restore", "restore-me.txt", "content", "브랜치 복원 테스트용 커밋")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "브랜치 복원 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-to-restore",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.MERGED
+                    )
+                )
+
+                val deleted = pullRequestService.deleteFromBranch(pr.id!!)
+                repositoryService.getRepository(fromProject).getBranches()
+                    .any { it.name == "refs/heads/feature-to-restore" } shouldBe false
+
+                val savedAfterDelete = pullRequestRepository.findById(pr.id!!).get()
+                pullRequestService.restoreFromBranch(savedAfterDelete.id!!)
+
+                val restoredBranch = repositoryService.getRepository(fromProject).getBranches()
+                    .firstOrNull { it.name == "refs/heads/feature-to-restore" }
+
+                restoredBranch shouldNotBe null
+                restoredBranch!!.headCommit.getId() shouldBe deleted.lastCommitId
+            }
         }
     }
 }

@@ -62,6 +62,8 @@ interface PlayRepository {
 
     fun deleteBranch(branchName: String)
 
+    fun createBranch(branchName: String, startPoint: String)
+
     fun getParentCommitOf(commitId: String): Commit?
 
     fun isEmpty(): Boolean

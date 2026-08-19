@@ -31,7 +31,7 @@
 | P0-11 | [x] | git push 시 커밋 알림 이벤트 훅 부재 | `NotifyPushedCommits.java`, `UpdateLastPushedDate.java` | `domain/vcs/GitPushHooks.kt`, `config/GitServletConfig.kt` | **완료(범위 조정, 아래 참고)** |
 | P0-12 | [x] | 브랜치 삭제 시 관련 PR 정리 훅 부재 | `PullRequestCheck.java` | `domain/vcs/GitPushHooks.kt` | **완료** — 브랜치 삭제 → 관련 열린 PR 자동 삭제 |
 | P0-13 | [x] | LOCKED/DELETED 계정 로그인 차단 안 됨 | `UserApp.java:207-233` | `config/YonaAuthenticationProvider.kt` | **완료** — `YonaAuthenticationProviderSpec.kt`, 94%/100% (명령어/분기) 커버리지 |
-| P0-14 | [ ] | PullRequest 라우트 누락 | `conf/routes` (PullRequestApp) | `web/PullRequestController.kt`, `PullRequestViewController.kt` | doClone, closedPullRequests, editPullRequestForm, deleteFromBranch/restoreFromBranch |
+| P0-14 | [x] | PullRequest 라우트 누락 | `conf/routes` (PullRequestApp) | `web/PullRequestController.kt`, `PullRequestViewController.kt` | **완료(범위 조정, 아래 참고)** — closedPullRequests/sentPullRequests/deleteFromBranch/restoreFromBranch 구현 |
 | P0-15 | [ ] | Board 라우트 누락 (postlabel) | `conf/routes` (BoardApp) | `web/BoardController.kt` | 게시글 라벨 첨부 API |
 | P0-16 | [ ] | CodeHistory 라우트 누락 (커밋 댓글) | `conf/routes` (CodeHistoryApp) | `web/CodeHistoryController.kt` | newComment/deleteComment on commit |
 
@@ -73,6 +73,8 @@
 | P1-32 | [ ] | 수신 주소 detail에 리소스 경로 직접 명시 방식 미지원 | `EmailHandler.java getResourceFromDetail` (owner/project/issue/5 형태) | `domain/mail/IncomingMailProcessingService.kt` | P0-02에서 범위 분리 — detail은 owner/project까지만 해석, 그 뒤 경로 세그먼트는 무시됨 |
 | P1-33 | [ ] | 복원 후 auto-increment 채번이 백업된 PK와 충돌할 수 있음 | (해당 없음, yuna 자체 설계 이슈) | `domain/site/DataBackupServiceImpl.kt` | P0-07에서 식별 — DELETE 후 백업된 PK 그대로 INSERT하므로, 이후 신규 행 채번 시퀀스가 백업 최댓값보다 낮으면 PK 충돌 가능. MariaDB는 AUTO_INCREMENT가 INSERT된 값을 보고 자동으로 다음 채번을 올리므로(실측상 문제 재현 안 됨) 우선순위를 낮춰 P1로 분류, 운영 배포 전 재확인 권장 |
 | P1-34 | [ ] | PostgreSQL 방언 경로는 통합테스트로 검증되지 않음 | (해당 없음) | `domain/site/DataBackupServiceImpl.kt` (`Dialect.POSTGRES`) | P0-07에서 식별 — 코드는 존재하나(`session_replication_role`), Testcontainers Postgres로 실제 검증한 테스트는 아직 없음(MariaDB만 검증됨) |
+| P1-35 | [ ] | PR 수정 화면(editPullRequestForm/editPullRequest) 미구현 | `PullRequestApp.java:510-554`, `views/pullrequest/edit.scala.html` | `web/PullRequestViewController.kt`(없음), `templates/pullrequest/`(edit.html 없음) | P0-14에서 범위 분리 — REST `PUT /api/projects/{id}/pullrequests/{number}`(`updatePullRequest`)로 API 레벨 수정은 이미 가능하지만, 서버 렌더링 수정 폼 페이지가 없음. 신규 Thymeleaf 템플릿 작성이 필요해 프론트엔드 작업 포함 |
+| P1-36 | [ ] | doClone 전용 라우트 없음(기능은 forkProject로 커버) | `PullRequestApp.java:115-157` | `web/ProjectController.kt forkProject`, `ProjectViewController.kt fork` | P0-14에서 범위 분리 — 감사에서 이미 "부분 커버"로 확인됨. URL 경로만 다르고 포크 기능 자체는 동작하므로 우선순위 낮음, 템플릿이 옛 URL을 참조하는지만 별도 확인 필요 |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -136,6 +138,14 @@
   - 테스트: **실제 MariaDB(Testcontainers) 통합테스트**(`DataBackupServiceIntegrationSpec.kt`, 2 tests) — 순수 목으로는 "실제 DB 스키마/방언에서 동작하는가"를 검증할 수 없어 통합테스트로 작성. 데이터 추가 → 이전 시점 백업으로 복원 → 추가분 소실 확인 + 원본 데이터 보존 확인까지 실제 DB로 검증. 컨트롤러 위임 테스트는 `SiteControllerSpec.kt`에 추가(export/import 각 1건, 기존 export 테스트는 새 구조에 맞게 갱신).
   - 커버리지: `DataBackupServiceImpl` INSTRUCTION 88.8%(342/385)·BRANCH 60%(15/25) — 미커버 분기는 주로 PostgreSQL 방언 경로(P1-34로 별도 추적, MariaDB만 실제 검증됨).
   - 식별된 후속 리스크(P1-33/34로 분리): 복원 후 auto-increment 채번 충돌 가능성(MariaDB 실측상 문제 없었음), PostgreSQL 경로 미검증.
+
+- **2026-08-19 — P0-14**: yona의 PullRequestApp에는 있지만 yuna에 대응 라우트가 없던 것 중 4개(closedPullRequests/sentPullRequests/deleteFromBranch/restoreFromBranch)를 구현.
+  - `PullRequestRepository`에 `findByToProjectAndStateIn`(CLOSED+MERGED를 "닫힌 PR"로 취급), `findByFromProject`(이 프로젝트가 출발지인 PR) 추가.
+  - `PullRequestViewController`에 `GET /{owner}/{projectName}/closedPullRequests`, `/sentPullRequests` 추가 — 기존 `listPullRequests`의 권한체크/렌더링 로직을 `checkMemberAccess`/`renderList`로 추출해 셋이 공유.
+  - `PlayRepository` 인터페이스에 `createBranch(branchName, startPoint)` 추가(`GitRepository`는 JGit `branchCreate`로 구현, `SvnRepository`는 no-op).
+  - `PullRequestService`에 `deleteFromBranch`/`restoreFromBranch` 추가 — 병합된 PR만 브랜치 삭제 가능(가드), 삭제 직전 head 커밋을 `lastCommitId`에 기록해 복원 가능하게 함. `PullRequestController`에 `DELETE`/`POST /{number}/fromBranch` 라우트로 노출.
+  - **범위 조정(P1-35/36로 분리)**: `editPullRequestForm`/`editPullRequest`(서버 렌더링 수정 폼 — 신규 템플릿 필요)와 `doClone`(기능은 이미 `ProjectController.forkProject`로 커버되는 것으로 이전 감사에서 확인됨, URL만 다름)은 이번 패스에서 제외.
+  - 테스트: `PullRequestViewControllerSpec.kt` +3, **`PullRequestServiceSpec.kt`(실제 MariaDB+실제 JGit bare 저장소 통합테스트) +3**(브랜치 삭제→lastCommitId 기록·브랜치 소멸 확인, 미병합 PR 삭제 거부 확인, 삭제 후 복원까지 동일 커밋으로 재생성 확인), `PullRequestControllerSpec.kt` +2. 총 8 tests 전체 통과.
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

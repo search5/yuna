@@ -281,6 +281,8 @@ class SvnRepository(
 
     override fun deleteBranch(branchName: String) {}
 
+    override fun createBranch(branchName: String, startPoint: String) {}
+
     override fun getParentCommitOf(commitId: String): Commit? {
         val rev = commitId.toLong() - 1
         return try {

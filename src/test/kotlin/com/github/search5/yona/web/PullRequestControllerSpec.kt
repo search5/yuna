@@ -199,6 +199,38 @@ class PullRequestControllerSpec : DescribeSpec({
             }
         }
 
+        describe("DELETE /api/projects/{projectId}/pullrequests/{number}/fromBranch") {
+            it("PR 작성자가 원본 브랜치 삭제를 요청하면 200 OK와 갱신된 PR을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.deleteFromBranch(50L) } returns pullRequest
+
+                mockMvc.perform(
+                    delete("/api/projects/1/pullrequests/1/fromBranch")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+            }
+        }
+
+        describe("POST /api/projects/{projectId}/pullrequests/{number}/fromBranch") {
+            it("PR 작성자가 원본 브랜치 복원을 요청하면 200 OK와 갱신된 PR을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.restoreFromBranch(50L) } returns pullRequest
+
+                mockMvc.perform(
+                    post("/api/projects/1/pullrequests/1/fromBranch")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+            }
+        }
+
         describe("POST /api/projects/{projectId}/pullrequests/{number}/merge - 리뷰어 부족 케이스") {
             it("최소 리뷰어 수 미달 시 LackingReviewerException이 던져지면 400 Bad Request를 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)

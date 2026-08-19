@@ -50,7 +50,21 @@ interface PullRequestService {
 
     fun getDiff(pullRequest: PullRequest): List<FileDiff>
     fun getDiff(pullRequest: PullRequest, commitId: String): List<FileDiff>
+
+    /**
+     * 병합된 PR의 원본(from) 브랜치를 삭제한다. 이후 복원할 수 있도록 삭제 직전
+     * 브랜치의 head 커밋을 pullRequest.lastCommitId에 기록한다.
+     */
+    fun deleteFromBranch(pullRequestId: Long): PullRequest
+
+    /**
+     * deleteFromBranch()로 지워진 브랜치를 pullRequest.lastCommitId 지점으로 복원한다.
+     */
+    fun restoreFromBranch(pullRequestId: Long): PullRequest
 }
 
 @ResponseStatus(value = HttpStatus.BAD_REQUEST, reason = "리뷰어 수가 부족하여 머지할 수 없습니다.")
 class LackingReviewerException(message: String) : RuntimeException(message)
+
+@ResponseStatus(value = HttpStatus.BAD_REQUEST, reason = "병합되지 않은 PR은 브랜치를 삭제/복원할 수 없습니다.")
+class InvalidBranchOperationException(message: String) : RuntimeException(message)

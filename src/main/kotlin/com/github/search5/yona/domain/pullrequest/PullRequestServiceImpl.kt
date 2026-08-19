@@ -414,4 +414,48 @@ class PullRequestServiceImpl(
         @Suppress("UNCHECKED_CAST")
         return playRepo.getDiff(commitId) as List<com.github.search5.yona.domain.vcs.FileDiff>
     }
+
+    @Transactional
+    override fun deleteFromBranch(pullRequestId: Long): PullRequest {
+        val pullRequest = pullRequestRepository.findById(pullRequestId)
+            .orElseThrow { IllegalArgumentException("PullRequest with ID $pullRequestId not found") }
+
+        if (pullRequest.state != State.MERGED) {
+            throw InvalidBranchOperationException("병합된 PR만 원본 브랜치를 삭제할 수 있습니다.")
+        }
+
+        val playRepo = repositoryService.getRepository(pullRequest.fromProject)
+        val branch = playRepo.getBranches().firstOrNull { isSameBranch(it.name, pullRequest.fromBranch) }
+            ?: throw InvalidBranchOperationException("원본 브랜치를 찾을 수 없습니다: ${pullRequest.fromBranch}")
+
+        playRepo.deleteBranch(pullRequest.fromBranch)
+        pullRequest.lastCommitId = branch.headCommit.getId()
+
+        return pullRequestRepository.save(pullRequest)
+    }
+
+    @Transactional
+    override fun restoreFromBranch(pullRequestId: Long): PullRequest {
+        val pullRequest = pullRequestRepository.findById(pullRequestId)
+            .orElseThrow { IllegalArgumentException("PullRequest with ID $pullRequestId not found") }
+
+        val lastCommitId = pullRequest.lastCommitId
+            ?: throw InvalidBranchOperationException("복원할 브랜치의 커밋 정보가 없습니다.")
+
+        val playRepo = repositoryService.getRepository(pullRequest.fromProject)
+        val alreadyExists = playRepo.getBranches().any { isSameBranch(it.name, pullRequest.fromBranch) }
+        if (alreadyExists) {
+            throw InvalidBranchOperationException("이미 존재하는 브랜치입니다: ${pullRequest.fromBranch}")
+        }
+
+        playRepo.createBranch(pullRequest.fromBranch, lastCommitId)
+
+        return pullRequest
+    }
+
+    private fun isSameBranch(refName: String, branchName: String): Boolean {
+        val shortRefName = refName.removePrefix("refs/heads/")
+        val shortBranchName = branchName.removePrefix("refs/heads/")
+        return shortRefName == shortBranchName
+    }
 }

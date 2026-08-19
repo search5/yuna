@@ -184,6 +184,50 @@ class PullRequestController(
         return ResponseEntity.ok(updated)
     }
 
+    // yona PullRequestApp.deleteFromBranch 대응
+    @DeleteMapping("/{number}/fromBranch")
+    fun deleteFromBranch(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        if (!isManagerOrContributor(project, pullRequest.contributor.id, user) && !checkWritePermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val updated = pullRequestService.deleteFromBranch(pullRequest.id!!)
+        return ResponseEntity.ok(updated)
+    }
+
+    // yona PullRequestApp.restoreFromBranch 대응
+    @PostMapping("/{number}/fromBranch")
+    fun restoreFromBranch(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        if (!isManagerOrContributor(project, pullRequest.contributor.id, user) && !checkWritePermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val updated = pullRequestService.restoreFromBranch(pullRequest.id!!)
+        return ResponseEntity.ok(updated)
+    }
+
     data class CreatePullRequestRequest(
         val title: String,
         val body: String?,
