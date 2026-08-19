@@ -6,6 +6,12 @@ import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectUser
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleRepository
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.matchers.shouldBe
@@ -21,6 +27,8 @@ class WatchServiceSpec @Autowired constructor(
     private val watchService: WatchService,
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
+    private val projectUserRepository: ProjectUserRepository,
+    private val roleRepository: RoleRepository,
     private val issueRepository: IssueRepository,
     private val watchRepository: WatchRepository,
     private val unwatchRepository: UnwatchRepository,
@@ -43,13 +51,17 @@ class WatchServiceSpec @Autowired constructor(
                 watchRepository.deleteAll()
                 unwatchRepository.deleteAll()
                 issueRepository.deleteAll()
+                projectUserRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
 
                 user1 = userRepository.save(User(loginId = "user1", name = "사용자1", email = "user1@example.com"))
                 user2 = userRepository.save(User(loginId = "user2", name = "사용자2", email = "user2@example.com"))
                 user3 = userRepository.save(User(loginId = "user3", name = "사용자3", email = "user3@example.com"))
-                project = projectRepository.save(Project(name = "test-project", owner = "user1"))
+                // 이 스펙의 기존 시나리오들은 프로젝트 멤버십과 무관한 "감시 매커니즘" 자체를 검증하므로
+                // PUBLIC 프로젝트를 사용해 P1-21의 allowedWatchersOnly 권한 필터에 영향받지 않게 한다.
+                // 권한 필터 자체는 아래 별도 describe 블록에서 PRIVATE 프로젝트로 명시적으로 검증한다.
+                project = projectRepository.save(Project(name = "test-project", owner = "user1", projectScope = ProjectScope.PUBLIC))
                 issue = issueRepository.save(
                     Issue(
                         title = "테스트 이슈",
@@ -157,6 +169,77 @@ class WatchServiceSpec @Autowired constructor(
                 val commentEvent = updatedEvents.find { ev -> ev.eventType == EventType.NEW_COMMENT }
                 commentEvent shouldNotBe null
                 commentEvent!!.receivers.map { u -> u.loginId }.toSet() shouldBe setOf("user3")
+            }
+
+            describe("allowedWatchersOnly 권한 필터링 (P1-21, yona Watch.findActualWatchers 대응)") {
+                it("allowedWatchersOnly=true이면 비공개 프로젝트에 접근 권한이 없는 감시자는 실제 감시자에서 제외되어야 한다") {
+                    val managerRole = roleRepository.findById(RoleType.MANAGER.roleType)
+                        .orElseGet { roleRepository.save(Role(id = RoleType.MANAGER.roleType, name = "MANAGER")) }
+
+                    val privateProject = projectRepository.save(
+                        Project(name = "private-project", owner = "user1", projectScope = ProjectScope.PRIVATE)
+                    )
+                    projectUserRepository.save(ProjectUser(project = privateProject, user = user1, role = managerRole))
+
+                    val privateIssue = issueRepository.save(
+                        Issue(
+                            title = "비공개 이슈",
+                            body = "내용",
+                            project = privateProject,
+                            authorId = user1.id,
+                            authorLoginId = user1.loginId,
+                            authorName = user1.name
+                        )
+                    )
+
+                    // user2(프로젝트 멤버 아님)와 user3(프로젝트 멤버)이 둘 다 이슈를 감시
+                    projectUserRepository.save(ProjectUser(project = privateProject, user = user3, role = managerRole))
+                    watchService.watch(user2, ResourceType.ISSUE_POST, privateIssue.id.toString())
+                    watchService.watch(user3, ResourceType.ISSUE_POST, privateIssue.id.toString())
+
+                    val watchers = watchService.findActualWatchers(
+                        baseWatchers = emptySet(),
+                        resourceType = ResourceType.ISSUE_POST,
+                        resourceId = privateIssue.id.toString(),
+                        projectId = privateProject.id,
+                        allowedWatchersOnly = true
+                    )
+
+                    watchers.map { it.loginId }.toSet() shouldBe setOf("user3")
+                }
+
+                it("allowedWatchersOnly=false이면 권한 필터를 건너뛰고 감시자 전원을 반환해야 한다") {
+                    val managerRole = roleRepository.findById(RoleType.MANAGER.roleType)
+                        .orElseGet { roleRepository.save(Role(id = RoleType.MANAGER.roleType, name = "MANAGER")) }
+
+                    val privateProject = projectRepository.save(
+                        Project(name = "private-project-2", owner = "user1", projectScope = ProjectScope.PRIVATE)
+                    )
+                    projectUserRepository.save(ProjectUser(project = privateProject, user = user1, role = managerRole))
+
+                    val privateIssue = issueRepository.save(
+                        Issue(
+                            title = "비공개 이슈2",
+                            body = "내용",
+                            project = privateProject,
+                            authorId = user1.id,
+                            authorLoginId = user1.loginId,
+                            authorName = user1.name
+                        )
+                    )
+
+                    watchService.watch(user2, ResourceType.ISSUE_POST, privateIssue.id.toString())
+
+                    val watchers = watchService.findActualWatchers(
+                        baseWatchers = emptySet(),
+                        resourceType = ResourceType.ISSUE_POST,
+                        resourceId = privateIssue.id.toString(),
+                        projectId = privateProject.id,
+                        allowedWatchersOnly = false
+                    )
+
+                    watchers.map { it.loginId }.toSet() shouldBe setOf("user2")
+                }
             }
         }
     }
