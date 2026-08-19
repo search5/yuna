@@ -1,5 +1,7 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.issue.RecentIssue
+import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.domain.user.Email
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -21,11 +23,12 @@ import java.util.Optional
 class UserControllerSpec : DescribeSpec({
     val userService = mockk<UserService>()
     val userRepository = mockk<UserRepository>()
-    val userController = UserController(userService, userRepository)
+    val recentIssueService = mockk<RecentIssueService>()
+    val userController = UserController(userService, userRepository, recentIssueService)
     val mockMvc = MockMvcBuilders.standaloneSetup(userController).build()
 
     beforeTest {
-        io.mockk.clearMocks(userService, userRepository)
+        io.mockk.clearMocks(userService, userRepository, recentIssueService)
     }
 
     describe("UserController 웹 API 테스트") {
@@ -190,6 +193,28 @@ class UserControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
                     .andExpect(jsonPath("$.token").exists())
+            }
+        }
+
+        describe("GET /api/users/me/recent-issues (P1-41)") {
+            it("로그인한 사용자의 최근 방문 이슈/게시글 목록을 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { recentIssueService.getRecentIssues(testUser) } returns listOf(
+                    RecentIssue(id = 1L, userId = 1L, issueId = 5L, title = "최근 본 이슈", url = "/owner/proj/issue/1")
+                )
+
+                mockMvc.perform(
+                    get("/api/users/me/recent-issues")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0].title").value("최근 본 이슈"))
+                    .andExpect(jsonPath("$[0].url").value("/owner/proj/issue/1"))
+            }
+
+            it("로그인하지 않았다면 401을 반환해야 한다") {
+                mockMvc.perform(get("/api/users/me/recent-issues"))
+                    .andExpect(status().isUnauthorized)
             }
         }
     }
