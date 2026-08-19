@@ -1,6 +1,9 @@
 package com.github.search5.yona.domain.comment
 
 import com.github.search5.yona.AbstractIntegrationTest
+import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.board.PostingCommentRepository
+import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.user.User
@@ -25,7 +28,9 @@ class CommentServiceSpec @Autowired constructor(
     private val issueCommentRepository: IssueCommentRepository,
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
-    private val notificationEventRepository: NotificationEventRepository
+    private val notificationEventRepository: NotificationEventRepository,
+    private val postingRepository: PostingRepository,
+    private val postingCommentRepository: PostingCommentRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -34,6 +39,8 @@ class CommentServiceSpec @Autowired constructor(
                 notificationEventRepository.deleteAll()
                 issueCommentRepository.deleteAll()
                 issueRepository.deleteAll()
+                postingCommentRepository.deleteAll()
+                postingRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
             }
@@ -87,6 +94,25 @@ class CommentServiceSpec @Autowired constructor(
                 // userb가 수신자로 정상 등록되었는지 확인
                 event.receivers.size shouldBe 1
                 event.receivers.first().loginId shouldBe "userb"
+            }
+
+            it("게시글 댓글을 작성/삭제하면 posting.numOfComments가 실제 댓글 수와 일치해야 한다 (P1-19)") {
+                val author = userRepository.save(User(loginId = "boardwriter", name = "글쓴이", email = "boardwriter@yona.io"))
+                val commenter = userRepository.save(User(loginId = "boardcommenter", name = "댓글러", email = "boardcommenter@yona.io"))
+                val project = projectRepository.save(Project(name = "comment-count-project", owner = "boardwriter"))
+                val posting = postingRepository.save(
+                    Posting(title = "댓글수 테스트", body = "본문", project = project, number = 1L)
+                )
+                posting.numOfComments shouldBe 0
+
+                val comment1 = commentService.createPostingComment(posting.id!!, "댓글1", commenter, null)
+                postingRepository.findById(posting.id!!).orElseThrow().numOfComments shouldBe 1
+
+                commentService.createPostingComment(posting.id!!, "댓글2", commenter, null)
+                postingRepository.findById(posting.id!!).orElseThrow().numOfComments shouldBe 2
+
+                commentService.deletePostingComment(comment1.id!!, commenter)
+                postingRepository.findById(posting.id!!).orElseThrow().numOfComments shouldBe 1
             }
         }
     }

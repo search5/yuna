@@ -95,6 +95,27 @@ class BoardViewControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/owner/TestProj/posts").principal(userAuth))
                     .andExpect(view().name("error/403"))
             }
+
+            it("labelIds 파라미터가 있으면 라벨 필터 쿼리를 사용해야 한다 (P1-19)") {
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every {
+                    postingRepository.findByProjectAndLabelIdsIn(project, listOf(3L, 4L), null, any<Pageable>())
+                } returns PageImpl(listOf(posting), pageRequest, 1)
+                every { postingService.getNotices(1L) } returns emptyList()
+
+                mockMvc.perform(
+                    get("/owner/TestProj/posts")
+                        .param("labelIds", "3", "4")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("board/list"))
+                    .andExpect(model().attribute("labelIds", listOf(3L, 4L)))
+
+                io.mockk.verify(exactly = 0) { postingRepository.findByProject(any(), any<Pageable>()) }
+            }
         }
 
         describe("GET /{owner}/{projectName}/post/{number}") {

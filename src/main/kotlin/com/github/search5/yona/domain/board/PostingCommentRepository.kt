@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository
 @Repository
 interface PostingCommentRepository : JpaRepository<PostingComment, Long> {
     fun findByPostingIdOrderByCreatedDateAsc(postingId: Long): List<PostingComment>
+    fun countByPostingId(postingId: Long): Int
 
     @Query("""
         SELECT pc FROM PostingComment pc 

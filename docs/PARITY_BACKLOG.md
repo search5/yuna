@@ -57,7 +57,7 @@
 | P1-16 | [x] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` | **완료** |
 | P1-17 | [x] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` | **완료** |
 | P1-18 | [x] | 게시판 알림 미발송 | `BoardApp.java:255,360,386` | `domain/board/PostingServiceImpl.kt` | **완료(범위 조정, 아래 참고)** |
-| P1-19 | [ ] | 게시판 편집이력/댓글수/라벨필터 저하 | `AbstractPostingApp.java:106-140` | `web/BoardViewController.kt`, `domain/board/PostingServiceImpl.kt` |
+| P1-19 | [x] | 게시판 편집이력/댓글수/라벨필터 저하 | `AbstractPostingApp.java:106-140` | `web/BoardViewController.kt`, `domain/board/PostingServiceImpl.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-20 | [ ] | CodeCommentThread.isOutdated() 없음 | `CodeCommentThread.java:76-123` | `domain/comment/CodeCommentThread.kt` |
 | P1-21 | [ ] | Watch 권한 필터링(allowedWatchersOnly) 무시됨 | `models/Watch.java:160-187` | `domain/watch/WatchServiceImpl.kt:55-77` |
 | P1-22 | [ ] | 프로젝트별 알림 뮤트 토글 미반영 | `models/NotificationEvent.java:486-511` | `domain/issue/IssueServiceImpl.kt`, `domain/comment/CommentServiceImpl.kt` |
@@ -89,7 +89,7 @@
 | # | 상태 | 제목 | 비고 |
 |---|---|---|---|
 | P2-01 | [ ] | ReservedWordsValidator(예약어 검증) 없음 | 로그인ID/프로젝트명이 라우트 경로와 충돌 가능 |
-| P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음 |
+| P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음. P1-19에서 재확인 — `AbstractPosting.history`/`AbstractPostingApp.addToHistory()`(yona `utils.diff_match_patch` 기반 워드단위 diff)도 이 항목과 동일한 미구현 의존성(diff_match_patch 라이브러리 포팅)이라 함께 묶임. yuna `Posting.history` 필드 자체는 이미 존재하나 실제로 채워지지 않음 |
 | P2-03 | [ ] | 사이트 관리자 아바타 지정 API가 빈 스텁 | `SiteApiController.kt:314-322` |
 | P2-04 | [ ] | 웹훅 JSON 페이로드 단순화 | 커밋 리스트 없이 event/sender/project만 포함 |
 | P2-05 | [ ] | 접근제어가 컨트롤러별 산발적 인라인 체크로 분산 | 전 컨트롤러(~40개) 일관성 전수 미검증 |
@@ -277,3 +277,10 @@
   - **범위 조정(P1-44로 분리)**: 게시글 "수정" 시 알림(yona `editPost`의 `isSelectedToSendNotificationMail() || !original.isAuthoredBy(currentUser)` 분기)은 다루지 않음 — 이건 폼의 "알림메일 발송" 체크박스 값에 의존하는데 yuna `updatePosting()`엔 그 파라미터 자체가 없어 컨트롤러/폼까지 함께 바꿔야 하는 별도 규모의 작업이라 분리했다. 참고로 `IssueServiceImpl.updateIssue()`(제목/본문 일반 수정)도 이 저장소에서 알림을 만들지 않는 것과 같은 기준.
   - 테스트: `PostingServiceSpec.kt`(신규, 실제 MariaDB 통합테스트) 2 tests(신규 게시글 NEW_POSTING 알림 발행 확인, 삭제 시 RESOURCE_DELETED 알림 발행 확인). `BoardControllerSpec`/`BoardViewControllerSpec` 재실행으로 회귀 없음 확인(생성자 파라미터는 Spring 빈 자동 주입이라 기존 컨트롤러 목 테스트에 영향 없음).
   - 검증: `./gradlew test --tests "PostingServiceSpec" --tests "BoardControllerSpec" --tests "BoardViewControllerSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
+
+- **2026-08-20 — P1-19**: 게시판 목록/댓글 관련 3가지가 yona 대비 저하돼 있던 문제 중 2가지(댓글수, 라벨필터)를 수정. 편집이력(diff)은 별도 이슈(P2-02)로 통합했다.
+  - **댓글수(numOfComments)**: `Posting.numOfComments` 필드는 있었지만 어디서도 갱신되지 않아 항상 0으로 고정돼 있던 문제(yona `AbstractPosting.save()/update()`의 `numOfComments = computeNumOfComments()` 대응). `CommentServiceImpl.createPostingComment()`/`deletePostingComment()`에서 댓글 저장/삭제 직후 `postingCommentRepository.countByPostingId()`로 재계산해 `Posting`에 반영하도록 추가. `PostingCommentRepository`에 `countByPostingId` 신규 메서드.
+  - **라벨필터**: 게시판 목록(`BoardViewController.listPosts`)이 텍스트 검색(`filter`)만 지원하고 라벨 필터는 아예 없던 문제(yona `BoardApp.SearchCondition.asExpressionList()`의 `labelIdSet` 대응). `labelIds` 쿼리 파라미터를 추가하고, `PostingRepository`에 `findByProjectAndLabelIdsIn`(라벨 필터 + 선택적 텍스트 검색을 AND로 결합, yona와 동일한 조합 규칙) 신규 쿼리 추가.
+  - **범위 조정(P2-02에 통합, 별도 신규 항목 만들지 않음)**: 편집이력(`AbstractPosting.history`, `AbstractPostingApp.addToHistory()`)은 yona `utils/diff_match_patch.java`(Google diff-match-patch 포팅본, 워드단위 diff 알고리즘)에 의존하는데, 이 라이브러리 자체가 yuna에 전혀 없다. 이미 같은 의존성 문제로 대기 중이던 P2-02("DiffUtil 워드단위 diff 하이라이팅 없음")와 사실상 동일한 선행 작업이 필요해 새 항목을 만드는 대신 P2-02 비고에 편집이력도 함께 묶여 있음을 명시했다. `Posting.history` 필드 자체는 이미 존재하므로, diff 라이브러리만 갖춰지면 연결은 어렵지 않다.
+  - 테스트: `CommentServiceSpec.kt` +1(게시글 댓글 작성/삭제 시 `numOfComments` 정합성 확인). `BoardViewControllerSpec.kt` +1(`labelIds` 파라미터 시 라벨 필터 쿼리 사용, 기본 쿼리는 호출되지 않음 확인). 전체 board/comment 도메인 테스트 + `YonaApplicationTests` 재실행으로 회귀 없음 확인.
+  - 검증: `./gradlew test --tests "com.github.search5.yona.domain.board.*" --tests "com.github.search5.yona.domain.comment.*" --tests "BoardControllerSpec" --tests "CommentControllerSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
