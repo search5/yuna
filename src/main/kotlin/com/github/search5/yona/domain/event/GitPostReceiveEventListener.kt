@@ -11,6 +11,8 @@ import com.github.search5.yona.domain.issue.IssueReferenceParser
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.webhook.WebhookService
+import com.github.search5.yona.domain.webhook.PushedCommits
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.RepositoryBuilder
 import org.eclipse.jgit.revwalk.RevCommit
@@ -29,7 +31,8 @@ class GitPostReceiveEventListener(
     private val gitService: GitService,
     private val notificationEventRepository: NotificationEventRepository,
     private val issueRepository: IssueRepository,
-    private val issueEventRepository: IssueEventRepository
+    private val issueEventRepository: IssueEventRepository,
+    private val webhookService: WebhookService
 ) {
     private val logger = LoggerFactory.getLogger(GitPostReceiveEventListener::class.java)
 
@@ -103,9 +106,9 @@ class GitPostReceiveEventListener(
         return list
     }
 
-    private fun processCommitsNotification(commits: List<RevCommit>, refNames: List<String>, project: Project, sender: User) {
+    internal fun processCommitsNotification(commits: List<RevCommit>, refNames: List<String>, project: Project, sender: User) {
         if (commits.isEmpty()) return
-        
+
         val title = if (refNames.size == 1) {
             "[${project.name}] ${commits.size}개의 커밋이 ${refNames[0]} 브랜치로 푸시되었습니다."
         } else {
@@ -123,6 +126,12 @@ class GitPostReceiveEventListener(
         )
         notificationEventRepository.save(notificationEvent)
         logger.info("[NOTIFICATION] Pushed commits notification created and saved: '$title' by ${sender.name}")
+
+        // yona Webhook.sendRequestToPayloadUrl(commits, refNames, sender) 대응 (P1-25).
+        // 커밋은 DB 엔티티가 아니라 NotificationEvent.resourceId(커밋 SHA)만으로는 프로젝트를 되짚어
+        // 재조회할 수 없으므로, WebhookNotificationEventListener(비동기, resourceId 기반 재조회)를
+        // 거치지 않고 project/commits를 이미 들고 있는 이 지점에서 직접 웹훅을 보낸다.
+        webhookService.sendWebhook(project, EventType.NEW_COMMIT, sender, PushedCommits(commits, refNames))
     }
 
     // yona actors/IssueReferredFromCommitEventActor.java 대응.
