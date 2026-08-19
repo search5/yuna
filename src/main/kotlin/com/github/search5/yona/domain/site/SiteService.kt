@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.site
 
+import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectService
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -19,7 +20,8 @@ class SiteService(
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val projectService: ProjectService
+    private val projectService: ProjectService,
+    private val recentIssueService: RecentIssueService
 ) {
 
     @Transactional
@@ -94,6 +96,9 @@ class SiteService(
         targetUser.state = UserState.DELETED
         targetUser.lastStateModifiedDate = Instant.now()
         userRepository.save(targetUser)
+
+        // yona models/RecentIssue.java deleteAll(user) 대응 (P1-41).
+        recentIssueService.deleteAll(targetUser)
     }
 
     @Transactional

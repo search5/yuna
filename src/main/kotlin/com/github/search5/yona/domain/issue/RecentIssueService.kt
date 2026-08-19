@@ -68,6 +68,13 @@ class RecentIssueService(
         return recentIssueRepository.findByUserIdOrderByIdDesc(userId)
     }
 
+    // yona models/RecentIssue.java deleteAll(user) 대응 (P1-41). 회원 탈퇴/계정 삭제 시 방문 이력을 정리한다.
+    @Transactional
+    fun deleteAll(user: User) {
+        val userId = user.id ?: return
+        recentIssueRepository.deleteByUserId(userId)
+    }
+
     private fun deleteOldestIfOverflow(userId: Long) {
         val recentList = recentIssueRepository.findByUserIdOrderByIdDesc(userId)
         if (recentList.size > MAX_RECENT_LIST_PER_USER) {

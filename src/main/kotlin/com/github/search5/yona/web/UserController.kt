@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.domain.user.Email
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -16,7 +17,8 @@ import java.util.Base64
 @RestController
 class UserController(
     private val userService: UserService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val recentIssueService: RecentIssueService
 ) {
 
     private fun getLoginUserId(authentication: Authentication?): Long {
@@ -35,6 +37,25 @@ class UserController(
         } else {
             "$scheme://$serverName:$serverPort"
         }
+    }
+
+    // yona models/User.java getVisitedIssues() / RecentIssue.getRecentIssues 대응 (P1-41).
+    @GetMapping("/api/users/me/recent-issues")
+    fun getRecentIssues(authentication: Authentication?): ResponseEntity<List<Map<String, Any?>>> {
+        if (authentication == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        }
+        val user = userRepository.findByLoginId(authentication.name).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+
+        val recentIssues = recentIssueService.getRecentIssues(user).map {
+            mapOf(
+                "title" to it.title,
+                "url" to it.url,
+                "createdDate" to it.createdDate.toString()
+            )
+        }
+        return ResponseEntity.ok(recentIssues)
     }
 
     @GetMapping("/api/users")

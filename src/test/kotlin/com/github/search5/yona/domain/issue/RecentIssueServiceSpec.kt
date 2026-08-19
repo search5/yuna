@@ -115,4 +115,14 @@ class RecentIssueServiceSpec : DescribeSpec({
             service.getRecentIssues(user) shouldBe list
         }
     }
+
+    describe("RecentIssueService.deleteAll (P1-41)") {
+        it("사용자의 최근 방문 이력을 모두 삭제해야 한다") {
+            every { recentIssueRepository.deleteByUserId(10L) } returns Unit
+
+            service.deleteAll(user)
+
+            verify(exactly = 1) { recentIssueRepository.deleteByUserId(10L) }
+        }
+    }
 })
