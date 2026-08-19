@@ -108,6 +108,31 @@ class IssueLabelController(
         return ResponseEntity.status(HttpStatus.CREATED).body(saved)
     }
 
+    // yona IssueLabelApp.update() 대응 (P1-10)
+    @PutMapping("/{labelId}")
+    fun updateLabel(
+        @PathVariable projectId: Long,
+        @PathVariable labelId: Long,
+        @RequestBody request: UpdateLabelRequest,
+        authentication: Authentication?
+    ): ResponseEntity<IssueLabel> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isProjectManager(projectId, user.id!!)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val updated = issueLabelService.updateLabel(
+            labelId = labelId,
+            name = request.name,
+            color = request.color,
+            categoryId = request.categoryId
+        )
+        return ResponseEntity.ok(updated)
+    }
+
     @DeleteMapping("/{labelId}")
     fun deleteLabel(
         @PathVariable projectId: Long,
@@ -153,5 +178,11 @@ class IssueLabelController(
     data class CreateCategoryRequest(
         val name: String,
         val isExclusive: Boolean?
+    )
+
+    data class UpdateLabelRequest(
+        val name: String,
+        val color: String,
+        val categoryId: Long
     )
 }

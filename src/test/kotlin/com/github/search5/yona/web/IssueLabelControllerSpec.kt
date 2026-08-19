@@ -123,6 +123,57 @@ class IssueLabelControllerSpec : DescribeSpec({
             }
         }
 
+        describe("PUT /api/projects/{projectId}/labels/{labelId}") {
+            it("관리자가 라벨을 수정하면 200 OK와 수정된 라벨을 반환해야 한다") {
+                val updatedLabel = IssueLabel(id = 300L, category = category, color = "#123456", name = "수정된 라벨", project = project)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
+                every { issueLabelService.updateLabel(300L, "수정된 라벨", "#123456", 200L) } returns updatedLabel
+
+                val jsonContent = """
+                    {
+                        "name": "수정된 라벨",
+                        "color": "#123456",
+                        "categoryId": 200
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/labels/300")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(managerAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.name").value("수정된 라벨"))
+            }
+
+            it("관리자가 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+
+                val jsonContent = """
+                    {
+                        "name": "수정된 라벨",
+                        "color": "#123456",
+                        "categoryId": 200
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/labels/300")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueLabelService.updateLabel(any(), any(), any(), any()) }
+            }
+        }
+
         describe("DELETE /api/projects/{projectId}/labels/{labelId}") {
             it("관리자가 라벨을 삭제하면 200 OK를 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)

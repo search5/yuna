@@ -63,6 +63,20 @@ class IssueLabelServiceImpl(
         return issueLabelCategoryRepository.save(category)
     }
 
+    // yona IssueLabelApp.update() 대응. newLabel()과 달리 이름/색상 중복 검사는 하지 않고 그대로 덮어쓴다.
+    override fun updateLabel(labelId: Long, name: String, color: String, categoryId: Long): IssueLabel {
+        val label = issueLabelRepository.findById(labelId)
+            .orElseThrow { IllegalArgumentException("Label not found: $labelId") }
+        val category = issueLabelCategoryRepository.findById(categoryId)
+            .orElseThrow { IllegalArgumentException("Category not found: $categoryId") }
+
+        label.name = name
+        label.color = color
+        label.category = category
+
+        return issueLabelRepository.save(label)
+    }
+
     override fun deleteLabel(labelId: Long) {
         issueLabelRepository.deleteIssueMappings(labelId)
         issueLabelRepository.deletePostingMappings(labelId)

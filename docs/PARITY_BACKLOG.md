@@ -48,7 +48,7 @@
 | P1-07 | [x] | 이슈 타임라인(IssueEvent) 부재 | `models/IssueEvent.java` | `domain/issue/IssueServiceImpl.kt`, `web/IssueController.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-08 | [x] | PR 타임라인(PullRequestEvent) 부재 | `models/PullRequestEvent.java` | `domain/pullrequest/PullRequestEvent.kt`(신규), `PullRequestServiceImpl.kt`, `domain/event/PullRequestMergeEventListener.kt`, `web/PullRequestController.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-09 | [x] | RecentIssue(최근 본 이슈) 부재 | `models/RecentIssue.java` | `domain/issue/{RecentIssue,RecentIssueRepository,RecentIssueService}.kt`(신규) | **완료(범위 조정, 아래 참고)** |
-| P1-10 | [ ] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` |
+| P1-10 | [x] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` | **완료** |
 | P1-11 | [ ] | 라벨 카테고리 수정 기능 없음 | `IssueLabelApp.java:390` | 위와 동일 |
 | P1-12 | [ ] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 |
 | P1-13 | [ ] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` |
@@ -211,6 +211,11 @@
   - **범위 조정(P1-41로 분리)**: 방문 기록(record)만 구현했고, 사용자가 본인의 최근 방문 목록을 조회하는 컨트롤러/화면과, 회원 탈퇴 시 `deleteAll(user)`로 데이터를 정리하는 배선은 아직 없다. `getRecentIssues()`는 준비돼 있어 연결만 하면 되는 상태.
   - 테스트: `RecentIssueServiceSpec.kt`(신규) 7 tests — 신규 방문 저장/재방문 dedupe/100건 초과 시 최오래 항목 삭제를 이슈·게시글 양쪽에 대해 검증. `IssueViewControllerSpec.kt`/`BoardViewControllerSpec.kt`는 생성자 파라미터 추가에 맞춰 relaxed mock 추가(기존 테스트 회귀 없음). 커버리지: `RecentIssueService` LINE 100%(40/40)·INSTRUCTION 95%(208/219)·BRANCH 58.3%(7/12, null 가드 분기 일부 미도달 — 저장된 엔티티는 항상 id가 있으므로 실질적으로 도달 불가능한 방어 코드).
   - 검증: `./gradlew test --tests "RecentIssueServiceSpec" --tests "IssueViewControllerSpec" --tests "BoardViewControllerSpec"` 전체 통과, `YonaApplicationTests`로 신규 엔티티/빈 배선 확인, 전체 스위트 490 tests 중 1 실패는 `DataBackupServiceIntegrationSpec`(P0-07, 이번 변경과 무관한 기존 flaky 테스트 — 단독 실행 시 통과 확인)뿐.
+
+- **2026-08-19 — P1-10**: 프로젝트 라벨을 생성/삭제만 할 수 있고 이름·색상·카테고리를 수정할 방법이 없던 문제 해결(yona `IssueLabelApp.update()` 대응).
+  - `IssueLabelService`/`IssueLabelServiceImpl`에 `updateLabel(labelId, name, color, categoryId)` 추가 — 대상 라벨과 신규 카테고리를 각각 조회해(둘 중 하나라도 없으면 `IllegalArgumentException`) 라벨의 `name`/`color`/`category`를 덮어쓰고 저장. yona의 `update()`와 동일하게 **이름/색상 중복 검사는 하지 않음**(`newLabel()`의 dedupe와는 다른 동작 — 원본 그대로 이식).
+  - `IssueLabelController`에 `PUT /api/projects/{projectId}/labels/{labelId}` 추가 — 기존 `createLabel`/`deleteLabel`과 동일하게 `isProjectManager` 기준으로 권한 검사(yona `@IsAllowed(Operation.UPDATE, resourceType=ISSUE_LABEL)`에 대응).
+  - 테스트: `IssueLabelServiceImplSpec.kt`(신규) 3 tests(정상 수정, 라벨 없음, 카테고리 없음) — 기존 `IssueLabelServiceImpl`의 다른 메서드들과 달리 새로 작성한 로직은 mockk 기반으로 직접 단위테스트함. `IssueLabelControllerSpec.kt` +2(관리자 200 OK, 비관리자 403). 커버리지: `updateLabel` 메서드 단독 LINE 100%(8/8)·INSTRUCTION 100%(46/46) — 클래스 전체 수치(LINE 23.6%)는 이번 작업 범위 밖의 기존 미검증 메서드(getLabels/createLabel 등)가 함께 집계된 것으로, 그쪽은 원래부터 컨트롤러 mock 테스트로만 간접 커버되던 이 파일의 기존 관례임.
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.
