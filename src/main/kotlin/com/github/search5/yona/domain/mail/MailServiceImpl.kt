@@ -13,14 +13,35 @@ class MailServiceImpl(
     private val logger = LoggerFactory.getLogger(MailServiceImpl::class.java)
 
     override fun sendHtmlMail(toEmail: String, toName: String, subject: String, htmlContent: String) {
-        sendHtmlMail("no-reply@yona.io", toEmail, toName, subject, htmlContent)
+        sendHtmlMailWithReplyTo(toEmail, toName, subject, htmlContent, null)
+    }
+
+    override fun sendHtmlMailWithReplyTo(toEmail: String, toName: String, subject: String, htmlContent: String, replyTo: String?) {
+        try {
+            val message = mailSender.createMimeMessage()
+            val helper = MimeMessageHelper(message, true, "UTF-8")
+
+            helper.setTo(toEmail)
+            helper.setSubject(subject)
+            helper.setText(htmlContent, true)
+            helper.setFrom("no-reply@yona.io")
+            if (!replyTo.isNullOrBlank()) {
+                helper.setReplyTo(replyTo)
+            }
+
+            mailSender.send(message)
+            logger.info("Email sent to $toEmail ($toName) with subject '$subject'" + (replyTo?.let { ", replyTo=$it" } ?: ""))
+        } catch (e: Exception) {
+            logger.error("Failed to send email to $toEmail", e)
+            throw e
+        }
     }
 
     override fun sendHtmlMail(fromEmail: String, toEmail: String, toName: String, subject: String, htmlContent: String) {
         try {
             val message = mailSender.createMimeMessage()
             val helper = MimeMessageHelper(message, true, "UTF-8")
-            
+
             helper.setTo(toEmail)
             helper.setSubject(subject)
             helper.setText(htmlContent, true)

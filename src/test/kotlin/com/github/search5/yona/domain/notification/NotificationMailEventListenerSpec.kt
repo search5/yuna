@@ -2,9 +2,16 @@ package com.github.search5.yona.domain.notification
 
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.board.PostingCommentRepository
+import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.mail.MailService
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
@@ -13,16 +20,34 @@ import io.mockk.verify
 import io.mockk.Runs
 import io.mockk.just
 import java.time.Instant
+import java.util.Optional
 
 class NotificationMailEventListenerSpec : DescribeSpec({
     val mailService = mockk<MailService>(relaxed = true)
     val notificationMailRepository = mockk<NotificationMailRepository>()
+    val issueRepository = mockk<IssueRepository>(relaxed = true)
+    val postingRepository = mockk<PostingRepository>(relaxed = true)
+    val issueCommentRepository = mockk<IssueCommentRepository>(relaxed = true)
+    val postingCommentRepository = mockk<PostingCommentRepository>(relaxed = true)
 
-    val listener = NotificationMailEventListener(mailService, notificationMailRepository)
+    val listener = NotificationMailEventListener(
+        mailService, notificationMailRepository,
+        issueRepository, postingRepository, issueCommentRepository, postingCommentRepository,
+        "yona@example.com"
+    )
 
     beforeTest {
-        io.mockk.clearMocks(mailService, notificationMailRepository, answers = false)
+        io.mockk.clearMocks(
+            mailService, notificationMailRepository,
+            issueRepository, postingRepository, issueCommentRepository, postingCommentRepository,
+            answers = false
+        )
         every { notificationMailRepository.save(any()) } returnsArgument 0
+        // 기본값: resourceId로 프로젝트를 되짚어 찾지 못하면 Reply-To 없이(=replyTo null) 발송된다.
+        every { issueRepository.findById(any()) } returns Optional.empty()
+        every { postingRepository.findById(any()) } returns Optional.empty()
+        every { issueCommentRepository.findById(any()) } returns Optional.empty()
+        every { postingCommentRepository.findById(any()) } returns Optional.empty()
     }
 
     describe("NotificationMailEventListener") {
@@ -43,10 +68,10 @@ class NotificationMailEventListenerSpec : DescribeSpec({
             listener.handleNotificationEvent(event)
 
             verify(exactly = 1) {
-                mailService.sendHtmlMail(toEmail = "u1@example.com", toName = "사용자1", subject = event.title, htmlContent = any())
+                mailService.sendHtmlMailWithReplyTo(toEmail = "u1@example.com", toName = "사용자1", subject = event.title, htmlContent = any(), replyTo = any())
             }
             verify(exactly = 1) {
-                mailService.sendHtmlMail(toEmail = "u2@example.com", toName = "사용자2", subject = event.title, htmlContent = any())
+                mailService.sendHtmlMailWithReplyTo(toEmail = "u2@example.com", toName = "사용자2", subject = event.title, htmlContent = any(), replyTo = any())
             }
         }
 
@@ -64,7 +89,7 @@ class NotificationMailEventListenerSpec : DescribeSpec({
             )
             val captured = slot<String>()
             every {
-                mailService.sendHtmlMail(any(), any(), any(), capture(captured))
+                mailService.sendHtmlMailWithReplyTo(any(), any(), any(), capture(captured), any())
             } just Runs
 
             listener.handleNotificationEvent(event)
@@ -86,7 +111,7 @@ class NotificationMailEventListenerSpec : DescribeSpec({
 
             listener.handleNotificationEvent(event)
 
-            verify(exactly = 0) { mailService.sendHtmlMail(any(), any(), any(), any()) }
+            verify(exactly = 0) { mailService.sendHtmlMailWithReplyTo(any(), any(), any(), any(), any()) }
         }
 
         it("수신자가 없으면 아무 메일도 발송하지 않고 NotificationMail도 저장하지 않아야 한다") {
@@ -102,7 +127,7 @@ class NotificationMailEventListenerSpec : DescribeSpec({
 
             listener.handleNotificationEvent(event)
 
-            verify(exactly = 0) { mailService.sendHtmlMail(any(), any(), any(), any()) }
+            verify(exactly = 0) { mailService.sendHtmlMailWithReplyTo(any(), any(), any(), any(), any()) }
             verify(exactly = 0) { notificationMailRepository.save(any()) }
         }
 
@@ -136,13 +161,78 @@ class NotificationMailEventListenerSpec : DescribeSpec({
                 receivers = mutableSetOf(receiver1, receiver2)
             )
             every {
-                mailService.sendHtmlMail(toEmail = "u1@example.com", toName = any(), subject = any(), htmlContent = any())
+                mailService.sendHtmlMailWithReplyTo(toEmail = "u1@example.com", toName = any(), subject = any(), htmlContent = any(), replyTo = any())
             } throws RuntimeException("SMTP down")
 
             listener.handleNotificationEvent(event)
 
             verify(exactly = 1) {
-                mailService.sendHtmlMail(toEmail = "u2@example.com", toName = "사용자2", subject = any(), htmlContent = any())
+                mailService.sendHtmlMailWithReplyTo(toEmail = "u2@example.com", toName = "사용자2", subject = any(), htmlContent = any(), replyTo = any())
+            }
+        }
+
+        describe("Reply-To 헤더 (P1-28, yona NotificationMail.getReplyTo() 대응)") {
+            it("ISSUE_POST 리소스면 owner/project detail이 담긴 plus-address를 Reply-To로 설정해야 한다") {
+                val project = Project(owner = "gildong", name = "yona-project")
+                val issue = Issue(id = 1L, title = "제목", body = "본문", project = project, number = 1L)
+                every { issueRepository.findById(1L) } returns Optional.of(issue)
+
+                val receiver = User(id = 1L, loginId = "u1", name = "사용자1", email = "u1@example.com")
+                val event = NotificationEvent(
+                    id = 200L, title = "새 이슈", created = Instant.now(),
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "1",
+                    eventType = EventType.NEW_ISSUE, receivers = mutableSetOf(receiver)
+                )
+
+                listener.handleNotificationEvent(event)
+
+                verify(exactly = 1) {
+                    mailService.sendHtmlMailWithReplyTo(
+                        toEmail = "u1@example.com", toName = "사용자1", subject = any(), htmlContent = any(),
+                        replyTo = "yona+gildong/yona-project@example.com"
+                    )
+                }
+            }
+
+            it("IMAP 주소가 설정돼 있지 않으면 Reply-To 없이 발송해야 한다") {
+                val listenerWithoutImap = NotificationMailEventListener(
+                    mailService, notificationMailRepository,
+                    issueRepository, postingRepository, issueCommentRepository, postingCommentRepository,
+                    ""
+                )
+                val project = Project(owner = "gildong", name = "yona-project")
+                val issue = Issue(id = 1L, title = "제목", body = "본문", project = project, number = 1L)
+                every { issueRepository.findById(1L) } returns Optional.of(issue)
+
+                val receiver = User(id = 1L, loginId = "u1", name = "사용자1", email = "u1@example.com")
+                val event = NotificationEvent(
+                    id = 201L, title = "새 이슈", created = Instant.now(),
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "1",
+                    eventType = EventType.NEW_ISSUE, receivers = mutableSetOf(receiver)
+                )
+
+                listenerWithoutImap.handleNotificationEvent(event)
+
+                verify(exactly = 1) {
+                    mailService.sendHtmlMailWithReplyTo(toEmail = "u1@example.com", toName = "사용자1", subject = any(), htmlContent = any(), replyTo = null)
+                }
+            }
+
+            it("리소스를 찾을 수 없으면 Reply-To 없이 발송해야 한다") {
+                every { issueRepository.findById(999L) } returns Optional.empty()
+
+                val receiver = User(id = 1L, loginId = "u1", name = "사용자1", email = "u1@example.com")
+                val event = NotificationEvent(
+                    id = 202L, title = "새 이슈", created = Instant.now(),
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "999",
+                    eventType = EventType.NEW_ISSUE, receivers = mutableSetOf(receiver)
+                )
+
+                listener.handleNotificationEvent(event)
+
+                verify(exactly = 1) {
+                    mailService.sendHtmlMailWithReplyTo(toEmail = "u1@example.com", toName = "사용자1", subject = any(), htmlContent = any(), replyTo = null)
+                }
             }
         }
     }
