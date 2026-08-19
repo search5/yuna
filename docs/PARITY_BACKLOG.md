@@ -39,7 +39,7 @@
 
 | # | 상태 | 제목 | yona 근거 | yuna 대상 |
 |---|---|---|---|---|
-| P1-01 | [ ] | LDAP 인증 부재 | `utils/LdapService.java` | `config/`, `domain/user/` |
+| P1-01 | [x] | LDAP 인증 부재 | `utils/LdapService.java` | `domain/user/{LdapService,LdapQueryBuilder,LdapUserProvisioningService,LdapUser}.kt`(신규) | **완료** |
 | P1-02 | [ ] | API 토큰 인증 미작동 | `UserApp.java` (`Yona-Token`) | 인증 필터 신규 필요 |
 | P1-03 | [ ] | OAuth 다중 계정 연동/병합 소실 | `models/LinkedAccount.java` | `config/oauth2/CustomOAuth2UserService.kt` |
 | P1-04 | [ ] | 이메일 도메인 allowlist 미시행 | `UserApp.java:385-499` | `web/AuthController.kt` |
@@ -155,6 +155,14 @@
   - 테스트: `CodeHistoryControllerSpec.kt`(신규 파일, 이전에 이 컨트롤러에 대한 테스트가 전혀 없었음) 5 tests 전체 통과.
 
 **이 시점에서 P0(치명적) 16건 전체 완료.**
+
+- **2026-08-19 — P1-01**: LDAP 인증(디렉터리 바인딩 로그인) 자체가 yuna에 전혀 없던 문제 해결. yona `utils/LdapService.java`가 JNDI 연결·검색·사용자 매핑을 한 클래스에 뒤섞어 두었던 것을, 테스트 가능성을 위해 3개 클래스로 분리해 이식:
+  - `LdapQueryBuilder`(순수 로직): 사용자 식별자 추측(`guessUser`), LDAP principal 조립, 검색 필터 속성 선택, `javax.naming.directory.Attributes` → `LdapUser` 파싱, 게스트 계정 prefix 판별 — 전부 실제 LDAP 서버 없이 `BasicAttributes`로 단위테스트.
+  - `LdapUserProvisioningService`(순수 로직): LDAP 인증 성공 후 "로컬 User와 어떻게 맞출 것인가" — 이메일로 기존 유저 없으면 신규 생성, 있으면 비밀번호 불일치 시에만 재해시, 표시이름/영문이름/게스트여부 동기화. yona `UserApp.authenticateWithLdap()`의 성공 분기 로직을 그대로 이식.
+  - `LdapService`(글루): 위 두 클래스를 조합해 실제 `InitialDirContext` 바인딩 수행. 연결 실패/인증 실패를 `LdapAuthResult`(Success/InvalidCredentials/ConnectionFailed) sealed class로 구분 — 이 저장소에 LDAP 테스트 서버가 없어 실제 바인딩 경로 자체는 `ImapMailboxPoller`/`GitServletConfig`와 동일하게 단위테스트 대상에서 제외.
+  - `YonaAuthenticationProvider`에 LDAP 분기 추가: `ldapService.enabled`일 때 LDAP 우선 시도 → 성공 시 재조정된 로컬 사용자로 인증, 실패 시 `fallbackToLocalLogin` 설정에 따라 로컬 비밀번호 인증으로 폴백하거나 즉시 거부. LDAP로 재조정된 사용자도 P0-13의 계정 잠금/탈퇴 체크를 동일하게 통과해야 함.
+  - `application.yml`에 `yuna.ldap.*` 설정 추가(기본 비활성).
+  - 테스트: `LdapQueryBuilderSpec.kt`(신규) 15 tests, `LdapUserProvisioningServiceSpec.kt`(신규) 4 tests, `YonaAuthenticationProviderSpec.kt` +5 tests. 전체 Spring 컨텍스트 로딩(`YonaApplicationTests`)으로 신규 빈 배선 확인. 커버리지: `LdapQueryBuilder` 96.6%/78%, `LdapUserProvisioningService` 95.3%/70%, `YonaAuthenticationProvider` 94.8%/94.4%(명령어/분기).
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

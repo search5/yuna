@@ -1,5 +1,10 @@
 package com.github.search5.yona.config
 
+import com.github.search5.yona.domain.user.LdapAuthResult
+import com.github.search5.yona.domain.user.LdapService
+import com.github.search5.yona.domain.user.LdapUser
+import com.github.search5.yona.domain.user.LdapUserProvisioningService
+import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.user.YonaUserDetails
 import io.kotest.assertions.throwables.shouldThrow
@@ -8,6 +13,8 @@ import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import org.springframework.security.authentication.AuthenticationServiceException
 import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.security.authentication.DisabledException
 import org.springframework.security.authentication.LockedException
@@ -19,7 +26,13 @@ import java.util.Base64
 
 class YonaAuthenticationProviderSpec : DescribeSpec({
     val userDetailsService = mockk<UserDetailsService>()
-    val authenticationProvider = YonaAuthenticationProvider(userDetailsService)
+    val ldapService = mockk<LdapService>()
+    val ldapUserProvisioningService = mockk<LdapUserProvisioningService>()
+    val authenticationProvider = YonaAuthenticationProvider(userDetailsService, ldapService, ldapUserProvisioningService)
+
+    beforeTest {
+        every { ldapService.enabled } returns false
+    }
 
     fun getLegacyHashedPassword(password: String, salt: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -160,6 +173,96 @@ class YonaAuthenticationProviderSpec : DescribeSpec({
 
             // Then
             authResult.isAuthenticated shouldBe true
+        }
+    }
+
+    describe("YonaAuthenticationProvider - LDAP 인증 활성화") {
+        it("LDAP 인증에 성공하면 재조정(reconcile)된 로컬 사용자로 인증되어야 한다") {
+            val ldapUser = LdapUser(displayName = "홍길동", email = "gildong@example.com", loginId = "gildong")
+            val reconciledUser = User(id = 7L, loginId = "gildong", name = "홍길동", email = "gildong@example.com")
+            val userDetails = YonaUserDetails(
+                id = 7L, loginId = "gildong", passwordVal = "x", passwordSalt = "y",
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_ACTIVE"))
+            )
+
+            every { ldapService.enabled } returns true
+            every { ldapService.authenticate("gildong", "myPassword123!") } returns LdapAuthResult.Success(ldapUser)
+            every { ldapUserProvisioningService.reconcile(ldapUser, "myPassword123!") } returns reconciledUser
+            every { userDetailsService.loadUserByUsername("gildong") } returns userDetails
+
+            val authRequest = UsernamePasswordAuthenticationToken("gildong", "myPassword123!")
+            val authResult = authenticationProvider.authenticate(authRequest)
+
+            authResult.isAuthenticated shouldBe true
+            authResult.principal shouldBe userDetails
+            verify(exactly = 1) { ldapUserProvisioningService.reconcile(ldapUser, "myPassword123!") }
+        }
+
+        it("LDAP 인증 실패 + fallback 비활성화면 로컬 인증을 시도하지 않고 BadCredentialsException을 던져야 한다") {
+            every { ldapService.enabled } returns true
+            every { ldapService.fallbackToLocalLogin } returns false
+            every { ldapService.authenticate("gildong", "wrongPassword") } returns LdapAuthResult.InvalidCredentials
+
+            val authRequest = UsernamePasswordAuthenticationToken("gildong", "wrongPassword")
+
+            // 로컬 인증(authenticateLocally)으로 넘어갔다면 loadUserByUsername("gildong")에
+            // stub이 없어 MockKException이 발생해 shouldThrow<BadCredentialsException>이
+            // 실패하므로, 아래 통과 자체가 fallback이 일어나지 않았음을 증명한다.
+            shouldThrow<BadCredentialsException> {
+                authenticationProvider.authenticate(authRequest)
+            }
+        }
+
+        it("LDAP 인증 실패 + fallback 활성화면 로컬 비밀번호 인증으로 넘어가야 한다") {
+            val salt = "test-salt"
+            val rawPassword = "myPassword123!"
+            val expectedHashed = getLegacyHashedPassword(rawPassword, salt)
+            val userDetails = YonaUserDetails(
+                id = 1L, loginId = "gildong", passwordVal = expectedHashed, passwordSalt = salt,
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_ACTIVE"))
+            )
+
+            every { ldapService.enabled } returns true
+            every { ldapService.fallbackToLocalLogin } returns true
+            every { ldapService.authenticate("gildong", rawPassword) } returns LdapAuthResult.InvalidCredentials
+            every { userDetailsService.loadUserByUsername("gildong") } returns userDetails
+
+            val authRequest = UsernamePasswordAuthenticationToken("gildong", rawPassword)
+            val authResult = authenticationProvider.authenticate(authRequest)
+
+            authResult.isAuthenticated shouldBe true
+        }
+
+        it("LDAP 서버 연결 실패 + fallback 비활성화면 AuthenticationServiceException을 던져야 한다") {
+            every { ldapService.enabled } returns true
+            every { ldapService.fallbackToLocalLogin } returns false
+            every { ldapService.authenticate("gildong", "pw") } returns LdapAuthResult.ConnectionFailed(RuntimeException("timeout"))
+
+            val authRequest = UsernamePasswordAuthenticationToken("gildong", "pw")
+
+            shouldThrow<AuthenticationServiceException> {
+                authenticationProvider.authenticate(authRequest)
+            }
+        }
+
+        it("LDAP로 재조정된 사용자가 LOCKED 상태면 LockedException이 발생해야 한다") {
+            val ldapUser = LdapUser(displayName = "잠긴유저", email = "locked@example.com", loginId = "lockeduser")
+            val reconciledUser = User(id = 8L, loginId = "lockeduser", name = "잠긴유저", email = "locked@example.com")
+            val userDetails = YonaUserDetails(
+                id = 8L, loginId = "lockeduser", passwordVal = "x", passwordSalt = "y",
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_LOCKED")), state = UserState.LOCKED
+            )
+
+            every { ldapService.enabled } returns true
+            every { ldapService.authenticate("lockeduser", "pw") } returns LdapAuthResult.Success(ldapUser)
+            every { ldapUserProvisioningService.reconcile(ldapUser, "pw") } returns reconciledUser
+            every { userDetailsService.loadUserByUsername("lockeduser") } returns userDetails
+
+            val authRequest = UsernamePasswordAuthenticationToken("lockeduser", "pw")
+
+            shouldThrow<LockedException> {
+                authenticationProvider.authenticate(authRequest)
+            }
         }
     }
 })
