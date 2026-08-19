@@ -32,6 +32,16 @@ class ProjectController(
             .orElse(false)
     }
 
+    private fun isProjectMember(projectId: Long, userId: Long): Boolean {
+        return projectUserRepository.existsByProjectIdAndUserId(projectId, userId)
+    }
+
+    private fun checkReadPermission(project: Project, user: User?): Boolean {
+        if (project.projectScope == ProjectScope.PUBLIC) return true
+        if (user == null) return false
+        return isProjectMember(project.id!!, user.id!!)
+    }
+
     @GetMapping("/api/projects/search")
     fun searchProjects(
         @RequestParam(value = "query", defaultValue = "") query: String,
@@ -163,6 +173,79 @@ class ProjectController(
         } catch (e: IllegalArgumentException) {
             ResponseEntity.badRequest().body(mapOf("error" to e.message))
         }
+    }
+
+    // yona ProjectApp.labels() 대응 (P1-13)
+    @GetMapping("/api/{owner}/{projectName}/labels")
+    fun getProjectLabels(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!checkReadPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        return ResponseEntity.ok(projectService.getProjectLabels(project.id!!))
+    }
+
+    // yona ProjectApp.attachLabel() 대응 (P1-13). yona AccessControl은 PROJECT_LABELS를
+    // 별도 케이스로 다루지 않아 일반 프로젝트 리소스 UPDATE 규칙(user.isMemberOf(project))을 그대로
+    // 따른다 - MANAGER가 아니어도 프로젝트 멤버라면 라벨을 붙이고 뗄 수 있다.
+    @PostMapping("/api/{owner}/{projectName}/labels")
+    fun attachLabel(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam(required = false) category: String?,
+        @RequestParam name: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isProjectMember(project.id!!, user.id!!)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val result = projectService.attachLabel(project.id!!, category, name)
+        if (!result.isAttached) {
+            // 이미 붙어있던 라벨: yona는 204 No Content를 반환한다.
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).build()
+        }
+
+        return if (result.isCreated) {
+            ResponseEntity.status(HttpStatus.CREATED).body(result.label)
+        } else {
+            ResponseEntity.ok(result.label)
+        }
+    }
+
+    // yona ProjectApp.detachLabel() 대응 (P1-13)
+    @DeleteMapping("/api/{owner}/{projectName}/labels/{labelId}")
+    fun detachLabel(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable labelId: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isProjectMember(project.id!!, user.id!!)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val detached = projectService.detachLabel(project.id!!, labelId)
+        if (!detached) {
+            return ResponseEntity.notFound().build()
+        }
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build()
     }
 
     data class UpdateProjectRequest(

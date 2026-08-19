@@ -11,6 +11,7 @@ interface ProjectRepository : JpaRepository<Project, Long> {
     fun findByOwnerAndName(owner: String, name: String): Optional<Project>
     fun existsByOwnerAndName(owner: String, name: String): Boolean
     fun findByOwner(owner: String): List<Project>
+    fun countByLabelsId(labelId: Long): Long
 
     @Query("""
         SELECT DISTINCT p.id FROM Project p 

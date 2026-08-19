@@ -26,7 +26,8 @@ class ProjectServiceImpl(
     private val projectTransferRepository: ProjectTransferRepository,
     private val roleRepository: RoleRepository,
     private val organizationRepository: OrganizationRepository,
-    private val organizationUserRepository: OrganizationUserRepository
+    private val organizationUserRepository: OrganizationUserRepository,
+    private val labelRepository: LabelRepository
 ) : ProjectService {
 
     override fun findByOwnerAndName(owner: String, name: String): Project? {
@@ -326,6 +327,51 @@ class ProjectServiceImpl(
         repositoryService.getRepository(project).create()
 
         return projectRepository.save(project)
+    }
+
+    override fun getProjectLabels(projectId: Long): Set<Label> {
+        val project = projectRepository.findById(projectId)
+            .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
+        return project.labels
+    }
+
+    @Transactional
+    override fun attachLabel(projectId: Long, category: String?, name: String): AttachLabelResult {
+        val project = projectRepository.findById(projectId)
+            .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
+        val resolvedCategory = category ?: "Label"
+
+        var label = labelRepository.findByCategoryAndName(resolvedCategory, name).orElse(null)
+        val isCreated = label == null
+        if (label == null) {
+            label = labelRepository.save(Label(category = resolvedCategory, name = name))
+        }
+
+        if (project.labels.any { it.id == label.id }) {
+            // yona Project.attachLabel(): 이미 붙어있으면 아무 것도 하지 않고 false를 반환한다.
+            return AttachLabelResult(label, isCreated, isAttached = false)
+        }
+
+        project.labels.add(label)
+        projectRepository.save(project)
+        return AttachLabelResult(label, isCreated, isAttached = true)
+    }
+
+    @Transactional
+    override fun detachLabel(projectId: Long, labelId: Long): Boolean {
+        val project = projectRepository.findById(projectId)
+            .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
+        val label = labelRepository.findById(labelId).orElse(null) ?: return false
+
+        project.labels.remove(label)
+        projectRepository.save(project)
+
+        // yona Label.delete(project) 이후 Project.detachLabel(): 라벨을 참조하는 프로젝트가
+        // 더 이상 없으면(0개) 이 전역 라벨 자체를 삭제한다.
+        if (projectRepository.countByLabelsId(labelId) == 0L) {
+            labelRepository.delete(label)
+        }
+        return true
     }
 }
 
