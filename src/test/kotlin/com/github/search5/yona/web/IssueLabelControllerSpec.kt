@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.issue.DuplicateLabelCategoryNameException
 import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.IssueLabelCategory
 import com.github.search5.yona.domain.issue.IssueLabelService
@@ -184,6 +185,78 @@ class IssueLabelControllerSpec : DescribeSpec({
                 mockMvc.perform(delete("/api/projects/1/labels/300").principal(managerAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
+            }
+        }
+
+        describe("PUT /api/projects/{projectId}/labels/categories/{categoryId}") {
+            it("관리자가 카테고리를 수정하면 200 OK와 수정된 카테고리를 반환해야 한다") {
+                val updatedCategory = IssueLabelCategory(id = 200L, name = "수정된 카테고리", isExclusive = true, project = project)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
+                every { issueLabelService.updateCategory(200L, "수정된 카테고리", true) } returns updatedCategory
+
+                val jsonContent = """
+                    {
+                        "name": "수정된 카테고리",
+                        "isExclusive": true
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/labels/categories/200")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(managerAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.name").value("수정된 카테고리"))
+            }
+
+            it("이름이 같은 프로젝트 내 다른 카테고리와 중복되면 400 Bad Request를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
+                every { issueLabelService.updateCategory(200L, "중복 이름", false) } throws
+                    DuplicateLabelCategoryNameException("이미 존재하는 카테고리 이름입니다: 중복 이름")
+
+                val jsonContent = """
+                    {
+                        "name": "중복 이름",
+                        "isExclusive": false
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/labels/categories/200")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(managerAuth)
+                )
+                    .andExpect(status().isBadRequest)
+            }
+
+            it("관리자가 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+
+                val jsonContent = """
+                    {
+                        "name": "수정된 카테고리",
+                        "isExclusive": true
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/labels/categories/200")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueLabelService.updateCategory(any(), any(), any()) }
             }
         }
 

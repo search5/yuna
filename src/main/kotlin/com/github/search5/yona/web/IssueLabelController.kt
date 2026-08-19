@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.issue.DuplicateLabelCategoryNameException
 import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.IssueLabelCategory
 import com.github.search5.yona.domain.issue.IssueLabelService
@@ -133,6 +134,34 @@ class IssueLabelController(
         return ResponseEntity.ok(updated)
     }
 
+    // yona IssueLabelApp.updateCategory() 대응 (P1-11)
+    @PutMapping("/categories/{categoryId}")
+    fun updateCategory(
+        @PathVariable projectId: Long,
+        @PathVariable categoryId: Long,
+        @RequestBody request: UpdateCategoryRequest,
+        authentication: Authentication?
+    ): ResponseEntity<IssueLabelCategory> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isProjectManager(projectId, user.id!!)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        return try {
+            val updated = issueLabelService.updateCategory(
+                categoryId = categoryId,
+                name = request.name,
+                isExclusive = request.isExclusive ?: false
+            )
+            ResponseEntity.ok(updated)
+        } catch (e: DuplicateLabelCategoryNameException) {
+            ResponseEntity.badRequest().build()
+        }
+    }
+
     @DeleteMapping("/{labelId}")
     fun deleteLabel(
         @PathVariable projectId: Long,
@@ -184,5 +213,10 @@ class IssueLabelController(
         val name: String,
         val color: String,
         val categoryId: Long
+    )
+
+    data class UpdateCategoryRequest(
+        val name: String,
+        val isExclusive: Boolean?
     )
 }
