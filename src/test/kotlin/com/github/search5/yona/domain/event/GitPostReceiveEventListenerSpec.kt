@@ -10,6 +10,7 @@ import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.project.GitService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.webhook.WebhookService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -17,6 +18,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.springframework.context.ApplicationEventPublisher
 import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository
 import org.eclipse.jgit.lib.CommitBuilder
@@ -51,16 +53,28 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
     val issueRepository = mockk<IssueRepository>()
     val issueEventRepository = mockk<IssueEventRepository>()
     val webhookService = mockk<WebhookService>(relaxed = true)
+    val watchService = mockk<WatchService>()
+    val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
 
     val listener = GitPostReceiveEventListener(
-        gitService, notificationEventRepository, issueRepository, issueEventRepository, webhookService
+        gitService, notificationEventRepository, issueRepository, issueEventRepository, webhookService,
+        watchService, eventPublisher
     )
 
     val project = Project(id = 1L, name = "yona-project", owner = "gildong")
     val sender = User(id = 9L, loginId = "gildong", name = "길동", email = "gildong@example.com")
 
     beforeTest {
-        io.mockk.clearMocks(issueRepository, issueEventRepository, webhookService, notificationEventRepository, answers = false)
+        io.mockk.clearMocks(issueRepository, issueEventRepository, webhookService, notificationEventRepository, watchService, eventPublisher, answers = false)
+        every {
+            watchService.findActualWatchers(
+                baseWatchers = emptySet(),
+                resourceType = com.github.search5.yona.domain.enumeration.ResourceType.PROJECT,
+                resourceId = "1",
+                projectId = 1L,
+                eventType = EventType.NEW_COMMIT
+            )
+        } returns emptySet()
     }
 
     describe("GitPostReceiveEventListener.recordReferredIssues") {
@@ -128,6 +142,29 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
 
             verify(exactly = 0) { notificationEventRepository.save(any()) }
             verify(exactly = 0) { webhookService.sendWebhook(any(), any(), any(), any()) }
+        }
+
+        it("push된 커밋이 있으면 프로젝트 워처를 수신자로 계산해 NotificationEvent를 publish해야 한다 (P1-46)") {
+            val watcher = User(id = 20L, loginId = "watcher1", name = "워처")
+            every {
+                watchService.findActualWatchers(
+                    baseWatchers = emptySet(),
+                    resourceType = com.github.search5.yona.domain.enumeration.ResourceType.PROJECT,
+                    resourceId = "1",
+                    projectId = 1L,
+                    eventType = EventType.NEW_COMMIT
+                )
+            } returns setOf(watcher, sender)
+
+            val commit = testCommit("fix bug")
+            val savedNotification = slot<NotificationEvent>()
+            every { notificationEventRepository.save(capture(savedNotification)) } answers { firstArg() }
+
+            listener.processCommitsNotification(listOf(commit), listOf("refs/heads/master"), project, sender)
+
+            // 워처 목록에 발신자 본인이 섞여 있어도 자기 자신에게는 알림을 보내지 않는다(기존 다른 리스너들과 동일한 관례)
+            savedNotification.captured.receivers shouldBe setOf(watcher)
+            verify(exactly = 1) { eventPublisher.publishEvent(savedNotification.captured) }
         }
     }
 })
