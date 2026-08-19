@@ -261,6 +261,8 @@ class CodeReviewServiceImpl(
     }
 
     // yona models/PullRequestEvent.java 대응 (P1-39) — 리뷰어 참여/해제 시점을 PR 타임라인에 기록.
+    // draft-time 병합/취소(P1-40): 같은 리뷰어가 30초 내 연속으로 참여/해제를 반복하면 직전 이벤트를
+    // 삭제하고 새 이벤트도 저장하지 않는다(legacy PullRequestEvent.needToDeleteEvent와 동일한 동작).
     private fun recordPullRequestEvent(pullRequest: PullRequest, senderLoginId: String?, newValue: String) {
         val event = PullRequestEvent(
             pullRequest = pullRequest,
@@ -269,7 +271,7 @@ class CodeReviewServiceImpl(
             newValue = newValue,
             created = Instant.now()
         )
-        pullRequestEventRepository.save(event)
+        pullRequestEventRepository.recordWithDraftMerge(event)
     }
 
     // yona CodeCommentThread.isOutdated() 대응 (P1-20)

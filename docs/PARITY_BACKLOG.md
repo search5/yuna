@@ -78,7 +78,7 @@
 | P1-37 | [x] | 이슈 타임라인에 라벨/본문/이동/공유자 변경 이벤트 기록 없음 | `models/IssueEvent.java`(ISSUE_LABEL_CHANGED 등) | `domain/issue/IssueServiceImpl.kt`, `IssueShareServiceImpl.kt` | **완료(범위 조정, 아래 참고)** — 라벨/본문/공유자 3종은 구현, 이동(ISSUE_MOVED)은 P1-48로 분리 |
 | P1-38 | [x] | IssueEvent draft-time 병합/취소 최적화 없음 | `models/IssueEvent.java` `add()/addWithoutSkipEvent()` | `domain/issue/IssueEventRecorder.kt`, `IssueServiceImpl.kt recordIssueEvent`, `IssueShareServiceImpl.kt` | **완료** — 아래 참고 |
 | P1-39 | [x] | PR 생성/리뷰 상태변경이 NotificationEvent·PullRequestEvent 모두 미기록 | `models/PullRequestEvent.java`, `NotificationEvent.afterNewPullRequest` | `PullRequestServiceImpl.kt createPullRequest`, `CodeReviewServiceImpl.kt` | **완료** — 아래 참고 |
-| P1-40 | [ ] | PullRequestEvent draft-time 병합/취소 최적화 없음 | `models/PullRequestEvent.java` `add()` | `domain/pullrequest/PullRequestServiceImpl.kt recordPullRequestEvent` | P1-08에서 범위 분리 — P1-38(IssueEvent)과 동일한 이유로 미이식 |
+| P1-40 | [x] | PullRequestEvent draft-time 병합/취소 최적화 없음 | `models/PullRequestEvent.java` `add()` | `domain/pullrequest/PullRequestEventRecorder.kt`, `PullRequestServiceImpl.kt recordPullRequestEvent`, `CodeReviewServiceImpl.kt recordPullRequestEvent` | **완료** — 아래 참고 |
 | P1-41 | [ ] | 최근 본 이슈/게시글 조회 UI·엔드포인트, 탈퇴 시 정리 없음 | `models/RecentIssue.java getRecentIssues/deleteAll` | `domain/issue/RecentIssueService.kt` | P1-09에서 범위 분리 — 방문 시 기록(record)만 구현했고, 사용자가 자신의 최근 방문 목록을 실제로 조회하는 컨트롤러/화면과, 회원 탈퇴 시 `deleteAll(user)`로 데이터를 정리하는 배선이 아직 없음. `RecentIssueService.getRecentIssues()`는 준비돼 있어 연결만 하면 됨 |
 | P1-42 | [ ] | mentionList 추가 후보 소스(공유자/작성자·댓글러/워처, "@project all"·"@group all") 미지원 | `ProjectApp.java collectAuthorAndCommenter/addProjectAuthorsAndWatchersList/addSharers/addProjectNameToMentionList/addOrganizationNameToMentionList` | `web/MentionController.kt` | P1-14에서 범위 분리 — 현재는 프로젝트 멤버+조직 그룹멤버(또는 query 검색)만 후보로 삼는다. 이슈/게시글의 작성자·댓글 작성자·워처, 이슈 공유자, 그리고 "@project all:"/"@group all:" 특수 멘션 항목(이미지 URL 포함)은 미구현 |
 | P1-43 | [ ] | mentionListAtCommitDiff/mentionListAtPullRequest 엔드포인트 없음 | `ProjectApp.java:226-227`(mentionListAtCommitDiff/mentionListAtPullRequest) | (해당 없음) | P1-14에서 범위 분리 — 커밋 diff 화면/PR 화면 전용 멘션 후보(커밋 작성자, 코드댓글 작성자, PR 코멘트 작성자, PR contributor)를 추가하는 변형 엔드포인트 2개가 아직 없음. 기본 `mentionList`만으로도 프로젝트 멤버 멘션은 가능해 P1로 분류 |
@@ -103,6 +103,14 @@
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P1-40**: `PullRequestEvent` 타임라인에 draft-time 병합/취소 최적화가 없던 문제 수정. yona `models/PullRequestEvent.java`의 `add()`를 정독한 결과, **`IssueEvent`(P1-38)와 알고리즘이 다름**을 확인 — 값을 병합(A→B→C ⇒ A→C)하는 게 아니라, `PULL_REQUEST_REVIEW_STATE_CHANGED` 타입에 한해서만 같은 사용자가 30초 내 연속으로 리뷰 상태를 바꾸면 직전 이벤트를 삭제하고 **새 이벤트도 저장하지 않는다**(`needToDeleteEvent`가 참이면 `lastEvent.delete()`만 하고 `event.save()`는 아예 안 탐 — 두 이벤트가 완전히 사라짐). 다른 이벤트 타입(PR 생성/상태변경/병합/충돌/커밋)은 애초에 이 최적화 대상이 아니라 항상 그대로 저장된다. 이는 IssueEvent와 겉보기엔 비슷해 보이지만 실제로는 별개의 더 단순한(그리고 다소 특이한) 알고리즘이라 그대로 이식했다.
+  - 신규 `domain/pullrequest/PullRequestEventRecorder.kt`: `PullRequestEventRepository.recordWithDraftMerge(event)` 확장 함수 추가 — legacy `needToDeleteEvent`/`add()` 로직을 그대로 포팅.
+  - `PullRequestEventRepository`에 `findFirstByPullRequestAndCreatedAfterOrderByCreatedDesc(pullRequest, created)` 파생 쿼리 추가.
+  - `PullRequestServiceImpl.recordPullRequestEvent()`, `CodeReviewServiceImpl.recordPullRequestEvent()` 모두 기존 `save()` 호출을 `recordWithDraftMerge()`로 교체.
+  - **P1-39 테스트 조정**: 리뷰어 추가+즉시 해제를 검증하던 기존 테스트는 이제 두 이벤트가 서로 상쇄되어 타임라인에 0건 남는 것이 정확한 동작이므로, 해당 테스트를 참여만 검증하는 테스트와 상쇄를 검증하는 신규 테스트로 분리했다(알림 `NotificationEvent`는 이 최적화 대상이 아니라 여전히 매번 발송됨을 함께 확인).
+  - 테스트: `CodeReviewServiceSpec.kt` — 기존 테스트 1건 조정 + 신규 2 tests(참여/해제 반복 시 상쇄, 참여/해제/참여 반복 시 마지막 참여만 남음). `PullRequestServiceSpec.kt` +1 test(PULL_REQUEST_STATE_CHANGED는 연속 변경이어도 병합/상쇄 대상이 아니라 모두 남음 — 회귀 안전장치).
+  - 검증: `./gradlew compileKotlin compileTestKotlin`, `./gradlew test --tests "com.github.search5.yona.domain.pullrequest.*" --tests "com.github.search5.yona.web.PullRequest*" --tests "com.github.search5.yona.web.Review*" --tests "com.github.search5.yona.YonaApplicationTests"` 모두 통과.
 
 - **2026-08-20 — P1-39**: PR 생성 시점과 코드리뷰 리뷰어 참여/해제 시점에 `NotificationEvent`/`PullRequestEvent`가 전혀 기록되지 않던 문제 수정. yona `NotificationEvent.afterNewPullRequest`를 확인해 동일한 지점에 이벤트를 연결.
   - `PullRequestServiceImpl.createPullRequest()`: PR 저장(및 attemptMerge 시도) 이후 `EventType.NEW_PULL_REQUEST` `NotificationEvent`를 생성 — `IssueServiceImpl.createIssue()`의 `NEW_ISSUE` 패턴과 동일하게 `WatchService.findActualWatchers(baseWatchers=setOf(contributor), ...)`로 수신자를 계산(yona의 `getReceiversWithRelatedAuthors`보다 단순화됨 — 워처만 계산하고 관련 커밋 작성자까지는 포함하지 않음, 기존 `createIssue`와 동일한 수준의 근사). 이어서 `recordPullRequestEvent`로 `PullRequestEvent`도 기록. 이를 위해 `WatchService`를 신규 생성자 의존성으로 주입.
