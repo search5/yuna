@@ -5,6 +5,10 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.issue.IssueEvent
+import com.github.search5.yona.domain.issue.IssueEventRepository
+import com.github.search5.yona.domain.issue.IssueReferenceParser
+import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.EventType
 import org.eclipse.jgit.lib.ObjectId
@@ -23,7 +27,9 @@ import java.time.Instant
 @Component
 class GitPostReceiveEventListener(
     private val gitService: GitService,
-    private val notificationEventRepository: NotificationEventRepository
+    private val notificationEventRepository: NotificationEventRepository,
+    private val issueRepository: IssueRepository,
+    private val issueEventRepository: IssueEventRepository
 ) {
     private val logger = LoggerFactory.getLogger(GitPostReceiveEventListener::class.java)
 
@@ -119,10 +125,28 @@ class GitPostReceiveEventListener(
         logger.info("[NOTIFICATION] Pushed commits notification created and saved: '$title' by ${sender.name}")
     }
 
+    // yona actors/IssueReferredFromCommitEventActor.java 대응.
     private fun processIssueReferredFromCommit(commits: List<RevCommit>, project: Project, sender: User) {
         for (commit in commits) {
-            val message = commit.fullMessage
-            logger.info("[ISSUE REFER] Parsing issue references from commit '${commit.name}': $message by ${sender.loginId}")
+            recordReferredIssues(commit.fullMessage, commit.name, project, sender)
+        }
+    }
+
+    internal fun recordReferredIssues(commitMessage: String, commitId: String, project: Project, sender: User) {
+        val issueNumbers = IssueReferenceParser.findReferredIssueNumbers(commitMessage)
+        for (number in issueNumbers) {
+            val issue = issueRepository.findByProjectAndNumber(project, number) ?: continue
+
+            val issueEvent = IssueEvent(
+                issue = issue,
+                senderLoginId = sender.loginId,
+                senderEmail = sender.email,
+                newValue = commitId,
+                created = Instant.now(),
+                eventType = EventType.ISSUE_REFERRED_FROM_COMMIT
+            )
+            issueEventRepository.save(issueEvent)
+            logger.info("[ISSUE REFER] Recorded issue #$number referred from commit $commitId")
         }
     }
 }
