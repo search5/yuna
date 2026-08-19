@@ -20,6 +20,51 @@ import org.springframework.transaction.annotation.Transactional
 import java.io.File
 import java.nio.file.Files
 
+private fun createTestCommit(
+    bareRepoDir: File,
+    branch: String,
+    filePath: String,
+    content: String,
+    authorName: String = "tester",
+    authorEmail: String = "tester@yona.io"
+) {
+    val tempWorkingDir = Files.createTempDirectory("yuna-test-commit").toFile()
+    try {
+        val git = Git.init().setDirectory(tempWorkingDir).call()
+        val config = git.repository.config
+        config.setString("remote", "origin", "url", bareRepoDir.absolutePath)
+        config.setString("remote", "origin", "fetch", "+refs/heads/*:refs/remotes/origin/*")
+        config.save()
+
+        try {
+            git.fetch().setRemote("origin").call()
+            val ref = git.repository.resolve("refs/remotes/origin/$branch")
+            if (ref != null) {
+                git.checkout().setCreateBranch(true).setName(branch).setStartPoint("origin/$branch").call()
+            }
+        } catch (e: Exception) {
+            // 빈 저장소인 경우 checkout 생략
+        }
+
+        val file = File(tempWorkingDir, filePath)
+        file.parentFile.mkdirs()
+        file.writeText(content)
+
+        git.add().addFilepattern(filePath).call()
+        git.commit().setSign(false).setAuthor(authorName, authorEmail).setMessage("commit").call()
+        git.push()
+            .setRemote("origin")
+            .setRefSpecs(org.eclipse.jgit.transport.RefSpec("HEAD:refs/heads/$branch"))
+            .setForce(true)
+            .call()
+
+        git.repository.close()
+        git.close()
+    } finally {
+        tempWorkingDir.deleteRecursively()
+    }
+}
+
 @Transactional
 class CodeReviewServiceSpec @Autowired constructor(
     private val codeReviewService: CodeReviewService,
@@ -173,8 +218,11 @@ class CodeReviewServiceSpec @Autowired constructor(
                     events.first().newValue shouldBe "답글"
                 }
 
-                it("PR 밖(commitId만 있는) 리뷰 댓글은 프로젝트 감시자에게 NEW_REVIEW_COMMENT 알림이 발행되어야 한다") {
-                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PROJECT, resourceId = project.id.toString()))
+                // yona Commit.getWatchers(project) 대응: 커밋 리소스(resourceType=COMMIT,
+                // resourceId="{projectId}:{commitId}", legacy Commit.asResource()와 동일한 합성 키)를
+                // 명시적으로 감시 중인 사용자에게 알림이 가야 한다.
+                it("PR 밖(commitId만 있는) 리뷰 댓글은 그 커밋을 감시 중인 사용자에게 NEW_REVIEW_COMMENT 알림이 발행되어야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.COMMIT, resourceId = "${project.id}:deadbeef"))
 
                     codeReviewService.createReviewComment(
                         project = project, pullRequest = null, commitId = "deadbeef",
@@ -184,6 +232,26 @@ class CodeReviewServiceSpec @Autowired constructor(
                     val events = notificationEventRepository.findAll()
                     events.size shouldBe 1
                     events.first().eventType shouldBe EventType.NEW_REVIEW_COMMENT
+                    events.first().receivers.map { it.id } shouldBe listOf(otherUser.id)
+                }
+
+                // yona Commit.getWatchers()의 "이미 이 커밋에 댓글을 남긴 사용자는 기본 감시자" 대응 —
+                // Watch 엔티티로 명시적으로 감시하지 않았어도 자동으로 수신자가 된다.
+                it("PR 밖 커밋에 이미 댓글을 남긴 사용자는 명시적으로 감시하지 않아도 다음 댓글 알림을 받아야 한다") {
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "deadbeef",
+                        contents = "먼저 남긴 댓글", codeRange = null, threadId = null, currentUser = otherUser
+                    )
+                    notificationMailRepository.deleteAll()
+                    notificationEventRepository.deleteAll()
+
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "deadbeef",
+                        contents = "두 번째 댓글", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
                     events.first().receivers.map { it.id } shouldBe listOf(otherUser.id)
                 }
 
@@ -200,8 +268,8 @@ class CodeReviewServiceSpec @Autowired constructor(
             // yona NotificationEvent.forNewSVNCommitComment(project, codeComment, author) 대응 (P1-50).
             // legacy는 이 경로만 이벤트 타입이 NEW_COMMENT(NEW_REVIEW_COMMENT 아님)다.
             describe("커밋 댓글(CommitComment) 알림 (P1-50)") {
-                it("커밋 댓글을 작성하면 프로젝트 감시자에게 NEW_COMMENT 알림이 발행되어야 한다") {
-                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PROJECT, resourceId = project.id.toString()))
+                it("커밋 댓글을 작성하면 그 커밋을 감시 중인 사용자에게 NEW_COMMENT 알림이 발행되어야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.COMMIT, resourceId = "${project.id}:cafebabe"))
 
                     val comment = codeReviewService.createCommitComment(
                         project = project, commitId = "cafebabe", contents = "커밋 댓글 내용",
@@ -215,6 +283,24 @@ class CodeReviewServiceSpec @Autowired constructor(
                     event.resourceType shouldBe ResourceType.COMMIT_COMMENT
                     event.resourceId shouldBe comment.id.toString()
                     event.newValue shouldBe "커밋 댓글 내용"
+                }
+
+                it("같은 커밋에 이미 CommitComment를 남긴 사용자는 자동으로 다음 댓글 알림을 받아야 한다") {
+                    codeReviewService.createCommitComment(
+                        project = project, commitId = "cafebabe", contents = "첫 커밋 댓글",
+                        path = null, line = null, side = null, currentUser = otherUser
+                    )
+                    notificationMailRepository.deleteAll()
+                    notificationEventRepository.deleteAll()
+
+                    codeReviewService.createCommitComment(
+                        project = project, commitId = "cafebabe", contents = "두 번째 커밋 댓글",
+                        path = null, line = null, side = null, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().receivers.map { it.id } shouldBe listOf(otherUser.id)
                 }
             }
 
@@ -267,6 +353,44 @@ class CodeReviewServiceSpec @Autowired constructor(
                     codeReviewService.updateThreadState(comment.thread!!.id!!, CommentThread.ThreadState.CLOSED, user)
 
                     notificationEventRepository.findAll().size shouldBe 0
+                }
+
+                it("PR 밖(순수 커밋 위) 스레드는 그 커밋을 감시 중인 사용자에게 알림이 발행되어야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.COMMIT, resourceId = "${project.id}:deadbeef"))
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "deadbeef",
+                        contents = "댓글", codeRange = null, threadId = null, currentUser = user
+                    )
+                    notificationMailRepository.deleteAll()
+                    notificationEventRepository.deleteAll()
+
+                    codeReviewService.updateThreadState(comment.thread!!.id!!, CommentThread.ThreadState.CLOSED, user)
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().receivers.map { it.id } shouldBe listOf(otherUser.id)
+                }
+            }
+
+            // yona Commit.getWatchers()의 "커밋 작성자는 항상 기본 감시자" 규칙(getAuthor().isAnonymous()
+            // 체크만 통과하면 Watch 여부와 무관) 대응 — 실제 git 저장소로 커밋을 만들어 검증한다.
+            describe("커밋 작성자 자동 감시 (P1-50, yona Commit.getWatchers()의 author 포함 규칙 대응)") {
+                it("PR 밖 커밋에 댓글이 달리면, 그 커밋의 작성자는 감시하지 않았어도 알림을 받아야 한다") {
+                    val commitProject = projectRepository.save(Project(name = "commit-author-repo", owner = "owner-x", vcs = "GIT", projectScope = ProjectScope.PUBLIC))
+                    repositoryService.getRepository(commitProject).create()
+                    val bareDir = repositoryService.getRepository(commitProject).getDirectory()
+                    createTestCommit(bareDir, "master", "test.txt", "v1", authorName = "타인", authorEmail = "other@yona.io")
+                    val commitId = repositoryService.getRepository(commitProject).getBranches()
+                        .first { it.name == "refs/heads/master" }.headCommit.getId()
+
+                    codeReviewService.createReviewComment(
+                        project = commitProject, pullRequest = null, commitId = commitId,
+                        contents = "커밋 작성자에게 가야 할 댓글", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().receivers.map { it.id } shouldBe listOf(otherUser.id)
                 }
             }
 
@@ -434,53 +558,15 @@ class CodeReviewServiceSpec @Autowired constructor(
             }
 
             describe("isThreadOutdated (P1-20, yona CodeCommentThread.isOutdated() 대응)") {
-                fun createCommit(bareRepoDir: File, branch: String, filePath: String, content: String) {
-                    val tempWorkingDir = Files.createTempDirectory("yuna-outdated-test").toFile()
-                    try {
-                        val git = Git.init().setDirectory(tempWorkingDir).call()
-                        val config = git.repository.config
-                        config.setString("remote", "origin", "url", bareRepoDir.absolutePath)
-                        config.setString("remote", "origin", "fetch", "+refs/heads/*:refs/remotes/origin/*")
-                        config.save()
-
-                        try {
-                            git.fetch().setRemote("origin").call()
-                            val ref = git.repository.resolve("refs/remotes/origin/$branch")
-                            if (ref != null) {
-                                git.checkout().setCreateBranch(true).setName(branch).setStartPoint("origin/$branch").call()
-                            }
-                        } catch (e: Exception) {
-                            // 빈 저장소인 경우 checkout 생략
-                        }
-
-                        val file = File(tempWorkingDir, filePath)
-                        file.parentFile.mkdirs()
-                        file.writeText(content)
-
-                        git.add().addFilepattern(filePath).call()
-                        git.commit().setSign(false).setAuthor("tester", "tester@yona.io").setMessage("commit").call()
-                        git.push()
-                            .setRemote("origin")
-                            .setRefSpecs(org.eclipse.jgit.transport.RefSpec("HEAD:refs/heads/$branch"))
-                            .setForce(true)
-                            .call()
-
-                        git.repository.close()
-                        git.close()
-                    } finally {
-                        tempWorkingDir.deleteRecursively()
-                    }
-                }
-
                 it("병합 시점과 코멘트 시점의 코드가 동일하면 outdated가 아니어야 한다") {
                     val outdatedProject = projectRepository.save(Project(name = "outdated-repo-1", owner = "owner-x", vcs = "GIT"))
                     repositoryService.getRepository(outdatedProject).create()
                     try {
                         val bareDir = repositoryService.getRepository(outdatedProject).getDirectory()
-                        createCommit(bareDir, "master", "test.txt", "v1")
+                        createTestCommit(bareDir, "master", "test.txt", "v1")
                         val c1 = repositoryService.getRepository(outdatedProject).getBranches()
                             .first { it.name == "refs/heads/master" }.headCommit.getId()
-                        createCommit(bareDir, "master", "test.txt", "v2")
+                        createTestCommit(bareDir, "master", "test.txt", "v2")
                         val c2 = repositoryService.getRepository(outdatedProject).getBranches()
                             .first { it.name == "refs/heads/master" }.headCommit.getId()
 
@@ -517,10 +603,10 @@ class CodeReviewServiceSpec @Autowired constructor(
                     repositoryService.getRepository(outdatedProject).create()
                     try {
                         val bareDir = repositoryService.getRepository(outdatedProject).getDirectory()
-                        createCommit(bareDir, "master", "test.txt", "v1")
+                        createTestCommit(bareDir, "master", "test.txt", "v1")
                         val c1 = repositoryService.getRepository(outdatedProject).getBranches()
                             .first { it.name == "refs/heads/master" }.headCommit.getId()
-                        createCommit(bareDir, "master", "test.txt", "v2")
+                        createTestCommit(bareDir, "master", "test.txt", "v2")
                         val c2 = repositoryService.getRepository(outdatedProject).getBranches()
                             .first { it.name == "refs/heads/master" }.headCommit.getId()
 
@@ -547,7 +633,7 @@ class CodeReviewServiceSpec @Autowired constructor(
                         )
 
                         // 병합 이후 test.txt가 v3로 다시 바뀌고, PR의 mergedCommitIdTo도 그 시점으로 갱신됐다고 가정
-                        createCommit(bareDir, "master", "test.txt", "v3")
+                        createTestCommit(bareDir, "master", "test.txt", "v3")
                         val c3 = repositoryService.getRepository(outdatedProject).getBranches()
                             .first { it.name == "refs/heads/master" }.headCommit.getId()
                         pr.mergedCommitIdTo = c3

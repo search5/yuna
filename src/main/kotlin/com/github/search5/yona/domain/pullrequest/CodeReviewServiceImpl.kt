@@ -140,18 +140,11 @@ class CodeReviewServiceImpl(
                 )
             )
         } else {
-            // yona commit.getWatchers(project)(커밋 단위 감시자) 대응 — yuna는 커밋을 감시 대상으로
-            // 등록하는 UI/데이터 모델이 없어(P1-25/46에서도 같은 제약 확인) 프로젝트 감시자로 대체한다.
+            val commitId = thread.commitId
             title = "[${project.name}] 커밋 리뷰에 새 댓글이 등록되었습니다."
-            receivers.addAll(
-                watchService.findActualWatchers(
-                    baseWatchers = emptySet(),
-                    resourceType = ResourceType.PROJECT,
-                    resourceId = project.id.toString(),
-                    projectId = project.id,
-                    eventType = EventType.NEW_REVIEW_COMMENT
-                )
-            )
+            if (commitId != null) {
+                receivers.addAll(getCommitWatchers(project, commitId, EventType.NEW_REVIEW_COMMENT))
+            }
         }
         receivers.removeIf { it.id == sender.id }
         if (receivers.isEmpty()) return
@@ -167,6 +160,42 @@ class CodeReviewServiceImpl(
             receivers = receivers
         )
         notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
+    }
+
+    // yona playRepository/Commit.java의 getWatchers(project)/asResource(project) 대응. PR 밖(순수 커밋
+    // 위) 리뷰/커밋 댓글·스레드 상태변경 알림의 "커밋 단위 감시자"를 계산한다. 기본 감시자는 (1) 커밋
+    // 작성자(게스트 제외), (2) 이미 이 커밋에 댓글을 남긴 모든 사용자(git이면 ReviewComment 스레드,
+    // svn 계열이면 CommitComment)이고, 여기에 Watch 엔티티로 이 커밋(resourceType=COMMIT,
+    // resourceId="{projectId}:{commitId}" — legacy Commit.asResource()와 동일한 합성 키)을 명시적으로
+    // 감시 중인 사용자까지 findActualWatchers()로 합산한다.
+    private fun getCommitWatchers(project: Project, commitId: String, eventType: EventType): Set<User> {
+        val baseWatchers = mutableSetOf<User>()
+
+        try {
+            val author = repositoryService.getRepository(project).getCommit(commitId)?.getAuthor()
+            if (author != null && author.id != null && !author.isGuest) {
+                baseWatchers.add(author)
+            }
+        } catch (e: Exception) {
+            // VCS에서 커밋 작성자 조회 실패 시 조용히 무시(createReviewComment의 codeAuthor 조회와 동일한 방어)
+        }
+
+        commentThreadRepository.findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(project, commitId)
+            .flatMap { it.reviewComments }
+            .mapNotNull { it.author?.id }
+            .forEach { authorId -> userRepository.findById(authorId).ifPresent { baseWatchers.add(it) } }
+
+        commitCommentRepository.findByProjectAndCommitIdOrderByCreatedDateAsc(project, commitId)
+            .mapNotNull { it.author?.id }
+            .forEach { authorId -> userRepository.findById(authorId).ifPresent { baseWatchers.add(it) } }
+
+        return watchService.findActualWatchers(
+            baseWatchers = baseWatchers,
+            resourceType = ResourceType.COMMIT,
+            resourceId = "${project.id}:$commitId",
+            projectId = project.id,
+            eventType = eventType
+        )
     }
 
     override fun deleteReviewComment(commentId: Long, currentUser: User) {
@@ -230,17 +259,7 @@ class CodeReviewServiceImpl(
         val mentioned = commentService.extractMentionedUsers(comment.contents)
         val receivers = mutableSetOf<User>()
         receivers.addAll(mentioned)
-        // yona commit.getWatchers(project) 대응 — createReviewComment의 커밋 단위 분기와 동일한 이유로
-        // 프로젝트 감시자로 대체한다.
-        receivers.addAll(
-            watchService.findActualWatchers(
-                baseWatchers = emptySet(),
-                resourceType = ResourceType.PROJECT,
-                resourceId = project.id.toString(),
-                projectId = project.id,
-                eventType = EventType.NEW_COMMENT
-            )
-        )
+        receivers.addAll(getCommitWatchers(project, comment.commitId, EventType.NEW_COMMENT))
         receivers.removeIf { it.id == sender.id }
         if (receivers.isEmpty()) return
 
@@ -313,16 +332,9 @@ class CodeReviewServiceImpl(
             )
         } else {
             val project = thread.project ?: return
+            val commitId = thread.commitId ?: return
             title = "[${project.name}] 리뷰 스레드 상태가 변경되었습니다."
-            // yona commit.getWatchers(project) 대응 — createReviewComment의 커밋 단위 분기와 동일한 이유로
-            // 프로젝트 감시자로 대체한다.
-            watchers = watchService.findActualWatchers(
-                baseWatchers = emptySet(),
-                resourceType = ResourceType.PROJECT,
-                resourceId = project.id.toString(),
-                projectId = project.id,
-                eventType = EventType.REVIEW_THREAD_STATE_CHANGED
-            )
+            watchers = getCommitWatchers(project, commitId, EventType.REVIEW_THREAD_STATE_CHANGED)
         }
 
         val receivers = watchers.filterTo(mutableSetOf()) { it.id != sender.id }
