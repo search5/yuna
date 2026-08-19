@@ -44,8 +44,8 @@
 | P1-03 | [x] | OAuth 다중 계정 연동/병합 소실 | `models/LinkedAccount.java` | `domain/user/LinkedAccount.kt`(신규), `config/oauth2/CustomOAuth2UserService.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-04 | [x] | 이메일 도메인 allowlist 미시행 | `UserApp.java:385-499` | `domain/user/EmailDomainValidator.kt`(신규), `web/AuthController.kt`, `config/oauth2/CustomOAuth2UserService.kt` | **완료** |
 | P1-05 | [x] | Related-PR 재병합 로직 스텁 | `RelatedPullRequestMergingActor.java` | `domain/event/PullRequestMergeEventListener.kt` | **완료(범위 조정, 아래 참고)** |
-| P1-06 | [ ] | 커밋→이슈 자동 참조 리스너가 로깅만 함 | `IssueReferredFromCommitEventActor.java` | `domain/event/GitPostReceiveEventListener.kt` |
-| P1-07 | [ ] | 이슈 타임라인(IssueEvent) 부재 | `models/IssueEvent.java` | `domain/issue/` |
+| P1-06 | [x] | 커밋→이슈 자동 참조 리스너가 로깅만 함 | `IssueReferredFromCommitEventActor.java` | `domain/event/GitPostReceiveEventListener.kt` | **완료** — `IssueEvent` 최소 엔티티 신설(P1-07 선행 작업) |
+| P1-07 | [ ] | 이슈 타임라인(IssueEvent) 부재 | `models/IssueEvent.java` | `domain/issue/IssueEvent.kt`(엔티티는 P1-06에서 신설됨) | 엔티티/리포지토리는 있음. 상태·담당자·마일스톤·라벨 변경 시 `IssueServiceImpl`에서 기록하는 로직과 타임라인 조회 API/화면은 아직 없음 |
 | P1-08 | [ ] | PR 타임라인(PullRequestEvent) 부재 | `models/PullRequestEvent.java` | `domain/pullrequest/` |
 | P1-09 | [ ] | RecentIssue(최근 본 이슈) 부재 | `models/RecentIssue.java` | (해당 없음) |
 | P1-10 | [ ] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` |
@@ -180,6 +180,12 @@
   - 충돌 상태가 실제로 바뀐 경우(없음→발생, 발생→해소)에만 `NotificationEvent`를 발행 — P0-01(알림 메일)·P0-03(웹훅)이 이미 이 이벤트를 구독하고 있어 별도 배선 없이 자동으로 메일/웹훅까지 나간다.
   - **범위 조정**: yona `PullRequestActor.processPullRequestMerging`의 "새 커밋이 추가되면 `PullRequestEvent` 타임라인에 커밋 이벤트 추가" 부분은 `PullRequestEvent`(P1-08) 부재로 이번 패스에서 다루지 않음 — 충돌 상태 변화 알림까지만 구현.
   - 테스트: `PullRequestMergeEventListenerSpec.kt`(신규) 5 tests(재검사 후 isMerging 복구, 충돌 발생/해소 시 알림 발행, 상태 변화 없으면 미발행, 예외 발생해도 isMerging 복구). 기존 `PullRequestServiceSpec.kt`(실제 MariaDB+git) 재실행으로 회귀 없음 확인. 커버리지 INSTRUCTION 86%(449/520, 파일 전체 — 기존 메서드 포함).
+
+- **2026-08-19 — P1-06**: `GitPostReceiveEventListener.processIssueReferredFromCommit()`가 커밋 메시지를 로그로만 찍고 실제로 이슈 참조 이벤트를 만들지 않던 문제 수정. yona `IssueReferredFromCommitEventActor.java` 대응.
+  - **선행 의존성 처리**: 이 기능은 원래 P1-07(`IssueEvent` 부재)에 의존한다 — yona가 참조 기록을 `IssueEvent` 엔티티에 저장하기 때문에, `IssueEvent`(id, issue, senderLoginId, senderEmail, oldValue/newValue, created, eventType) 최소 엔티티+리포지토리를 이번에 함께 신설했다. 상태/담당자/마일스톤 변경 등 나머지 이벤트 타입 기록과 타임라인 조회 API는 P1-07에 남겨둠(아래 참고).
+  - `IssueReferenceParser`(순수 함수)로 커밋 메시지에서 `#123` 형태의 이슈 참조를 추출(yona `Issue.ISSUE_PATTERN` 대응).
+  - 참조된 이슈가 프로젝트에 실제로 존재하면 `IssueEvent(eventType=ISSUE_REFERRED_FROM_COMMIT)`를 저장, 존재하지 않으면 조용히 스킵.
+  - 테스트: `IssueReferenceParserSpec.kt`(신규) 5 tests, `GitPostReceiveEventListenerSpec.kt`(신규) 4 tests. 전체 컨텍스트 로딩으로 신규 엔티티/빈 배선 확인.
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

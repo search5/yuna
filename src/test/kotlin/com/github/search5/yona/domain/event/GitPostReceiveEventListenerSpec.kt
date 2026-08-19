@@ -1,0 +1,78 @@
+package com.github.search5.yona.domain.event
+
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueEvent
+import com.github.search5.yona.domain.issue.IssueEventRepository
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.project.GitService
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.user.User
+import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.slot
+import io.mockk.verify
+
+class GitPostReceiveEventListenerSpec : DescribeSpec({
+    val gitService = mockk<GitService>()
+    val notificationEventRepository = mockk<NotificationEventRepository>(relaxed = true)
+    val issueRepository = mockk<IssueRepository>()
+    val issueEventRepository = mockk<IssueEventRepository>()
+
+    val listener = GitPostReceiveEventListener(
+        gitService, notificationEventRepository, issueRepository, issueEventRepository
+    )
+
+    val project = Project(id = 1L, name = "yona-project", owner = "gildong")
+    val sender = User(id = 9L, loginId = "gildong", name = "길동", email = "gildong@example.com")
+
+    beforeTest {
+        io.mockk.clearMocks(issueRepository, issueEventRepository, answers = false)
+    }
+
+    describe("GitPostReceiveEventListener.recordReferredIssues") {
+        it("커밋 메시지가 언급한 이슈가 프로젝트에 존재하면 IssueEvent를 기록해야 한다") {
+            val issue = Issue(id = 100L, title = "버그", body = "...", project = project, number = 42L)
+            every { issueRepository.findByProjectAndNumber(project, 42L) } returns issue
+            val savedSlot = slot<IssueEvent>()
+            every { issueEventRepository.save(capture(savedSlot)) } answers { firstArg() }
+
+            listener.recordReferredIssues("fix #42 bug", "abc123commit", project, sender)
+
+            savedSlot.captured.issue shouldBe issue
+            savedSlot.captured.senderLoginId shouldBe "gildong"
+            savedSlot.captured.senderEmail shouldBe "gildong@example.com"
+            savedSlot.captured.newValue shouldBe "abc123commit"
+            savedSlot.captured.eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.ISSUE_REFERRED_FROM_COMMIT
+        }
+
+        it("언급된 이슈 번호가 프로젝트에 존재하지 않으면 조용히 스킵해야 한다") {
+            every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+            listener.recordReferredIssues("close #999", "def456", project, sender)
+
+            verify(exactly = 0) { issueEventRepository.save(any()) }
+        }
+
+        it("커밋 메시지에 이슈 참조가 없으면 아무 것도 저장하지 않아야 한다") {
+            listener.recordReferredIssues("just a regular commit", "ghi789", project, sender)
+
+            verify(exactly = 0) { issueRepository.findByProjectAndNumber(any(), any()) }
+            verify(exactly = 0) { issueEventRepository.save(any()) }
+        }
+
+        it("커밋 메시지에 여러 이슈가 언급되면 각각에 대해 IssueEvent를 기록해야 한다") {
+            val issue1 = Issue(id = 1L, title = "A", body = "", project = project, number = 1L)
+            val issue2 = Issue(id = 2L, title = "B", body = "", project = project, number = 2L)
+            every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue1
+            every { issueRepository.findByProjectAndNumber(project, 2L) } returns issue2
+            every { issueEventRepository.save(any()) } answers { firstArg() }
+
+            listener.recordReferredIssues("fixes #1 and #2", "jkl012", project, sender)
+
+            verify(exactly = 2) { issueEventRepository.save(any()) }
+        }
+    }
+})
