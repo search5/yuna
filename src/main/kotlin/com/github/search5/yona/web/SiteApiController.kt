@@ -8,6 +8,7 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.mail.MailService
+import com.github.search5.yona.domain.site.DataBackupService
 import com.github.search5.yona.domain.support.YonaUpdateService
 import org.springframework.core.env.Environment
 import org.springframework.http.HttpHeaders
@@ -31,6 +32,7 @@ class SiteApiController(
     private val projectRepository: ProjectRepository,
     private val mailService: MailService,
     private val yonaUpdateService: YonaUpdateService,
+    private val dataBackupService: DataBackupService,
     private val objectMapper: ObjectMapper,
     private val environment: org.springframework.core.env.Environment
 ) {
@@ -219,31 +221,13 @@ class SiteApiController(
         return ResponseEntity.ok(emails)
     }
 
-    // 9. 전체 데이터 백업 다운로드
+    // 9. 전체 데이터 백업 다운로드 (모든 테이블, P0-07: users/projects만 백업되던 문제 해결)
     @GetMapping("/export")
     fun exportData(
         authentication: Authentication?
     ): ResponseEntity<ByteArray> {
         checkAdmin(authentication)
-        val dataMap = mutableMapOf<String, Any>()
-        dataMap["users"] = userRepository.findAll().map {
-            mapOf(
-                "loginId" to it.loginId,
-                "name" to it.name,
-                "email" to (it.email ?: ""),
-                "isGuest" to it.isGuest,
-                "state" to it.state.name
-            )
-        }
-        dataMap["projects"] = projectRepository.findAll().map {
-            mapOf(
-                "name" to it.name,
-                "owner" to (it.owner ?: ""),
-                "vcs" to (it.vcs ?: "GIT"),
-                "projectScope" to it.projectScope.name
-            )
-        }
-        val jsonBytes = objectMapper.writeValueAsBytes(dataMap)
+        val jsonBytes = dataBackupService.exportAll()
         val headers = HttpHeaders()
         headers.contentType = MediaType.APPLICATION_JSON
         headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"yona-data-${Instant.now().epochSecond}.json\"")
@@ -252,7 +236,7 @@ class SiteApiController(
             .body(jsonBytes)
     }
 
-    // 10. 데이터 업로드 복원
+    // 10. 데이터 업로드 복원 (모든 테이블 전체 교체 - 완전 복원)
     @PostMapping("/import")
     fun importData(
         @RequestParam("data") file: MultipartFile,
@@ -262,38 +246,7 @@ class SiteApiController(
         checkAdmin(authentication)
         if (!file.isEmpty) {
             try {
-                val dataMap = objectMapper.readValue(file.bytes, Map::class.java) as Map<*, *>
-                val usersData = dataMap["users"] as? List<*> ?: emptyList<Any>()
-                for (u in usersData) {
-                    val uMap = u as? Map<*, *> ?: continue
-                    val loginId = uMap["loginId"]?.toString() ?: continue
-                    if (!userRepository.findByLoginId(loginId).isPresent) {
-                        val newUser = User(
-                            loginId = loginId,
-                            name = uMap["name"]?.toString() ?: "",
-                            email = uMap["email"]?.toString() ?: "",
-                            isGuest = uMap["isGuest"]?.toString()?.toBoolean() ?: false,
-                            state = UserState.of(uMap["state"]?.toString() ?: "ACTIVE") ?: UserState.ACTIVE
-                        )
-                        userRepository.save(newUser)
-                    }
-                }
-                val projectsData = dataMap["projects"] as? List<*> ?: emptyList<Any>()
-                for (p in projectsData) {
-                    val pMap = p as? Map<*, *> ?: continue
-                    val name = pMap["name"]?.toString() ?: continue
-                    val owner = pMap["owner"]?.toString() ?: continue
-                    val exist = projectRepository.findByOwnerAndName(owner, name).isPresent
-                    if (!exist) {
-                        val newProject = Project(
-                            name = name,
-                            owner = owner,
-                            vcs = pMap["vcs"]?.toString() ?: "GIT",
-                            projectScope = ProjectScope.valueOf(pMap["projectScope"]?.toString() ?: "PRIVATE")
-                        )
-                        projectRepository.save(newProject)
-                    }
-                }
+                dataBackupService.importAll(file.bytes)
             } catch (e: Exception) {
                 return "error/400"
             }
