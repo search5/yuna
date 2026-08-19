@@ -38,6 +38,7 @@ import com.github.search5.yona.domain.issue.IssueSpecification
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.config.TemplateHelper
 import com.github.search5.yona.domain.issue.IssueExcelService
+import com.github.search5.yona.domain.issue.RecentIssueService
 
 @Controller
 class IssueViewController(
@@ -57,7 +58,8 @@ class IssueViewController(
     private val issueService: IssueService,
     private val templateHelper: TemplateHelper,
     private val issueExcelService: IssueExcelService,
-    private val repositoryService: RepositoryService
+    private val repositoryService: RepositoryService,
+    private val recentIssueService: RecentIssueService
 ) {
 
     @GetMapping("/{owner}/{projectName}/issues")
@@ -239,6 +241,14 @@ class IssueViewController(
 
         val issue = issueRepository.findByProjectAndNumber(project, number) ?: return "error/404"
         val comments = issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!)
+
+        if (loginUser != null) {
+            try {
+                recentIssueService.recordIssueVisit(loginUser, issue)
+            } catch (e: Exception) {
+                // NOOP: 방문 이력 기록 실패가 이슈 조회 자체를 막지 않아야 한다
+            }
+        }
 
         val isWatching = loginUser?.let {
             watchService.isWatching(it, ResourceType.ISSUE_POST, issue.id.toString())

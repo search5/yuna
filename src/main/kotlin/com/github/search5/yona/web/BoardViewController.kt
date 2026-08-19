@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Value
 import com.github.search5.yona.domain.vcs.BareCommit
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.issue.RecentIssueService
 import tools.jackson.databind.ObjectMapper
 
 @Controller
@@ -36,7 +37,8 @@ class BoardViewController(
     private val objectMapper: ObjectMapper,
     private val repositoryService: com.github.search5.yona.domain.vcs.RepositoryService,
     @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
-    private val gitBaseDir: String
+    private val gitBaseDir: String,
+    private val recentIssueService: RecentIssueService
 ) {
 
     @GetMapping("/{owner}/{projectName}/posts")
@@ -112,6 +114,14 @@ class BoardViewController(
 
         val posting = postingService.getPosting(project.id!!, number) ?: return "error/404"
         val comments = postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(posting.id!!)
+
+        if (loginUser != null) {
+            try {
+                recentIssueService.recordPostingVisit(loginUser, posting)
+            } catch (e: Exception) {
+                // NOOP: 방문 이력 기록 실패가 게시글 조회 자체를 막지 않아야 한다
+            }
+        }
 
         val isWatching = loginUser?.let {
             watchService.isWatching(it, ResourceType.BOARD_POST, posting.id.toString())
