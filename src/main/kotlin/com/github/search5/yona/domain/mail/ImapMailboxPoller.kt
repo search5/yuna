@@ -9,7 +9,6 @@ import jakarta.mail.Session
 import jakarta.mail.internet.InternetAddress
 import jakarta.mail.internet.MimeMessage
 import jakarta.mail.search.FlagTerm
-import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -98,6 +97,7 @@ class ImapMailboxPoller(
             ?.map { it.address }
             ?: emptyList()
         val mime = message as? MimeMessage
+        val body = extractBody(message)
 
         return InboundEmailMessage(
             messageId = mime?.messageID ?: "",
@@ -107,13 +107,14 @@ class ImapMailboxPoller(
             recipientAddresses = recipients,
             inReplyTo = mime?.getHeader("In-Reply-To")?.firstOrNull(),
             references = mime?.getHeader("References")?.firstOrNull(),
-            textBody = extractTextBody(message),
+            textBody = body.content,
+            isHtml = body.isHtml,
             attachments = extractAttachments(message)
         )
     }
 
     // yona CreationViaEmail.saveAttachments()가 순회하는 MIME 파트 트리 대응 (P1-29).
-    // cid 이미지 치환은 다루지 않고(별도 후속), 첨부/인라인 파일을 추출해 그대로 저장 대상으로만 넘긴다.
+    // Content-ID도 함께 추출해 본문의 cid: 참조와 매칭할 수 있게 한다(P1-47).
     private fun extractAttachments(part: Part): List<InboundAttachment> {
         return try {
             when {
@@ -123,7 +124,8 @@ class ImapMailboxPoller(
                 }
                 !part.fileName.isNullOrBlank() -> {
                     val bytes = part.inputStream.use { it.readBytes() }
-                    listOf(InboundAttachment(part.fileName, part.contentType ?: "application/octet-stream", bytes))
+                    val contentId = (part as? jakarta.mail.internet.MimePart)?.contentID?.trim('<', '>')
+                    listOf(InboundAttachment(part.fileName, part.contentType ?: "application/octet-stream", bytes, contentId))
                 }
                 else -> emptyList()
             }
@@ -133,22 +135,27 @@ class ImapMailboxPoller(
         }
     }
 
-    private fun extractTextBody(part: Part): String {
+    private data class ExtractedBody(val content: String, val isHtml: Boolean)
+
+    // yona CreationViaEmail.processPart()/getContentOfBestPart() 대응(간소화 - 여러 표현 중 첫 번째로
+    // 발견되는 비어있지 않은 파트를 그대로 쓴다). text/plain이 있으면 그걸 쓰고, text/html뿐이면 P1-47부터는
+    // 태그를 벗겨 텍스트화하지 않고 원본 HTML을 그대로 보존한다(cid 치환·마크다운 렌더링은 상위에서 처리).
+    private fun extractBody(part: Part): ExtractedBody {
         return try {
             when {
-                part.isMimeType("text/plain") -> part.content as? String ?: ""
+                part.isMimeType("text/plain") -> ExtractedBody(part.content as? String ?: "", false)
                 part.isMimeType("multipart/*") -> {
                     val multipart = part.content as Multipart
                     (0 until multipart.count)
-                        .map { extractTextBody(multipart.getBodyPart(it)) }
-                        .firstOrNull { it.isNotBlank() } ?: ""
+                        .map { extractBody(multipart.getBodyPart(it)) }
+                        .firstOrNull { it.content.isNotBlank() } ?: ExtractedBody("", false)
                 }
-                part.isMimeType("text/html") -> Jsoup.parse(part.content as? String ?: "").text()
-                else -> ""
+                part.isMimeType("text/html") -> ExtractedBody(part.content as? String ?: "", true)
+                else -> ExtractedBody("", false)
             }
         } catch (e: Exception) {
             logger.warn("메일 본문 추출 실패", e)
-            ""
+            ExtractedBody("", false)
         }
     }
 }

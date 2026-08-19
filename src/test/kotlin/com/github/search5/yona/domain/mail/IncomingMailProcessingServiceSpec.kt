@@ -9,7 +9,9 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingComment
+import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -45,11 +47,14 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     val commitCommentRepository = mockk<CommitCommentRepository>()
     val codeReviewService = mockk<CodeReviewService>()
     val mailService = mockk<MailService>(relaxed = true)
+    val issueCommentRepository = mockk<IssueCommentRepository>()
+    val postingCommentRepository = mockk<PostingCommentRepository>()
 
     val service = IncomingMailProcessingService(
         originalEmailRepository, userRepository, projectRepository,
         issueRepository, postingRepository, issueService, commentService, attachmentService,
         commentThreadRepository, commitCommentRepository, codeReviewService, mailService,
+        issueCommentRepository, postingCommentRepository,
         inboundBaseAddress = "yona@example.com"
     )
 
@@ -60,7 +65,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
         io.mockk.clearMocks(
             originalEmailRepository, userRepository, projectRepository, issueRepository, postingRepository,
             issueService, commentService, attachmentService, commentThreadRepository, commitCommentRepository,
-            codeReviewService, mailService
+            codeReviewService, mailService, issueCommentRepository, postingCommentRepository
         )
         every { originalEmailRepository.existsByMessageId(any()) } returns false
         every { userRepository.findByEmail("gildong@example.com") } returns Optional.of(sender)
@@ -240,6 +245,50 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 service.process(baseMessage())
 
                 verify(exactly = 0) { attachmentService.store(any(), any(), any(), any(), any()) }
+            }
+        }
+
+        describe("HTML 본문 보존 및 cid 인라인 이미지 치환 (P1-47, yona CreationViaEmail.postprocessForHTML/replaceCidWithAttachments 대응)") {
+            it("새 이슈 생성 시 HTML 본문의 cid: 참조를 저장된 첨부파일 URL로 치환해 본문을 갱신해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val htmlBody = "<p>사진: <img src=\"cid:image1\"></p>"
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = htmlBody, project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { issueRepository.findById(100L) } returns Optional.of(savedIssue)
+                every { issueRepository.save(any()) } returnsArgument 0
+
+                val savedAttachment = com.github.search5.yona.domain.attachment.Attachment(
+                    id = 999L, name = "photo.png", containerType = ResourceType.ISSUE_POST, containerId = "100"
+                )
+                every {
+                    attachmentService.store(any(), "photo.png", ResourceType.ISSUE_POST, "100", "gildong")
+                } returns savedAttachment
+
+                val attachment = InboundAttachment(
+                    fileName = "photo.png", contentType = "image/png", bytes = byteArrayOf(1, 2, 3), contentId = "image1"
+                )
+                val message = baseMessage(attachments = listOf(attachment)).copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                val bodySlot = slot<Issue>()
+                verify(exactly = 1) { issueRepository.save(capture(bodySlot)) }
+                bodySlot.captured.body shouldBe "<p>사진: <img src=\"/files/999\"></p>"
+            }
+
+            it("cid에 매칭되는 첨부파일이 없으면 이슈 본문을 갱신하지 않아야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val htmlBody = "<p>서식 있는 본문</p>"
+                val savedIssue = Issue(id = 101L, title = "메일로 만든 이슈", body = htmlBody, project = project, number = 2L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val message = baseMessage().copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                verify(exactly = 0) { issueRepository.save(any()) }
             }
         }
 

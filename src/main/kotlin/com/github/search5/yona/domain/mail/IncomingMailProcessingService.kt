@@ -1,11 +1,14 @@
 package com.github.search5.yona.domain.mail
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.attachment.Attachment
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.project.Project
@@ -14,6 +17,7 @@ import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -50,6 +54,8 @@ class IncomingMailProcessingService(
     private val commitCommentRepository: CommitCommentRepository,
     private val codeReviewService: CodeReviewService,
     private val mailService: MailService,
+    private val issueCommentRepository: IssueCommentRepository,
+    private val postingCommentRepository: PostingCommentRepository,
     @Value("\${yuna.mailbox.imap.address:}")
     private val inboundBaseAddress: String
 ) {
@@ -165,33 +171,94 @@ class IncomingMailProcessingService(
         } else {
             createIssue(project, owner, projectName, sender, message)
         }
-        attachAttachments(outcome, message.attachments, sender)
+        val cidAttachments = attachAttachments(outcome, message.attachments, sender)
+
+        // yona CreationViaEmail.postprocessForHTML/replaceCidWithAttachments 대응 (P1-47).
+        if (message.isHtml && cidAttachments.isNotEmpty()) {
+            postprocessHtmlBody(outcome, cidAttachments)
+        }
+
         return outcome
     }
 
-    // yona CreationViaEmail.saveAttachments() 대응 (P1-29). cid 이미지 치환은 다루지 않고
-    // 첨부파일을 생성된 리소스에 그대로 연결하는 것까지만 구현한다.
-    private fun attachAttachments(outcome: IncomingMailOutcome, attachments: List<InboundAttachment>, sender: User) {
-        if (attachments.isEmpty()) return
+    // yona CreationViaEmail.saveAttachments() 대응 (P1-29). Content-ID가 있는 첨부파일은
+    // cid → Attachment 매핑으로 반환해, HTML 본문의 cid: 참조 치환(P1-47)에 사용한다.
+    private fun attachAttachments(outcome: IncomingMailOutcome, attachments: List<InboundAttachment>, sender: User): Map<String, Attachment> {
+        if (attachments.isEmpty()) return emptyMap()
         val (resourceType, resourceId) = when (outcome) {
             is IncomingMailOutcome.IssueCreated -> ResourceType.ISSUE_POST to outcome.issueId.toString()
             is IncomingMailOutcome.IssueCommentCreated -> ResourceType.ISSUE_POST to outcome.issueId.toString()
             is IncomingMailOutcome.PostingCommentCreated -> ResourceType.BOARD_POST to outcome.postingId.toString()
-            else -> return
+            else -> return emptyMap()
         }
+        val cidMap = mutableMapOf<String, Attachment>()
         for (attachment in attachments) {
             try {
-                attachmentService.store(
+                val saved = attachmentService.store(
                     attachment.bytes.inputStream(),
                     attachment.fileName,
                     resourceType,
                     resourceId,
                     sender.loginId
                 )
+                if (!attachment.contentId.isNullOrBlank()) {
+                    cidMap[attachment.contentId] = saved
+                }
             } catch (e: Exception) {
                 logger.warn("메일 첨부파일 저장 실패: fileName=${attachment.fileName}", e)
             }
         }
+        return cidMap
+    }
+
+    // yona CreationViaEmail.replaceCidWithAttachments() 대응 (P1-47). 이미 생성된 리소스의 본문에서
+    // cid: 참조를 실제 저장된 첨부파일 URL로 치환해 갱신한다. Issue/Posting 본문은 Markdown 기준이지만
+    // 렌더링 시점에 항상 OWASP sanitizer를 거치므로(MarkdownServiceImpl, P0-08) 원본 HTML을 그대로
+    // 저장해도 안전하다.
+    private fun postprocessHtmlBody(outcome: IncomingMailOutcome, cidAttachments: Map<String, Attachment>) {
+        when (outcome) {
+            is IncomingMailOutcome.IssueCreated -> {
+                val issue = issueRepository.findById(outcome.issueId).orElse(null) ?: return
+                val replaced = replaceCidWithAttachments(issue.body ?: "", cidAttachments) ?: return
+                issue.body = replaced
+                issueRepository.save(issue)
+            }
+            is IncomingMailOutcome.IssueCommentCreated -> {
+                val comment = issueCommentRepository.findById(outcome.commentId).orElse(null) ?: return
+                val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
+                comment.contents = replaced
+                issueCommentRepository.save(comment)
+            }
+            is IncomingMailOutcome.PostingCommentCreated -> {
+                val comment = postingCommentRepository.findById(outcome.commentId).orElse(null) ?: return
+                val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
+                comment.contents = replaced
+                postingCommentRepository.save(comment)
+            }
+            else -> return
+        }
+    }
+
+    // cid: 참조가 하나도 치환되지 않으면 null을 반환해 불필요한 저장을 막는다.
+    private fun replaceCidWithAttachments(html: String, attachments: Map<String, Attachment>): String? {
+        val doc = Jsoup.parse(html)
+        var replacedAny = false
+
+        for (attrName in listOf("src", "href")) {
+            for (tag in doc.select("*[$attrName]")) {
+                val uri = tag.attr(attrName).trim()
+                if (!uri.startsWith("cid:", ignoreCase = true)) continue
+
+                val cid = uri.substring("cid:".length)
+                val attachment = attachments[cid] ?: continue
+
+                tag.attr(attrName, "/files/${attachment.id}")
+                replacedAny = true
+            }
+        }
+
+        if (!replacedAny) return null
+        return doc.body().html()
     }
 
     private fun resolveThreads(message: InboundEmailMessage): List<ResolvedThread> {
