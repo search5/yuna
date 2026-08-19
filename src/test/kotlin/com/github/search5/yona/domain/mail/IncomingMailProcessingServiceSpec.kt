@@ -342,5 +342,46 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 verify(exactly = 0) { mailService.sendReply(any(), any(), any(), any(), any()) }
             }
         }
+
+        describe("수신 주소 detail에 리소스 경로 직접 명시(owner/project/resourceType/id) 지원 (P1-32, yona EmailHandler.getResourceFromDetail 대응)") {
+            it("detail이 owner/project/issue_post/50 형식이면 In-Reply-To 없이도 그 이슈에 바로 댓글을 달아야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val existingIssue = Issue(id = 50L, title = "기존 이슈", body = "...", project = project, number = 3L)
+                every { issueRepository.findById(50L) } returns Optional.of(existingIssue)
+                val savedComment = IssueComment(id = 200L, contents = "메일 본문 내용", issue = existingIssue)
+                every { commentService.createIssueComment(50L, "메일 본문 내용", sender) } returns savedComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/issue_post/50@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCommentCreated(200L, 50L))
+                verify(exactly = 0) { issueService.createIssue(any(), any(), any(), any(), any()) }
+            }
+
+            it("직접 지정한 리소스가 다른 프로젝트 소속이면 무시하고 일반 새 이슈 생성으로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val otherProject = Project(id = 20L, name = "other", owner = "other-owner", projectScope = ProjectScope.PUBLIC)
+                val issueInOtherProject = Issue(id = 60L, title = "다른 프로젝트 이슈", body = "...", project = otherProject, number = 1L)
+                every { issueRepository.findById(60L) } returns Optional.of(issueInOtherProject)
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/issue_post/60@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("알 수 없는 리소스 타입 세그먼트는 무시하고 일반 새 이슈 생성으로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/unknown_type/99@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+        }
     }
 })
