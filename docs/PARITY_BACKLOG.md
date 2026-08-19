@@ -47,7 +47,7 @@
 | P1-06 | [x] | 커밋→이슈 자동 참조 리스너가 로깅만 함 | `IssueReferredFromCommitEventActor.java` | `domain/event/GitPostReceiveEventListener.kt` | **완료** — `IssueEvent` 최소 엔티티 신설(P1-07 선행 작업) |
 | P1-07 | [x] | 이슈 타임라인(IssueEvent) 부재 | `models/IssueEvent.java` | `domain/issue/IssueServiceImpl.kt`, `web/IssueController.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-08 | [x] | PR 타임라인(PullRequestEvent) 부재 | `models/PullRequestEvent.java` | `domain/pullrequest/PullRequestEvent.kt`(신규), `PullRequestServiceImpl.kt`, `domain/event/PullRequestMergeEventListener.kt`, `web/PullRequestController.kt` | **완료(범위 조정, 아래 참고)** |
-| P1-09 | [ ] | RecentIssue(최근 본 이슈) 부재 | `models/RecentIssue.java` | (해당 없음) |
+| P1-09 | [x] | RecentIssue(최근 본 이슈) 부재 | `models/RecentIssue.java` | `domain/issue/{RecentIssue,RecentIssueRepository,RecentIssueService}.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P1-10 | [ ] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` |
 | P1-11 | [ ] | 라벨 카테고리 수정 기능 없음 | `IssueLabelApp.java:390` | 위와 동일 |
 | P1-12 | [ ] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 |
@@ -79,6 +79,7 @@
 | P1-38 | [ ] | IssueEvent draft-time 병합/취소 최적화 없음 | `models/IssueEvent.java` `add()/addWithoutSkipEvent()` | `domain/issue/IssueServiceImpl.kt recordIssueEvent` | P1-07에서 범위 분리 — yona는 30초 내 연속된 동일 타입 변경을 병합(A→B→C를 A→C로)하거나 상쇄(A→B→A를 삭제)해 타임라인 잡음을 줄이지만, yuna는 매 변경을 그대로 기록 |
 | P1-39 | [ ] | PR 생성/리뷰 상태변경이 NotificationEvent·PullRequestEvent 모두 미기록 | `models/PullRequestEvent.java`, `NotificationEvent.afterNewPullRequest` | `PullRequestServiceImpl.kt createPullRequest`, `CodeReviewServiceImpl.kt` | P1-08에서 범위 분리 — `changeState`/병합/충돌 3곳은 이번에 연결했지만, PR 생성 시점(NEW_PULL_REQUEST)과 코드리뷰 승인/반려(PULL_REQUEST_REVIEW_STATE_CHANGED, `CodeReviewServiceImpl`이 NotificationEvent는 만들지만 PullRequestEvent는 아직 미기록)는 남아있음 |
 | P1-40 | [ ] | PullRequestEvent draft-time 병합/취소 최적화 없음 | `models/PullRequestEvent.java` `add()` | `domain/pullrequest/PullRequestServiceImpl.kt recordPullRequestEvent` | P1-08에서 범위 분리 — P1-38(IssueEvent)과 동일한 이유로 미이식 |
+| P1-41 | [ ] | 최근 본 이슈/게시글 조회 UI·엔드포인트, 탈퇴 시 정리 없음 | `models/RecentIssue.java getRecentIssues/deleteAll` | `domain/issue/RecentIssueService.kt` | P1-09에서 범위 분리 — 방문 시 기록(record)만 구현했고, 사용자가 자신의 최근 방문 목록을 실제로 조회하는 컨트롤러/화면과, 회원 탈퇴 시 `deleteAll(user)`로 데이터를 정리하는 배선이 아직 없음. `RecentIssueService.getRecentIssues()`는 준비돼 있어 연결만 하면 됨 |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -202,6 +203,14 @@
   - `PullRequestController`에 `GET /api/projects/{projectId}/pullrequests/{number}/timeline` 조회 API 추가.
   - **범위 조정(P1-39/40으로 분리)**: PR 생성 시점(NEW_PULL_REQUEST) 알림과 코드리뷰 승인/반려의 PullRequestEvent 기록은 미포함. yona의 30초 draft-time 병합/취소 최적화도 미이식.
   - 테스트: `PullRequestServiceSpec.kt`(실제 MariaDB 통합테스트) +2(상태변경 시 이벤트 생성, 동일상태 변경시 미생성) = 총 11 tests. `PullRequestMergeEventListenerSpec.kt` +1(병합시 이벤트 생성), 기존 4건도 함께 재통과 = 총 6 tests. `PullRequestControllerSpec.kt` +1(타임라인 조회). 전체 컨텍스트 로딩 확인.
+
+- **2026-08-19 — P1-09**: 이슈/게시글을 열람해도 "최근 본 목록"이 전혀 쌓이지 않던 문제 해결(yona `models/RecentIssue.java` 대응, yuna에 대응 코드 자체가 없었음).
+  - 신규 `RecentIssue`(엔티티, issue_id/posting_id 둘 다 nullable — yona 원본처럼 이슈/게시글 방문을 한 테이블로 함께 추적) + `RecentIssueRepository` 추가.
+  - 신규 `RecentIssueService`(`recordIssueVisit`/`recordPostingVisit`/`getRecentIssues`) — 기존 `ProjectViewController.addVisitHistory`(RecentProject) 패턴과 달리, mockk로 완전히 단위테스트 가능하도록 별도 `@Service` 클래스로 분리(private 메서드로 컨트롤러에 묻지 않음). 같은 이슈/게시글 재방문 시 기존 항목 삭제 후 재저장(dedupe), 사용자당 100건(yona `MAX_RECENT_LIST_PER_USER`) 초과 시 가장 오래된(id 최소) 항목부터 삭제.
+  - `IssueViewController.viewIssue`/`BoardViewController.viewPost`에서 로그인 사용자가 열람할 때마다 호출 — 기록 실패가 조회 자체를 막지 않도록 try/catch NOOP으로 감쌈(`ProjectViewController.addVisitHistory`와 동일 기조).
+  - **범위 조정(P1-41로 분리)**: 방문 기록(record)만 구현했고, 사용자가 본인의 최근 방문 목록을 조회하는 컨트롤러/화면과, 회원 탈퇴 시 `deleteAll(user)`로 데이터를 정리하는 배선은 아직 없다. `getRecentIssues()`는 준비돼 있어 연결만 하면 되는 상태.
+  - 테스트: `RecentIssueServiceSpec.kt`(신규) 7 tests — 신규 방문 저장/재방문 dedupe/100건 초과 시 최오래 항목 삭제를 이슈·게시글 양쪽에 대해 검증. `IssueViewControllerSpec.kt`/`BoardViewControllerSpec.kt`는 생성자 파라미터 추가에 맞춰 relaxed mock 추가(기존 테스트 회귀 없음). 커버리지: `RecentIssueService` LINE 100%(40/40)·INSTRUCTION 95%(208/219)·BRANCH 58.3%(7/12, null 가드 분기 일부 미도달 — 저장된 엔티티는 항상 id가 있으므로 실질적으로 도달 불가능한 방어 코드).
+  - 검증: `./gradlew test --tests "RecentIssueServiceSpec" --tests "IssueViewControllerSpec" --tests "BoardViewControllerSpec"` 전체 통과, `YonaApplicationTests`로 신규 엔티티/빈 배선 확인, 전체 스위트 490 tests 중 1 실패는 `DataBackupServiceIntegrationSpec`(P0-07, 이번 변경과 무관한 기존 flaky 테스트 — 단독 실행 시 통과 확인)뿐.
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

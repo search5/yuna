@@ -53,6 +53,7 @@ class IssueViewControllerSpec : DescribeSpec({
     val templateHelper = mockk<com.github.search5.yona.config.TemplateHelper>()
     val issueExcelService = mockk<com.github.search5.yona.domain.issue.IssueExcelService>()
     val repositoryService = mockk<RepositoryService>()
+    val recentIssueService = mockk<com.github.search5.yona.domain.issue.RecentIssueService>(relaxed = true)
 
     val issueViewController = IssueViewController(
         projectRepository,
@@ -71,7 +72,8 @@ class IssueViewControllerSpec : DescribeSpec({
         issueService,
         templateHelper,
         issueExcelService,
-        repositoryService
+        repositoryService,
+        recentIssueService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -81,7 +83,8 @@ class IssueViewControllerSpec : DescribeSpec({
         io.mockk.clearMocks(
             projectRepository, projectService, issueRepository, projectUserRepository, userRepository, issueCommentRepository,
             watchService, milestoneService, issueLabelRepository, favoriteIssueRepository, attachmentRepository,
-            messageSource, recentProjectRepository, issueService, templateHelper, issueExcelService, repositoryService
+            messageSource, recentProjectRepository, issueService, templateHelper, issueExcelService, repositoryService,
+            recentIssueService
         )
     }
 
