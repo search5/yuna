@@ -23,9 +23,11 @@ import java.util.Properties
  * yuna는 IMAP `\Seen` 플래그를 북마크로 삼는 폴링 전용 방식으로 단순화했다
  * (별도 상태 테이블 없이 멱등적으로 동작, 단 IDLE 대비 최대 polling-interval만큼 지연 발생).
  *
- * 실제 IMAP 서버 연결이 필요한 순수 글루 코드라 단위테스트 대상에서 제외했다
+ * 실제 IMAP 서버 연결(`connectAndProcess`)은 순수 글루 코드라 단위테스트 대상에서 제외했다
  * (이 저장소의 다른 *Config류 인프라 배선과 동일한 관례) — 라우팅/생성 비즈니스 로직은
  * IncomingMailProcessingService에 전부 위임되어 있으며 그쪽은 전체 커버됨.
+ * 다만 `toInboundEmailMessage`(본문/첨부파일 MIME 파싱, P1-29)는 실제 `jakarta.mail`
+ * 객체를 구성해 단위테스트 가능하고 실제로 커버돼 있다(ImapMailboxPollerSpec).
  */
 @Component
 @ConditionalOnProperty(prefix = "yuna.mailbox.imap", name = ["enabled"], havingValue = "true")
@@ -89,7 +91,7 @@ class ImapMailboxPoller(
         }
     }
 
-    private fun toInboundEmailMessage(message: Message): InboundEmailMessage {
+    internal fun toInboundEmailMessage(message: Message): InboundEmailMessage {
         val from = message.from?.filterIsInstance<InternetAddress>()?.firstOrNull()
         val recipients = message.allRecipients
             ?.filterIsInstance<InternetAddress>()
@@ -105,8 +107,30 @@ class ImapMailboxPoller(
             recipientAddresses = recipients,
             inReplyTo = mime?.getHeader("In-Reply-To")?.firstOrNull(),
             references = mime?.getHeader("References")?.firstOrNull(),
-            textBody = extractTextBody(message)
+            textBody = extractTextBody(message),
+            attachments = extractAttachments(message)
         )
+    }
+
+    // yona CreationViaEmail.saveAttachments()가 순회하는 MIME 파트 트리 대응 (P1-29).
+    // cid 이미지 치환은 다루지 않고(별도 후속), 첨부/인라인 파일을 추출해 그대로 저장 대상으로만 넘긴다.
+    private fun extractAttachments(part: Part): List<InboundAttachment> {
+        return try {
+            when {
+                part.isMimeType("multipart/*") -> {
+                    val multipart = part.content as Multipart
+                    (0 until multipart.count).flatMap { extractAttachments(multipart.getBodyPart(it)) }
+                }
+                !part.fileName.isNullOrBlank() -> {
+                    val bytes = part.inputStream.use { it.readBytes() }
+                    listOf(InboundAttachment(part.fileName, part.contentType ?: "application/octet-stream", bytes))
+                }
+                else -> emptyList()
+            }
+        } catch (e: Exception) {
+            logger.warn("첨부파일 추출 실패", e)
+            emptyList()
+        }
     }
 
     private fun extractTextBody(part: Part): String {
