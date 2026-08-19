@@ -45,20 +45,20 @@
       </div>
     </div>
     
-    <header class="gnb-outer" th:classappend="${project != null} ? 'project-header' : ''">
+    <header class="gnb-outer" th:classappend="${project != null or org != null} ? 'project-header' : ''">
       <div class="gnb-inner">
         <div class="pin" data-toggle="tooltip" data-placement="bottom" title="Sidebar"><i class="yobicon-arrow-left"></i><i class="yobicon-arrow-right" style="display: block;"></i></div>
         <ul class="gnb-nav">
           <li>
             <a href="/" class="logo logo-letter">Y</a>
           </li>
-          <li sec:authorize="isAuthenticated()" class="">
+          <li class="hide-in-mobile">
             <a href="/projects" class="show-progress-bar" th:text="#{title.list}">전체 목록</a>
           </li>
-          <li sec:authorize="isAuthenticated()" class="divider"></li>
+          <li class="divider hide-in-mobile"></li>
           
-          <li th:if="${feedbackUrl != null and !feedbackUrl.isEmpty()}">
-            <a th:href="${feedbackUrl}" target="_blank" th:text="#{title.yobi.feedback}">Feedback</a>
+          <li class="hide-in-mobile">
+            <a th:href="${#strings.isEmpty(feedbackUrl) ? 'https://github.com/yona-projects/yona/issues' : feedbackUrl}" target="_blank" th:text="#{title.yobi.feedback}">개발팀에게 문의하기</a>
           </li>
           
           <li>
@@ -156,12 +156,11 @@
                 <span class="avatar-wrap smaller">
                   <img src="/images/default-avatar-128.png" th:src="${currentUser != null ? currentUser.avatarUrl(32) : '/images/default-avatar-128.png'}" />
                 </span>
-                <span th:if="${currentUser != null}" th:text="${currentUser.name} + '님'" class="caret-text hide-in-mobile">지호님</span>
                 <span class="caret"></span>
               </a>
             </li>
             <li class="gnb-usermenu-dropdown">
-              <a href="javascript:void(0);" class="gnb-dropdown-toggle" data-toggle="dropdown">
+              <a href="javascript:void(0);" class="gnb-dropdown-toggle dropdwon-box-btn" data-toggle="dropdown">
                 <i class="yobicon-plus"></i>
                 <span class="caret"></span>
               </a>
@@ -278,7 +277,7 @@
               </a>
             </li>
             <li class="gnb-usermenu-dropdown">
-              <a href="javascript:void(0);" class="gnb-dropdown-toggle" data-toggle="dropdown">
+              <a href="javascript:void(0);" class="gnb-dropdown-toggle dropdwon-box-btn" data-toggle="dropdown">
                 <i class="yobicon-plus"></i>
                 <span class="caret"></span>
               </a>
@@ -753,7 +752,7 @@
               };
               $yobi.loadModule("project.Global", {
                   "htKeyMap": htKeyMap,
-                  "sRepoURL": [[${project.owner} + '@localhost:9091/' + ${project.owner} + '/' + ${project.name}]]
+                  "sRepoURL": [[${project.owner}]] + '@' + window.location.host + '/' + [[${project.owner}]] + '/' + [[${project.name}]]
               });
           });
       </script>

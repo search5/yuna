@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.board.PostingCommentRepository
+import org.springframework.beans.factory.annotation.Value
+import com.github.search5.yona.domain.vcs.BareCommit
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import tools.jackson.databind.ObjectMapper
@@ -31,7 +33,10 @@ class BoardViewController(
     private val postingCommentRepository: PostingCommentRepository,
     private val watchService: WatchService,
     private val attachmentRepository: AttachmentRepository,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val repositoryService: com.github.search5.yona.domain.vcs.RepositoryService,
+    @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
+    private val gitBaseDir: String
 ) {
 
     @GetMapping("/{owner}/{projectName}/posts")
@@ -141,6 +146,10 @@ class BoardViewController(
     fun createPostForm(
         @PathVariable owner: String,
         @PathVariable projectName: String,
+        @RequestParam(required = false) readme: Boolean?,
+        @RequestParam(required = false) issueTemplate: Boolean?,
+        @RequestParam(required = false) branch: String?,
+        @RequestParam(required = false) path: String?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -153,9 +162,31 @@ class BoardViewController(
         }
 
         val isAllowedToNotice = loginUser != null && projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)
+        
+        var preparedPostBody = ""
+        if (readme == true) {
+            try {
+                val bytes = repositoryService.getRepository(project).getRawFile("HEAD", "README.md")
+                if (bytes != null) {
+                    preparedPostBody = String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+                }
+            } catch (e: Exception) {}
+        } else if (issueTemplate == true) {
+            preparedPostBody = getIssueTemplate(project)
+        } else if (!path.isNullOrBlank()) {
+            try {
+                val bytes = repositoryService.getRepository(project).getRawFile(branch ?: "HEAD", path)
+                if (bytes != null) {
+                    preparedPostBody = String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+                }
+            } catch (e: Exception) {}
+        }
+
         model.addAttribute("project", project)
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("isAllowedToNotice", isAllowedToNotice)
+        model.addAttribute("readme", readme ?: false)
+        model.addAttribute("preparedPostBody", preparedPostBody)
 
         return "board/create"
     }
@@ -200,4 +231,109 @@ class BoardViewController(
 
         return "board/edit"
     }
+
+    @org.springframework.web.bind.annotation.PostMapping(value = ["/{owner}/{projectName}/post/{number}/editform", "/{owner}/{projectName}/post/{number}/edit"])
+    fun editPost(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable number: Long,
+        @org.springframework.web.bind.annotation.ModelAttribute request: PostingForm,
+        authentication: Authentication?
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return "error/403"
+
+        val posting = postingService.getPosting(project.id!!, number) ?: return "error/404"
+
+        if (posting.authorLoginId != loginUser.loginId && !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            return "error/403"
+        }
+
+        posting.title = request.title
+        posting.body = request.body ?: ""
+        posting.notice = request.notice ?: false
+        
+        val isReadme = posting.readme ?: false
+        if (isReadme) {
+            try {
+                val bare = BareCommit(project, loginUser, gitBaseDir)
+                bare.commitTextFile("README.md", posting.body ?: "", posting.title ?: "")
+                
+                val readmes = postingRepository.findByProjectAndReadme(project, true)
+                for (other in readmes) {
+                    if (other.id != posting.id) {
+                        other.readme = false
+                        postingRepository.save(other)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        postingRepository.save(posting)
+
+        if (isReadme) {
+            return "redirect:/$owner/$projectName"
+        }
+        return "redirect:/$owner/$projectName/post/$number"
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/{owner}/{projectName}/posts")
+    fun createPost(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @org.springframework.web.bind.annotation.ModelAttribute request: PostingForm,
+        authentication: Authentication?
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return "error/403"
+
+        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            return "error/403"
+        }
+
+        val posting = Posting(
+            title = request.title,
+            body = request.body ?: "",
+            notice = request.notice ?: false,
+            readme = request.readme ?: false,
+            project = project
+        )
+
+        val saved = postingService.createPosting(project.id!!, posting, loginUser.id!!)
+        
+        if (saved.readme) {
+            try {
+                val bare = BareCommit(project, loginUser, gitBaseDir)
+                bare.commitTextFile("README.md", saved.body ?: "", saved.title ?: "")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return "redirect:/$owner/$projectName"
+        }
+        return "redirect:/$owner/$projectName/post/${saved.number}"
+    }
+
+    private fun getIssueTemplate(project: com.github.search5.yona.domain.project.Project): String {
+        return try {
+            val bytes = repositoryService.getRepository(project).getRawFile("HEAD", "ISSUE_TEMPLATE.md")
+            if (bytes != null) String(bytes, java.nio.charset.StandardCharsets.UTF_8) else ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
 }
+
+data class PostingForm(
+    var title: String = "",
+    var body: String? = "",
+    var notice: Boolean? = false,
+    var readme: Boolean? = false
+)
+

@@ -95,22 +95,16 @@
   }
 </style>
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
   <div th:replace="~{site/layout :: gnb}"></div>
-
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header" style="background-color: #f8f9fa; padding: 20px; border-bottom: 1px solid #e9ecef; margin-bottom: 20px;">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+  <div th:replace="~{project/header :: header(${project})}"></div>
+  <div th:replace="~{project/menu :: menu(${project}, 'code')}"></div>
 
   <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="code-browse-wrap">
+  <div class="page-wrap-outer">
+    <div class="project-page-wrap">
+      <div class="code-browse-wrap">
       <!-- 상단 탭 메뉴 -->
       <ul class="nav nav-tabs" style="margin-bottom:20px;">
         <li class="active">
@@ -222,6 +216,7 @@
         </th:block>
       </div>
 
+    </div>
     </div>
   </div>
 

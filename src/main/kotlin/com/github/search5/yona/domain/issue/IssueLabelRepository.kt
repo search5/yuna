@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository
 interface IssueLabelRepository : JpaRepository<IssueLabel, Long> {
     fun findByProject(project: Project): List<IssueLabel>
     fun findByProjectAndName(project: Project, name: String): IssueLabel?
+    fun findByCategory(category: IssueLabelCategory): List<IssueLabel>
 
     @Modifying
     @Query(value = "delete from issue_issue_label where issue_label_id = :labelId", nativeQuery = true)

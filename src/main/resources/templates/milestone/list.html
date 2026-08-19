@@ -5,8 +5,8 @@
 <body class="theme-default prj" id="html-body">
 <div id="main" class="main">
     <div th:replace="~{site/layout :: gnb}"></div>
-    <div th:replace="~{site/layout :: projectHeader}"></div>
-    <div th:replace="~{site/layout :: projectMenu('MILESTONE')}"></div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'milestone')}"></div>
 
     <link rel="stylesheet" th:href="@{/{owner}/{projectName}/issue/labels.css(owner=${project.owner}, projectName=${project.name})}" type="text/css" />
 

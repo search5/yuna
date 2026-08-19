@@ -30,6 +30,9 @@ class IndexControllerIntegrationSpec @Autowired constructor(
             mockMvc = MockMvcBuilders.webAppContextSetup(wac)
                 .apply<org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder>(SecurityMockMvcConfigurers.springSecurity())
                 .build()
+            if (!userRepository.findByLoginId("system-setup-user").isPresent) {
+                userRepository.save(User(loginId = "system-setup-user", name = "초기사용자", email = "setup@yona.io"))
+            }
         }
 
         describe("IndexController 통합 테스트") {
@@ -39,6 +42,7 @@ class IndexControllerIntegrationSpec @Autowired constructor(
                     .andExpect(view().name("index"))
                     .andExpect(content().string(org.hamcrest.Matchers.containsString("21st Century Software Development Platform")))
                     .andExpect(content().string(org.hamcrest.Matchers.containsString("로그인")))
+                    .andExpect(content().string(org.hamcrest.Matchers.containsString("개발팀에게 문의하기")))
             }
 
             it("로그인한 사용자가 메인 홈(/) 접근 시, 대시보드 화면과 사용자명이 노출되어야 한다") {
@@ -62,7 +66,6 @@ class IndexControllerIntegrationSpec @Autowired constructor(
                     .andExpect(status().isOk)
                     .andExpect(view().name("index"))
                     .andExpect(content().string(org.hamcrest.Matchers.containsString("gildong")))
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("님")))
                     .andExpect(content().string(org.hamcrest.Matchers.containsString("새 프로젝트 만들기")))
             }
         }

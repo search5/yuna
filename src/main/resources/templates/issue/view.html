@@ -5,8 +5,8 @@
 <body class="theme-default prj" id="html-body">
 <div id="main" class="main">
     <div th:replace="~{site/layout :: gnb}"></div>
-    <div th:replace="~{site/layout :: projectHeader}"></div>
-    <div th:replace="~{site/layout :: projectMenu('ISSUE')}"></div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'issue')}"></div>
 
     <div class="page-wrap-outer">
         <div class="project-page-wrap board-view">
@@ -64,6 +64,9 @@
                                     지켜보기
                                 </button>
                                 <button th:if="${isAllowedUpdate}" id="issue-share-button" type="button" class="ybtn" data-toggle="popover" data-trigger="hover" data-placement="top" th:data-content="#{issue.sharer.description}" th:text="#{button.share.issue}">공유</button>
+                                <span class="project-btn-item ml4">
+                                    <a th:href="@{/{owner}/{projectName}/issue/new(owner=${project.owner}, projectName=${project.name}, parentIssueId=${issue.id})}" class="ybtn ybtn-success" th:text="#{button.newSubtask}">하위 이슈 등록</a>
+                                </span>
                                 <span class="issue-weight">
                                     <span class="divider">|</span>
                                     <button id="upvote-issue-weight" class="ybtn ybtn-small" data-toggle="tooltip" title="Upvote"><i class="yobicon-arrow-up-alt"></i></button>
@@ -110,6 +113,7 @@
                         </div>
 
                         <button type="button" id="translate" class="icon btn-transparent-with-fontsize-lineheight ml10" data-toggle="tooltip" th:title="#{button.translation}"><i class="yobicon-lang"></i></button>
+                        <div class="watcher-list" style="margin-top: 10px;"></div>
 
                         <span class="act-row">
                             <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:onclick="|window.location='/${project.owner}/${project.name}/issue/${issue.number}/editform'|"><i class="yobicon-edit-2"></i></button>
@@ -117,9 +121,14 @@
                                 <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.show.original}"><i class="yobicon-edit-2"></i></button>
                             </a>
                             <th:block th:if="${isAllowedUpdate}">
-                                <a href="#deleteConfirm" data-toggle="modal">
-                                    <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml6" data-toggle="tooltip" th:title="#{button.delete}"><i class="yobicon-trash"></i></button>
-                                </a>
+                                <th:block th:if="${@templateHelper.canBeDeleted(issue, comments)}">
+                                    <a href="#deleteConfirm" data-toggle="modal">
+                                        <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml6" data-toggle="tooltip" th:title="#{button.delete}"><i class="yobicon-trash"></i></button>
+                                    </a>
+                                </th:block>
+                                <th:block th:unless="${@templateHelper.canBeDeleted(issue, comments)}">
+                                    <button type="button" class="icon disabled btn-transparent-with-fontsize-lineheight ml6" data-toggle="popover" data-trigger="hover" data-placement="top" th:data-content="#{issue.can.not.be.deleted}"><i class="yobicon-trash"></i></button>
+                                </th:block>
                             </th:block>
                         </span>
                     </div>
@@ -257,6 +266,40 @@
                                 <dt th:text="#{issue.dueDate}">마감일</dt>
                                 <dd>
                                     <span th:text="${issue.dueDate != null ? #dates.format(issue.dueDate, 'yyyy-MM-dd') : #messages.msg('issue.noDuedate')}">마감일 없음</span>
+                                </dd>
+                            </dl>
+
+                            <!-- labels -->
+                            <th:block th:with="projectLabels=${@templateHelper.getProjectLabels(project)}">
+                                <div th:if="${projectLabels != null and !projectLabels.isEmpty()}">
+                                    <div th:if="${isAllowedUpdate}">
+                                        <div th:replace="~{issue/partial_select_label :: selectLabel(${projectLabels}, ${issue.labels}, '', '', ${project})}"></div>
+                                    </div>
+                                    <div th:unless="${isAllowedUpdate}">
+                                        <div th:replace="~{issue/partial_show_selected_label :: showLabel(${issue.labels}, '')}"></div>
+                                    </div>
+                                </div>
+                            </th:block>
+
+                            <!-- sharers -->
+                            <dl class="sharer-list" th:classappend="${issue.sharers.isEmpty()} ? 'hide' : ''" style="margin-top: 15px;">
+                                <dt class="issue-share-title mb10">
+                                    <span th:text="#{issue.sharer}">공유자</span>
+                                    <span class="num issue-sharer-count" th:if="${!issue.sharers.isEmpty()}" th:text="${issue.sharers.size()}">0</span>
+                                </dt>
+                                <dd id="sharer-list" th:classappend="${issue.sharers.isEmpty()} ? 'hide' : ''">
+                                    <th:block th:if="${isAllowedUpdate}">
+                                        <input type="text" class="width100p" id="issueSharer" name="issueSharer" th:placeholder="#{issue.sharer.select}" th:value="${#strings.listJoin(issue.sharers.![user.loginId], ',')}" style="width: 100%;">
+                                    </th:block>
+                                    <th:block th:unless="${isAllowedUpdate}">
+                                        <div th:each="sharer : ${issue.sharers}" class="text-ellipsis sharer-item" style="padding: 2px 0;">
+                                            <a th:href="@{/user/{loginId}(loginId=${sharer.user.loginId})}" class="usf-group">
+                                                <span class="avatar-wrap smaller"><img th:src="${sharer.user.avatarUrl}"></span>
+                                                <strong th:text="${sharer.user.name}">이름</strong>
+                                                <span th:text="'@' + ${sharer.user.loginId}">loginId</span>
+                                            </a>
+                                        </div>
+                                    </th:block>
                                 </dd>
                             </dl>
                         </form>

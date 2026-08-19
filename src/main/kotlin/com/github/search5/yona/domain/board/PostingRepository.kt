@@ -16,6 +16,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
     fun findByProjectAndNotice(project: Project, notice: Boolean): List<Posting>
     fun findByProjectAndNumber(project: Project, number: Long): Posting?
     fun findByProjectIn(projects: List<Project>, pageable: Pageable): Page<Posting>
+    fun findByProjectAndReadme(project: Project, readme: Boolean): List<Posting>
 
     @Query("""
         SELECT p FROM Posting p 

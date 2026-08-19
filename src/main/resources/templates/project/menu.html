@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <body>
 <div th:fragment="menu(project, activeMenu)" class="project-menu-outer"
-     th:with="isMember=${@templateHelper.isMember(project, currentUser)}">
+     th:with="isMember=${@templateHelper.isMember(project, currentUser)}, isManager=${@templateHelper.isManager(project, currentUser)}">
     <div class="project-menu-inner">
         <ul class="project-menu-nav project-menu-gruop">
             <li th:class="${activeMenu == 'home' ? 'active' : ''}">
@@ -46,7 +46,7 @@
                 </a>
             </li>
         </ul>
-        <div sec:authorize="isAuthenticated()" class="project-setting">
+        <div th:if="${isManager}" class="project-setting">
             <ul class="project-menu-nav">
                 <li th:class="${activeMenu == 'setting' ? 'active' : ''}">
                     <a th:href="@{/{owner}/{name}/setting(owner=${project.owner}, name=${project.name})}">
