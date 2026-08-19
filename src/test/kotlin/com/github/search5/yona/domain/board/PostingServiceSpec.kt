@@ -52,6 +52,59 @@ class PostingServiceSpec @Autowired constructor(
                 event.senderId shouldBe author.id
             }
 
+            it("본인이 작성한 글을 수정하고 알림 발송 옵션을 선택하지 않으면 알림이 발행되지 않아야 한다(P1-44)") {
+                val author = userRepository.save(User(loginId = "writer3", name = "작성자3", email = "writer3@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project3", owner = "writer3"))
+                val saved = postingService.createPosting(project.id!!, Posting(title = "원본", body = "원본 본문", project = project), author.id!!)
+                notificationEventRepository.deleteAll()
+
+                postingService.updatePosting(
+                    projectId = project.id!!, number = saved.number!!,
+                    title = "수정됨", body = "수정된 본문", notice = false, readme = false,
+                    authorId = author.id!!, sendNotificationMail = false
+                )
+
+                notificationEventRepository.findAll().size shouldBe 0
+            }
+
+            it("본인이 작성한 글을 수정할 때 알림 발송 옵션을 선택하면 알림(POSTING_BODY_CHANGED)이 발행되어야 한다(P1-44)") {
+                val author = userRepository.save(User(loginId = "writer4", name = "작성자4", email = "writer4@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project4", owner = "writer4"))
+                val saved = postingService.createPosting(project.id!!, Posting(title = "원본", body = "원본 본문", project = project), author.id!!)
+                notificationEventRepository.deleteAll()
+
+                postingService.updatePosting(
+                    projectId = project.id!!, number = saved.number!!,
+                    title = "수정됨", body = "수정된 본문", notice = false, readme = false,
+                    authorId = author.id!!, sendNotificationMail = true
+                )
+
+                val events = notificationEventRepository.findAll()
+                events.size shouldBe 1
+                events.first().eventType shouldBe EventType.POSTING_BODY_CHANGED
+                events.first().oldValue shouldBe "원본 본문"
+                events.first().newValue shouldBe "수정된 본문"
+            }
+
+            it("본인이 작성하지 않은 글을 수정하면 알림 발송 옵션과 무관하게 항상 알림이 발행되어야 한다(P1-44)") {
+                val author = userRepository.save(User(loginId = "writer5", name = "작성자5", email = "writer5@yona.io"))
+                val editor = userRepository.save(User(loginId = "editor1", name = "편집자", email = "editor1@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project5", owner = "writer5"))
+                val saved = postingService.createPosting(project.id!!, Posting(title = "원본", body = "원본 본문", project = project), author.id!!)
+                notificationEventRepository.deleteAll()
+
+                postingService.updatePosting(
+                    projectId = project.id!!, number = saved.number!!,
+                    title = "수정됨", body = "수정된 본문", notice = false, readme = false,
+                    authorId = editor.id!!, sendNotificationMail = false
+                )
+
+                val events = notificationEventRepository.findAll()
+                events.size shouldBe 1
+                events.first().eventType shouldBe EventType.POSTING_BODY_CHANGED
+                events.first().senderId shouldBe editor.id
+            }
+
             it("게시글을 삭제하면 삭제(RESOURCE_DELETED) 알림 이벤트가 발행되어야 한다") {
                 val author = userRepository.save(User(loginId = "writer2", name = "작성자2", email = "writer2@yona.io"))
                 val project = projectRepository.save(Project(name = "board-project2", owner = "writer2"))

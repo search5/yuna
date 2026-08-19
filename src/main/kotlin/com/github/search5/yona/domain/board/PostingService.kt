@@ -15,7 +15,8 @@ interface PostingService {
         body: String,
         notice: Boolean,
         readme: Boolean,
-        authorId: Long
+        authorId: Long,
+        sendNotificationMail: Boolean = false
     ): Posting
     fun deletePosting(projectId: Long, number: Long, authorId: Long)
 }

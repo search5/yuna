@@ -126,7 +126,7 @@ class BoardControllerSpec : DescribeSpec({
                 every { postingService.getPosting(1L, 1L) } returns posting
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
-                every { postingService.updatePosting(1L, 1L, "수정된 포스트 제목", "수정된 포스트 내용", false, false, 10L) } returns posting
+                every { postingService.updatePosting(1L, 1L, "수정된 포스트 제목", "수정된 포스트 내용", false, false, 10L, false) } returns posting
 
                 val jsonContent = """
                     {
@@ -144,6 +144,34 @@ class BoardControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            it("sendNotificationMail 옵션을 서비스로 그대로 전달해야 한다(P1-44)") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { postingService.updatePosting(1L, 1L, "수정된 포스트 제목", "수정된 포스트 내용", false, false, 10L, true) } returns posting
+
+                val jsonContent = """
+                    {
+                        "title": "수정된 포스트 제목",
+                        "body": "수정된 포스트 내용",
+                        "notice": false,
+                        "readme": false,
+                        "sendNotificationMail": true
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { postingService.updatePosting(1L, 1L, "수정된 포스트 제목", "수정된 포스트 내용", false, false, 10L, true) }
             }
         }
 

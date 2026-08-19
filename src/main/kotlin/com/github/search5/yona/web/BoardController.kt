@@ -143,7 +143,8 @@ class BoardController(
             body = request.body,
             notice = request.notice ?: false,
             readme = request.readme ?: false,
-            authorId = user.id!!
+            authorId = user.id!!,
+            sendNotificationMail = request.sendNotificationMail ?: false
         )
 
         return ResponseEntity.ok(updated)
@@ -206,6 +207,7 @@ class BoardController(
         val title: String,
         val body: String,
         val notice: Boolean?,
-        val readme: Boolean?
+        val readme: Boolean?,
+        val sendNotificationMail: Boolean? = null
     )
 }

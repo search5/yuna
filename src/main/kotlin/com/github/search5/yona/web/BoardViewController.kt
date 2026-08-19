@@ -269,16 +269,12 @@ class BoardViewController(
             return "error/403"
         }
 
-        posting.title = request.title
-        posting.body = request.body ?: ""
-        posting.notice = request.notice ?: false
-        
         val isReadme = posting.readme ?: false
         if (isReadme) {
             try {
                 val bare = BareCommit(project, loginUser, gitBaseDir)
-                bare.commitTextFile("README.md", posting.body ?: "", posting.title ?: "")
-                
+                bare.commitTextFile("README.md", request.body ?: "", request.title)
+
                 val readmes = postingRepository.findByProjectAndReadme(project, true)
                 for (other in readmes) {
                     if (other.id != posting.id) {
@@ -290,7 +286,18 @@ class BoardViewController(
                 e.printStackTrace()
             }
         }
-        postingRepository.save(posting)
+
+        // yona BoardApp.editPost의 isSelectedToSendNotificationMail() 대응 (P1-44) — 서비스 계층에 위임.
+        postingService.updatePosting(
+            projectId = project.id!!,
+            number = number,
+            title = request.title,
+            body = request.body ?: "",
+            notice = request.notice ?: false,
+            readme = isReadme,
+            authorId = loginUser.id!!,
+            sendNotificationMail = request.sendNotificationMail ?: false
+        )
 
         if (isReadme) {
             return "redirect:/$owner/$projectName"
@@ -363,6 +370,7 @@ data class PostingForm(
     var body: String? = "",
     var notice: Boolean? = false,
     var readme: Boolean? = false,
-    var temporaryUploadFiles: String? = null
+    var temporaryUploadFiles: String? = null,
+    var sendNotificationMail: Boolean? = false
 )
 
