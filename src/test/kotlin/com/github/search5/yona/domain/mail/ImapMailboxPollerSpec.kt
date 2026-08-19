@@ -95,5 +95,50 @@ class ImapMailboxPollerSpec : DescribeSpec({
 
             result.attachments.map { it.fileName }.toSet() shouldBe setOf("a.txt", "b.txt")
         }
+
+        it("text/html뿐인 메일은 태그를 벗기지 않고 원본 HTML을 그대로 보존하고 isHtml=true여야 한다(P1-47)") {
+            val message = MimeMessage(session)
+            message.setFrom("gildong@example.com")
+            message.setRecipients(jakarta.mail.Message.RecipientType.TO, "yona+dlab/hive@example.com")
+            message.subject = "HTML 메일"
+            message.setContent("<p>안녕하세요 <b>굵게</b></p>", "text/html; charset=UTF-8")
+            message.saveChanges()
+
+            val result = poller.toInboundEmailMessage(message)
+
+            result.isHtml shouldBe true
+            result.textBody shouldBe "<p>안녕하세요 <b>굵게</b></p>"
+        }
+
+        it("인라인 이미지 첨부의 Content-ID를 추출해야 한다(P1-47)") {
+            val message = MimeMessage(session)
+            message.setFrom("gildong@example.com")
+            message.setRecipients(jakarta.mail.Message.RecipientType.TO, "yona+dlab/hive@example.com")
+            message.subject = "인라인 이미지"
+
+            val htmlPart = MimeBodyPart()
+            htmlPart.setContent("<p>사진: <img src=\"cid:image1\"></p>", "text/html; charset=UTF-8")
+
+            val imagePart = MimeBodyPart()
+            imagePart.fileName = "photo.png"
+            imagePart.dataHandler = jakarta.activation.DataHandler(
+                jakarta.mail.util.ByteArrayDataSource("fake-image-bytes".toByteArray(), "image/png")
+            )
+            imagePart.setContentID("<image1>")
+            imagePart.setDisposition(jakarta.mail.Part.INLINE)
+
+            val multipart = MimeMultipart("related")
+            multipart.addBodyPart(htmlPart)
+            multipart.addBodyPart(imagePart)
+            message.setContent(multipart)
+            message.saveChanges()
+
+            val result = poller.toInboundEmailMessage(message)
+
+            result.isHtml shouldBe true
+            result.textBody shouldBe "<p>사진: <img src=\"cid:image1\"></p>"
+            result.attachments.size shouldBe 1
+            result.attachments[0].contentId shouldBe "image1"
+        }
     }
 })
