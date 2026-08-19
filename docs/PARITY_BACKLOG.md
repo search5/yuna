@@ -51,7 +51,7 @@
 | P1-10 | [x] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` | **완료** |
 | P1-11 | [x] | 라벨 카테고리 수정 기능 없음 | `IssueLabelApp.java:390` | 위와 동일 | **완료** |
 | P1-12 | [x] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 | **완료** |
-| P1-13 | [ ] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` |
+| P1-13 | [x] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` | **완료** |
 | P1-14 | [ ] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | (해당 없음) |
 | P1-15 | [ ] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | (해당 없음) |
 | P1-16 | [ ] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` |
@@ -231,3 +231,11 @@
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.
+
+- **2026-08-20 — P1-13**: 프로젝트에 전역 라벨(태그)을 붙이거나 뗄 방법이 yuna에 전혀 없던 문제 해결(yona `ProjectApp.attachLabel/detachLabel/labels` 대응). 이 `models.Label`은 P1-10~12에서 다룬 이슈 라벨(`IssueLabel`, 프로젝트에 종속)과는 별개의 **전역 태그** 개념으로, yuna에도 이미 `domain/project/Label.kt`(category+name 유니크) + `Project.labels`(`@ManyToMany`, `project_label` 조인테이블)까지는 이식되어 있었지만 읽기 전용 검색(`web/LabelController.kt`의 `/labels`, `/categories` 자동완성용)만 있고 attach/detach API가 없었다.
+  - **배치 위치 조정**: 백로그 원안은 대상을 `web/LabelController.kt`로 표기했지만, 실제로는 프로젝트별 owner/name 경로(`/api/{owner}/{projectName}/...`)를 쓰는 다른 프로젝트 라우트들과 함께 `web/ProjectController.kt`에 추가하는 것이 기존 코드 관례(예: `/api/{owner}/{projectName}/fork`, `/transfer`)와 일치해 그쪽에 구현했다. `LabelController.kt`(전역 태그 자동완성 검색)는 이번 항목과 무관해 손대지 않았다.
+  - `ProjectService`/`ProjectServiceImpl`에 `getProjectLabels`/`attachLabel`/`detachLabel` 추가. `attachLabel`은 yona `ProjectApp.attachLabel()`과 동일하게 category+name으로 기존 라벨을 찾아 없으면 새로 생성(`isCreated`)하고, 이미 이 프로젝트에 붙어있으면 아무 것도 하지 않고 `isAttached=false`를 반환(yona의 204 No Content 분기에 대응). `detachLabel`은 yona `Project.detachLabel()`+`Label.delete(project)`와 동일하게, 라벨을 이 프로젝트에서만 떼어내고 그 라벨을 참조하는 프로젝트가 하나도 남지 않으면(`ProjectRepository.countByLabelsId`) 전역 라벨 자체를 삭제한다.
+  - `ProjectController`에 `GET/POST /api/{owner}/{projectName}/labels`, `DELETE /api/{owner}/{projectName}/labels/{labelId}` 추가.
+  - **인가 정책(중요, yona 원본 그대로 이식)**: yona `AccessControl.isProjectResourceAllowed`를 추적한 결과, `PROJECT_LABELS` 리소스 타입은 `ISSUE_STATE`/`ISSUE_ASSIGNEE`/`ISSUE_MILESTONE`/`ATTACHMENT`처럼 컨테이너 위임 특례 목록에 없어 일반 프로젝트 리소스의 `UPDATE` 규칙(`user.isMemberOf(project) || isAllowedIfGroupMember(...)`)을 그대로 따른다 — 즉 **MANAGER가 아닌 일반 MEMBER도 라벨을 붙이고 뗄 수 있다**. 이는 P1-10~12(이슈 라벨 CRUD)에서 이 저장소가 채택한 "isProjectManager(관리자 전용)" 기준과 의도적으로 다르며, yona 소스(`utils/AccessControl.java:280-282`)를 직접 확인해 정한 것이다. 조회(`GET /labels`)는 공개 프로젝트면 비회원도 가능, 비공개면 멤버만(기존 `IssueLabelController.checkReadPermission`과 동일 패턴, 조직 그룹멤버 특례는 이 저장소의 기존 관례대로 미구현).
+  - 테스트: `ProjectServiceImplSpec.kt` +7(신규 라벨 생성+attach, category 기본값 'Label', 기존 라벨 재사용, 이미 붙어있으면 isAttached=false, 존재하지 않는 라벨 detach시 false, orphan 라벨 삭제, 다른 프로젝트가 참조 중이면 라벨 유지). `ProjectControllerSpec.kt` +7(공개 프로젝트 비회원 조회 허용, 비공개 비회원 403, MEMBER 권한으로 attach 성공 201, 비멤버 403, 이미 붙어있으면 204, 멤버 detach 204, 없는 라벨 detach 404). 전체 20 tests(신규 14 + 기존 6) 통과. `YonaApplicationTests`로 `ProjectServiceImpl` 생성자에 `LabelRepository` 추가된 빈 배선 확인.
+  - 검증: `./gradlew test --tests "ProjectServiceImplSpec" --tests "ProjectControllerSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.

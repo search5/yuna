@@ -27,6 +27,7 @@ class ProjectServiceImplSpec : DescribeSpec({
     val roleRepository = mockk<RoleRepository>()
     val organizationRepository = mockk<OrganizationRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
+    val labelRepository = mockk<LabelRepository>()
 
     val projectService = ProjectServiceImpl(
         projectRepository,
@@ -36,7 +37,8 @@ class ProjectServiceImplSpec : DescribeSpec({
         projectTransferRepository,
         roleRepository,
         organizationRepository,
-        organizationUserRepository
+        organizationUserRepository,
+        labelRepository
     )
 
     describe("ProjectServiceImpl.acceptTransfer") {
@@ -154,6 +156,102 @@ class ProjectServiceImplSpec : DescribeSpec({
             shouldThrow<IllegalArgumentException> {
                 projectService.acceptTransfer(50L, "wrong-key", 2L)
             }
+        }
+    }
+
+    describe("ProjectServiceImpl.attachLabel/detachLabel (P1-13)") {
+        val project = Project(id = 1L, name = "yona-project", owner = "owner", vcs = "GIT")
+
+        it("같은 category+name의 라벨이 없으면 새로 생성하여 프로젝트에 붙여야 한다") {
+            every { projectRepository.findById(1L) } returns Optional.of(project)
+            every { labelRepository.findByCategoryAndName("os", "linux") } returns Optional.empty()
+            every { labelRepository.save(any()) } answers { (it.invocation.args[0] as Label).apply { id = 100L } }
+            every { projectRepository.save(any()) } returns project
+
+            val result = projectService.attachLabel(1L, "os", "linux")
+
+            result.isCreated shouldBe true
+            result.isAttached shouldBe true
+            result.label.name shouldBe "linux"
+            project.labels.any { it.id == 100L } shouldBe true
+        }
+
+        it("category가 없으면 기본값 'Label'로 처리해야 한다") {
+            val freshProject = Project(id = 2L, name = "p2", owner = "owner", vcs = "GIT")
+            every { projectRepository.findById(2L) } returns Optional.of(freshProject)
+            every { labelRepository.findByCategoryAndName("Label", "urgent") } returns Optional.empty()
+            every { labelRepository.save(any()) } answers { (it.invocation.args[0] as Label).apply { id = 101L } }
+            every { projectRepository.save(any()) } returns freshProject
+
+            val result = projectService.attachLabel(2L, null, "urgent")
+
+            result.label.category shouldBe "Label"
+        }
+
+        it("이미 존재하는 라벨이지만 이 프로젝트엔 아직 없으면 새로 만들지 않고 붙이기만 해야 한다") {
+            val freshProject = Project(id = 3L, name = "p3", owner = "owner", vcs = "GIT")
+            val existingLabel = Label(id = 200L, category = "os", name = "linux")
+            every { projectRepository.findById(3L) } returns Optional.of(freshProject)
+            every { labelRepository.findByCategoryAndName("os", "linux") } returns Optional.of(existingLabel)
+            every { projectRepository.save(any()) } returns freshProject
+
+            val result = projectService.attachLabel(3L, "os", "linux")
+
+            result.isCreated shouldBe false
+            result.isAttached shouldBe true
+        }
+
+        it("이미 이 프로젝트에 붙어있는 라벨이면 isAttached=false를 반환해야 한다") {
+            val existingLabel = Label(id = 200L, category = "os", name = "linux")
+            val projectWithLabel = Project(id = 4L, name = "p4", owner = "owner", vcs = "GIT")
+            projectWithLabel.labels.add(existingLabel)
+            every { projectRepository.findById(4L) } returns Optional.of(projectWithLabel)
+            every { labelRepository.findByCategoryAndName("os", "linux") } returns Optional.of(existingLabel)
+
+            val result = projectService.attachLabel(4L, "os", "linux")
+
+            result.isCreated shouldBe false
+            result.isAttached shouldBe false
+        }
+
+        it("존재하지 않는 라벨 id로 detach를 시도하면 false를 반환해야 한다(404 대응)") {
+            every { projectRepository.findById(1L) } returns Optional.of(project)
+            every { labelRepository.findById(999L) } returns Optional.empty()
+
+            val result = projectService.detachLabel(1L, 999L)
+
+            result shouldBe false
+        }
+
+        it("detach 후 다른 프로젝트가 더 이상 없으면 라벨 자체를 삭제해야 한다") {
+            val label = Label(id = 200L, category = "os", name = "linux")
+            val projectWithLabel = Project(id = 5L, name = "p5", owner = "owner", vcs = "GIT")
+            projectWithLabel.labels.add(label)
+            every { projectRepository.findById(5L) } returns Optional.of(projectWithLabel)
+            every { labelRepository.findById(200L) } returns Optional.of(label)
+            every { projectRepository.save(any()) } returns projectWithLabel
+            every { projectRepository.countByLabelsId(200L) } returns 0L
+            every { labelRepository.delete(label) } returns Unit
+
+            val result = projectService.detachLabel(5L, 200L)
+
+            result shouldBe true
+            projectWithLabel.labels.any { it.id == 200L } shouldBe false
+        }
+
+        it("detach 후에도 다른 프로젝트가 그 라벨을 쓰고 있으면 라벨을 삭제하지 않아야 한다") {
+            val label = Label(id = 201L, category = "os", name = "mac")
+            val projectWithLabel = Project(id = 6L, name = "p6", owner = "owner", vcs = "GIT")
+            projectWithLabel.labels.add(label)
+            every { projectRepository.findById(6L) } returns Optional.of(projectWithLabel)
+            every { labelRepository.findById(201L) } returns Optional.of(label)
+            every { projectRepository.save(any()) } returns projectWithLabel
+            every { projectRepository.countByLabelsId(201L) } returns 1L
+
+            val result = projectService.detachLabel(6L, 201L)
+
+            result shouldBe true
+            io.mockk.verify(exactly = 0) { labelRepository.delete(label) }
         }
     }
 })

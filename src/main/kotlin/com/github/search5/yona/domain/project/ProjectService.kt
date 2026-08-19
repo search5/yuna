@@ -14,7 +14,18 @@ interface ProjectService {
     fun acceptTransfer(transferId: Long, confirmKey: String, acceptorId: Long)
     fun forkProject(projectId: Long, forkerId: Long, destinationOwner: String = "", destinationName: String = ""): Project
     fun changeVCS(projectId: Long): Project
+
+    // yona ProjectApp.labels/attachLabel/detachLabel 대응 (P1-13)
+    fun getProjectLabels(projectId: Long): Set<Label>
+    fun attachLabel(projectId: Long, category: String?, name: String): AttachLabelResult
+    fun detachLabel(projectId: Long, labelId: Long): Boolean
 }
+
+data class AttachLabelResult(
+    val label: Label,
+    val isCreated: Boolean,
+    val isAttached: Boolean
+)
 
 data class UpdateProjectParam(
     val overview: String,

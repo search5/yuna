@@ -1,5 +1,7 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.project.AttachLabelResult
+import com.github.search5.yona.domain.project.Label
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -16,8 +18,10 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
@@ -122,6 +126,98 @@ class ProjectControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
 
                 verify { projectService.deleteProject(1L) }
+            }
+        }
+
+        describe("GET/POST/DELETE /api/{owner}/{projectName}/labels (P1-13)") {
+            val publicProject = Project(id = 30L, name = "pub", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val privateProject = Project(id = 31L, name = "priv", owner = "owner", projectScope = ProjectScope.PRIVATE)
+            val memberRole = Role(id = RoleType.MEMBER.roleType)
+            val memberProjectUser = ProjectUser(id = 200L, user = user, project = privateProject, role = memberRole)
+
+            it("공개 프로젝트는 비회원도 라벨 목록을 조회할 수 있어야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "pub") } returns Optional.of(publicProject)
+                every { projectService.getProjectLabels(30L) } returns setOf(Label(id = 1L, category = "os", name = "linux"))
+
+                mockMvc.perform(get("/api/owner/pub/labels"))
+                    .andExpect(status().isOk)
+            }
+
+            it("비공개 프로젝트는 비회원이 조회하면 403을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+
+                mockMvc.perform(get("/api/owner/priv/labels"))
+                    .andExpect(status().isForbidden)
+            }
+
+            it("프로젝트 멤버(MEMBER 권한도 포함)는 라벨을 붙일 수 있어야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
+                every { projectService.attachLabel(31L, "os", "linux") } returns
+                    AttachLabelResult(Label(id = 1L, category = "os", name = "linux"), isCreated = true, isAttached = true)
+
+                mockMvc.perform(
+                    post("/api/owner/priv/labels")
+                        .param("category", "os")
+                        .param("name", "linux")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("프로젝트 멤버가 아니면 라벨 붙이기가 403을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns false
+
+                mockMvc.perform(
+                    post("/api/owner/priv/labels")
+                        .param("name", "linux")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
+            }
+
+            it("이미 붙어있는 라벨을 다시 붙이면 204 No Content를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
+                every { projectService.attachLabel(31L, null, "linux") } returns
+                    AttachLabelResult(Label(id = 1L, category = "Label", name = "linux"), isCreated = false, isAttached = false)
+
+                mockMvc.perform(
+                    post("/api/owner/priv/labels")
+                        .param("name", "linux")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNoContent)
+            }
+
+            it("멤버는 라벨을 뗄 수 있어야 하고 204를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
+                every { projectService.detachLabel(31L, 1L) } returns true
+
+                mockMvc.perform(
+                    delete("/api/owner/priv/labels/1")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNoContent)
+            }
+
+            it("존재하지 않는 라벨을 떼려고 하면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
+                every { projectService.detachLabel(31L, 999L) } returns false
+
+                mockMvc.perform(
+                    delete("/api/owner/priv/labels/999")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
             }
         }
     }
