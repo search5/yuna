@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.issue.IssueReferenceParser
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.webhook.WebhookService
 import com.github.search5.yona.domain.webhook.PushedCommits
 import org.eclipse.jgit.lib.ObjectId
@@ -18,6 +19,7 @@ import org.eclipse.jgit.lib.RepositoryBuilder
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.transport.ReceiveCommand
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
@@ -32,7 +34,9 @@ class GitPostReceiveEventListener(
     private val notificationEventRepository: NotificationEventRepository,
     private val issueRepository: IssueRepository,
     private val issueEventRepository: IssueEventRepository,
-    private val webhookService: WebhookService
+    private val webhookService: WebhookService,
+    private val watchService: WatchService,
+    private val eventPublisher: ApplicationEventPublisher
 ) {
     private val logger = LoggerFactory.getLogger(GitPostReceiveEventListener::class.java)
 
@@ -124,7 +128,21 @@ class GitPostReceiveEventListener(
             eventType = EventType.NEW_COMMIT,
             newValue = title
         )
+
+        // yona NotificationEvent.java:604-680(push 메일 경로) 대응 (P1-46). 수신자를 계산하고 실제로
+        // publish해야 NotificationMailEventListener(P0-01)가 이 이벤트를 구독해 메일을 발송할 수 있다.
+        val receivers = watchService.findActualWatchers(
+            baseWatchers = emptySet(),
+            resourceType = ResourceType.PROJECT,
+            resourceId = project.id.toString(),
+            projectId = project.id,
+            eventType = EventType.NEW_COMMIT
+        ).toMutableSet()
+        receivers.removeIf { it.id == sender.id }
+        notificationEvent.receivers = receivers
+
         notificationEventRepository.save(notificationEvent)
+        eventPublisher.publishEvent(notificationEvent)
         logger.info("[NOTIFICATION] Pushed commits notification created and saved: '$title' by ${sender.name}")
 
         // yona Webhook.sendRequestToPayloadUrl(commits, refNames, sender) 대응 (P1-25).
