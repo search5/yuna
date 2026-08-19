@@ -425,7 +425,7 @@ class PullRequestServiceImpl(
         return saved
     }
 
-    // yona models/PullRequestEvent.java 대응(간소화 - draft-time 병합/취소 최적화는 제외, P1-08).
+    // yona models/PullRequestEvent.java 대응(draft-time 병합/취소 최적화는 recordWithDraftMerge에서 처리, P1-40).
     private fun recordPullRequestEvent(
         pullRequest: PullRequest,
         eventType: EventType,
@@ -441,7 +441,7 @@ class PullRequestServiceImpl(
             newValue = newValue,
             created = Instant.now()
         )
-        pullRequestEventRepository.save(event)
+        pullRequestEventRepository.recordWithDraftMerge(event)
     }
 
     @Transactional

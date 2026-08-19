@@ -98,7 +98,7 @@ class CodeReviewServiceSpec @Autowired constructor(
                 codeThread.state shouldBe CommentThread.ThreadState.OPEN
             }
 
-            it("리뷰어를 추가/해제하면 NotificationEvent와 PullRequestEvent가 모두 생성되어야 한다(P1-39)") {
+            it("리뷰어를 추가하면 NotificationEvent와 PullRequestEvent가 모두 생성되어야 한다(P1-39)") {
                 codeReviewService.addReviewer(pullRequest.id!!, otherUser.id!!)
 
                 val prEventsAfterAdd = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
@@ -108,14 +108,26 @@ class CodeReviewServiceSpec @Autowired constructor(
                 prEventsAfterAdd.first().senderLoginId shouldBe otherUser.loginId
 
                 notificationEventRepository.findAll().size shouldBe 1
+            }
 
+            it("같은 리뷰어가 30초 내에 참여/해제를 반복하면 PullRequestEvent가 상쇄돼야 한다(P1-40)") {
+                codeReviewService.addReviewer(pullRequest.id!!, otherUser.id!!)
                 codeReviewService.removeReviewer(pullRequest.id!!, otherUser.id!!)
 
-                val prEventsAfterRemove = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
-                prEventsAfterRemove.size shouldBe 2
-                prEventsAfterRemove.last().newValue shouldBe "CANCEL"
-
+                // 참여/해제 두 이벤트가 서로 상쇄돼 타임라인에는 아무것도 남지 않아야 한다(legacy 동작 그대로)
+                pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest).size shouldBe 0
+                // 알림(NotificationEvent)은 병합/취소 대상이 아니라 두 번 다 발송된다
                 notificationEventRepository.findAll().size shouldBe 2
+            }
+
+            it("같은 리뷰어가 30초 내에 참여/해제/참여를 반복하면 마지막 참여만 남아야 한다(P1-40)") {
+                codeReviewService.addReviewer(pullRequest.id!!, otherUser.id!!)
+                codeReviewService.removeReviewer(pullRequest.id!!, otherUser.id!!)
+                codeReviewService.addReviewer(pullRequest.id!!, otherUser.id!!)
+
+                val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
+                prEvents.size shouldBe 1
+                prEvents.first().newValue shouldBe "DONE"
             }
 
             it("2. 기존 스레드에 대댓글을 달면 동일 스레드 하위에 묶여야 한다") {

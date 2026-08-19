@@ -590,6 +590,25 @@ class PullRequestServiceSpec @Autowired constructor(
                 prEvents.first().senderLoginId shouldBe contributor.loginId
             }
 
+            it("PULL_REQUEST_STATE_CHANGED는 30초 내 연속 변경이어도 상쇄되지 않고 모두 남아야 한다(P1-40)") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "상태 병합 제외 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-no-merge",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                pullRequestService.changeState(pr.id!!, State.CLOSED, contributor.loginId)
+                pullRequestService.changeState(pr.id!!, State.REJECTED, contributor.loginId)
+
+                // yona PullRequestEvent.needToDeleteEvent는 PULL_REQUEST_REVIEW_STATE_CHANGED 타입에만 적용되므로
+                // 상태 변경 이벤트는 IssueEvent(P1-38)와 달리 병합되지 않고 둘 다 그대로 남는다.
+                pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr).size shouldBe 2
+            }
+
             it("동일한 상태로 변경을 시도하면 이벤트를 생성하지 않아야 한다") {
                 val pr = pullRequestRepository.save(
                     PullRequest(
