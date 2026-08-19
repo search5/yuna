@@ -95,7 +95,7 @@
 |---|---|---|---|
 | P2-01 | [x] | ReservedWordsValidator(예약어 검증) 없음 | **완료** — 아래 완료 로그 참고 |
 | P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음. P1-19에서 재확인 — `AbstractPosting.history`/`AbstractPostingApp.addToHistory()`(yona `utils.diff_match_patch` 기반 워드단위 diff)도 이 항목과 동일한 미구현 의존성(diff_match_patch 라이브러리 포팅)이라 함께 묶임. yuna `Posting.history` 필드 자체는 이미 존재하나 실제로 채워지지 않음 |
-| P2-03 | [ ] | 사이트 관리자 아바타 지정 API가 빈 스텁 | `SiteApiController.kt:314-322` |
+| P2-03 | [x] | 사이트 관리자 아바타 지정 API가 빈 스텁 | **완료** — 아래 완료 로그 참고 |
 | P2-04 | [ ] | 웹훅 JSON 페이로드 단순화 | 커밋 리스트 없이 event/sender/project만 포함 |
 | P2-05 | [ ] | 접근제어가 컨트롤러별 산발적 인라인 체크로 분산 | 전 컨트롤러(~40개) 일관성 전수 미검증 |
 | P2-06 | [ ] | SVN 컨트롤러 라우트 커버리지 오탐 | catch-all 매핑으로 실제론 문제 없음 — 조치 불요, 기록만 |
@@ -103,6 +103,14 @@
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P2-03**: `SiteApiController.setAttachmentToUserAvatar`가 요청을 받고도 아무 것도 하지 않고 `{status: 200}`만 반환하던 빈 스텁이던 문제 수정. 구현 과정에서 형제 엔드포인트 `noAvatarUsers`(11번)도 실제로는 필터링을 전혀 하지 않고 활성 사용자 전원을 반환하던 별개의 버그를 발견해 함께 고쳤다(같은 화면·같은 서비스 메서드가 쓰는 밀접한 코드라 분리하지 않음).
+  - yona `SiteApp.setAttachmentToUserAvatar`를 확인한 결과 `avatarFileId`로 첨부파일을 찾아 이미지 MIME 타입인지 검사하고, `email`로 대상 사용자를 찾아 기존 아바타 첨부파일을 지우고 새 첨부파일을 그 자리로 옮기는 로직이었다. yuna의 아바타 모델은 `User.avatarId`라는 영속 필드가 아니라(그 필드는 `@Transient`, 조회 시점에만 채워짐) `Attachment(containerType=USER_AVATAR, containerId=user.id)` 컨테이너 조회 방식(`UserViewController.editUserInfo`가 이미 이 패턴 사용 중)임을 먼저 확인하고 동일한 패턴으로 구현.
+  - `SiteService.setUserAvatar(avatarFileId, email)` 신규 추가 — 첨부파일 조회(없으면 예외) → MIME 타입이 `image`로 시작하는지 검사(아니면 예외) → 이메일로 사용자 조회(없으면 예외) → 기존 `USER_AVATAR` 컨테이너 첨부파일 삭제 → 새 첨부파일의 `containerType`/`containerId`를 대상 사용자로 재지정.
+  - `SiteService.getNoAvatarUsers()`: 활성 사용자 필터에 `USER_AVATAR` 컨테이너 첨부파일이 비어있는지 확인하는 조건을 추가해 실제로 "아바타 없는 사용자만" 반환하도록 수정.
+  - `SiteApiController.setAttachmentToUserAvatar`: 요청 바디에서 `avatarFileId`/`email`을 파싱해 `SiteService.setUserAvatar`를 호출하고, 검증 실패 시 400과 사유를 반환하도록 구현.
+  - 테스트: `SiteServiceSpec.kt` +4 tests(아바타 없는 사용자만 필터링/이미지 첨부파일로 아바타 지정+기존 아바타 삭제/비이미지 첨부파일 거부/존재하지 않는 사용자 거부), `SiteControllerSpec.kt` +1 test(엔드포인트가 서비스 호출로 위임됨을 검증). 인접 회귀: `web/SiteControllerSpec`, `domain/site/*`, `web/UserViewControllerSpec`, `YonaApplicationTests` 전체 재실행 통과.
+  - 검증: `./gradlew compileKotlin compileTestKotlin`, `./gradlew test --tests "com.github.search5.yona.web.SiteControllerSpec" --tests "com.github.search5.yona.domain.site.*" --tests "com.github.search5.yona.web.UserViewControllerSpec" --tests "com.github.search5.yona.YonaApplicationTests"` 모두 통과.
 
 - **2026-08-20 — P2-01**: 로그인ID/조직명이 정적 라우트 경로(`/new`, `/projects`, `/organizations` 등)와 충돌할 수 있는데도 예약어 검증이 없던 문제 수정. yona `utils/ReservedWordsValidator.java`를 확인한 결과 `User.loginId`와 `Organization.name`에만 `@ValidateWith`로 적용되고(`Project.name`은 두 번째 경로 세그먼트라 적용 안 됨), Play 라우트 테이블을 런타임에 스캔해 `/{loginId}` 패턴과 충돌하는 첫 경로 세그먼트를 자동 수집한 뒤 "new"/"projects"/"orgs"/"organizations" 4개를 수동 추가하는 방식이었다.
   - 신규 `domain/user/ReservedWordsValidator.kt`: yona처럼 런타임에 Spring MVC 라우트를 스캔하는 대신(라우팅 프레임워크가 달라 등가 구현이 더 복잡하고 불확실함), 실제 컨트롤러들의 정적 최상위 경로를 직접 확인해 정적 집합으로 나열(`EmailDomainValidator`와 동일한 순수 object 스타일).

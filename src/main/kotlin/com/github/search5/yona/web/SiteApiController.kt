@@ -263,7 +263,7 @@ class SiteApiController(
         return ResponseEntity.ok(mapOf("users" to users))
     }
 
-    // 12. 아바타 지정 API
+    // 12. 아바타 지정 API (yona SiteApp.setAttachmentToUserAvatar 대응, P2-03)
     @PostMapping("/setAttachmentToUserAvatar")
     @ResponseBody
     fun setAttachmentToUserAvatar(
@@ -271,7 +271,18 @@ class SiteApiController(
         authentication: Authentication?
     ): ResponseEntity<Map<String, Any>> {
         checkAdmin(authentication)
-        return ResponseEntity.ok(mapOf("status" to 200, "message" to "OK"))
+
+        val avatarFileId = (body["avatarFileId"] as? Number)?.toLong()
+            ?: return ResponseEntity.badRequest().body(mapOf("message" to "Expecting Json data"))
+        val email = body["email"] as? String
+            ?: return ResponseEntity.badRequest().body(mapOf("message" to "Expecting Json data"))
+
+        return try {
+            siteService.setUserAvatar(avatarFileId, email)
+            ResponseEntity.ok(mapOf("status" to 200, "message" to "OK"))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "Bad request")))
+        }
     }
 
     // 13. 업데이트 알림 무시 비동기 API

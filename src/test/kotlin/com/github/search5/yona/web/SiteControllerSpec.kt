@@ -455,6 +455,24 @@ class SiteControllerSpec : DescribeSpec({
             }
         }
 
+        describe("POST /site/setAttachmentToUserAvatar (P2-03)") {
+            it("첨부파일ID/이메일을 서비스에 그대로 전달해 아바타를 지정해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { siteService.setUserAvatar(100L, "gildong@example.com") } returns Unit
+
+                mockMvcApi.perform(
+                    post("/site/setAttachmentToUserAvatar")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""{"avatarFileId": 100, "email": "gildong@example.com"}""")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.status").value(200))
+
+                verify(exactly = 1) { siteService.setUserAvatar(100L, "gildong@example.com") }
+            }
+        }
+
         describe("GET /site/diagnostic") {
             it("시스템 자가진단 분석 뷰를 반환해야 한다") {
                 every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
