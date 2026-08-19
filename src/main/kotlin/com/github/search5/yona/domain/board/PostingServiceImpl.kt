@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.support.HistoryUtil
 
 @Service
 @Transactional(readOnly = true)
@@ -121,6 +122,7 @@ class PostingServiceImpl(
 
         val originalBody = posting.body
         val isAuthoredByUpdater = posting.authorId == authorId
+        val updater = userRepository.findById(authorId).orElse(null)
 
         posting.title = title.trim()
         posting.body = body
@@ -128,12 +130,23 @@ class PostingServiceImpl(
         posting.readme = readme
         posting.updatedDate = Instant.now()
 
+        // yona AbstractPostingApp.editPosting()의 history 갱신 대응 (P2-02).
+        if (updater != null && (originalBody ?: "") != body) {
+            posting.history = HistoryUtil.appendHistory(
+                originalBody = originalBody,
+                newBody = body,
+                updaterName = updater.name,
+                updaterLoginId = updater.loginId,
+                updatedDate = posting.updatedDate,
+                existingHistory = posting.history
+            )
+        }
+
         val saved = postingRepository.save(posting)
 
         // yona BoardApp.editPost의 isSelectedToSendNotificationMail() 대응 (P1-44).
         // 본인 글이 아니면 옵션과 무관하게 항상 발송하고, 본인 글이면 체크박스를 선택했을 때만 발송한다.
         if (sendNotificationMail || !isAuthoredByUpdater) {
-            val updater = userRepository.findById(authorId).orElse(null)
             if (updater != null) {
                 val title2 = "[${saved.project.name}] 게시글 수정: ${saved.title}"
                 val notificationEvent = NotificationEvent(

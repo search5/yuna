@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.support.HistoryUtil
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
@@ -108,6 +109,18 @@ class IssueServiceImpl(
         issue.title = title
         issue.body = (body)
         issue.updatedDate = Instant.now()
+
+        // yona AbstractPostingApp.editPosting()의 history 갱신 대응 (P2-02).
+        if ((oldBody ?: "") != body) {
+            issue.history = HistoryUtil.appendHistory(
+                originalBody = oldBody,
+                newBody = body,
+                updaterName = updater.name,
+                updaterLoginId = updater.loginId ?: "",
+                updatedDate = issue.updatedDate,
+                existingHistory = issue.history
+            )
+        }
 
         if (assigneeUser != null) {
             issue.assignee = Assignee(user = assigneeUser, project = issue.project)

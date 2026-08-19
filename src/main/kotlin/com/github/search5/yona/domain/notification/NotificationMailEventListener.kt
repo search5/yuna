@@ -2,12 +2,14 @@ package com.github.search5.yona.domain.notification
 
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.mail.EmailAddressDetail
 import com.github.search5.yona.domain.mail.MailService
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.support.DiffUtil
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.event.EventListener
@@ -42,7 +44,7 @@ class NotificationMailEventListener(
             return
         }
 
-        val htmlContent = renderHtml(event.newValue?.takeIf { it.isNotBlank() } ?: event.title)
+        val htmlContent = buildHtmlContent(event)
         val replyTo = buildReplyTo(event.resourceType, event.resourceId)
 
         for (receiver in event.receivers) {
@@ -63,6 +65,18 @@ class NotificationMailEventListener(
         }
 
         notificationMailRepository.save(NotificationMail(notificationEvent = event))
+    }
+
+    // yona NotificationEvent.getMessage()의 ISSUE_BODY_CHANGED/POSTING_BODY_CHANGED 분기(DiffUtil.getDiffText)
+    // 대응 (P2-02). 이 두 이벤트 타입은 DiffUtil이 이미 HTML 이스케이프+하이라이트 span을 직접 생성하므로
+    // renderHtml()로 다시 이스케이프하면 안 된다(span 태그 자체가 깨짐).
+    private fun buildHtmlContent(event: NotificationEvent): String {
+        return when (event.eventType) {
+            EventType.ISSUE_BODY_CHANGED, EventType.POSTING_BODY_CHANGED ->
+                "<div>${DiffUtil.getDiffText(event.oldValue, event.newValue)}</div>"
+            else ->
+                renderHtml(event.newValue?.takeIf { it.isNotBlank() } ?: event.title)
+        }
     }
 
     private fun renderHtml(content: String): String {

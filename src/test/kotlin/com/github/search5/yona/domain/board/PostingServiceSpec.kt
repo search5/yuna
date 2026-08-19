@@ -9,6 +9,7 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 
@@ -84,6 +85,38 @@ class PostingServiceSpec @Autowired constructor(
                 events.first().eventType shouldBe EventType.POSTING_BODY_CHANGED
                 events.first().oldValue shouldBe "원본 본문"
                 events.first().newValue shouldBe "수정된 본문"
+            }
+
+            it("본문을 수정하면 변경 이력(history)이 기록되어야 한다(P2-02)") {
+                val author = userRepository.save(User(loginId = "writer6", name = "작성자6", email = "writer6@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project6", owner = "writer6"))
+                val saved = postingService.createPosting(project.id!!, Posting(title = "원본", body = "원본 본문", project = project), author.id!!)
+                notificationEventRepository.deleteAll()
+
+                val updated = postingService.updatePosting(
+                    projectId = project.id!!, number = saved.number!!,
+                    title = "수정됨", body = "수정된 본문", notice = false, readme = false,
+                    authorId = author.id!!, sendNotificationMail = false
+                )
+
+                updated.history shouldNotBe null
+                updated.history!!.contains("history-made-by") shouldBe true
+                updated.history!!.contains("작성자6") shouldBe true
+            }
+
+            it("본문이 바뀌지 않으면 history를 기록하지 않아야 한다(P2-02)") {
+                val author = userRepository.save(User(loginId = "writer7", name = "작성자7", email = "writer7@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project7", owner = "writer7"))
+                val saved = postingService.createPosting(project.id!!, Posting(title = "원본", body = "동일 본문", project = project), author.id!!)
+                notificationEventRepository.deleteAll()
+
+                val updated = postingService.updatePosting(
+                    projectId = project.id!!, number = saved.number!!,
+                    title = "제목만 수정", body = "동일 본문", notice = false, readme = false,
+                    authorId = author.id!!, sendNotificationMail = false
+                )
+
+                updated.history shouldBe null
             }
 
             it("본인이 작성하지 않은 글을 수정하면 알림 발송 옵션과 무관하게 항상 알림이 발행되어야 한다(P1-44)") {
