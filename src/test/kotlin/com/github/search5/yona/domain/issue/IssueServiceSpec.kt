@@ -24,7 +24,9 @@ class IssueServiceSpec @Autowired constructor(
     private val notificationEventRepository: NotificationEventRepository,
     private val issueCommentRepository: IssueCommentRepository,
     private val issueEventRepository: IssueEventRepository,
-    private val milestoneRepository: com.github.search5.yona.domain.milestone.MilestoneRepository
+    private val milestoneRepository: com.github.search5.yona.domain.milestone.MilestoneRepository,
+    private val issueLabelRepository: IssueLabelRepository,
+    private val issueLabelCategoryRepository: IssueLabelCategoryRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -34,6 +36,8 @@ class IssueServiceSpec @Autowired constructor(
                 notificationEventRepository.deleteAll()
                 issueCommentRepository.deleteAll()
                 issueRepository.deleteAll()
+                issueLabelRepository.deleteAll()
+                issueLabelCategoryRepository.deleteAll()
                 milestoneRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
@@ -123,6 +127,89 @@ class IssueServiceSpec @Autowired constructor(
                 issueEvents.size shouldBe 1
                 issueEvents.first().eventType shouldBe EventType.ISSUE_MILESTONE_CHANGED
                 issueEvents.first().newValue shouldBe "1.0 출시"
+            }
+
+            it("updateIssue로 본문을 변경하면 IssueEvent 타임라인 항목(ISSUE_BODY_CHANGED)이 생성되어야 한다") {
+                val author = userRepository.save(User(loginId = "tester4", name = "테스터4", email = "tester4@yona.io"))
+                val project = projectRepository.save(Project(name = "body-test-project", owner = "tester4"))
+                val issue = Issue(
+                    title = "본문 변경 테스트", body = "원래 본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                issueService.updateIssue(
+                    issueId = savedIssue.id!!,
+                    title = savedIssue.title,
+                    body = "변경된 본문",
+                    updater = author,
+                    assigneeUser = null,
+                    milestoneId = null,
+                    labelIds = null
+                )
+
+                val issueEvents = issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue)
+                issueEvents.size shouldBe 1
+                issueEvents.first().eventType shouldBe EventType.ISSUE_BODY_CHANGED
+                issueEvents.first().oldValue shouldBe "원래 본문"
+                issueEvents.first().newValue shouldBe "변경된 본문"
+                issueEvents.first().senderLoginId shouldBe "tester4"
+            }
+
+            it("updateIssue로 본문이 바뀌지 않으면 ISSUE_BODY_CHANGED 이벤트가 생성되지 않아야 한다") {
+                val author = userRepository.save(User(loginId = "tester5", name = "테스터5", email = "tester5@yona.io"))
+                val project = projectRepository.save(Project(name = "body-nochange-project", owner = "tester5"))
+                val issue = Issue(
+                    title = "본문 유지 테스트", body = "동일 본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                issueService.updateIssue(
+                    issueId = savedIssue.id!!,
+                    title = savedIssue.title,
+                    body = "동일 본문",
+                    updater = author,
+                    assigneeUser = null,
+                    milestoneId = null,
+                    labelIds = null
+                )
+
+                issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue).size shouldBe 0
+            }
+
+            it("updateIssue로 라벨을 변경하면 IssueEvent 타임라인 항목(ISSUE_LABEL_CHANGED)이 생성되어야 한다") {
+                val author = userRepository.save(User(loginId = "tester6", name = "테스터6", email = "tester6@yona.io"))
+                val project = projectRepository.save(Project(name = "label-test-project", owner = "tester6"))
+                val category = issueLabelCategoryRepository.save(
+                    IssueLabelCategory(name = "종류", isExclusive = false, project = project)
+                )
+                val bugLabel = issueLabelRepository.save(
+                    IssueLabel(category = category, color = "red", name = "버그", project = project)
+                )
+                val issue = Issue(
+                    title = "라벨 변경 테스트", body = "본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                issueService.updateIssue(
+                    issueId = savedIssue.id!!,
+                    title = savedIssue.title,
+                    body = savedIssue.body ?: "",
+                    updater = author,
+                    assigneeUser = null,
+                    milestoneId = null,
+                    labelIds = listOf(bugLabel.id!!)
+                )
+
+                val issueEvents = issueEventRepository.findByIssueOrderByCreatedAsc(savedIssue)
+                issueEvents.size shouldBe 1
+                issueEvents.first().eventType shouldBe EventType.ISSUE_LABEL_CHANGED
+                issueEvents.first().newValue shouldBe "버그"
             }
 
             it("사용자가 이슈에 투표를 던지거나 취소할 수 있어야 한다") {
