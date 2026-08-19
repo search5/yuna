@@ -94,10 +94,10 @@
 | # | 상태 | 제목 | 비고 |
 |---|---|---|---|
 | P2-01 | [x] | ReservedWordsValidator(예약어 검증) 없음 | **완료** — 아래 완료 로그 참고 |
-| P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음. P1-19에서 재확인 — `AbstractPosting.history`/`AbstractPostingApp.addToHistory()`(yona `utils.diff_match_patch` 기반 워드단위 diff)도 이 항목과 동일한 미구현 의존성(diff_match_patch 라이브러리 포팅)이라 함께 묶임. yuna `Posting.history` 필드 자체는 이미 존재하나 실제로 채워지지 않음 |
+| P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음. P1-19에서 재확인 — `AbstractPosting.history`/`AbstractPostingApp.addToHistory()`(yona `utils.diff_match_patch` 기반 워드단위 diff)도 이 항목과 동일한 미구현 의존성(diff_match_patch 라이브러리 포팅)이라 함께 묶임. yuna `Posting.history` 필드 자체는 이미 존재하나 실제로 채워지지 않음. **2026-08-20 재검토 결과 이번 세션에서 착수하지 않기로 결정**: 확인해보니 `history`를 채우는 코드가 이슈/게시글 수정 경로 어디에도 전혀 없어(단순 누락이 아니라 완전 미구현) 신규 word-diff 라이브러리 의존성 추가(`diff_match_patch` 직접 포팅 또는 `io.github.java-diff-utils` 등 대체 라이브러리 도입) 여부부터 결정해야 하는데, 이는 build.gradle.kts에 새 외부 의존성을 추가하는 결정이라 세션 종료 직전에 사용자 확인 없이 밀어붙이기보다 다음 세션에서 라이브러리 선택을 논의 후 진행하는 것이 안전하다고 판단 |
 | P2-03 | [x] | 사이트 관리자 아바타 지정 API가 빈 스텁 | **완료** — 아래 완료 로그 참고 |
 | P2-04 | [x] | 웹훅 JSON 페이로드 단순화 | **완료** — 아래 완료 로그 참고 |
-| P2-05 | [ ] | 접근제어가 컨트롤러별 산발적 인라인 체크로 분산 | 전 컨트롤러(~40개) 일관성 전수 미검증 |
+| P2-05 | [ ] | 접근제어가 컨트롤러별 산발적 인라인 체크로 분산 | 전 컨트롤러(~40개) 일관성 전수 미검증. **2026-08-20 재검토**: 이 항목은 단일 결함 수정이 아니라 "~40개 컨트롤러에 흩어진 인라인 권한 체크(`checkReadPermission`/`isManagerOrAuthor` 등 패턴)가 서로 일관된 규칙을 따르는지"를 전수 확인하는 감사(audit) 작업이라, 이번 세션에 남은 시간 예산 안에서 제대로 수행하면 표면적으로 훑는 수준에 그쳐 실효성이 낮다고 판단해 착수하지 않음. 향후 별도 세션에서 컨트롤러별 권한 체크 패턴을 표로 정리하고 불일치를 찾는 감사 작업으로 진행하는 것을 권장 |
 | P2-06 | [x] | SVN 컨트롤러 라우트 커버리지 오탐 | **완료(검증만, 코드 변경 없음)** — `SvnController.kt`에 `@RequestMapping("/svn/{ownerName}/{projectName}/**")` catch-all이 여전히 존재함을 2026-08-20 재확인. 실제 결함 아님 |
 
 ---
