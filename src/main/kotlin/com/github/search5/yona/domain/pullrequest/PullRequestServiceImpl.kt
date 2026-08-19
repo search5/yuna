@@ -450,9 +450,11 @@ class PullRequestServiceImpl(
             .orElseThrow { IllegalArgumentException("PullRequest not found: $pullRequestId") }
         val user = userRepository.findById(reviewer.id!!)
             .orElseThrow { IllegalArgumentException("User not found: ${reviewer.id}") }
-        
-        pr.reviewers.add(user)
-        pullRequestRepository.save(pr)
+
+        if (pr.reviewers.add(user)) {
+            pullRequestRepository.save(pr)
+            notifyReviewerChanged(pr, user, "DONE")
+        }
     }
 
     @Transactional
@@ -462,8 +464,35 @@ class PullRequestServiceImpl(
         val user = userRepository.findById(reviewer.id!!)
             .orElseThrow { IllegalArgumentException("User not found: ${reviewer.id}") }
 
-        pr.reviewers.remove(user)
-        pullRequestRepository.save(pr)
+        if (pr.reviewers.remove(user)) {
+            pullRequestRepository.save(pr)
+            notifyReviewerChanged(pr, user, "CANCEL")
+        }
+    }
+
+    // yona CodeReviewServiceImpl.addReviewer/removeReviewer와 동일한 알림/타임라인 기록 (P1-49).
+    // PullRequestController(REST)가 이 서비스를, ReviewApiController가 CodeReviewService를 각각 사용하는
+    // 중복 구현 구조는 그대로 남아있지만(별도 정리 과제), 최소한 두 경로 모두 알림이 발송되도록 맞춘다.
+    private fun notifyReviewerChanged(pullRequest: PullRequest, reviewer: User, newValue: String) {
+        val actionLabel = if (newValue == "DONE") "참여했습니다" else "취소했습니다"
+        val notificationEvent = NotificationEvent(
+            title = "[${pullRequest.toProject.name}] 풀 리퀘스트 #${pullRequest.number}에 리뷰어로 $actionLabel.",
+            senderId = reviewer.id,
+            created = Instant.now(),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = pullRequest.id.toString(),
+            eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
+            newValue = newValue
+        )
+        val receivers = mutableSetOf(pullRequest.contributor)
+        receivers.addAll(pullRequest.reviewers)
+        receivers.removeIf { it.id == reviewer.id }
+        notificationEvent.receivers = receivers
+
+        notificationEventRepository.save(notificationEvent)
+        eventPublisher.publishEvent(notificationEvent)
+
+        recordPullRequestEvent(pullRequest, EventType.PULL_REQUEST_REVIEW_STATE_CHANGED, reviewer.loginId, null, newValue)
     }
 
     override fun getDiff(pullRequest: PullRequest): List<com.github.search5.yona.domain.vcs.FileDiff> {

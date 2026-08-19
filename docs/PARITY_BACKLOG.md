@@ -87,7 +87,7 @@
 | P1-46 | [x] | git push(NEW_COMMIT) 알림 메일은 여전히 발송되지 않음(수신자 미계산) | `NotificationEvent.java:604-680`(push 부분, 메일 경로) | `domain/event/GitPostReceiveEventListener.kt` | **완료** — 아래 참고 |
 | P1-47 | [x] | 수신메일 HTML 서식 보존 및 cid 인라인 이미지 치환 미지원 | `CreationViaEmail.java postprocessForHTML/replaceCidWithAttachments` | `domain/mail/ImapMailboxPoller.kt`, `domain/mail/IncomingMailProcessingService.kt` | **완료** — 아래 참고 |
 | P1-48 | [ ] | 이슈를 다른 프로젝트로 이동하는 기능 자체가 없음(ISSUE_MOVED) | `IssueApp.java addIssueMovedNotification/isRequestedToOtherProject`, `models/NotificationEvent.java afterIssueMoved` | (해당 없음) | P1-37에서 범위 분리 — 단순히 이벤트 기록 누락이 아니라, "이슈를 다른 프로젝트로 옮기기" 자체가 yuna에 전혀 없는 기능이다(이슈 수정 폼에 프로젝트 선택 UI 없음, 서비스 계층에 project 재할당 로직 없음). yona는 이동 시 원본 프로젝트에 `ISSUE_MOVED` 알림을 남기고 대상 프로젝트에 새 이슈 번호로 재등록한다. 신규 컨트롤러 액션+폼 필드+서비스 로직이 필요한 별도 규모의 기능 포팅이라 분리 |
-| P1-49 | [ ] | `PullRequestService.addReviewer/removeReviewer`(REST `PullRequestController`가 사용)는 알림/이벤트를 전혀 남기지 않음 | (해당 없음, yuna 자체 설계 이슈) | `web/PullRequestController.kt`(→`PullRequestService.addReviewer/removeReviewer`), `web/ReviewApiController.kt`(→`CodeReviewService.addReviewer/removeReviewer`) | P1-39 작업 중 발견 — 리뷰어 참여/해제가 실제로는 서로 다른 서비스의 동명 메서드 2벌로 중복 구현돼 있다. `CodeReviewService.addReviewer/removeReviewer`(`ReviewApiController`가 호출)는 이번에 NotificationEvent+PullRequestEvent를 모두 남기도록 고쳤지만, `PullRequestService.addReviewer/removeReviewer`(`PullRequestController`가 호출, `PullRequestServiceImpl.kt:419-428`)는 여전히 리뷰어 컬렉션만 갱신하고 알림/타임라인 기록이 전혀 없다. 어느 경로가 실제 UI에서 쓰이는지 확인 후 중복을 정리하거나 두 경로 모두 동일하게 기록하도록 통일 필요 |
+| P1-49 | [x] | `PullRequestService.addReviewer/removeReviewer`(REST `PullRequestController`가 사용)는 알림/이벤트를 전혀 남기지 않음 | (해당 없음, yuna 자체 설계 이슈) | `web/PullRequestController.kt`(→`PullRequestService.addReviewer/removeReviewer`), `web/ReviewApiController.kt`(→`CodeReviewService.addReviewer/removeReviewer`) | **완료(부분, 아래 참고)** — 두 경로 모두 알림/타임라인을 남기도록 고쳤으나 중복 구현 자체는 정리하지 않음 |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -103,6 +103,12 @@
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P1-49**: `PullRequestService.addReviewer/removeReviewer`(REST `PullRequestController`가 호출하는 경로)가 리뷰어 컬렉션만 갱신하고 알림/타임라인 기록이 전혀 없던 문제 수정. P1-39 작업 중 발견한 대로, 리뷰어 참여/해제가 `CodeReviewService`(→`ReviewApiController`)와 `PullRequestService`(→`PullRequestController`) 두 서비스에 중복 구현돼 있고 이번에 고친 건 전자뿐이었다.
+  - `PullRequestServiceImpl.addReviewer/removeReviewer`에 `CodeReviewServiceImpl.addReviewer/removeReviewer`(P1-39/40에서 이미 완성)와 동일한 패턴의 `notifyReviewerChanged` 헬퍼를 추가 — `NotificationEvent(PULL_REQUEST_REVIEW_STATE_CHANGED)`를 발행(수신자=contributor+나머지 리뷰어, 본인 제외)하고, 기존 `recordPullRequestEvent`(P1-40의 draft-time 병합/취소 로직 포함)로 `PullRequestEvent`도 함께 기록. 이미 같은 사용자가 리뷰어로 등록/해제돼 있어 실제 변경이 없는 경우(`Set.add/remove`가 false 반환)는 기존처럼 알림을 발행하지 않도록 가드도 유지.
+  - **의도적으로 남긴 부분**: 리뷰어 참여/해제가 서로 다른 두 서비스에 중복 구현된 근본 구조(어느 한쪽으로 통합하거나 위임하는 리팩터링)는 이번 패스에서 다루지 않음 — 관찰 가능한 결함(알림 미발송)은 양쪽 다 고쳤지만, 코드 중복 자체를 없애는 건 컨트롤러 배선까지 함께 바꿔야 하는 별도 리팩터링 과제라 범위를 좁혔다. `PullRequestServiceSpec`의 "5. 최소 리뷰어 수 미달 시 머지 실패 검증" 테스트가 `PullRequestService.addReviewer`의 리뷰어-수 계산 책임(머지 가능 여부 판단)에 의존하고 있어, 두 서비스를 섣불리 통합하면 그 책임 소재도 함께 얽힐 위험이 있다고 판단했다.
+  - 테스트: `PullRequestServiceSpec.kt` +1 test(리뷰어 추가 시 NotificationEvent/PullRequestEvent 발행 검증). 인접 회귀: `domain/pullrequest/*`, `web/PullRequest*`, `web/Review*`, `YonaApplicationTests` 전체 재실행 통과.
+  - 검증: `./gradlew compileKotlin compileTestKotlin`, `./gradlew test --tests "com.github.search5.yona.domain.pullrequest.*" --tests "com.github.search5.yona.web.PullRequest*" --tests "com.github.search5.yona.web.Review*" --tests "com.github.search5.yona.YonaApplicationTests"` 모두 통과.
 
 - **2026-08-20 — P1-47**: 수신메일이 HTML뿐일 때 서식이 손실되던 문제와, 본문 HTML 안의 `cid:xxx` 인라인 이미지가 깨진 채로 남던 문제를 모두 해결. yona `CreationViaEmail.postprocessForHTML`/`replaceCidWithAttachments`를 이식하기 전, 백로그가 명시한 선행 확인(raw HTML을 Issue/Posting 본문에 그대로 저장해도 안전한지)부터 검증 — `MarkdownServiceImpl.render()`가 항상 OWASP `owasp-java-html-sanitizer`(P0-08)로 최종 sanitize를 거친 뒤 반환하는 것을 확인했고, 이는 저장 시점 출처(사용자 입력이든 메일이든)와 무관하게 렌더링 시점에 균일하게 적용되므로 raw HTML을 그대로 저장해도 안전하다고 결론.
   - `ImapMailboxPoller`: `extractTextBody`(단순 String 반환, HTML을 jsoup으로 태그 제거)를 `extractBody`(본문+`isHtml` 플래그를 함께 반환)로 교체 — text/plain이 있으면 그걸 쓰고, text/html뿐이면 이제 태그를 벗기지 않고 원본 HTML을 그대로 보존한다. `extractAttachments`가 각 첨부파일의 `Content-ID` 헤더도 함께 추출하도록 확장.
