@@ -32,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional
  *    추적하지 않는다(P1-28은 프로젝트 단위 Reply-To 라우팅까지만 구현) — 그래서 "답장에 답장"(이미
  *    메일로 만들어진 리뷰/커밋 댓글에 대한 재답장) 체인은 동작하지만, UI에서 만든 리뷰/커밋 댓글의
  *    "첫 알림 메일"에 대한 답장은 아직 스레드로 연결되지 않는다.
- *  - "help" 자동응답, 수신 거부 사유 회신 메일
+ *  - "help" 자동응답, 수신 거부 사유 회신 메일은 P1-31에서 구현됨
  *  - 수신 주소 detail에 리소스 경로를 직접 명시하는 방식(owner/project/issue/5)
  *  - 한 이메일이 여러 프로젝트로 발송된 경우, OriginalEmail은 최초 성공 리소스 1건만 기록
  */
@@ -49,6 +49,7 @@ class IncomingMailProcessingService(
     private val commentThreadRepository: CommentThreadRepository,
     private val commitCommentRepository: CommitCommentRepository,
     private val codeReviewService: CodeReviewService,
+    private val mailService: MailService,
     @Value("\${yuna.mailbox.imap.address:}")
     private val inboundBaseAddress: String
 ) {
@@ -81,8 +82,45 @@ class IncomingMailProcessingService(
         val outcomes = targets.map { target -> processTarget(target, threads, sender, message) }
 
         outcomes.firstOrNull { it.isCreated() }?.let { saveOriginalEmail(message.messageId, it) }
+        replyWithErrorsIfAny(outcomes, sender, message)
 
         return outcomes
+    }
+
+    // yona EmailHandler.handle()의 "errors.size() > 0이면 도움말+사유를 회신" 분기 대응 (P1-31)
+    private fun replyWithErrorsIfAny(outcomes: List<IncomingMailOutcome>, sender: User, message: InboundEmailMessage) {
+        val reasons = outcomes.filterIsInstance<IncomingMailOutcome.Rejected>().map { it.reason }
+        if (reasons.isEmpty()) return
+
+        mailService.sendReply(
+            toEmail = sender.email,
+            toName = sender.name,
+            subject = message.subject,
+            textContent = buildHelpMessage(sender.name, reasons),
+            inReplyToMessageId = message.messageId
+        )
+    }
+
+    // yona EmailHandler.getHelpMessage() 대응 (P1-31). i18n 메시지 번들 대신 이 저장소의
+    // 다른 사용자 안내문과 마찬가지로 한국어 고정 문구로 단순화했다.
+    private fun buildHelpMessage(username: String, errors: List<String> = emptyList()): String {
+        val lines = mutableListOf("안녕하세요 ${username}님,")
+        if (errors.isNotEmpty()) {
+            lines += ""
+            lines += "요청을 처리하는 중 다음과 같은 문제가 발생했습니다:"
+            errors.forEach { lines += "- $it" }
+        }
+        lines += ""
+        lines += "메일로 이슈를 등록하거나 댓글을 달려면 프로젝트 주소로 보내주세요."
+        val sampleAddress = runCatching {
+            EmailAddressDetail.of(inboundBaseAddress).let { EmailAddressDetail(it.user, "owner/project", it.domain).toString() }
+        }.getOrNull()
+        if (sampleAddress != null) {
+            lines += "예) $sampleAddress"
+        }
+        lines += ""
+        lines += "감사합니다."
+        return lines.joinToString("\n")
     }
 
     private fun IncomingMailOutcome.isCreated(): Boolean = this is IncomingMailOutcome.IssueCreated ||
@@ -97,6 +135,18 @@ class IncomingMailProcessingService(
         sender: User,
         message: InboundEmailMessage
     ): IncomingMailOutcome {
+        // yona EmailHandler.getProjects()의 detail=="help" 분기 대응 (P1-31)
+        if (target.detail.equals("help", ignoreCase = true)) {
+            mailService.sendReply(
+                toEmail = sender.email,
+                toName = sender.name,
+                subject = message.subject,
+                textContent = buildHelpMessage(sender.name),
+                inReplyToMessageId = message.messageId
+            )
+            return IncomingMailOutcome.HelpRequested
+        }
+
         val segments = target.detail.split("/")
         if (segments.size < 2) {
             return IncomingMailOutcome.Rejected("잘못된 수신 주소 형식: $target")

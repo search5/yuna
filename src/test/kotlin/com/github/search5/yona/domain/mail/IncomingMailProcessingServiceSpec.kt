@@ -44,11 +44,12 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val commitCommentRepository = mockk<CommitCommentRepository>()
     val codeReviewService = mockk<CodeReviewService>()
+    val mailService = mockk<MailService>(relaxed = true)
 
     val service = IncomingMailProcessingService(
         originalEmailRepository, userRepository, projectRepository,
         issueRepository, postingRepository, issueService, commentService, attachmentService,
-        commentThreadRepository, commitCommentRepository, codeReviewService,
+        commentThreadRepository, commitCommentRepository, codeReviewService, mailService,
         inboundBaseAddress = "yona@example.com"
     )
 
@@ -58,7 +59,8 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     beforeTest {
         io.mockk.clearMocks(
             originalEmailRepository, userRepository, projectRepository, issueRepository, postingRepository,
-            issueService, commentService, attachmentService, commentThreadRepository, commitCommentRepository, codeReviewService
+            issueService, commentService, attachmentService, commentThreadRepository, commitCommentRepository,
+            codeReviewService, mailService
         )
         every { originalEmailRepository.existsByMessageId(any()) } returns false
         every { userRepository.findByEmail("gildong@example.com") } returns Optional.of(sender)
@@ -289,6 +291,55 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 val result = service.process(baseMessage(inReplyTo = "<commit@mail.example.com>"))
 
                 result shouldBe listOf(IncomingMailOutcome.CommitCommentCreated(500L))
+            }
+        }
+
+        describe("help 자동응답 및 실패 사유 회신 (P1-31, yona EmailHandler.getHelpMessage/reply 대응)") {
+            it("수신 주소 detail이 'help'면 도움말 회신을 보내고 다른 처리는 하지 않아야 한다") {
+                val result = service.process(baseMessage(recipients = listOf("yona+help@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.HelpRequested)
+                verify(exactly = 1) {
+                    mailService.sendReply(
+                        toEmail = "gildong@example.com",
+                        toName = "길동",
+                        subject = "메일로 만든 이슈",
+                        textContent = any(),
+                        inReplyToMessageId = "<msg1@mail.example.com>"
+                    )
+                }
+                verify(exactly = 0) { issueService.createIssue(any(), any(), any(), any(), any()) }
+            }
+
+            it("처리 중 거부(Rejected)된 대상이 있으면 실패 사유를 요약한 회신을 보내야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "secret") } returns Optional.of(
+                    Project(id = 99L, name = "secret", owner = "dlab", projectScope = ProjectScope.PRIVATE)
+                )
+
+                service.process(baseMessage(recipients = listOf("yona+dlab/secret@example.com")))
+
+                val captured = slot<String>()
+                verify(exactly = 1) {
+                    mailService.sendReply(
+                        toEmail = "gildong@example.com",
+                        toName = "길동",
+                        subject = "메일로 만든 이슈",
+                        textContent = capture(captured),
+                        inReplyToMessageId = "<msg1@mail.example.com>"
+                    )
+                }
+                captured.captured.contains("프로젝트를 찾을 수 없거나 권한이 없습니다") shouldBe true
+            }
+
+            it("정상적으로 이슈가 생성되면 회신 메일을 보내지 않아야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                service.process(baseMessage())
+
+                verify(exactly = 0) { mailService.sendReply(any(), any(), any(), any(), any()) }
             }
         }
     }

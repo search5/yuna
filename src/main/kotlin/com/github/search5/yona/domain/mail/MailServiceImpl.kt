@@ -54,4 +54,25 @@ class MailServiceImpl(
             throw e
         }
     }
+
+    override fun sendReply(toEmail: String, toName: String, subject: String, textContent: String, inReplyToMessageId: String) {
+        try {
+            val message = mailSender.createMimeMessage()
+            val helper = MimeMessageHelper(message, false, "UTF-8")
+
+            helper.setTo(toEmail)
+            helper.setSubject(if (subject.lowercase().startsWith("re:")) subject else "Re: $subject")
+            helper.setText(textContent, false)
+            helper.setFrom("no-reply@yona.io")
+            if (inReplyToMessageId.isNotBlank()) {
+                message.setHeader("In-Reply-To", inReplyToMessageId)
+                message.setHeader("References", inReplyToMessageId)
+            }
+
+            mailSender.send(message)
+            logger.info("Reply email sent to $toEmail ($toName), inReplyTo=$inReplyToMessageId")
+        } catch (e: Exception) {
+            logger.error("Failed to send reply email to $toEmail", e)
+        }
+    }
 }
