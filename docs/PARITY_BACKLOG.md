@@ -41,7 +41,7 @@
 |---|---|---|---|---|
 | P1-01 | [x] | LDAP 인증 부재 | `utils/LdapService.java` | `domain/user/{LdapService,LdapQueryBuilder,LdapUserProvisioningService,LdapUser}.kt`(신규) | **완료** |
 | P1-02 | [x] | API 토큰 인증 미작동 | `UserApp.java` (`Yona-Token`) | `config/ApiTokenAuthenticationFilter.kt`(신규) | **완료** |
-| P1-03 | [ ] | OAuth 다중 계정 연동/병합 소실 | `models/LinkedAccount.java` | `config/oauth2/CustomOAuth2UserService.kt` |
+| P1-03 | [x] | OAuth 다중 계정 연동/병합 소실 | `models/LinkedAccount.java` | `domain/user/LinkedAccount.kt`(신규), `config/oauth2/CustomOAuth2UserService.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-04 | [ ] | 이메일 도메인 allowlist 미시행 | `UserApp.java:385-499` | `web/AuthController.kt` |
 | P1-05 | [ ] | Related-PR 재병합 로직 스텁 | `RelatedPullRequestMergingActor.java` | `domain/event/PullRequestMergeEventListener.kt:95-108` |
 | P1-06 | [ ] | 커밋→이슈 자동 참조 리스너가 로깅만 함 | `IssueReferredFromCommitEventActor.java` | `domain/event/GitPostReceiveEventListener.kt` |
@@ -165,6 +165,11 @@
   - 테스트: `LdapQueryBuilderSpec.kt`(신규) 15 tests, `LdapUserProvisioningServiceSpec.kt`(신규) 4 tests, `YonaAuthenticationProviderSpec.kt` +5 tests. 전체 Spring 컨텍스트 로딩(`YonaApplicationTests`)으로 신규 빈 배선 확인. 커버리지: `LdapQueryBuilder` 96.6%/78%, `LdapUserProvisioningService` 95.3%/70%, `YonaAuthenticationProvider` 94.8%/94.4%(명령어/분기).
 
 - **2026-08-19 — P1-02**: API 토큰(`Yona-Token` 헤더 또는 `Authorization: token <값>`) 재발급 API는 있었지만, 그 토큰으로 요청을 인증하는 경로가 전혀 없어 사실상 write-only였던 문제 해결. 신규 `ApiTokenAuthenticationFilter`(`OncePerRequestFilter`)를 `SecurityConfig`에 `BasicAuthenticationFilter` 뒤에 추가 — 이미 인증된(비-익명) 요청이면 건너뛰고, 아니면 헤더에서 토큰을 추출해 `UserRepository.findByToken`으로 사용자를 찾아 SecurityContext에 인증 정보를 채운다. LOCKED/DELETED 계정 토큰은 인증하지 않음(P0-13과 동일 기조). `UserRepository.findByToken` 추가. 테스트: `ApiTokenAuthenticationFilterSpec.kt`(신규) 6 tests, `MockHttpServletRequest`로 실제 필터 체인을 통해 검증. 커버리지: INSTRUCTION 92.8%(84/92, 필터)+95.7%(45/47, 토큰 파싱).
+
+- **2026-08-19 — P1-03**: `CustomOAuth2UserService`가 소셜 로그인마다 이메일/loginId로만 매칭해, 서로 다른 provider(예: Google, GitHub)로 로그인하면 provider 연결 이력이 전혀 남지 않던 문제 해결. yona의 `UserCredential`(play-authenticate 플러그인 산물, `active`/`emailValidated` 등 프레임워크 종속 필드 포함)은 이식하지 않고, 핵심 기능만 `LinkedAccount`(User ↔ provider+providerUserId) 엔티티로 단순화해 이식.
+  - 로그인 시 (1) `LinkedAccount`로 이미 연결된 provider면 그 계정으로 즉시 로그인, (2) 처음 보는 provider면 이메일/loginId로 기존 계정을 찾아 자동으로 `LinkedAccount`를 만들어 연결(사실상 자동 병합), (3) 기존 계정도 없으면 신규 가입 + 연결.
+  - **범위 조정**: 이메일이 서로 다른 두 계정을 사용자가 수동으로 병합하는 UI(yona의 `UserCredential.merge()`에 해당)는 이식하지 않음 — 이메일 일치를 통한 자동 연결까지만 지원.
+  - 테스트: `CustomOAuth2UserServiceSpec.kt` 기존 1건 + 신규 2건(이미 연결된 계정 재로그인, 이메일 일치로 새 provider 자동 연결) = 3 tests 전체 통과. 커버리지 INSTRUCTION 92%(151/164).
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.
