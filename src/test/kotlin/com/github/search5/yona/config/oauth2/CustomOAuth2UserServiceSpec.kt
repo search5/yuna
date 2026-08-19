@@ -5,6 +5,7 @@ import com.github.search5.yona.domain.user.LinkedAccountRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.shouldBe
@@ -14,6 +15,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
 import org.springframework.security.oauth2.core.AuthorizationGrantType
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User
 import java.util.Optional
 
@@ -21,7 +23,7 @@ class CustomOAuth2UserServiceSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val linkedAccountRepository = mockk<LinkedAccountRepository>()
     val delegate = mockk<DefaultOAuth2UserService>()
-    val customOAuth2UserService = CustomOAuth2UserService(userRepository, linkedAccountRepository, delegate)
+    val customOAuth2UserService = CustomOAuth2UserService(userRepository, linkedAccountRepository, delegate, "")
 
     beforeTest {
         clearMocks(userRepository, linkedAccountRepository, delegate)
@@ -131,6 +133,30 @@ class CustomOAuth2UserServiceSpec : DescribeSpec({
             verify(exactly = 1) {
                 linkedAccountRepository.save(match { it.providerKey == "github" && it.providerUserId == "555" && it.user.id == 42L })
             }
+        }
+
+        it("허용된 이메일 도메인 설정이 있고 신규 가입자의 이메일이 그 목록에 없으면 OAuth2AuthenticationException을 던져야 한다") {
+            val restrictedService = CustomOAuth2UserService(userRepository, linkedAccountRepository, delegate, "allowed.com")
+
+            val clientRegistration = ClientRegistration.withRegistrationId("google")
+                .clientId("client-id").tokenUri("https://token.uri").authorizationUri("https://auth.uri")
+                .userInfoUri("https://user.info.uri").authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("https://redirect.uri").build()
+            val userRequest = mockk<OAuth2UserRequest>()
+            every { userRequest.clientRegistration } returns clientRegistration
+
+            val attributes = mapOf("sub" to "google-sub-id", "name" to "홍길동", "email" to "gildong@notallowed.com")
+            val defaultOAuth2User = DefaultOAuth2User(listOf(SimpleGrantedAuthority("ROLE_USER")), attributes, "sub")
+            every { delegate.loadUser(userRequest) } returns defaultOAuth2User
+
+            every { linkedAccountRepository.findByProviderKeyAndProviderUserId("google", "google-sub-id") } returns Optional.empty()
+            every { userRepository.findByEmail("gildong@notallowed.com") } returns Optional.empty()
+            every { userRepository.findByLoginId("gildong") } returns Optional.empty()
+
+            shouldThrow<OAuth2AuthenticationException> {
+                restrictedService.loadUser(userRequest)
+            }
+            verify(exactly = 0) { userRepository.save(any()) }
         }
     }
 })

@@ -13,7 +13,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
 class AuthControllerSpec : DescribeSpec({
     val userService = mockk<UserService>()
-    val authController = AuthController(userService)
+    val authController = AuthController(userService, "")
     val viewResolver = org.springframework.web.servlet.view.InternalResourceViewResolver().apply {
         setPrefix("/templates/")
         setSuffix(".html")
@@ -102,6 +102,32 @@ class AuthControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
                     .andExpect(model().attributeExists("passwordError"))
+                    .andExpect(view().name("signup"))
+
+                verify(exactly = 0) { userService.createUser(any()) }
+            }
+
+            it("허용된 이메일 도메인 설정이 있고 그 목록에 없는 도메인이면 가입이 거부되어야 한다") {
+                val restrictedController = AuthController(userService, "allowed.com")
+                val restrictedViewResolver = org.springframework.web.servlet.view.InternalResourceViewResolver().apply {
+                    setPrefix("/templates/")
+                    setSuffix(".html")
+                }
+                val restrictedMockMvc = MockMvcBuilders.standaloneSetup(restrictedController)
+                    .setViewResolvers(restrictedViewResolver)
+                    .build()
+                every { userService.isLoginIdExist("gildong") } returns false
+
+                restrictedMockMvc.perform(
+                    post("/signup")
+                        .param("loginId", "gildong")
+                        .param("name", "홍길동")
+                        .param("email", "gildong@notallowed.com")
+                        .param("password", "pass123")
+                        .param("retypedPassword", "pass123")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(model().attributeExists("emailDomainError"))
                     .andExpect(view().name("signup"))
 
                 verify(exactly = 0) { userService.createUser(any()) }
