@@ -50,6 +50,7 @@ class BoardViewController(
         @RequestParam(required = false) filter: String?,
         @RequestParam(required = false, defaultValue = "createdDate") orderBy: String,
         @RequestParam(required = false, defaultValue = "desc") orderDir: String,
+        @RequestParam(required = false) labelIds: List<Long>?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -76,7 +77,12 @@ class BoardViewController(
         }
         val pageable = PageRequest.of(actualPage, 20, sort)
 
-        val postingPage = if (!filter.isNullOrBlank()) {
+        val labelFilter = labelIds?.filterNotNull()?.takeIf { it.isNotEmpty() }
+        val postingPage = if (labelFilter != null) {
+            postingRepository.findByProjectAndLabelIdsIn(
+                project, labelFilter, if (filter.isNullOrBlank()) null else "%$filter%", pageable
+            )
+        } else if (!filter.isNullOrBlank()) {
             postingRepository.searchPostingsInProject(project, "%$filter%", pageable)
         } else {
             postingRepository.findByProject(project, pageable)
@@ -90,6 +96,7 @@ class BoardViewController(
         model.addAttribute("filter", filter)
         model.addAttribute("orderBy", orderBy)
         model.addAttribute("orderDir", orderDir)
+        model.addAttribute("labelIds", labelFilter ?: emptyList<Long>())
 
         return "board/list"
     }

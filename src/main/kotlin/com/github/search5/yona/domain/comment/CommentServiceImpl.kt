@@ -120,6 +120,10 @@ class CommentServiceImpl(
         )
         val savedComment = postingCommentRepository.save(comment)
 
+        // yona AbstractPosting.save()/update()의 numOfComments = computeNumOfComments() 대응 (P1-19)
+        posting.numOfComments = postingCommentRepository.countByPostingId(posting.id!!)
+        postingRepository.save(posting)
+
         val mentionedUsers = extractMentionedUsers(contents)
         val title = "[${posting.project.name}] 게시글 #${posting.number}에 새 댓글이 등록되었습니다."
         val notificationEvent = NotificationEvent(
@@ -200,7 +204,12 @@ class CommentServiceImpl(
         if (!hasPermission(comment.projectId, comment.authorId, author.id)) {
             throw IllegalArgumentException("Permission denied")
         }
+        val posting = comment.posting
         postingCommentRepository.delete(comment)
+
+        // yona AbstractPosting.save()/update()의 numOfComments = computeNumOfComments() 대응 (P1-19)
+        posting.numOfComments = postingCommentRepository.countByPostingId(posting.id!!)
+        postingRepository.save(posting)
     }
 
     private fun hasPermission(projectId: Long?, commentAuthorId: Long?, requestUserId: Long?): Boolean {

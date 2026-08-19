@@ -51,4 +51,19 @@ interface PostingRepository : JpaRepository<Posting, Long> {
     fun countSearchPostingsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
 
     fun findAllByOrderByCreatedDateDesc(pageable: Pageable): Page<Posting>
+
+    // yona BoardApp.SearchCondition.asExpressionList()의 labelIdSet 필터 대응 (P1-19)
+    @Query("""
+        SELECT DISTINCT p FROM Posting p
+        JOIN p.labels l
+        WHERE p.project = :project
+          AND l.id IN :labelIds
+          AND (:keyword IS NULL OR p.title LIKE :keyword OR p.body LIKE :keyword)
+    """)
+    fun findByProjectAndLabelIdsIn(
+        @Param("project") project: Project,
+        @Param("labelIds") labelIds: List<Long>,
+        @Param("keyword") keyword: String?,
+        pageable: Pageable
+    ): Page<Posting>
 }
