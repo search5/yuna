@@ -30,7 +30,8 @@ class UserDetailsServiceImpl(
             loginId = user.loginId,
             passwordVal = user.password ?: "",
             passwordSalt = user.passwordSalt ?: "",
-            authoritiesVal = authorities
+            authoritiesVal = authorities,
+            state = user.state
         )
     }
 }

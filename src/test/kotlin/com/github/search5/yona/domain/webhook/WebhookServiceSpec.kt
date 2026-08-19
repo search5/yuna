@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.webhook
 
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.WebhookType
 import com.github.search5.yona.domain.project.Project
@@ -102,6 +103,40 @@ class WebhookServiceSpec : DescribeSpec({
                 )
 
                 verify(exactly = 1) { webhookRepository.findByProjectId(1L) }
+            }
+        }
+
+        describe("shouldDeliverToWebhook (gitPush 필터 정책)") {
+            fun webhookOf(gitPush: Boolean, type: WebhookType) = Webhook(
+                id = 20L, project = project, payloadUrl = "http://localhost:8080/hook",
+                gitPush = gitPush, webhookType = type
+            )
+
+            it("push(NEW_COMMIT)가 아닌 이벤트는 gitPush 설정과 무관하게 항상 전송되어야 한다") {
+                val gitPushOnlyWebhook = webhookOf(gitPush = true, type = WebhookType.SIMPLE)
+
+                webhookService.shouldDeliverToWebhook(gitPushOnlyWebhook, EventType.NEW_ISSUE) shouldBe true
+                webhookService.shouldDeliverToWebhook(gitPushOnlyWebhook, EventType.NEW_COMMENT) shouldBe true
+                webhookService.shouldDeliverToWebhook(gitPushOnlyWebhook, EventType.NEW_POSTING) shouldBe true
+                webhookService.shouldDeliverToWebhook(gitPushOnlyWebhook, EventType.NEW_PULL_REQUEST) shouldBe true
+            }
+
+            it("gitPush=false인 SIMPLE/SLACK 웹훅은 NEW_COMMIT 이벤트를 받지 않아야 한다") {
+                val noGitPushWebhook = webhookOf(gitPush = false, type = WebhookType.SIMPLE)
+
+                webhookService.shouldDeliverToWebhook(noGitPushWebhook, EventType.NEW_COMMIT) shouldBe false
+            }
+
+            it("gitPush=true인 웹훅은 NEW_COMMIT 이벤트를 받아야 한다") {
+                val gitPushWebhook = webhookOf(gitPush = true, type = WebhookType.SIMPLE)
+
+                webhookService.shouldDeliverToWebhook(gitPushWebhook, EventType.NEW_COMMIT) shouldBe true
+            }
+
+            it("JSON 포맷 웹훅은 gitPush 설정과 무관하게 NEW_COMMIT 이벤트를 항상 받아야 한다") {
+                val jsonWebhookNoGitPush = webhookOf(gitPush = false, type = WebhookType.JSON)
+
+                webhookService.shouldDeliverToWebhook(jsonWebhookNoGitPush, EventType.NEW_COMMIT) shouldBe true
             }
         }
     }

@@ -3,6 +3,8 @@ package com.github.search5.yona.config
 import com.github.search5.yona.domain.user.YonaUserDetails
 import org.springframework.security.authentication.AuthenticationProvider
 import org.springframework.security.authentication.BadCredentialsException
+import org.springframework.security.authentication.DisabledException
+import org.springframework.security.authentication.LockedException
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.userdetails.UserDetailsService
@@ -20,6 +22,14 @@ class YonaAuthenticationProvider(
         val password = authentication.credentials.toString()
 
         val userDetails = userDetailsService.loadUserByUsername(loginId) as YonaUserDetails
+
+        if (!userDetails.isAccountNonLocked) {
+            throw LockedException("계정이 잠겨 있습니다.")
+        }
+        if (!userDetails.isEnabled) {
+            throw DisabledException("탈퇴한 계정입니다.")
+        }
+
         val hashedInput = hashPassword(password, userDetails.passwordSalt)
 
         if (hashedInput != userDetails.password) {

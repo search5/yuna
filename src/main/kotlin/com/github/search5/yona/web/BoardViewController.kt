@@ -307,7 +307,18 @@ class BoardViewController(
         )
 
         val saved = postingService.createPosting(project.id!!, posting, loginUser.id!!)
-        
+
+        if (!request.temporaryUploadFiles.isNullOrBlank()) {
+            val fileIds = request.temporaryUploadFiles!!.split(",").mapNotNull { it.trim().toLongOrNull() }
+            fileIds.forEach { fileId ->
+                attachmentRepository.findById(fileId).ifPresent { attachment ->
+                    attachment.containerType = ResourceType.BOARD_POST
+                    attachment.containerId = saved.id.toString()
+                    attachmentRepository.save(attachment)
+                }
+            }
+        }
+
         if (saved.readme) {
             try {
                 val bare = BareCommit(project, loginUser, gitBaseDir)
@@ -334,6 +345,7 @@ data class PostingForm(
     var title: String = "",
     var body: String? = "",
     var notice: Boolean? = false,
-    var readme: Boolean? = false
+    var readme: Boolean? = false,
+    var temporaryUploadFiles: String? = null
 )
 

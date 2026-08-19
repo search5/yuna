@@ -14,6 +14,7 @@ import com.github.search5.yona.domain.vcs.PlayRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.context.MessageSource
@@ -129,6 +130,57 @@ class MarkdownServiceImplSpec : DescribeSpec({
 
             output.shouldContain("href=\"/yobi/yobi/commit/763575f177a4ce8b9370954de3ea1a1410205593\"")
             output.shouldContain("763575f")
+        }
+    }
+
+    describe("MarkdownServiceImpl 새니타이저 XSS 방지 검증 (allowlist 기반)") {
+        it("<script> 태그는 완전히 제거되어야 한다") {
+            val output = markdownService.render("본문 <script>alert('xss')</script> 끝")
+            output.shouldNotContain("<script")
+            output.shouldNotContain("alert(")
+        }
+
+        it("onclick 같은 이벤트 핸들러 속성은 허용목록에 없으므로 제거되어야 한다") {
+            val output = markdownService.render("<div onclick=\"alert(1)\">내용</div>")
+            output.shouldNotContain("onclick")
+        }
+
+        it("onerror 이벤트 핸들러가 있는 img 태그는 속성만 제거되고 태그는 허용되어야 한다") {
+            val output = markdownService.render("<img src=\"x.png\" onerror=\"alert(1)\">")
+            output.shouldNotContain("onerror")
+        }
+
+        it("javascript: 프로토콜 링크는 무해화되어야 한다") {
+            val output = markdownService.render("[클릭](javascript:alert(1))")
+            output.shouldNotContain("javascript:")
+        }
+
+        it("허용되지 않은 svg/onload 벡터는 태그 자체가 제거되어야 한다") {
+            val output = markdownService.render("<svg onload=\"alert(1)\"></svg>")
+            output.shouldNotContain("onload")
+            output.shouldNotContain("<svg")
+        }
+
+        it("data: URI 기반 스크립트 삽입은 무해화되어야 한다") {
+            val output = markdownService.render("<a href=\"data:text/html,<script>alert(1)</script>\">링크</a>")
+            output.shouldNotContain("<script")
+        }
+
+        it("정상적인 GFM 표(table)는 그대로 렌더링되어야 한다") {
+            val input = """
+                |a|b|
+                |---|---|
+                |1|2|
+            """.trimIndent()
+            val output = markdownService.render(input)
+            output.shouldContain("<table")
+            output.shouldContain("<td>1</td>")
+        }
+
+        it("펜스 코드블록은 그대로 렌더링되어야 한다") {
+            val output = markdownService.render("```\nval x = 1\n```")
+            output.shouldContain("<pre")
+            output.shouldContain("val x = 1")
         }
     }
 })

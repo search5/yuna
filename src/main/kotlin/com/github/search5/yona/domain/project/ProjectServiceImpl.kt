@@ -8,6 +8,8 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -22,7 +24,9 @@ class ProjectServiceImpl(
     private val repositoryService: RepositoryService,
     private val userRepository: UserRepository,
     private val projectTransferRepository: ProjectTransferRepository,
-    private val roleRepository: RoleRepository
+    private val roleRepository: RoleRepository,
+    private val organizationRepository: OrganizationRepository,
+    private val organizationUserRepository: OrganizationUserRepository
 ) : ProjectService {
 
     override fun findByOwnerAndName(owner: String, name: String): Project? {
@@ -149,6 +153,12 @@ class ProjectServiceImpl(
             throw IllegalArgumentException("Confirm key mismatch")
         }
 
+        val acceptor = userRepository.findById(acceptorId)
+            .orElseThrow { IllegalArgumentException("Acceptor not found") }
+        if (!isAuthorizedToAcceptTransfer(pt.destination, acceptor)) {
+            throw IllegalArgumentException("이 프로젝트 이전을 수락할 권한이 없습니다.")
+        }
+
         val project = pt.project
         val originalOwner = project.owner ?: ""
         val originalName = project.name
@@ -205,6 +215,17 @@ class ProjectServiceImpl(
 
         pt.accepted = true
         projectTransferRepository.save(pt)
+    }
+
+    private fun isAuthorizedToAcceptTransfer(destination: String, acceptor: User): Boolean {
+        if (acceptor.loginId == destination) {
+            return true
+        }
+        val organization = organizationRepository.findByName(destination).orElse(null) ?: return false
+        val orgUser = organizationUserRepository
+            .findByOrganizationIdAndUserId(organization.id!!, acceptor.id!!)
+            .orElse(null) ?: return false
+        return orgUser.role.id == RoleType.ORG_ADMIN.roleType
     }
 
     @Transactional

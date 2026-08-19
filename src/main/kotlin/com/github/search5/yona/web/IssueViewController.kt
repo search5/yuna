@@ -417,6 +417,7 @@ class IssueViewController(
         @RequestParam(required = false) dueDate: String?,
         @RequestParam(required = false) labelIds: List<Long>?,
         @RequestParam(required = false, defaultValue = "false") isDraft: Boolean,
+        @RequestParam(required = false) temporaryUploadFiles: String?,
         authentication: Authentication?
     ): String {
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
@@ -460,6 +461,17 @@ class IssueViewController(
             milestoneId = milestoneId,
             labelIds = labelIds
         )
+
+        if (!temporaryUploadFiles.isNullOrBlank()) {
+            val fileIds = temporaryUploadFiles.split(",").mapNotNull { it.trim().toLongOrNull() }
+            fileIds.forEach { fileId ->
+                attachmentRepository.findById(fileId).ifPresent { attachment ->
+                    attachment.containerType = ResourceType.ISSUE_POST
+                    attachment.containerId = saved.id.toString()
+                    attachmentRepository.save(attachment)
+                }
+            }
+        }
 
         return "redirect:/$owner/$projectName/issue/${saved.number}"
     }
