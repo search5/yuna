@@ -74,7 +74,7 @@
 | P1-33 | [x] | 복원 후 auto-increment 채번이 백업된 PK와 충돌할 수 있음 | (해당 없음, yuna 자체 설계 이슈) | `domain/site/DataBackupServiceImpl.kt` | **완료** — P1-34와 함께 해결(아래 참고) |
 | P1-34 | [x] | PostgreSQL 방언 경로는 통합테스트로 검증되지 않음 | (해당 없음) | `domain/site/DataBackupServiceImpl.kt` (`Dialect.POSTGRES`) | **완료** — P1-33 수정을 검증하며 함께 해결(아래 참고) |
 | P1-35 | [x] | PR 수정 화면(editPullRequestForm/editPullRequest) 미구현 | `PullRequestApp.java:510-554`, `views/pullrequest/edit.scala.html` | `web/PullRequestViewController.kt editPullRequestForm`, `templates/pullrequest/edit.html` | **완료**(아래 참고) |
-| P1-36 | [ ] | doClone 전용 라우트 없음(기능은 forkProject로 커버) | `PullRequestApp.java:115-157` | `web/ProjectController.kt forkProject`, `ProjectViewController.kt fork` | P0-14에서 범위 분리 — 감사에서 이미 "부분 커버"로 확인됨. URL 경로만 다르고 포크 기능 자체는 동작하므로 우선순위 낮음, 템플릿이 옛 URL을 참조하는지만 별도 확인 필요 |
+| P1-36 | [x] | doClone 전용 라우트 없음(기능은 forkProject로 커버) | `PullRequestApp.java:115-157` | `web/ProjectController.kt forkProject`, `ProjectViewController.kt fork` | **완료(코드 변경 없음, 검증만)** — 아래 참고 |
 | P1-37 | [ ] | 이슈 타임라인에 라벨/본문/이동/공유자 변경 이벤트 기록 없음 | `models/IssueEvent.java`(ISSUE_LABEL_CHANGED 등) | `domain/issue/IssueServiceImpl.kt`, `IssueShareServiceImpl.kt` | P1-07에서 범위 분리 — 상태/담당자/마일스톤/커밋참조 4종만 기록됨. `EventType.ISSUE_LABEL_CHANGED`/`ISSUE_BODY_CHANGED`/`ISSUE_MOVED`/`ISSUE_SHARER_CHANGED`는 enum엔 있으나 IssueEvent로 기록되지 않음 |
 | P1-38 | [ ] | IssueEvent draft-time 병합/취소 최적화 없음 | `models/IssueEvent.java` `add()/addWithoutSkipEvent()` | `domain/issue/IssueServiceImpl.kt recordIssueEvent` | P1-07에서 범위 분리 — yona는 30초 내 연속된 동일 타입 변경을 병합(A→B→C를 A→C로)하거나 상쇄(A→B→A를 삭제)해 타임라인 잡음을 줄이지만, yuna는 매 변경을 그대로 기록 |
 | P1-39 | [ ] | PR 생성/리뷰 상태변경이 NotificationEvent·PullRequestEvent 모두 미기록 | `models/PullRequestEvent.java`, `NotificationEvent.afterNewPullRequest` | `PullRequestServiceImpl.kt createPullRequest`, `CodeReviewServiceImpl.kt` | P1-08에서 범위 분리 — `changeState`/병합/충돌 3곳은 이번에 연결했지만, PR 생성 시점(NEW_PULL_REQUEST)과 코드리뷰 승인/반려(PULL_REQUEST_REVIEW_STATE_CHANGED, `CodeReviewServiceImpl`이 NotificationEvent는 만들지만 PullRequestEvent는 아직 미기록)는 남아있음 |
@@ -101,6 +101,11 @@
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P1-36**: `doClone`(yona `PullRequestApp.java:115-157`, AJAX 포크 생성) 전용 라우트가 없는 문제는 이전 감사에서 이미 "기능 자체는 `ProjectViewController.fork`(POST `/{owner}/{name}/fork`)로 완전히 커버됨, URL 경로만 다름"으로 확인돼 있었고, 남은 유일한 확인 사항은 "템플릿이 옛(존재하지 않는) `doClone` URL을 참조하는지"였음. 코드 검사 결과:
+  - `src/main/resources/templates/` 전체에서 `doClone`/구식 clone 경로를 참조하는 곳이 전혀 없음(`grep -rn "doClone"` 결과 없음).
+  - 유일한 포크 폼 `templates/project/fork.html:93`은 이미 현재 라우트인 `th:action="@{/{owner}/{name}/fork(...)}"`로 정확히 제출하고 있어 죽은 링크가 없음.
+  - 이에 따라 **코드 변경이 필요한 결함이 실제로는 존재하지 않음**을 확인 — 새 테스트 없이 검증만으로 항목을 완료 처리한다(수정할 대상이 없으므로 TDD red 상태를 만들 수 없었음, 검증 명령: `grep -rn "doClone" src/main/resources/templates/`).
 
 - **2026-08-20 — P1-35**: PR 수정 화면(`editPullRequestForm`/`editPullRequest`) 미구현 문제 해결. yona `PullRequestApp.java:508-554`를 확인한 결과, yuna는 이미 REST `PUT /api/projects/{id}/pullrequests/{number}`(`PullRequestController.updatePullRequest`)로 title/body API 레벨 수정을 완전히 지원하고 있었고, 빠진 부분은 서버 렌더링 수정 폼 페이지 하나뿐임을 확인 — 사전 조사 결과 "대규모 프론트엔드 작업"이 아니라 기존 `pull/new`(`createPullRequestForm`/`pullrequest/create.html`) 패턴을 그대로 재사용하면 되는 작은 작업으로 판단해 그대로 진행.
   - `PullRequestViewController.kt`에 `editPullRequestForm`(GET `/{owner}/{projectName}/pull/{number}/edit`) 추가. 권한 체크는 `PullRequestController.isManagerOrContributor`와 동일한 로직(작성자 본인이거나 프로젝트 매니저)을 그대로 복제해 적용 — yona가 두 액션 모두에 동일한 `@IsAllowed(UPDATE, PULL_REQUEST)`를 걸어둔 것과 동치.
