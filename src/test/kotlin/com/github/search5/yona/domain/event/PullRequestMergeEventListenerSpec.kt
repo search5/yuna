@@ -8,6 +8,8 @@ import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestEvent
+import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
@@ -29,10 +31,11 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
     val pullRequestService = mockk<PullRequestService>()
     val notificationEventRepository = mockk<NotificationEventRepository>()
     val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
+    val pullRequestEventRepository = mockk<PullRequestEventRepository>(relaxed = true)
 
     val listener = PullRequestMergeEventListener(
         pullRequestRepository, pullRequestCommitRepository, issueRepository, issueService,
-        pullRequestService, notificationEventRepository, eventPublisher
+        pullRequestService, notificationEventRepository, eventPublisher, pullRequestEventRepository
     )
 
     val project = Project(id = 1L, name = "yona-project", owner = "gildong")
@@ -48,9 +51,28 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
     beforeTest {
         io.mockk.clearMocks(
             pullRequestRepository, pullRequestCommitRepository, issueRepository, issueService,
-            pullRequestService, notificationEventRepository, eventPublisher, answers = false
+            pullRequestService, notificationEventRepository, eventPublisher, pullRequestEventRepository, answers = false
         )
         every { notificationEventRepository.save(any()) } answers { firstArg() }
+    }
+
+    describe("PullRequestMergeEventListener.handlePullRequestMergeEvent") {
+        it("PR을 병합하면 PullRequestEvent 타임라인 항목이 생성되어야 한다") {
+            val mergedPr = pr(200L, conflict = false)
+            every { pullRequestRepository.findById(200L) } returns Optional.of(mergedPr)
+            every { pullRequestRepository.save(any()) } answers { firstArg() }
+            every { pullRequestCommitRepository.findByPullRequest(mergedPr) } returns emptyList()
+
+            val captured = slot<PullRequestEvent>()
+            every { pullRequestEventRepository.save(capture(captured)) } answers { firstArg() }
+
+            listener.handlePullRequestMergeEvent(PullRequestMergeEvent(pullRequestId = 200L, sender = sender, isNewPullRequest = false))
+
+            mergedPr.state shouldBe State.MERGED
+            captured.captured.eventType.name shouldBe "PULL_REQUEST_STATE_CHANGED"
+            captured.captured.newValue shouldBe "MERGED"
+            captured.captured.senderLoginId shouldBe "pusher"
+        }
     }
 
     describe("PullRequestMergeEventListener.handleRelatedPullRequestMergeEvent") {
