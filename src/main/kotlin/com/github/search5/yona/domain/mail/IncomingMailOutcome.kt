@@ -10,4 +10,6 @@ sealed class IncomingMailOutcome {
     data class Rejected(val reason: String) : IncomingMailOutcome()
     object Duplicate : IncomingMailOutcome()
     object UnknownSender : IncomingMailOutcome()
+    // yona EmailHandler.getHelpMessage()/reply() 대응 (P1-31)
+    object HelpRequested : IncomingMailOutcome()
 }
