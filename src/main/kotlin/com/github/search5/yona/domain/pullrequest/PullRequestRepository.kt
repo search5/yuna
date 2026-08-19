@@ -35,6 +35,10 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long> {
         pageable: org.springframework.data.domain.Pageable
     ): org.springframework.data.domain.Page<PullRequest>
 
+    // yona PullRequest.findByFromProjectAndBranch() 대응 (P1-24) — 이미 PR로 추적 중인
+    // 브랜치는 별도 PushedBranch 레코드를 만들지 않기 위한 존재 확인.
+    fun existsByFromProjectAndFromBranch(fromProject: Project, fromBranch: String): Boolean
+
 
     @Query("""
         SELECT pr FROM PullRequest pr 

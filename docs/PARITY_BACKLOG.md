@@ -53,7 +53,7 @@
 | P1-12 | [x] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 | **완료** |
 | P1-13 | [x] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` | **완료** |
 | P1-14 | [x] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | `web/MentionController.kt`(신규) | **완료(범위 조정, 아래 참고)** |
-| P1-15 | [ ] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | (해당 없음) |
+| P1-15 | [x] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | `web/ProjectController.kt` | **완료(P1-24와 함께 구현, 아래 참고)** |
 | P1-16 | [ ] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` |
 | P1-17 | [ ] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` |
 | P1-18 | [ ] | 게시판 알림 미발송 | `BoardApp.java:255,360,386` | `domain/board/PostingServiceImpl.kt` |
@@ -62,7 +62,7 @@
 | P1-21 | [ ] | Watch 권한 필터링(allowedWatchersOnly) 무시됨 | `models/Watch.java:160-187` | `domain/watch/WatchServiceImpl.kt:55-77` |
 | P1-22 | [ ] | 프로젝트별 알림 뮤트 토글 미반영 | `models/NotificationEvent.java:486-511` | `domain/issue/IssueServiceImpl.kt`, `domain/comment/CommentServiceImpl.kt` |
 | P1-23 | [ ] | SVN 권한 모델 단순화 | `SvnApp.java:119-131` | `config/svn/SvnAuthorizationFilter.kt:48-67` |
-| P1-24 | [ ] | 최근 push된 브랜치 추적(PushedBranch) 기능 없음 | `models/PushedBranch.java`, `UpdateRecentlyPushedBranch.java` | (해당 없음) | P0-11에서 범위 분리 — 신규 엔티티/리포지토리 생성 필요, "삭제된 브랜치 복원" UI가 이 데이터에 의존 |
+| P1-24 | [x] | 최근 push된 브랜치 추적(PushedBranch) 기능 없음 | `models/PushedBranch.java`, `UpdateRecentlyPushedBranch.java` | `domain/vcs/{PushedBranch,PushedBranchRepository}.kt`(신규), `domain/vcs/GitPushHooks.kt` | **완료** — P1-15(삭제 API)의 선행 의존성이라 함께 구현, 아래 참고 |
 | P1-25 | [ ] | git push(NEW_COMMIT) 이벤트는 웹훅이 발송되지 않음 | `NotificationEvent.java:604-680`(push 부분) | `domain/event/GitPostReceiveEventListener.kt`, `domain/webhook/WebhookServiceImpl.kt` | P0-03에서 범위 분리 — 커밋은 DB 엔티티가 아니라 `resourceId`로 재조회 불가, `WebhookServiceImpl.getResourceType/getResourceId/buildPayload`에 COMMIT 케이스 추가 + `processCommitsNotification`에서 `eventPublisher.publishEvent(notificationEvent)` 호출 필요 |
 | P1-26 | [ ] | PULL_REQUEST 리소스 타입은 웹훅 payload를 만들 수 없음 | `Webhook.java:674-729`(PR 부분) | `domain/webhook/WebhookServiceImpl.kt` (`buildPayload`, `getResourceType`) | P0-03에서 범위 분리 — `CodeReviewServiceImpl`이 발행하는 PR 리뷰 NotificationEvent가 `WebhookNotificationEventListener`에서 조용히 스킵됨(PullRequest 조회/payload 케이스 미지원) |
 | P1-27 | [ ] | 알림 메일이 이벤트별 즉시 발송이며 다이제스트 병합/언어별 그룹핑이 없음 | `NotificationMail.java:99-188`(`mergeEvents`, 언어별 그룹핑) | `domain/notification/NotificationMailEventListener.kt` | P0-01에서 범위 분리 — yona는 `bymail.interval` 주기로 관련 이벤트를 병합해 한 통으로 보내지만, yuna는 이벤트 발생 즉시 개별 발송(스팸성 다건 메일 가능성). 사용자가 많은 프로젝트에서 체감 UX 저하 |
@@ -249,3 +249,11 @@
   - 사소한 단순화: yona `getDisplayName()`(닉네임/실명 우선순위 로직)에 대응하는 별도 표시이름 필드가 yuna `User`엔 없어 `user.name`을 그대로 사용, `searchText`도 `name+loginId` 2개 필드 조합으로 단순화(yona는 `name+displayName+loginId` 3필드 조합이었으나 yuna엔 displayName 자체가 없어 중복 제거).
   - 테스트: `MentionControllerSpec.kt`(신규) 6 tests(비공개+비멤버 403, 멤버 기준 프로젝트+그룹멤버 후보와 순서, 공개+query 검색 분기, admin 계정 필터링, 이슈 멘션 목록, mentionType 미지정 시 빈 결과) 전체 통과. `YonaApplicationTests`로 신규 컨트롤러/JPQL 쿼리(`CAST(i.number AS string)`) 빈 배선 확인.
   - 검증: `./gradlew test --tests "MentionControllerSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
+
+- **2026-08-20 — P1-24 + P1-15**: "삭제된 브랜치 복원" UI가 의존하는 최근 push 브랜치 추적(P1-24) 기능 자체가 yuna에 없어서, 그 위에 있는 삭제 API(P1-15)도 만들 수 없던 문제를 함께 해결. **순서 조정**: P1-15는 원래 고정 ID 순서상 P1-24보다 먼저지만, P1-15(삭제 API)가 다루는 `PushedBranch` 레코드 자체가 P1-24에서 만드는 것이라 의존관계상 P1-24를 먼저 구현하고 그 위에 P1-15를 얹었다(번호 순서를 건너뛴 것이 아니라 같은 세션에서 함께 완료).
+  - **P1-24**: yona `playRepository/hooks/UpdateRecentlyPushedBranch.java` 대응. 신규 `domain/vcs/PushedBranch.kt`(엔티티, `project_pushed_branch` 테이블) + `PushedBranchRepository.kt` 추가. `GitPushHooks.kt`의 `YunaPostReceiveHook.onPostReceive()`(P0-11/12에서 만든 훅)에 `updateRecentlyPushedBranches()` 단계를 추가해 push마다 (1) 1시간 이상 지난 오래된 기록 정리(`removeOldPushedBranches`, yona `DRAFT_TIME_IN_MILLIS=1000*60*60`과 동일), (2) CREATE/UPDATE 커맨드의 브랜치를 upsert(기존 있으면 `pushedDate`만 갱신) — 단 이미 그 브랜치를 `fromBranch`로 하는 PullRequest가 있으면 건너뜀(yona `isNotExistsPushedBranch`), (3) DELETE 커맨드의 브랜치는 대응 레코드도 함께 삭제, 세 단계를 수행하도록 이식. `PullRequestRepository`에 `existsByFromProjectAndFromBranch` 추가.
+  - **저장 형식 단순화(의도적)**: yona는 `PushedBranch.name`에 전체 ref(`refs/heads/foo`)를 저장하고 별도 `getShortName()`으로 표시할 때 벗겨내지만, 이 저장소는 P0-12(`GitPushHooks`)에서 이미 브랜치를 짧은 이름 기준으로 다뤄왔으므로(`findRelatedPullRequests`, `PullRequest.fromBranch`) 그 관례를 그대로 따라 짧은 브랜치 이름으로 저장한다. 태그(`refs/tags/*`)뿐 아니라 `refs/heads/`로 시작하지 않는 다른 ref 전체를 추적 대상에서 제외(yona는 태그만 제외).
+  - **P1-15**: yona `ProjectApp.deletePushedBranch()` 대응. `ProjectController`에 `DELETE /api/{owner}/{projectName}/pushedBranches/{id}` 추가 — yona와 동일하게 id가 실제로 이 프로젝트 소속인지는 검증하지 않고, 존재하면 삭제·존재하지 않아도 200 OK(404 아님)를 반환한다. 인가는 yona `@IsAllowed(Operation.DELETE)`가 일반 프로젝트 리소스 DELETE 규칙(`user.isMemberOf(project)`, `AccessControl.java:283-287`)으로 귀결됨을 확인해 프로젝트 멤버(역할 무관)면 누구나 삭제 가능하도록 구현(P1-13과 같은 판단 근거).
+  - **범위를 넘어 추가한 것(라우트 표엔 없음)**: yona는 이 데이터를 별도 JSON API가 아니라 `partial_recently_pushed_branches.scala.html` 뷰에 임베드해 보여주므로 전용 조회 라우트가 없다. 하지만 삭제 API만 있고 조회할 방법이 없으면 실질적으로 쓸 수 없어(P0-16과 같은 논리), `GET /api/{owner}/{projectName}/pushedBranches`(최근 1시간 이내 push분만, yona `getRecentlyPushedBranches()`와 동일 기준)를 함께 추가했다.
+  - 테스트: `GitPushHooksSpec.kt` +6(신규 브랜치 저장, 기존 브랜치 pushedDate 갱신, PR이 이미 추적 중이면 미저장, 태그 미추적, 오래된 기록 정리, 삭제 브랜치 레코드 정리) — 기존 8개 포함 총 14 tests. `ProjectControllerSpec.kt` +5(비회원 조회 403, 멤버 조회 200, 멤버 삭제 200, 존재하지 않는 id 삭제도 200, 비멤버 삭제 403) — 기존 `ProjectTransferForkSpec.kt`도 생성자 파라미터 추가에 맞춰 갱신(회귀 없음).
+  - 검증: `./gradlew test --tests "GitPushHooksSpec" --tests "ProjectControllerSpec" --tests "ProjectTransferForkSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.

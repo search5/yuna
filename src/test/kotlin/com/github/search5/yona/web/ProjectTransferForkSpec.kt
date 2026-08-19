@@ -21,12 +21,14 @@ class ProjectTransferForkSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
+    val pushedBranchRepository = mockk<com.github.search5.yona.domain.vcs.PushedBranchRepository>()
 
     val projectController = ProjectController(
         projectService,
         projectRepository,
         projectUserRepository,
-        userRepository
+        userRepository,
+        pushedBranchRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(projectController).build()
     val auth = UsernamePasswordAuthenticationToken("gildong", "pass")
