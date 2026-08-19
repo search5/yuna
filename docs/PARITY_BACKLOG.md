@@ -33,7 +33,7 @@
 | P0-13 | [x] | LOCKED/DELETED 계정 로그인 차단 안 됨 | `UserApp.java:207-233` | `config/YonaAuthenticationProvider.kt` | **완료** — `YonaAuthenticationProviderSpec.kt`, 94%/100% (명령어/분기) 커버리지 |
 | P0-14 | [x] | PullRequest 라우트 누락 | `conf/routes` (PullRequestApp) | `web/PullRequestController.kt`, `PullRequestViewController.kt` | **완료(범위 조정, 아래 참고)** — closedPullRequests/sentPullRequests/deleteFromBranch/restoreFromBranch 구현 |
 | P0-15 | [x] | Board 라우트 누락 (postlabel) | `conf/routes` (BoardApp) | `web/BoardController.kt` | **완료** — `PUT /api/projects/{id}/posts/{postId}/labels` |
-| P0-16 | [ ] | CodeHistory 라우트 누락 (커밋 댓글) | `conf/routes` (CodeHistoryApp) | `web/CodeHistoryController.kt` | newComment/deleteComment on commit |
+| P0-16 | [x] | CodeHistory 라우트 누락 (커밋 댓글) | `conf/routes` (CodeHistoryApp) | `web/CodeHistoryController.kt` | **완료** — create/delete/list 3개 엔드포인트 |
 
 ## P1 — 주요 (기능 결손 / 권한 로직 오류)
 
@@ -148,6 +148,13 @@
   - 테스트: `PullRequestViewControllerSpec.kt` +3, **`PullRequestServiceSpec.kt`(실제 MariaDB+실제 JGit bare 저장소 통합테스트) +3**(브랜치 삭제→lastCommitId 기록·브랜치 소멸 확인, 미병합 PR 삭제 거부 확인, 삭제 후 복원까지 동일 커밋으로 재생성 확인), `PullRequestControllerSpec.kt` +2. 총 8 tests 전체 통과.
 
 - **2026-08-19 — P0-15**: yona `api.BoardApi.updatePostLabel`(게시글에 붙은 라벨 집합을 통째로 교체)에 대응하는 라우트가 yuna에 없던 문제 수정. `BoardController`에 `PUT /api/projects/{projectId}/posts/{postId}/labels`(JSON body: 라벨 ID 배열) 추가 — `postingService.getPosting`으로 대상 조회, `isManagerOrAuthor`로 권한 검사(기존 `updatePosting`과 동일 기준), `IssueLabelRepository.findAllById`로 라벨 엔티티들을 조회해 `posting.labels`를 교체 후 저장. `Posting.labels`/`posting_issue_label` 조인테이블 자체는 이미 존재했으나(P1-19 감사에서 확인) 이를 갱신하는 API가 없었던 것이 실제 격차였음. 테스트: `BoardControllerSpec.kt` +2 tests(정상 교체, 권한 없음 403).
+
+- **2026-08-19 — P0-16**: yona `CodeHistoryApp.newComment`/`deleteComment`(커밋 단위 댓글)에 대응하는 라우트가 yuna에 없던 문제 수정. yona는 이 기능을 내부적으로 PR 리뷰코멘트용 `CodeCommentThread` 시스템을 재사용해 구현하지만(레거시스러운 이중 구조), yuna는 이미 별도의 단순한 `CommitComment` 엔티티+리포지토리를 1:1로 포팅해둔 상태였기 때문에(이전 PR/VCS 도메인 감사에서 "OK"로 확인됨) 그걸 그대로 사용하는 더 단순한 구조로 구현.
+  - `CodeHistoryController`에 `POST/DELETE/GET .../commit/{commitId}/comments[/{id}]` 3개 엔드포인트 추가. 생성은 `AccessControl.isProjectResourceCreatable(.., ResourceType.COMMIT_COMMENT)`로 권한 검사 + 커밋 존재 여부 확인, 삭제는 작성자 본인 또는 프로젝트 매니저만 허용.
+  - GET(목록 조회)은 yona 라우트 목록엔 없지만, 생성만 되고 조회할 방법이 없으면 기능이 무의미해 최소 추가.
+  - 테스트: `CodeHistoryControllerSpec.kt`(신규 파일, 이전에 이 컨트롤러에 대한 테스트가 전혀 없었음) 5 tests 전체 통과.
+
+**이 시점에서 P0(치명적) 16건 전체 완료.**
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

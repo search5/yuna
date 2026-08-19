@@ -1,17 +1,45 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CommitComment
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.support.CodeRange
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserIdent
+import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
+import java.time.Instant
 
 @RestController
 @RequestMapping("/api/vcs/{owner}/{projectName}")
 class CodeHistoryController(
     private val projectRepository: ProjectRepository,
-    private val repositoryService: RepositoryService
+    private val repositoryService: RepositoryService,
+    private val commitCommentRepository: CommitCommentRepository,
+    private val userRepository: UserRepository,
+    private val projectUserRepository: ProjectUserRepository
 ) {
+
+    private fun getLoginUser(authentication: Authentication?): User? {
+        if (authentication == null) return null
+        return userRepository.findByLoginId(authentication.name).orElse(null)
+    }
+
+    private fun isAuthorOrManager(project: Project, comment: CommitComment, user: User): Boolean {
+        if (comment.author?.id == user.id) return true
+        return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
+            .map { it.role.id == RoleType.MANAGER.roleType }
+            .orElse(false)
+    }
 
     @GetMapping("/history")
     fun getHistory(
@@ -74,7 +102,89 @@ class CodeHistoryController(
 
         return ResponseEntity.ok(response)
     }
+
+    // yona CodeHistoryApp.newComment 대응 (커밋 단위 댓글 생성)
+    @PostMapping("/commit/{commitId}/comments")
+    fun createComment(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable commitId: String,
+        @RequestBody request: CreateCommitCommentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<CommitComment> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!AccessControl.isProjectResourceCreatable(user, project, ResourceType.COMMIT_COMMENT)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        if (repositoryService.getRepository(project).getCommit(commitId) == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+        }
+
+        val comment = CommitComment(
+            project = project,
+            commitId = commitId,
+            contents = request.contents,
+            path = request.path,
+            line = request.line,
+            side = request.side,
+            author = UserIdent(user),
+            createdDate = Instant.now()
+        )
+        val saved = commitCommentRepository.save(comment)
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved)
+    }
+
+    // yona CodeHistoryApp.deleteComment 대응
+    @DeleteMapping("/commit/{commitId}/comments/{id}")
+    fun deleteComment(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable commitId: String,
+        @PathVariable id: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Void> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        val comment = commitCommentRepository.findById(id).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+
+        if (!isAuthorOrManager(project, comment, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        commitCommentRepository.delete(comment)
+        return ResponseEntity.ok().build()
+    }
+
+    // 커밋에 달린 댓글 목록 조회 (newComment/deleteComment와 함께 동작하려면 필요)
+    @GetMapping("/commit/{commitId}/comments")
+    fun listComments(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable commitId: String
+    ): ResponseEntity<List<CommitComment>> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+
+        return ResponseEntity.ok(
+            commitCommentRepository.findByProjectAndCommitIdOrderByCreatedDateAsc(project, commitId)
+        )
+    }
 }
+
+data class CreateCommitCommentRequest(
+    val contents: String,
+    val path: String? = null,
+    val line: Int? = null,
+    val side: CodeRange.Side? = null
+)
 
 data class CommitResponse(
     val id: String,
