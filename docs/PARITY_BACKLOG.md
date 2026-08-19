@@ -32,7 +32,7 @@
 | P0-12 | [x] | 브랜치 삭제 시 관련 PR 정리 훅 부재 | `PullRequestCheck.java` | `domain/vcs/GitPushHooks.kt` | **완료** — 브랜치 삭제 → 관련 열린 PR 자동 삭제 |
 | P0-13 | [x] | LOCKED/DELETED 계정 로그인 차단 안 됨 | `UserApp.java:207-233` | `config/YonaAuthenticationProvider.kt` | **완료** — `YonaAuthenticationProviderSpec.kt`, 94%/100% (명령어/분기) 커버리지 |
 | P0-14 | [x] | PullRequest 라우트 누락 | `conf/routes` (PullRequestApp) | `web/PullRequestController.kt`, `PullRequestViewController.kt` | **완료(범위 조정, 아래 참고)** — closedPullRequests/sentPullRequests/deleteFromBranch/restoreFromBranch 구현 |
-| P0-15 | [ ] | Board 라우트 누락 (postlabel) | `conf/routes` (BoardApp) | `web/BoardController.kt` | 게시글 라벨 첨부 API |
+| P0-15 | [x] | Board 라우트 누락 (postlabel) | `conf/routes` (BoardApp) | `web/BoardController.kt` | **완료** — `PUT /api/projects/{id}/posts/{postId}/labels` |
 | P0-16 | [ ] | CodeHistory 라우트 누락 (커밋 댓글) | `conf/routes` (CodeHistoryApp) | `web/CodeHistoryController.kt` | newComment/deleteComment on commit |
 
 ## P1 — 주요 (기능 결손 / 권한 로직 오류)
@@ -146,6 +146,8 @@
   - `PullRequestService`에 `deleteFromBranch`/`restoreFromBranch` 추가 — 병합된 PR만 브랜치 삭제 가능(가드), 삭제 직전 head 커밋을 `lastCommitId`에 기록해 복원 가능하게 함. `PullRequestController`에 `DELETE`/`POST /{number}/fromBranch` 라우트로 노출.
   - **범위 조정(P1-35/36로 분리)**: `editPullRequestForm`/`editPullRequest`(서버 렌더링 수정 폼 — 신규 템플릿 필요)와 `doClone`(기능은 이미 `ProjectController.forkProject`로 커버되는 것으로 이전 감사에서 확인됨, URL만 다름)은 이번 패스에서 제외.
   - 테스트: `PullRequestViewControllerSpec.kt` +3, **`PullRequestServiceSpec.kt`(실제 MariaDB+실제 JGit bare 저장소 통합테스트) +3**(브랜치 삭제→lastCommitId 기록·브랜치 소멸 확인, 미병합 PR 삭제 거부 확인, 삭제 후 복원까지 동일 커밋으로 재생성 확인), `PullRequestControllerSpec.kt` +2. 총 8 tests 전체 통과.
+
+- **2026-08-19 — P0-15**: yona `api.BoardApi.updatePostLabel`(게시글에 붙은 라벨 집합을 통째로 교체)에 대응하는 라우트가 yuna에 없던 문제 수정. `BoardController`에 `PUT /api/projects/{projectId}/posts/{postId}/labels`(JSON body: 라벨 ID 배열) 추가 — `postingService.getPosting`으로 대상 조회, `isManagerOrAuthor`로 권한 검사(기존 `updatePosting`과 동일 기준), `IssueLabelRepository.findAllById`로 라벨 엔티티들을 조회해 `posting.labels`를 교체 후 저장. `Posting.labels`/`posting_issue_label` 조인테이블 자체는 이미 존재했으나(P1-19 감사에서 확인) 이를 갱신하는 API가 없었던 것이 실제 격차였음. 테스트: `BoardControllerSpec.kt` +2 tests(정상 교체, 권한 없음 403).
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

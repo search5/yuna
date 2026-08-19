@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -31,19 +32,23 @@ class BoardControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
+    val postingRepository = mockk<com.github.search5.yona.domain.board.PostingRepository>()
+    val issueLabelRepository = mockk<com.github.search5.yona.domain.issue.IssueLabelRepository>()
 
     val boardController = BoardController(
         postingService,
         projectRepository,
         projectUserRepository,
-        userRepository
+        userRepository,
+        postingRepository,
+        issueLabelRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(boardController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(postingService, projectRepository, projectUserRepository, userRepository)
+        io.mockk.clearMocks(postingService, projectRepository, projectUserRepository, userRepository, postingRepository, issueLabelRepository)
     }
 
     describe("BoardController 웹 API 테스트") {
@@ -153,6 +158,51 @@ class BoardControllerSpec : DescribeSpec({
                 mockMvc.perform(delete("/api/projects/1/posts/1").principal(managerAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
+            }
+        }
+
+        describe("PUT /api/projects/{projectId}/posts/{postId}/labels") {
+            it("작성자가 라벨 ID 목록으로 게시글 라벨을 교체하면 200 OK를 반환해야 한다") {
+                val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "기본", project = project)
+                val label1 = com.github.search5.yona.domain.issue.IssueLabel(id = 1L, name = "버그", color = "red", category = category, project = project)
+                val label2 = com.github.search5.yona.domain.issue.IssueLabel(id = 2L, name = "긴급", color = "orange", category = category, project = project)
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every {
+                    issueLabelRepository.findAllById(listOf(1L, 2L))
+                } returns listOf(label1, label2)
+                every { postingRepository.save(posting) } returns posting
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/1/labels")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[1, 2]")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                posting.labels.map { it.id }.toSet() shouldBe setOf(1L, 2L)
+                verify(exactly = 1) { postingRepository.save(posting) }
+            }
+
+            it("작성자도 관리자도 아니면 403 Forbidden을 반환해야 한다") {
+                val otherUser = User(id = 99L, loginId = "other", name = "타인")
+                val otherAuth = UsernamePasswordAuthenticationToken("other", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("other") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 99L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/1/labels")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[1]")
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
             }
         }
     }
