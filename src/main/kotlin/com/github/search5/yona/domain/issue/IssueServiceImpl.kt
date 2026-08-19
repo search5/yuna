@@ -26,7 +26,8 @@ class IssueServiceImpl(
     private val notificationEventRepository: NotificationEventRepository,
     private val eventPublisher: ApplicationEventPublisher,
     private val issueCommentRepository: IssueCommentRepository,
-    private val watchService: WatchService
+    private val watchService: WatchService,
+    private val issueEventRepository: IssueEventRepository
 ) : IssueService {
 
     override fun createIssue(
@@ -168,6 +169,8 @@ class IssueServiceImpl(
         notificationEventRepository.save(notificationEvent)
         eventPublisher.publishEvent(notificationEvent)
 
+        recordIssueEvent(savedIssue, EventType.ISSUE_STATE_CHANGED, updaterLoginId, oldState.toString(), newState.toString())
+
         return savedIssue
     }
 
@@ -215,6 +218,8 @@ class IssueServiceImpl(
 
         notificationEventRepository.save(notificationEvent)
         eventPublisher.publishEvent(notificationEvent)
+
+        recordIssueEvent(savedIssue, EventType.ISSUE_ASSIGNEE_CHANGED, updaterLoginId, oldAssignee?.name, newAssigneeUser?.name)
 
         return savedIssue
     }
@@ -265,7 +270,23 @@ class IssueServiceImpl(
         notificationEventRepository.save(notificationEvent)
         eventPublisher.publishEvent(notificationEvent)
 
+        recordIssueEvent(savedIssue, EventType.ISSUE_MILESTONE_CHANGED, updaterLoginId, oldMilestone?.title, issue.milestone?.title)
+
         return savedIssue
+    }
+
+    // yona models/IssueEvent.java 대응(간소화 - draft-time 병합/취소 최적화는 제외, P1-07).
+    private fun recordIssueEvent(issue: Issue, eventType: EventType, senderLoginId: String, oldValue: String?, newValue: String?) {
+        val issueEvent = IssueEvent(
+            issue = issue,
+            senderLoginId = senderLoginId,
+            senderEmail = userRepository.findByLoginId(senderLoginId).map { it.email }.orElse(null),
+            oldValue = oldValue,
+            newValue = newValue,
+            created = Instant.now(),
+            eventType = eventType
+        )
+        issueEventRepository.save(issueEvent)
     }
 
     override fun voteIssue(issueId: Long, user: User) {
