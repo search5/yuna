@@ -9,6 +9,8 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestEvent
+import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
@@ -26,7 +28,8 @@ class PullRequestMergeEventListener(
     private val issueService: IssueService,
     private val pullRequestService: PullRequestService,
     private val notificationEventRepository: NotificationEventRepository,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val pullRequestEventRepository: PullRequestEventRepository
 ) {
     private val logger = LoggerFactory.getLogger(PullRequestMergeEventListener::class.java)
 
@@ -46,9 +49,21 @@ class PullRequestMergeEventListener(
         }
 
         val pullRequest = pullRequestOptional.get()
+        val oldState = pullRequest.state
         pullRequest.isMerging = true
         pullRequest.state = State.MERGED
         pullRequestRepository.save(pullRequest)
+
+        pullRequestEventRepository.save(
+            PullRequestEvent(
+                pullRequest = pullRequest,
+                senderLoginId = event.sender.loginId,
+                eventType = EventType.PULL_REQUEST_STATE_CHANGED,
+                oldValue = oldState.toString(),
+                newValue = State.MERGED.toString(),
+                created = Instant.now()
+            )
+        )
 
         logger.info("[PR MERGE] Successfully updated merge state for PR ID: ${event.pullRequestId}")
 
@@ -160,5 +175,16 @@ class PullRequestMergeEventListener(
         )
         notificationEventRepository.save(notificationEvent)
         eventPublisher.publishEvent(notificationEvent)
+
+        pullRequestEventRepository.save(
+            PullRequestEvent(
+                pullRequest = pullRequest,
+                senderLoginId = sender.loginId,
+                eventType = EventType.PULL_REQUEST_MERGED,
+                oldValue = (!isConflictNow).toString(),
+                newValue = isConflictNow.toString(),
+                created = Instant.now()
+            )
+        )
     }
 }

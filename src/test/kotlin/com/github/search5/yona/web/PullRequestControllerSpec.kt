@@ -30,17 +30,19 @@ class PullRequestControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
+    val pullRequestEventRepository = mockk<com.github.search5.yona.domain.pullrequest.PullRequestEventRepository>()
 
     val pullRequestController = PullRequestController(
         pullRequestService,
         projectRepository,
         projectUserRepository,
-        userRepository
+        userRepository,
+        pullRequestEventRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(pullRequestController).build()
 
     beforeTest {
-        io.mockk.clearMocks(pullRequestService, projectRepository, projectUserRepository, userRepository)
+        io.mockk.clearMocks(pullRequestService, projectRepository, projectUserRepository, userRepository, pullRequestEventRepository)
     }
 
     describe("PullRequestController 웹 API 테스트") {
@@ -94,6 +96,25 @@ class PullRequestControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/projects/1/pullrequests/1").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.title").value("PR 제목"))
+            }
+        }
+
+        describe("GET /api/projects/{projectId}/pullrequests/{number}/timeline") {
+            it("PR의 변경 이력을 시간순으로 반환해야 한다") {
+                val prEvent = com.github.search5.yona.domain.pullrequest.PullRequestEvent(
+                    id = 1L, pullRequest = pullRequest,
+                    eventType = com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED,
+                    oldValue = "OPEN", newValue = "MERGED"
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest) } returns listOf(prEvent)
+
+                mockMvc.perform(get("/api/projects/1/pullrequests/1/timeline").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0].newValue").value("MERGED"))
             }
         }
 

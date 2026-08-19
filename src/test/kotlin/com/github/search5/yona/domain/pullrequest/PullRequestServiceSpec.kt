@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.event.PullRequestMergeEventListener
+import com.github.search5.yona.domain.notification.NotificationEventRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.eclipse.jgit.api.Git
@@ -30,7 +31,9 @@ class PullRequestServiceSpec @Autowired constructor(
     private val repositoryService: RepositoryService,
     private val issueRepository: IssueRepository,
     private val issueService: IssueService,
-    private val pullRequestMergeEventListener: PullRequestMergeEventListener
+    private val pullRequestMergeEventListener: PullRequestMergeEventListener,
+    private val pullRequestEventRepository: PullRequestEventRepository,
+    private val notificationEventRepository: NotificationEventRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -41,6 +44,8 @@ class PullRequestServiceSpec @Autowired constructor(
             lateinit var fromProject: Project
 
             beforeEach {
+                pullRequestEventRepository.deleteAll()
+                notificationEventRepository.deleteAll()
                 pullRequestCommitRepository.deleteAll()
                 pullRequestRepository.deleteAll()
                 issueRepository.deleteAll()
@@ -534,6 +539,50 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 restoredBranch shouldNotBe null
                 restoredBranch!!.headCommit.getId() shouldBe deleted.lastCommitId
+            }
+
+            it("PR 상태를 변경하면 NotificationEvent와 PullRequestEvent가 모두 생성되어야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "상태 변경 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-state",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                val updated = pullRequestService.changeState(pr.id!!, State.CLOSED, contributor.loginId)
+
+                updated.state shouldBe State.CLOSED
+
+                val notiEvents = notificationEventRepository.findAll()
+                notiEvents.size shouldBe 1
+                notiEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED
+                notiEvents.first().oldValue shouldBe State.OPEN.toString()
+                notiEvents.first().newValue shouldBe State.CLOSED.toString()
+
+                val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(updated)
+                prEvents.size shouldBe 1
+                prEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED
+                prEvents.first().senderLoginId shouldBe contributor.loginId
+            }
+
+            it("동일한 상태로 변경을 시도하면 이벤트를 생성하지 않아야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "동일 상태 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-same",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                pullRequestService.changeState(pr.id!!, State.OPEN, contributor.loginId)
+
+                notificationEventRepository.findAll().size shouldBe 0
+                pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr).size shouldBe 0
             }
         }
     }

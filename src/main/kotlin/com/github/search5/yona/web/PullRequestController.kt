@@ -6,6 +6,8 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestEvent
+import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
 import com.github.search5.yona.domain.pullrequest.PullRequestService
 import com.github.search5.yona.domain.role.RoleType
@@ -22,7 +24,8 @@ class PullRequestController(
     private val pullRequestService: PullRequestService,
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val pullRequestEventRepository: PullRequestEventRepository
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -85,6 +88,27 @@ class PullRequestController(
             ?: return ResponseEntity.notFound().build()
 
         return ResponseEntity.ok(pullRequest)
+    }
+
+    // yona models/PullRequestEvent.java 타임라인 조회 대응 (P1-08)
+    @GetMapping("/{number}/timeline")
+    fun getTimeline(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<List<PullRequestEvent>> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!checkReadPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        return ResponseEntity.ok(pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest))
     }
 
     @PostMapping
@@ -180,7 +204,7 @@ class PullRequestController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val updated = pullRequestService.changeState(pullRequest.id!!, state)
+        val updated = pullRequestService.changeState(pullRequest.id!!, state, user.loginId)
         return ResponseEntity.ok(updated)
     }
 

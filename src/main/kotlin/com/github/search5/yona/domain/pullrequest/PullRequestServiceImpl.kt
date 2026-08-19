@@ -6,8 +6,12 @@ import com.github.search5.yona.domain.vcs.GitRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.event.PullRequestMergeEvent
+import com.github.search5.yona.domain.notification.NotificationEvent
+import com.github.search5.yona.domain.notification.NotificationEventRepository
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.*
 import org.eclipse.jgit.merge.MergeStrategy
@@ -29,7 +33,9 @@ class PullRequestServiceImpl(
     private val repositoryService: RepositoryService,
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val notificationEventRepository: NotificationEventRepository,
+    private val pullRequestEventRepository: PullRequestEventRepository
 ) : PullRequestService {
 
     @Transactional
@@ -356,13 +362,58 @@ class PullRequestServiceImpl(
     @Transactional
     override fun changeState(
         pullRequestId: Long,
-        state: State
+        state: State,
+        updaterLoginId: String
     ): PullRequest {
         val pr = pullRequestRepository.findById(pullRequestId)
             .orElseThrow { IllegalArgumentException("PullRequest not found: $pullRequestId") }
+        val oldState = pr.state
+        if (oldState == state) {
+            return pr
+        }
+
         pr.state = state
         pr.updated = Instant.now()
-        return pullRequestRepository.save(pr)
+        val saved = pullRequestRepository.save(pr)
+
+        val updater = userRepository.findByLoginId(updaterLoginId).orElse(null)
+        val title = "[${saved.toProject.name}] PR #${saved.number} 상태 변경: $oldState -> $state"
+        val notificationEvent = NotificationEvent(
+            title = title,
+            senderId = updater?.id,
+            created = Instant.now(),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = saved.id.toString(),
+            eventType = EventType.PULL_REQUEST_STATE_CHANGED,
+            oldValue = oldState.toString(),
+            newValue = state.toString(),
+            receivers = mutableSetOf(saved.contributor).apply { removeIf { it.id == updater?.id } }
+        )
+        notificationEventRepository.save(notificationEvent)
+        eventPublisher.publishEvent(notificationEvent)
+
+        recordPullRequestEvent(saved, EventType.PULL_REQUEST_STATE_CHANGED, updaterLoginId, oldState.toString(), state.toString())
+
+        return saved
+    }
+
+    // yona models/PullRequestEvent.java 대응(간소화 - draft-time 병합/취소 최적화는 제외, P1-08).
+    private fun recordPullRequestEvent(
+        pullRequest: PullRequest,
+        eventType: EventType,
+        senderLoginId: String?,
+        oldValue: String?,
+        newValue: String?
+    ) {
+        val event = PullRequestEvent(
+            pullRequest = pullRequest,
+            senderLoginId = senderLoginId,
+            eventType = eventType,
+            oldValue = oldValue,
+            newValue = newValue,
+            created = Instant.now()
+        )
+        pullRequestEventRepository.save(event)
     }
 
     @Transactional

@@ -42,7 +42,8 @@ interface PullRequestService {
 
     fun changeState(
         pullRequestId: Long,
-        state: State
+        state: State,
+        updaterLoginId: String
     ): PullRequest
 
     fun addReviewer(pullRequestId: Long, reviewer: User)
