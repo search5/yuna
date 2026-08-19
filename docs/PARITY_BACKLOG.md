@@ -18,7 +18,7 @@
 
 | # | 상태 | 제목 | yona 근거 | yuna 대상 | 비고 |
 |---|---|---|---|---|---|
-| P0-01 | [ ] | 알림 메일 발송 파이프라인 부재 | `models/NotificationMail.java:99-575` | `domain/notification/*` | `NotificationEvent`를 소비해 실제 메일을 보내는 `@EventListener`/`@Scheduled` 없음 |
+| P0-01 | [x] | 알림 메일 발송 파이프라인 부재 | `models/NotificationMail.java:99-575` | `domain/notification/NotificationMailEventListener.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P0-02 | [ ] | IMAP 수신메일→이슈/댓글 생성 부재 | `app/mailbox/*` | (해당 없음) | 서브시스템 자체 신규 구축 필요 |
 | P0-03 | [x] | 웹훅 발송 미연결 | `WebhookServiceImpl.kt:48-66` | `domain/webhook/WebhookNotificationEventListener.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P0-04 | [x] | 웹훅 gitPush 필터 로직 반전 | `models/NotificationEvent.java:604-680` | `domain/webhook/WebhookServiceImpl.kt` | **완료** |
@@ -65,6 +65,8 @@
 | P1-24 | [ ] | 최근 push된 브랜치 추적(PushedBranch) 기능 없음 | `models/PushedBranch.java`, `UpdateRecentlyPushedBranch.java` | (해당 없음) | P0-11에서 범위 분리 — 신규 엔티티/리포지토리 생성 필요, "삭제된 브랜치 복원" UI가 이 데이터에 의존 |
 | P1-25 | [ ] | git push(NEW_COMMIT) 이벤트는 웹훅이 발송되지 않음 | `NotificationEvent.java:604-680`(push 부분) | `domain/event/GitPostReceiveEventListener.kt`, `domain/webhook/WebhookServiceImpl.kt` | P0-03에서 범위 분리 — 커밋은 DB 엔티티가 아니라 `resourceId`로 재조회 불가, `WebhookServiceImpl.getResourceType/getResourceId/buildPayload`에 COMMIT 케이스 추가 + `processCommitsNotification`에서 `eventPublisher.publishEvent(notificationEvent)` 호출 필요 |
 | P1-26 | [ ] | PULL_REQUEST 리소스 타입은 웹훅 payload를 만들 수 없음 | `Webhook.java:674-729`(PR 부분) | `domain/webhook/WebhookServiceImpl.kt` (`buildPayload`, `getResourceType`) | P0-03에서 범위 분리 — `CodeReviewServiceImpl`이 발행하는 PR 리뷰 NotificationEvent가 `WebhookNotificationEventListener`에서 조용히 스킵됨(PullRequest 조회/payload 케이스 미지원) |
+| P1-27 | [ ] | 알림 메일이 이벤트별 즉시 발송이며 다이제스트 병합/언어별 그룹핑이 없음 | `NotificationMail.java:99-188`(`mergeEvents`, 언어별 그룹핑) | `domain/notification/NotificationMailEventListener.kt` | P0-01에서 범위 분리 — yona는 `bymail.interval` 주기로 관련 이벤트를 병합해 한 통으로 보내지만, yuna는 이벤트 발생 즉시 개별 발송(스팸성 다건 메일 가능성). 사용자가 많은 프로젝트에서 체감 UX 저하 |
+| P1-28 | [ ] | 알림 메일에 IMAP 답장용 Reply-To 헤더 없음 | `NotificationMail.java:582 getReplyTo()` | `domain/notification/NotificationMailEventListener.kt` | P0-01/P0-02와 연동 — IMAP 수신메일 처리(P0-02) 자체가 없으므로 Reply-To를 넣어도 무의미하지만, P0-02 구현 시 함께 처리 필요 |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -103,6 +105,13 @@
   - P0-03(미연결): 신규 `WebhookNotificationEventListener`(`@Async @EventListener fun handleNotificationEvent(event: NotificationEvent)`)를 추가. 이슈 생성/상태변경/담당자변경/마일스톤변경(`IssueServiceImpl`), 이슈 공유(`IssueShareServiceImpl`), 댓글(`CommentServiceImpl`)이 이미 `eventPublisher.publishEvent(notificationEvent)`로 발행하고 있었지만 그동안 아무도 구독하지 않던 `NotificationEvent`를 구독해, `resourceType`/`resourceId`로 실제 엔티티(Issue/Posting/IssueComment/PostingComment)를 재조회한 뒤 `webhookService.sendWebhook(project, eventType, sender, resource)`를 호출.
   - **범위 조정(의도적으로 다루지 않은 부분, P1-25/P1-26으로 분리)**: git push(NEW_COMMIT) 이벤트와 PULL_REQUEST 리뷰 이벤트는 각각 별도 이유로 이번 패스에서 제외 — 전자는 커밋이 DB 엔티티가 아니라 `resourceId` 재조회 패턴 자체가 안 맞고, 후자는 `WebhookServiceImpl.buildPayload`가 애초에 PullRequest 타입을 지원하지 않아 리스너만 고쳐선 끝까지 동작하지 않는다. 두 경우 모두 리스너가 "조용히 스킵"하도록 구현해 예외/크래시는 없지만, 실제 발송은 아직 안 된다 — 백로그에 명시적으로 남겨 은폐하지 않음.
   - 테스트: `WebhookServiceSpec.kt` +4 tests(gitPush 정책), `WebhookNotificationEventListenerSpec.kt`(신규) 7 tests. `WebhookNotificationEventListener` 커버리지 INSTRUCTION 94%(191/203).
+
+- **2026-08-19 — P0-01**: `NotificationEvent`가 `eventPublisher.publishEvent(notificationEvent)`로 여러 서비스(Issue/Comment/IssueShare/CodeReview)에서 이미 발행되고 있었지만, 이를 구독해 실제 메일을 보내는 리스너가 전혀 없어 이메일이 영구히 발송되지 않던 문제 수정.
+  - 신규 `NotificationMailEventListener`(`@Async @EventListener fun handleNotificationEvent(event: NotificationEvent)`) 추가. `event.receivers`(이미 각 서비스에서 감시자/멘션 대상으로 계산되어 채워짐) 각각에게 기존 `MailService.sendHtmlMail`로 HTML 메일을 발송하고, 처리 후 `NotificationMail` 마커 엔티티를 저장.
+  - 메일 본문은 `NotificationEvent.newValue`(없으면 title)를 HTML 이스케이프 후 렌더링 — P0-08과 동일한 방어적 태도로 XSS 방지.
+  - 이메일이 비어있는 수신자는 스킵, 한 수신자에게 발송 실패해도 나머지 수신자 발송은 계속 시도(개별 try/catch).
+  - **범위 조정(P1-27/28로 분리)**: yona의 Akka 스케줄러 기반 다이제스트 병합(`mergeEvents`, `bymail.interval` 주기 배치, 언어별 그룹핑)과 IMAP 답장용 `Reply-To` 헤더는 구현하지 않음 — "이벤트마다 즉시 개별 발송"으로 단순화했다. 핵심 요구사항(메일이 실제로 발송되는가)은 충족하지만, 대규모 프로젝트에서 다건 이벤트 발생 시 메일이 병합되지 않고 각각 날아가는 UX 차이가 있다.
+  - 테스트: `NotificationMailEventListenerSpec.kt`(신규) 6 tests, 관련 기존 스펙(`IssueServiceSpec`, `CommentServiceSpec`) 재실행으로 회귀 없음 확인. 커버리지: INSTRUCTION 98.5%(137/139).
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.
