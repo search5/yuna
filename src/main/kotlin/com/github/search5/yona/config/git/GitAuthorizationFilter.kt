@@ -2,6 +2,7 @@ package com.github.search5.yona.config.git
 
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectService
+import com.github.search5.yona.domain.user.UserRepository
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -12,7 +13,8 @@ import java.util.regex.Pattern
 
 @Component
 class GitAuthorizationFilter(
-    private val projectService: ProjectService
+    private val projectService: ProjectService,
+    private val userRepository: UserRepository
 ) : OncePerRequestFilter() {
 
     private val gitUriPattern = Pattern.compile("^/(git|git-lfs)/([^/]+)/([^/]+?)(?:\\.git)?(?:/.*)?$")
@@ -41,8 +43,10 @@ class GitAuthorizationFilter(
 
         val isWriteRequest = isWriteRequest(request)
 
-        val requiresAuth = project.projectScope == com.github.search5.yona.domain.project.ProjectScope.PRIVATE 
-                || project.isCodeAccessibleMemberOnly 
+        // yona AccessControl READ 규칙(SvnAuthorizationFilter, P1-23와 동일하게) 대응 (P1-45):
+        // PROTECTED도 PUBLIC과 동일하게 인증 없이 clone 가능했던 것을 PRIVATE와 같이 인증을 요구하도록 수정.
+        val requiresAuth = project.projectScope != com.github.search5.yona.domain.project.ProjectScope.PUBLIC
+                || project.isCodeAccessibleMemberOnly
                 || isWriteRequest
 
         if (requiresAuth) {
@@ -57,6 +61,15 @@ class GitAuthorizationFilter(
             if (!isMember(project, loginId)) {
                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden")
                 return
+            }
+        } else {
+            // yona의 "!user.isGuest" 대응: PUBLIC 프로젝트라도 게스트 계정으로 인증된 요청은 거부한다.
+            val authentication = SecurityContextHolder.getContext().authentication
+            if (authentication != null && authentication.isAuthenticated && !isAnonymous(authentication)) {
+                if (isGuestUser(authentication.name)) {
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden")
+                    return
+                }
             }
         }
 
@@ -79,5 +92,9 @@ class GitAuthorizationFilter(
     private fun isMember(project: Project, loginId: String): Boolean {
         val projectId = project.id ?: return false
         return projectService.isMember(projectId, loginId)
+    }
+
+    private fun isGuestUser(loginId: String): Boolean {
+        return userRepository.findByLoginId(loginId).map { it.isGuest }.orElse(false)
     }
 }
