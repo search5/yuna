@@ -13,7 +13,15 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.pullrequest.CodeCommentThread
+import com.github.search5.yona.domain.pullrequest.CodeReviewService
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.CommitComment
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.pullrequest.ReviewComment
+import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserIdent
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -33,10 +41,14 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     val issueService = mockk<IssueService>()
     val commentService = mockk<CommentService>()
     val attachmentService = mockk<AttachmentService>(relaxed = true)
+    val commentThreadRepository = mockk<CommentThreadRepository>()
+    val commitCommentRepository = mockk<CommitCommentRepository>()
+    val codeReviewService = mockk<CodeReviewService>()
 
     val service = IncomingMailProcessingService(
         originalEmailRepository, userRepository, projectRepository,
         issueRepository, postingRepository, issueService, commentService, attachmentService,
+        commentThreadRepository, commitCommentRepository, codeReviewService,
         inboundBaseAddress = "yona@example.com"
     )
 
@@ -44,7 +56,10 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     val project = Project(id = 10L, name = "hive", owner = "dlab", projectScope = ProjectScope.PUBLIC)
 
     beforeTest {
-        io.mockk.clearMocks(originalEmailRepository, userRepository, projectRepository, issueRepository, postingRepository, issueService, commentService, attachmentService)
+        io.mockk.clearMocks(
+            originalEmailRepository, userRepository, projectRepository, issueRepository, postingRepository,
+            issueService, commentService, attachmentService, commentThreadRepository, commitCommentRepository, codeReviewService
+        )
         every { originalEmailRepository.existsByMessageId(any()) } returns false
         every { userRepository.findByEmail("gildong@example.com") } returns Optional.of(sender)
     }
@@ -223,6 +238,57 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 service.process(baseMessage())
 
                 verify(exactly = 0) { attachmentService.store(any(), any(), any(), any(), any()) }
+            }
+        }
+
+        describe("리뷰 댓글/커밋 댓글 스레드로의 메일 답장 (P1-30, yona EmailHandler.getThreads() 대응)") {
+            it("COMMENT_THREAD(코드리뷰 스레드)를 가리키는 답장이면 그 스레드에 리뷰 댓글을 추가해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+
+                val originalReviewEmail = OriginalEmail(
+                    id = 3L, messageId = "<review@mail.example.com>",
+                    resourceType = ResourceType.COMMENT_THREAD, resourceId = "60"
+                )
+                every { originalEmailRepository.findByMessageId("<review@mail.example.com>") } returns Optional.of(originalReviewEmail)
+
+                val thread = CodeCommentThread(id = 60L, project = project, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                every { commentThreadRepository.findById(60L) } returns Optional.of(thread)
+
+                val savedReviewComment = ReviewComment(id = 400L, contents = "메일 본문 내용", author = UserIdent(sender))
+                every {
+                    codeReviewService.createReviewComment(project, null, null, "메일 본문 내용", null, 60L, sender)
+                } returns savedReviewComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<review@mail.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.ReviewCommentCreated(400L, 60L))
+            }
+
+            it("COMMIT_COMMENT를 가리키는 답장이면 같은 커밋/경로/라인에 새 커밋 댓글을 추가해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+
+                val originalCommitEmail = OriginalEmail(
+                    id = 4L, messageId = "<commit@mail.example.com>",
+                    resourceType = ResourceType.COMMIT_COMMENT, resourceId = "80"
+                )
+                every { originalEmailRepository.findByMessageId("<commit@mail.example.com>") } returns Optional.of(originalCommitEmail)
+
+                val originalCommitComment = CommitComment(
+                    id = 80L, project = project, commitId = "abc123", path = "b.kt", line = 5,
+                    contents = "원본 댓글", author = UserIdent(sender)
+                )
+                every { commitCommentRepository.findById(80L) } returns Optional.of(originalCommitComment)
+
+                val savedCommitComment = CommitComment(id = 500L, project = project, commitId = "abc123", contents = "메일 본문 내용", author = UserIdent(sender))
+                every {
+                    codeReviewService.createCommitComment(project, "abc123", "메일 본문 내용", "b.kt", 5, null, sender)
+                } returns savedCommitComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<commit@mail.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.CommitCommentCreated(500L))
             }
         }
     }
