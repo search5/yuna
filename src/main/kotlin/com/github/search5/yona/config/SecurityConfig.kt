@@ -21,7 +21,8 @@ import com.github.search5.yona.config.oauth2.CustomOAuth2UserService
 class SecurityConfig(
     private val customOAuth2UserService: CustomOAuth2UserService,
     private val gitAuthorizationFilter: com.github.search5.yona.config.git.GitAuthorizationFilter,
-    private val svnAuthorizationFilter: com.github.search5.yona.config.svn.SvnAuthorizationFilter
+    private val svnAuthorizationFilter: com.github.search5.yona.config.svn.SvnAuthorizationFilter,
+    private val apiTokenAuthenticationFilter: ApiTokenAuthenticationFilter
 ) {
 
     @Bean
@@ -74,6 +75,7 @@ class SecurityConfig(
             }
             .addFilterAfter(gitAuthorizationFilter, org.springframework.security.web.authentication.www.BasicAuthenticationFilter::class.java)
             .addFilterAfter(svnAuthorizationFilter, org.springframework.security.web.authentication.www.BasicAuthenticationFilter::class.java)
+            .addFilterAfter(apiTokenAuthenticationFilter, org.springframework.security.web.authentication.www.BasicAuthenticationFilter::class.java)
         return http.build()
     }
 }

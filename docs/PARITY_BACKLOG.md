@@ -40,7 +40,7 @@
 | # | 상태 | 제목 | yona 근거 | yuna 대상 |
 |---|---|---|---|---|
 | P1-01 | [x] | LDAP 인증 부재 | `utils/LdapService.java` | `domain/user/{LdapService,LdapQueryBuilder,LdapUserProvisioningService,LdapUser}.kt`(신규) | **완료** |
-| P1-02 | [ ] | API 토큰 인증 미작동 | `UserApp.java` (`Yona-Token`) | 인증 필터 신규 필요 |
+| P1-02 | [x] | API 토큰 인증 미작동 | `UserApp.java` (`Yona-Token`) | `config/ApiTokenAuthenticationFilter.kt`(신규) | **완료** |
 | P1-03 | [ ] | OAuth 다중 계정 연동/병합 소실 | `models/LinkedAccount.java` | `config/oauth2/CustomOAuth2UserService.kt` |
 | P1-04 | [ ] | 이메일 도메인 allowlist 미시행 | `UserApp.java:385-499` | `web/AuthController.kt` |
 | P1-05 | [ ] | Related-PR 재병합 로직 스텁 | `RelatedPullRequestMergingActor.java` | `domain/event/PullRequestMergeEventListener.kt:95-108` |
@@ -163,6 +163,8 @@
   - `YonaAuthenticationProvider`에 LDAP 분기 추가: `ldapService.enabled`일 때 LDAP 우선 시도 → 성공 시 재조정된 로컬 사용자로 인증, 실패 시 `fallbackToLocalLogin` 설정에 따라 로컬 비밀번호 인증으로 폴백하거나 즉시 거부. LDAP로 재조정된 사용자도 P0-13의 계정 잠금/탈퇴 체크를 동일하게 통과해야 함.
   - `application.yml`에 `yuna.ldap.*` 설정 추가(기본 비활성).
   - 테스트: `LdapQueryBuilderSpec.kt`(신규) 15 tests, `LdapUserProvisioningServiceSpec.kt`(신규) 4 tests, `YonaAuthenticationProviderSpec.kt` +5 tests. 전체 Spring 컨텍스트 로딩(`YonaApplicationTests`)으로 신규 빈 배선 확인. 커버리지: `LdapQueryBuilder` 96.6%/78%, `LdapUserProvisioningService` 95.3%/70%, `YonaAuthenticationProvider` 94.8%/94.4%(명령어/분기).
+
+- **2026-08-19 — P1-02**: API 토큰(`Yona-Token` 헤더 또는 `Authorization: token <값>`) 재발급 API는 있었지만, 그 토큰으로 요청을 인증하는 경로가 전혀 없어 사실상 write-only였던 문제 해결. 신규 `ApiTokenAuthenticationFilter`(`OncePerRequestFilter`)를 `SecurityConfig`에 `BasicAuthenticationFilter` 뒤에 추가 — 이미 인증된(비-익명) 요청이면 건너뛰고, 아니면 헤더에서 토큰을 추출해 `UserRepository.findByToken`으로 사용자를 찾아 SecurityContext에 인증 정보를 채운다. LOCKED/DELETED 계정 토큰은 인증하지 않음(P0-13과 동일 기조). `UserRepository.findByToken` 추가. 테스트: `ApiTokenAuthenticationFilterSpec.kt`(신규) 6 tests, `MockHttpServletRequest`로 실제 필터 체인을 통해 검증. 커버리지: INSTRUCTION 92.8%(84/92, 필터)+95.7%(45/47, 토큰 파싱).
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.
