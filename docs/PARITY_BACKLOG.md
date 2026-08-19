@@ -52,7 +52,7 @@
 | P1-11 | [x] | 라벨 카테고리 수정 기능 없음 | `IssueLabelApp.java:390` | 위와 동일 | **완료** |
 | P1-12 | [x] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 | **완료** |
 | P1-13 | [x] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` | **완료** |
-| P1-14 | [ ] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | (해당 없음) |
+| P1-14 | [x] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | `web/MentionController.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P1-15 | [ ] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | (해당 없음) |
 | P1-16 | [ ] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` |
 | P1-17 | [ ] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` |
@@ -80,6 +80,8 @@
 | P1-39 | [ ] | PR 생성/리뷰 상태변경이 NotificationEvent·PullRequestEvent 모두 미기록 | `models/PullRequestEvent.java`, `NotificationEvent.afterNewPullRequest` | `PullRequestServiceImpl.kt createPullRequest`, `CodeReviewServiceImpl.kt` | P1-08에서 범위 분리 — `changeState`/병합/충돌 3곳은 이번에 연결했지만, PR 생성 시점(NEW_PULL_REQUEST)과 코드리뷰 승인/반려(PULL_REQUEST_REVIEW_STATE_CHANGED, `CodeReviewServiceImpl`이 NotificationEvent는 만들지만 PullRequestEvent는 아직 미기록)는 남아있음 |
 | P1-40 | [ ] | PullRequestEvent draft-time 병합/취소 최적화 없음 | `models/PullRequestEvent.java` `add()` | `domain/pullrequest/PullRequestServiceImpl.kt recordPullRequestEvent` | P1-08에서 범위 분리 — P1-38(IssueEvent)과 동일한 이유로 미이식 |
 | P1-41 | [ ] | 최근 본 이슈/게시글 조회 UI·엔드포인트, 탈퇴 시 정리 없음 | `models/RecentIssue.java getRecentIssues/deleteAll` | `domain/issue/RecentIssueService.kt` | P1-09에서 범위 분리 — 방문 시 기록(record)만 구현했고, 사용자가 자신의 최근 방문 목록을 실제로 조회하는 컨트롤러/화면과, 회원 탈퇴 시 `deleteAll(user)`로 데이터를 정리하는 배선이 아직 없음. `RecentIssueService.getRecentIssues()`는 준비돼 있어 연결만 하면 됨 |
+| P1-42 | [ ] | mentionList 추가 후보 소스(공유자/작성자·댓글러/워처, "@project all"·"@group all") 미지원 | `ProjectApp.java collectAuthorAndCommenter/addProjectAuthorsAndWatchersList/addSharers/addProjectNameToMentionList/addOrganizationNameToMentionList` | `web/MentionController.kt` | P1-14에서 범위 분리 — 현재는 프로젝트 멤버+조직 그룹멤버(또는 query 검색)만 후보로 삼는다. 이슈/게시글의 작성자·댓글 작성자·워처, 이슈 공유자, 그리고 "@project all:"/"@group all:" 특수 멘션 항목(이미지 URL 포함)은 미구현 |
+| P1-43 | [ ] | mentionListAtCommitDiff/mentionListAtPullRequest 엔드포인트 없음 | `ProjectApp.java:226-227`(mentionListAtCommitDiff/mentionListAtPullRequest) | (해당 없음) | P1-14에서 범위 분리 — 커밋 diff 화면/PR 화면 전용 멘션 후보(커밋 작성자, 코드댓글 작성자, PR 코멘트 작성자, PR contributor)를 추가하는 변형 엔드포인트 2개가 아직 없음. 기본 `mentionList`만으로도 프로젝트 멤버 멘션은 가능해 P1로 분류 |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -239,3 +241,11 @@
   - **인가 정책(중요, yona 원본 그대로 이식)**: yona `AccessControl.isProjectResourceAllowed`를 추적한 결과, `PROJECT_LABELS` 리소스 타입은 `ISSUE_STATE`/`ISSUE_ASSIGNEE`/`ISSUE_MILESTONE`/`ATTACHMENT`처럼 컨테이너 위임 특례 목록에 없어 일반 프로젝트 리소스의 `UPDATE` 규칙(`user.isMemberOf(project) || isAllowedIfGroupMember(...)`)을 그대로 따른다 — 즉 **MANAGER가 아닌 일반 MEMBER도 라벨을 붙이고 뗄 수 있다**. 이는 P1-10~12(이슈 라벨 CRUD)에서 이 저장소가 채택한 "isProjectManager(관리자 전용)" 기준과 의도적으로 다르며, yona 소스(`utils/AccessControl.java:280-282`)를 직접 확인해 정한 것이다. 조회(`GET /labels`)는 공개 프로젝트면 비회원도 가능, 비공개면 멤버만(기존 `IssueLabelController.checkReadPermission`과 동일 패턴, 조직 그룹멤버 특례는 이 저장소의 기존 관례대로 미구현).
   - 테스트: `ProjectServiceImplSpec.kt` +7(신규 라벨 생성+attach, category 기본값 'Label', 기존 라벨 재사용, 이미 붙어있으면 isAttached=false, 존재하지 않는 라벨 detach시 false, orphan 라벨 삭제, 다른 프로젝트가 참조 중이면 라벨 유지). `ProjectControllerSpec.kt` +7(공개 프로젝트 비회원 조회 허용, 비공개 비회원 403, MEMBER 권한으로 attach 성공 201, 비멤버 403, 이미 붙어있으면 204, 멤버 detach 204, 없는 라벨 detach 404). 전체 20 tests(신규 14 + 기존 6) 통과. `YonaApplicationTests`로 `ProjectServiceImpl` 생성자에 `LabelRepository` 추가된 빈 배선 확인.
   - 검증: `./gradlew test --tests "ProjectServiceImplSpec" --tests "ProjectControllerSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
+
+- **2026-08-20 — P1-14**: 이슈/게시글 작성 화면에서 `@사용자`/`#이슈번호` 자동완성이 동작할 프로젝트 스코프 멘션 API가 yuna에 전혀 없던 문제 해결(yona `ProjectApp.mentionList()` 대응). 참고로 `web/UserController.kt`의 `GET /api/users`는 프로젝트와 무관한 전역 사용자 검색이라 이 기능과는 별개다.
+  - 신규 `web/MentionController.kt`에 `GET /api/{owner}/{projectName}/mentionList?query=&mentionType=` 추가. `mentionType=user`는 yona `addProjectMemberList`/`addGroupMemberList`(query 없음 또는 비공개 프로젝트 → 프로젝트 멤버+조직 그룹멤버) / `addSearchedUsers`(공개 프로젝트+query 있음 → 전역 검색) 분기를 그대로 이식하고, `userList.remove(currentUser); userList.add(currentUser)`(나를 항상 맨 뒤로)와 `collectedUsersToMentionList`의 admin 계정/빈 loginId 제외 필터도 동일하게 적용. `mentionType=issue`는 `getMentionIssueList`(제목/이슈번호 검색, 최신순, `ISSUE_MENTION_SHOW_LIMIT=20`)에 대응하는 `IssueRepository.findForMention` 신규 쿼리로 구현.
+  - **인가 정책 조정(의도적, yona 대비 강화)**: yona 원본은 `@AnonymousCheck`만 걸려 있어 비공개 프로젝트라도 로그인만 하면(심지어 비멤버라도) 멘션 후보 목록(멤버 명단)을 그대로 노출한다. 이 저장소의 다른 프로젝트 스코프 읽기 API들(`IssueLabelController.checkReadPermission` 등)과 동일하게 "공개 프로젝트는 누구나, 비공개는 멤버만" 규칙을 적용해 비공개 프로젝트의 멤버 명단이 비멤버에게 유출되지 않도록 의도적으로 강화했다(P0-08과 같은 기조 — 원본을 그대로 베끼면 불필요한 정보 노출이 생기는 지점은 강화).
+  - **범위 조정(P1-42/43으로 분리)**: 이슈/게시글 작성자·댓글 작성자·워처·공유자를 후보에 추가하는 로직과 "@project all:"/"@group all:" 특수 항목, 그리고 커밋 diff/PR 화면 전용 변형 엔드포인트(`mentionListAtCommitDiff`, `mentionListAtPullRequest`)는 이번 패스에서 다루지 않음 — 프로젝트 멤버 기반 기본 멘션만으로 핵심 요구사항(멤버를 멘션할 수 있는가)은 충족.
+  - 사소한 단순화: yona `getDisplayName()`(닉네임/실명 우선순위 로직)에 대응하는 별도 표시이름 필드가 yuna `User`엔 없어 `user.name`을 그대로 사용, `searchText`도 `name+loginId` 2개 필드 조합으로 단순화(yona는 `name+displayName+loginId` 3필드 조합이었으나 yuna엔 displayName 자체가 없어 중복 제거).
+  - 테스트: `MentionControllerSpec.kt`(신규) 6 tests(비공개+비멤버 403, 멤버 기준 프로젝트+그룹멤버 후보와 순서, 공개+query 검색 분기, admin 계정 필터링, 이슈 멘션 목록, mentionType 미지정 시 빈 결과) 전체 통과. `YonaApplicationTests`로 신규 컨트롤러/JPQL 쿼리(`CAST(i.number AS string)`) 빈 배선 확인.
+  - 검증: `./gradlew test --tests "MentionControllerSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
