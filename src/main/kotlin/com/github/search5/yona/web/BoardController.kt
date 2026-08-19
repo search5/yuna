@@ -1,7 +1,9 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.board.PostingService
+import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -23,7 +25,9 @@ class BoardController(
     private val postingService: PostingService,
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val postingRepository: PostingRepository,
+    private val issueLabelRepository: IssueLabelRepository
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -143,6 +147,31 @@ class BoardController(
         )
 
         return ResponseEntity.ok(updated)
+    }
+
+    // yona api.BoardApi.updatePostLabel 대응 — 게시글에 붙은 라벨 집합을 통째로 교체한다.
+    @PutMapping("/{postId}/labels")
+    fun updatePostLabels(
+        @PathVariable projectId: Long,
+        @PathVariable postId: Long,
+        @RequestBody labelIds: List<Long>,
+        authentication: Authentication?
+    ): ResponseEntity<Posting> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val posting = postingService.getPosting(projectId, postId)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isManagerOrAuthor(project, posting.authorId, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        posting.labels = issueLabelRepository.findAllById(labelIds).toMutableSet()
+        val saved = postingRepository.save(posting)
+
+        return ResponseEntity.ok(saved)
     }
 
     @DeleteMapping("/{postId}")
