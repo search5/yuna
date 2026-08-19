@@ -115,6 +115,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 override fun getBranches(): List<com.github.search5.yona.domain.vcs.GitBranch> = emptyList()
                 override fun getHeadBranch(): com.github.search5.yona.domain.vcs.GitBranch? = null
                 override fun deleteBranch(branchName: String) {}
+                override fun createBranch(branchName: String, startPoint: String) {}
                 override fun getParentCommitOf(commitId: String): Commit? = null
                 override fun isEmpty(): Boolean = false
                 override fun move(srcProjectOwner: String, srcProjectName: String, destProjectOwner: String, destProjectName: String): Boolean = true

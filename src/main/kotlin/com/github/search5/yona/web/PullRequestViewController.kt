@@ -45,12 +45,9 @@ class PullRequestViewController(
     ): String {
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
             ?: return "error/404"
-
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
-                return "error/403"
-            }
+        if (!checkMemberAccess(project, loginUser)) {
+            return "error/403"
         }
 
         val stateEnum = when (state.lowercase()) {
@@ -66,11 +63,74 @@ class PullRequestViewController(
             pullRequestRepository.findByToProjectAndState(project, stateEnum, pageable)
         }
 
+        return renderList(model, project, loginUser, prPage, state)
+    }
+
+    // yona PullRequestApp.closedPullRequests 대응. CLOSED/MERGED 상태를 모두 "닫힌 PR"로 취급한다.
+    @GetMapping("/{owner}/{projectName}/closedPullRequests")
+    fun closedPullRequests(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam(required = false, defaultValue = "0") page: Int,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (!checkMemberAccess(project, loginUser)) {
+            return "error/403"
+        }
+
+        val pageable = PageRequest.of(page, 20, Sort.by(Sort.Direction.DESC, "id"))
+        val prPage = pullRequestRepository.findByToProjectAndStateIn(project, listOf(State.CLOSED, State.MERGED), pageable)
+
+        return renderList(model, project, loginUser, prPage, "closed")
+    }
+
+    // yona PullRequestApp.sentPullRequests 대응. 이 프로젝트가 출발지(fromProject)인 PR 목록.
+    @GetMapping("/{owner}/{projectName}/sentPullRequests")
+    fun sentPullRequests(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam(required = false, defaultValue = "0") page: Int,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (!checkMemberAccess(project, loginUser)) {
+            return "error/403"
+        }
+
+        val pageable = PageRequest.of(page, 20, Sort.by(Sort.Direction.DESC, "id"))
+        val prPage = pullRequestRepository.findByFromProject(project, pageable)
+
+        return renderList(model, project, loginUser, prPage, "sent")
+    }
+
+    private fun checkMemberAccess(
+        project: com.github.search5.yona.domain.project.Project,
+        loginUser: com.github.search5.yona.domain.user.User?
+    ): Boolean {
+        if (project.projectScope == ProjectScope.PUBLIC) {
+            return true
+        }
+        return loginUser != null && projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)
+    }
+
+    private fun renderList(
+        model: Model,
+        project: com.github.search5.yona.domain.project.Project,
+        loginUser: com.github.search5.yona.domain.user.User?,
+        prPage: org.springframework.data.domain.Page<com.github.search5.yona.domain.pullrequest.PullRequest>,
+        state: String
+    ): String {
         model.addAttribute("project", project)
         model.addAttribute("prPage", prPage)
         model.addAttribute("state", state)
         model.addAttribute("currentUser", loginUser)
-
         return "pullrequest/list"
     }
 

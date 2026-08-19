@@ -644,6 +644,17 @@ class GitRepository(
         }
     }
 
+    override fun createBranch(branchName: String, startPoint: String) {
+        useRepository { repo ->
+            Git(repo).use { git ->
+                git.branchCreate()
+                    .setName(branchName.removePrefix("refs/heads/"))
+                    .setStartPoint(startPoint)
+                    .call()
+            }
+        }
+    }
+
     override fun getParentCommitOf(commitId: String): Commit? {
         return useRepository { repo ->
             val objectId = repo.resolve(commitId) ?: return@useRepository null

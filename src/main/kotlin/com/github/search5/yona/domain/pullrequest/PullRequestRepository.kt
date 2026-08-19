@@ -22,6 +22,19 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long> {
     fun findFirstByToProjectOrderByNumberDesc(toProject: Project): PullRequest?
     fun findByContributor(contributor: User): List<PullRequest>
 
+    // yona PullRequestApp.closedPullRequests 대응 — CLOSED와 MERGED를 모두 "닫힌 PR"로 취급한다.
+    fun findByToProjectAndStateIn(
+        toProject: Project,
+        states: List<State>,
+        pageable: org.springframework.data.domain.Pageable
+    ): org.springframework.data.domain.Page<PullRequest>
+
+    // yona PullRequestApp.sentPullRequests 대응 — 이 프로젝트가 출발지(fromProject)인 PR 목록.
+    fun findByFromProject(
+        fromProject: Project,
+        pageable: org.springframework.data.domain.Pageable
+    ): org.springframework.data.domain.Page<PullRequest>
+
 
     @Query("""
         SELECT pr FROM PullRequest pr 

@@ -111,6 +111,49 @@ class PullRequestViewControllerSpec : DescribeSpec({
             }
         }
 
+        describe("GET /{owner}/{projectName}/closedPullRequests") {
+            it("멤버라면 CLOSED와 MERGED 상태를 모두 포함한 목록을 pullrequest/list 뷰로 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every {
+                    pullRequestRepository.findByToProjectAndStateIn(project, listOf(State.CLOSED, State.MERGED), any<Pageable>())
+                } returns PageImpl(listOf(pullRequest), pageRequest, 1)
+
+                mockMvc.perform(get("/owner/TestProj/closedPullRequests").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("pullrequest/list"))
+                    .andExpect(model().attributeExists("project", "prPage"))
+                    .andExpect(model().attribute("state", "closed"))
+            }
+
+            it("프로젝트 멤버가 아닐 경우 403 Forbidden 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
+
+                mockMvc.perform(get("/owner/TestProj/closedPullRequests").principal(userAuth))
+                    .andExpect(view().name("error/403"))
+            }
+        }
+
+        describe("GET /{owner}/{projectName}/sentPullRequests") {
+            it("멤버라면 이 프로젝트가 출발지(fromProject)인 PR 목록을 pullrequest/list 뷰로 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every {
+                    pullRequestRepository.findByFromProject(project, any<Pageable>())
+                } returns PageImpl(listOf(pullRequest), pageRequest, 1)
+
+                mockMvc.perform(get("/owner/TestProj/sentPullRequests").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("pullrequest/list"))
+                    .andExpect(model().attributeExists("project", "prPage"))
+                    .andExpect(model().attribute("state", "sent"))
+            }
+        }
+
         describe("GET /{owner}/{projectName}/pull/{number}") {
             it("멤버라면 200 OK와 pullrequest/view 뷰를 반환해야 한다") {
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
