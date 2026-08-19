@@ -43,7 +43,7 @@
 | P1-02 | [x] | API 토큰 인증 미작동 | `UserApp.java` (`Yona-Token`) | `config/ApiTokenAuthenticationFilter.kt`(신규) | **완료** |
 | P1-03 | [x] | OAuth 다중 계정 연동/병합 소실 | `models/LinkedAccount.java` | `domain/user/LinkedAccount.kt`(신규), `config/oauth2/CustomOAuth2UserService.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-04 | [x] | 이메일 도메인 allowlist 미시행 | `UserApp.java:385-499` | `domain/user/EmailDomainValidator.kt`(신규), `web/AuthController.kt`, `config/oauth2/CustomOAuth2UserService.kt` | **완료** |
-| P1-05 | [ ] | Related-PR 재병합 로직 스텁 | `RelatedPullRequestMergingActor.java` | `domain/event/PullRequestMergeEventListener.kt:95-108` |
+| P1-05 | [x] | Related-PR 재병합 로직 스텁 | `RelatedPullRequestMergingActor.java` | `domain/event/PullRequestMergeEventListener.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-06 | [ ] | 커밋→이슈 자동 참조 리스너가 로깅만 함 | `IssueReferredFromCommitEventActor.java` | `domain/event/GitPostReceiveEventListener.kt` |
 | P1-07 | [ ] | 이슈 타임라인(IssueEvent) 부재 | `models/IssueEvent.java` | `domain/issue/` |
 | P1-08 | [ ] | PR 타임라인(PullRequestEvent) 부재 | `models/PullRequestEvent.java` | `domain/pullrequest/` |
@@ -174,6 +174,12 @@
 - **2026-08-19 — P1-04**: 이메일 도메인 allowlist(`yuna.signup.allowed-email-domains`, 콤마 구분, 기본 빈값=전체 허용)가 회원가입 어느 경로에서도 검증되지 않던 문제 해결. yona `NotificationMail.isAllowedEmailDomains()`를 순수 유틸 `EmailDomainValidator`로 이식(공백 처리, 대소문자 무시 매칭 포함) — 실제 LDAP/Config류와 달리 완전한 순수 로직이라 전체 단위테스트.
   - `AuthController.signup()`(로컬 가입)과 `CustomOAuth2UserService`(OAuth 자동 가입, P1-03에서 만든 신규가입 분기)에 각각 적용. **기존 계정의 로그인은 도메인 정책이 바뀌어도 계속 허용**(yona도 신규가입에만 게이트를 걸고 기존 사용자는 소급 차단하지 않음) — OAuth 쪽은 이미 연결된 계정/이메일 매칭 기존 계정 로그인이면 도메인 검사를 건너뛰고, 정말 신규 계정을 만드는 순간에만 검사해 `OAuth2AuthenticationException`으로 거부.
   - 테스트: `EmailDomainValidatorSpec.kt`(신규) 6 tests, `AuthControllerSpec.kt` +1, `CustomOAuth2UserServiceSpec.kt` +1. 전체 컨텍스트 로딩 확인.
+
+- **2026-08-19 — P1-05**: `handleRelatedPullRequestMergeEvent`가 `isMerging=true`만 세팅하고 실제 재병합/충돌 재검사를 전혀 하지 않아, 관련 브랜치에 push가 일어나도 PR 상태가 "병합중"에 영구히 멈춰있던 문제 수정.
+  - 이제 관련 PR마다 이미 존재하던 `PullRequestService.attemptMerge()`(dry-run 병합, `isConflict` 갱신)를 실제로 호출해 재검사하고, 처리 후 `isMerging`을 다시 `false`로 되돌린다(예외가 나도 마찬가지 — `attemptMerge` 실패가 PR을 "병합중" 상태로 영구 고정시키지 않도록).
+  - 충돌 상태가 실제로 바뀐 경우(없음→발생, 발생→해소)에만 `NotificationEvent`를 발행 — P0-01(알림 메일)·P0-03(웹훅)이 이미 이 이벤트를 구독하고 있어 별도 배선 없이 자동으로 메일/웹훅까지 나간다.
+  - **범위 조정**: yona `PullRequestActor.processPullRequestMerging`의 "새 커밋이 추가되면 `PullRequestEvent` 타임라인에 커밋 이벤트 추가" 부분은 `PullRequestEvent`(P1-08) 부재로 이번 패스에서 다루지 않음 — 충돌 상태 변화 알림까지만 구현.
+  - 테스트: `PullRequestMergeEventListenerSpec.kt`(신규) 5 tests(재검사 후 isMerging 복구, 충돌 발생/해소 시 알림 발행, 상태 변화 없으면 미발행, 예외 발생해도 isMerging 복구). 기존 `PullRequestServiceSpec.kt`(실제 MariaDB+git) 재실행으로 회귀 없음 확인. 커버리지 INSTRUCTION 86%(449/520, 파일 전체 — 기존 메서드 포함).
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.
