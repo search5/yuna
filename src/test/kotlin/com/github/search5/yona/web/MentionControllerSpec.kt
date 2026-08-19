@@ -14,11 +14,16 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.watch.WatchRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.mockk.every
@@ -44,6 +49,10 @@ class MentionControllerSpec : DescribeSpec({
     val postingCommentRepository = mockk<PostingCommentRepository>()
     val pullRequestRepository = mockk<PullRequestRepository>()
     val watchRepository = mockk<WatchRepository>()
+    val repositoryService = mockk<RepositoryService>()
+    val commentThreadRepository = mockk<CommentThreadRepository>()
+    val reviewCommentRepository = mockk<ReviewCommentRepository>()
+    val commitCommentRepository = mockk<CommitCommentRepository>()
 
     val mentionController = MentionController(
         projectRepository,
@@ -55,14 +64,19 @@ class MentionControllerSpec : DescribeSpec({
         postingRepository,
         postingCommentRepository,
         pullRequestRepository,
-        watchRepository
+        watchRepository,
+        repositoryService,
+        commentThreadRepository,
+        reviewCommentRepository,
+        commitCommentRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(mentionController).build()
 
     beforeTest {
         io.mockk.clearMocks(
             projectRepository, projectUserRepository, organizationUserRepository, issueRepository, userRepository,
-            issueCommentRepository, postingRepository, postingCommentRepository, pullRequestRepository, watchRepository
+            issueCommentRepository, postingRepository, postingCommentRepository, pullRequestRepository, watchRepository,
+            repositoryService, commentThreadRepository, reviewCommentRepository, commitCommentRepository
         )
         // query가 비어있는(=멤버 후보 수집) 분기에서 P1-42가 추가한 후보 소스들은 기본적으로 비어있다고 스텁한다.
         every { issueRepository.findByProject(any()) } returns emptyList()
@@ -252,6 +266,113 @@ class MentionControllerSpec : DescribeSpec({
             )
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.result[0].loginid").value("sharer1"))
+        }
+
+        describe("GET /api/{owner}/{projectName}/mentionListAtCommitDiff (P1-43)") {
+            it("커밋 작성자와 코드 댓글 작성자를 후보에 포함해야 한다") {
+                val project = Project(id = 30L, name = "cd1", owner = "owner", projectScope = ProjectScope.PRIVATE, vcs = "GIT")
+                val commitAuthor = User(id = 20L, loginId = "committer1", name = "커미터")
+                val codeCommenter = User(id = 21L, loginId = "codeCommenter1", name = "코드댓글러")
+                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>()
+                val repo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                val thread = com.github.search5.yona.domain.pullrequest.CodeCommentThread(
+                    id = 900L, project = project, commitId = "abc123",
+                    codeRange = com.github.search5.yona.domain.support.CodeRange(
+                        path = "a.kt", startSide = com.github.search5.yona.domain.support.CodeRange.Side.B,
+                        startLine = 1, startColumn = 0,
+                        endSide = com.github.search5.yona.domain.support.CodeRange.Side.B, endLine = 1, endColumn = 0
+                    )
+                )
+                val reviewComment = com.github.search5.yona.domain.pullrequest.ReviewComment(
+                    contents = "댓글", thread = thread,
+                    author = com.github.search5.yona.domain.user.UserIdent(codeCommenter)
+                )
+
+                every { projectRepository.findByOwnerAndName("owner", "cd1") } returns Optional.of(project)
+                every { userRepository.findByLoginId("me") } returns Optional.of(me)
+                every { projectUserRepository.existsByProjectIdAndUserId(30L, 1L) } returns true
+                every { projectUserRepository.findByProjectId(30L) } returns emptyList()
+                every { repositoryService.getRepository(project) } returns repo
+                every { repo.getCommit("abc123") } returns commit
+                every { commit.getAuthor() } returns commitAuthor
+                every { commit.getAuthorEmail() } returns "committer1@yona.io"
+                every { userRepository.findByLoginId("committer1") } returns Optional.of(commitAuthor)
+                every {
+                    commentThreadRepository.findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(project, "abc123")
+                } returns listOf(thread)
+                every { reviewCommentRepository.findByThreadIdOrderByCreatedDateAsc(900L) } returns listOf(reviewComment)
+                every { userRepository.findByLoginId("codeCommenter1") } returns Optional.of(codeCommenter)
+
+                mockMvc.perform(
+                    get("/api/owner/cd1/mentionListAtCommitDiff")
+                        .param("commitId", "abc123")
+                        .param("mentionType", "user")
+                        .principal(meAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.result[0].loginid").value("committer1"))
+                    .andExpect(jsonPath("$.result[1].loginid").value("codeCommenter1"))
+            }
+        }
+
+        describe("GET /api/{owner}/{projectName}/mentionListAtPullRequest (P1-43)") {
+            it("PR 코드리뷰 댓글 작성자와 PR contributor를 후보에 포함해야 한다") {
+                val project = Project(id = 31L, name = "pr1", owner = "owner", projectScope = ProjectScope.PRIVATE, vcs = "GIT")
+                val contributor = User(id = 22L, loginId = "contributor1", name = "기여자")
+                val reviewer = User(id = 23L, loginId = "reviewer1", name = "리뷰어")
+                val pullRequest = PullRequest(
+                    id = 950L, title = "PR", toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature", contributor = contributor, number = 5L
+                )
+                val thread = com.github.search5.yona.domain.pullrequest.CodeCommentThread(
+                    id = 901L, project = project, pullRequest = pullRequest, commitId = "def456",
+                    codeRange = com.github.search5.yona.domain.support.CodeRange(
+                        path = "b.kt", startSide = com.github.search5.yona.domain.support.CodeRange.Side.B,
+                        startLine = 1, startColumn = 0,
+                        endSide = com.github.search5.yona.domain.support.CodeRange.Side.B, endLine = 1, endColumn = 0
+                    )
+                )
+                val reviewComment = com.github.search5.yona.domain.pullrequest.ReviewComment(
+                    contents = "리뷰", thread = thread,
+                    author = com.github.search5.yona.domain.user.UserIdent(reviewer)
+                )
+
+                every { projectRepository.findByOwnerAndName("owner", "pr1") } returns Optional.of(project)
+                every { userRepository.findByLoginId("me") } returns Optional.of(me)
+                every { projectUserRepository.existsByProjectIdAndUserId(31L, 1L) } returns true
+                every { projectUserRepository.findByProjectId(31L) } returns emptyList()
+                every { pullRequestRepository.findById(950L) } returns Optional.of(pullRequest)
+                every { commentThreadRepository.findByPullRequest(pullRequest) } returns listOf(thread)
+                every { reviewCommentRepository.findByThreadIdOrderByCreatedDateAsc(901L) } returns listOf(reviewComment)
+                every { userRepository.findByLoginId("reviewer1") } returns Optional.of(reviewer)
+
+                mockMvc.perform(
+                    get("/api/owner/pr1/mentionListAtPullRequest")
+                        .param("pullRequestId", "950")
+                        .param("mentionType", "user")
+                        .principal(meAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.result[0].loginid").value("reviewer1"))
+                    .andExpect(jsonPath("$.result[1].loginid").value("contributor1"))
+            }
+
+            it("존재하지 않는 PR이면 404를 반환해야 한다") {
+                val project = Project(id = 32L, name = "pr2", owner = "owner", projectScope = ProjectScope.PRIVATE)
+
+                every { projectRepository.findByOwnerAndName("owner", "pr2") } returns Optional.of(project)
+                every { userRepository.findByLoginId("me") } returns Optional.of(me)
+                every { projectUserRepository.existsByProjectIdAndUserId(32L, 1L) } returns true
+                every { pullRequestRepository.findById(9999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    get("/api/owner/pr2/mentionListAtPullRequest")
+                        .param("pullRequestId", "9999")
+                        .param("mentionType", "user")
+                        .principal(meAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
         }
 
         it("mentionType=issue: 최근 이슈 목록을 name/issueNo/title로 반환해야 한다") {
