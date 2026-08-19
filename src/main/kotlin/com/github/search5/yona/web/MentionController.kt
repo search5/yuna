@@ -10,9 +10,14 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.watch.WatchRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
@@ -26,9 +31,7 @@ import org.springframework.web.bind.annotation.RestController
 private const val MENTION_ADMIN_LOGIN_ID = "admin"
 private const val ISSUE_MENTION_SHOW_LIMIT = 20
 
-// yona ProjectApp.mentionList() 대응 (P1-14, P1-42). mentionListAtCommitDiff/mentionListAtPullRequest
-// (커밋/PR 화면 전용 변형, 커밋 작성자/코드댓글 작성자/PR 기여자 등 추가 후보 소스)는
-// 이번 패스에서도 다루지 않음 - P1-43으로 분리(아래 백로그 참고).
+// yona ProjectApp.mentionList()/mentionListAtCommitDiff()/mentionListAtPullRequest() 대응 (P1-14, P1-42, P1-43).
 @RestController
 class MentionController(
     private val projectRepository: ProjectRepository,
@@ -40,7 +43,11 @@ class MentionController(
     private val postingRepository: PostingRepository,
     private val postingCommentRepository: PostingCommentRepository,
     private val pullRequestRepository: PullRequestRepository,
-    private val watchRepository: WatchRepository
+    private val watchRepository: WatchRepository,
+    private val repositoryService: RepositoryService,
+    private val commentThreadRepository: CommentThreadRepository,
+    private val reviewCommentRepository: ReviewCommentRepository,
+    private val commitCommentRepository: CommitCommentRepository
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -120,7 +127,17 @@ class MentionController(
             candidates[loginUserId] = loginUser
         }
 
-        val userMentions = candidates.values
+        val userMentions = toMentionMaps(candidates.values).toMutableList()
+
+        addProjectNameToMentionList(userMentions, project)
+        addOrganizationNameToMentionList(userMentions, project)
+
+        return userMentions
+    }
+
+    // yona collectedUsersToMentionList 대응
+    private fun toMentionMaps(users: Collection<User>): List<Map<String, String>> {
+        return users
             .filter { it.loginId.isNotBlank() && it.loginId != MENTION_ADMIN_LOGIN_ID }
             .map { user ->
                 mapOf(
@@ -130,12 +147,187 @@ class MentionController(
                     "image" to user.avatarUrl
                 )
             }
-            .toMutableList()
+    }
 
-        addProjectNameToMentionList(userMentions, project)
-        addOrganizationNameToMentionList(userMentions, project)
+    // yona ProjectApp.mentionListAtCommitDiff() 대응 (P1-43)
+    @GetMapping("/api/{owner}/{projectName}/mentionListAtCommitDiff")
+    fun mentionListAtCommitDiff(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam(required = false, defaultValue = "") commitId: String,
+        @RequestParam(required = false, defaultValue = "-1") pullRequestId: Long,
+        @RequestParam(required = false, defaultValue = "") query: String,
+        @RequestParam(required = false, defaultValue = "") mentionType: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
 
-        return userMentions
+        val loginUser = getLoginUser(authentication)
+        if (!checkReadPermission(project, loginUser)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val fromProject = if (pullRequestId != -1L) {
+            pullRequestRepository.findById(pullRequestId).orElse(null)?.fromProject ?: project
+        } else {
+            project
+        }
+
+        val result = mutableMapOf<String, List<Map<String, String>>>()
+
+        if (mentionType.equals("user", ignoreCase = true)) {
+            val candidates = LinkedHashMap<Long, User>()
+            fun addCandidate(user: User?) {
+                val id = user?.id ?: return
+                candidates.putIfAbsent(id, user)
+            }
+
+            if (query.isBlank()) {
+                if (commitId.isNotBlank()) {
+                    collectCommitAuthor(fromProject, commitId).forEach { addCandidate(it) }
+                    collectCodeCommenters(fromProject, commitId).forEach { addCandidate(it) }
+                }
+                projectUserRepository.findByProjectId(project.id!!).forEach { addCandidate(it.user) }
+                project.organization?.let { org ->
+                    organizationUserRepository.findByOrganizationId(org.id!!).forEach { addCandidate(it.user) }
+                }
+            } else {
+                userRepository.searchUsers(query, PageRequest.of(0, ISSUE_MENTION_SHOW_LIMIT)).content.forEach { addCandidate(it) }
+            }
+
+            val loginUserId = loginUser?.id
+            if (loginUserId != null) {
+                candidates.remove(loginUserId)
+                candidates[loginUserId] = loginUser
+            }
+
+            result["result"] = toMentionMaps(candidates.values)
+        }
+
+        if (mentionType.equals("issue", ignoreCase = true)) {
+            result["result"] = buildIssueMentionList(project, query)
+        }
+
+        return ResponseEntity.ok(result)
+    }
+
+    // yona ProjectApp.mentionListAtPullRequest() 대응 (P1-43)
+    @GetMapping("/api/{owner}/{projectName}/mentionListAtPullRequest")
+    fun mentionListAtPullRequest(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam(required = false, defaultValue = "") commitId: String,
+        @RequestParam pullRequestId: Long,
+        @RequestParam(required = false, defaultValue = "") query: String,
+        @RequestParam(required = false, defaultValue = "") mentionType: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val loginUser = getLoginUser(authentication)
+        if (!checkReadPermission(project, loginUser)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val pullRequest = pullRequestRepository.findById(pullRequestId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val result = mutableMapOf<String, List<Map<String, String>>>()
+
+        if (mentionType.equals("user", ignoreCase = true)) {
+            val candidates = LinkedHashMap<Long, User>()
+            fun addCandidate(user: User?) {
+                val id = user?.id ?: return
+                candidates.putIfAbsent(id, user)
+            }
+
+            if (query.isBlank()) {
+                collectCommentAuthors(pullRequest).forEach { addCandidate(it) }
+                projectUserRepository.findByProjectId(project.id!!).forEach { addCandidate(it.user) }
+                project.organization?.let { org ->
+                    organizationUserRepository.findByOrganizationId(org.id!!).forEach { addCandidate(it.user) }
+                }
+                if (commitId.isNotBlank()) {
+                    collectCommitAuthor(pullRequest.fromProject, commitId).forEach { addCandidate(it) }
+                }
+            } else {
+                userRepository.searchUsers(query, PageRequest.of(0, ISSUE_MENTION_SHOW_LIMIT)).content.forEach { addCandidate(it) }
+            }
+
+            addCandidate(pullRequest.contributor)
+
+            val loginUserId = loginUser?.id
+            if (loginUserId != null) {
+                candidates.remove(loginUserId)
+                candidates[loginUserId] = loginUser
+            }
+
+            result["result"] = toMentionMaps(candidates.values)
+        }
+
+        if (mentionType.equals("issue", ignoreCase = true)) {
+            result["result"] = buildIssueMentionList(project, query)
+        }
+
+        return ResponseEntity.ok(result)
+    }
+
+    // yona addCommitAuthor 대응 - 커밋 작성자를 이메일로 조회하고, email prefix를 loginId로 보는 폴백 검색도 함께 시도한다.
+    private fun collectCommitAuthor(project: Project, commitId: String): List<User> {
+        val commit = try {
+            repositoryService.getRepository(project).getCommit(commitId)
+        } catch (e: Exception) {
+            null
+        } ?: return emptyList()
+
+        val result = mutableListOf<User>()
+        commit.getAuthor()?.let { result.add(it) }
+
+        val authorEmail = commit.getAuthorEmail()
+        if (authorEmail != null && authorEmail.contains("@")) {
+            val byEmailPrefix = userRepository.findByLoginId(authorEmail.substringBefore("@")).orElse(null)
+            if (byEmailPrefix != null && result.none { it.id == byEmailPrefix.id }) {
+                result.add(byEmailPrefix)
+            }
+        }
+        return result
+    }
+
+    // yona addCodeCommenters 대응 - 특정 커밋(PR에 속하지 않은)에 달린 코드 댓글의 작성자를 최근 순으로 모은다.
+    private fun collectCodeCommenters(project: Project, commitId: String): List<User> {
+        val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"
+        val loginIds = LinkedHashSet<String>()
+
+        if (!isSvn) {
+            val threads = commentThreadRepository
+                .findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(project, commitId)
+                .reversed()
+            for (thread in threads) {
+                reviewCommentRepository.findByThreadIdOrderByCreatedDateAsc(thread.id!!).forEach { comment ->
+                    comment.author?.loginId?.let { loginIds.remove(it); loginIds.add(it) }
+                }
+            }
+        } else {
+            commitCommentRepository.findByProjectAndCommitIdOrderByCreatedDateAsc(project, commitId).forEach { comment ->
+                comment.author?.loginId?.let { loginIds.remove(it); loginIds.add(it) }
+            }
+        }
+
+        return loginIds.toList().reversed().mapNotNull { userRepository.findByLoginId(it).orElse(null) }
+    }
+
+    // yona addCommentAuthors 대응 - PR의 코드리뷰 댓글 작성자를 최근 순으로 모은다.
+    private fun collectCommentAuthors(pullRequest: PullRequest): List<User> {
+        val threads = commentThreadRepository.findByPullRequest(pullRequest)
+        val loginIds = LinkedHashSet<String>()
+        for (thread in threads) {
+            reviewCommentRepository.findByThreadIdOrderByCreatedDateAsc(thread.id!!).forEach { comment ->
+                comment.author?.loginId?.let { loginIds.remove(it); loginIds.add(it) }
+            }
+        }
+        return loginIds.toList().reversed().mapNotNull { userRepository.findByLoginId(it).orElse(null) }
     }
 
     // yona collectAuthorAndCommenter 대응 - 댓글 작성자를 최근 순으로, 마지막에 게시물 작성자를 추가한다.
