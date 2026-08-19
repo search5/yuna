@@ -728,4 +728,15 @@ class GitRepository(
             }
         }
     }
+
+    override fun getBlobId(revision: String, path: String): String? {
+        if (revision.isEmpty()) return null
+        return useRepository { repo ->
+            val objectId = repo.resolve(revision) ?: return@useRepository null
+            val revWalk = RevWalk(repo)
+            val tree = revWalk.parseTree(objectId)
+            val treeWalk = TreeWalk.forPath(repo, path, tree) ?: return@useRepository null
+            treeWalk.getObjectId(0).name
+        }
+    }
 }
