@@ -239,6 +239,17 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
     fun countByParentId(parentId: Long): Long
     fun countByParentIdAndState(parentId: Long, state: State): Long
     fun findByParentId(parentId: Long): List<Issue>
+
+    // yona ProjectApp.getMentionIssueList() 대응 (P1-14): @이슈번호 멘션 자동완성용 최근 이슈 검색
+    @Query("""
+        SELECT i FROM Issue i
+        WHERE i.project = :project
+          AND (:query = ''
+               OR LOWER(i.title) LIKE LOWER(CONCAT('%', :query, '%'))
+               OR CAST(i.number AS string) LIKE CONCAT(:query, '%'))
+        ORDER BY i.createdDate DESC
+    """)
+    fun findForMention(@Param("project") project: Project, @Param("query") query: String, pageable: Pageable): List<Issue>
 }
 
 
