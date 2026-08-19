@@ -16,9 +16,8 @@ import javax.sql.DataSource
  *
  * 복원 시 테이블 전체를 DELETE 후 백업 내용을 다시 INSERT한다(= 완전 교체).
  * yona는 원본 PK를 그대로 복원하는데, yuna도 auto-increment 컬럼을 포함해 백업된
- * 값 그대로 INSERT한다 — 신규 채번과 충돌하지 않으려면 복원 후 auto-increment
- * 시퀀스를 최댓값 이상으로 재설정해야 할 수 있다(운영 배포 가이드에 기술 필요,
- * docs/PARITY_BACKLOG.md 후속 항목 참고).
+ * 값 그대로 INSERT한다 — 신규 채번과 충돌하지 않도록 테이블마다 복원 직후
+ * auto-increment/시퀀스를 백업된 최댓값+1로 재설정한다(`resetAutoIncrement`, P1-33).
  */
 @Service
 class DataBackupServiceImpl(
@@ -54,6 +53,7 @@ class DataBackupServiceImpl(
                 for (row in rows) {
                     insertRow(table, row)
                 }
+                resetAutoIncrement(table, dialect, rows)
             }
             logger.info("데이터 복원 완료: ${dump.size}개 테이블")
         } finally {
@@ -82,6 +82,35 @@ class DataBackupServiceImpl(
         val placeholders = columns.joinToString(",") { "?" }
         val sql = "INSERT INTO $table (${columns.joinToString(",")}) VALUES ($placeholders)"
         jdbcTemplate.update(sql, *columns.map { row[it] }.toTypedArray())
+    }
+
+    // yuna 자체 설계 이슈 대응 (P1-33): 백업된 PK를 명시적으로 그대로 INSERT하므로,
+    // 이후 신규 행이 auto-increment/시퀀스로 채번될 때 이미 복원된 PK와 충돌할 수 있다.
+    // MySQL/MariaDB의 AUTO_INCREMENT는 명시적 INSERT 값을 보고 스스로 다음 채번을 올려주지만,
+    // PostgreSQL의 시퀀스는 그렇지 않아(nextval()이 실제 행 데이터와 완전히 무관하게 관리됨)
+    // 복원 직후 첫 신규 insert가 PK 충돌로 실패할 수 있다(P1-34에서 Postgres 통합테스트로 실측 확인).
+    // id 컬럼이 없는 조인 테이블 등은 그냥 스킵한다.
+    private fun resetAutoIncrement(table: String, dialect: Dialect, rows: List<Map<String, Any?>>) {
+        val maxId = rows.mapNotNull { (it["id"] as? Number)?.toLong() }.maxOrNull() ?: return
+
+        when (dialect) {
+            Dialect.MYSQL_COMPATIBLE -> {
+                // 실측상 MariaDB는 이미 명시적 INSERT 값을 보고 자동으로 채번을 올리지만,
+                // 방어적으로 명시 재설정해 다른 MySQL 계열/설정에서도 안전하게 만든다.
+                jdbcTemplate.execute("ALTER TABLE $table AUTO_INCREMENT = ${maxId + 1}")
+            }
+            Dialect.POSTGRES -> {
+                val sequenceName = jdbcTemplate.queryForObject(
+                    "SELECT pg_get_serial_sequence(?, 'id')",
+                    String::class.java,
+                    table
+                )
+                if (sequenceName != null) {
+                    jdbcTemplate.queryForObject("SELECT setval(?, ?, true)", Long::class.java, sequenceName, maxId)
+                }
+            }
+            Dialect.OTHER -> logger.warn("알 수 없는 DB 방언이라 $table 의 auto-increment/시퀀스를 재설정하지 않습니다")
+        }
     }
 
     private fun detectDialect(): Dialect {
