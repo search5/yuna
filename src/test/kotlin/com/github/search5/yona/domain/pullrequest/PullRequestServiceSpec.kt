@@ -541,6 +541,28 @@ class PullRequestServiceSpec @Autowired constructor(
                 restoredBranch!!.headCommit.getId() shouldBe deleted.lastCommitId
             }
 
+            it("PR을 생성하면 NotificationEvent(NEW_PULL_REQUEST)와 PullRequestEvent가 모두 생성되어야 한다(P1-39)") {
+                val created = pullRequestService.createPullRequest(
+                    title = "신규 PR 이벤트 테스트",
+                    body = "본문 내용",
+                    fromProjectId = fromProject.id!!,
+                    toProjectId = toProject.id!!,
+                    fromBranch = "refs/heads/master",
+                    toBranch = "refs/heads/master",
+                    contributor = contributor
+                )
+
+                val notiEvents = notificationEventRepository.findAll()
+                notiEvents.size shouldBe 1
+                notiEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST
+                notiEvents.first().newValue shouldBe "본문 내용"
+
+                val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(created)
+                prEvents.size shouldBe 1
+                prEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST
+                prEvents.first().senderLoginId shouldBe contributor.loginId
+            }
+
             it("PR 상태를 변경하면 NotificationEvent와 PullRequestEvent가 모두 생성되어야 한다") {
                 val pr = pullRequestRepository.save(
                     PullRequest(

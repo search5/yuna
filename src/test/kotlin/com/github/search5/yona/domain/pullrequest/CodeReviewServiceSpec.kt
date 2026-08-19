@@ -24,7 +24,9 @@ class CodeReviewServiceSpec @Autowired constructor(
     private val userRepository: UserRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val pullRequestCommitRepository: PullRequestCommitRepository,
-    private val repositoryService: RepositoryService
+    private val repositoryService: RepositoryService,
+    private val pullRequestEventRepository: PullRequestEventRepository,
+    private val notificationEventRepository: com.github.search5.yona.domain.notification.NotificationEventRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -38,6 +40,8 @@ class CodeReviewServiceSpec @Autowired constructor(
             beforeEach {
                 reviewCommentRepository.deleteAll()
                 commentThreadRepository.deleteAll()
+                pullRequestEventRepository.deleteAll()
+                notificationEventRepository.deleteAll()
                 pullRequestRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
@@ -92,6 +96,26 @@ class CodeReviewServiceSpec @Autowired constructor(
                 val codeThread = comment.thread as CodeCommentThread
                 codeThread.codeRange.path shouldBe "src/main/kotlin/App.kt"
                 codeThread.state shouldBe CommentThread.ThreadState.OPEN
+            }
+
+            it("리뷰어를 추가/해제하면 NotificationEvent와 PullRequestEvent가 모두 생성되어야 한다(P1-39)") {
+                codeReviewService.addReviewer(pullRequest.id!!, otherUser.id!!)
+
+                val prEventsAfterAdd = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
+                prEventsAfterAdd.size shouldBe 1
+                prEventsAfterAdd.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+                prEventsAfterAdd.first().newValue shouldBe "DONE"
+                prEventsAfterAdd.first().senderLoginId shouldBe otherUser.loginId
+
+                notificationEventRepository.findAll().size shouldBe 1
+
+                codeReviewService.removeReviewer(pullRequest.id!!, otherUser.id!!)
+
+                val prEventsAfterRemove = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
+                prEventsAfterRemove.size shouldBe 2
+                prEventsAfterRemove.last().newValue shouldBe "CANCEL"
+
+                notificationEventRepository.findAll().size shouldBe 2
             }
 
             it("2. 기존 스레드에 대댓글을 달면 동일 스레드 하위에 묶여야 한다") {
