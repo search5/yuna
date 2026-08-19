@@ -4,19 +4,29 @@ import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.notification.NotificationEvent
+import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestService
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import org.slf4j.LoggerFactory
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 
 @Component
 class PullRequestMergeEventListener(
     private val pullRequestRepository: PullRequestRepository,
     private val pullRequestCommitRepository: PullRequestCommitRepository,
     private val issueRepository: IssueRepository,
-    private val issueService: IssueService
+    private val issueService: IssueService,
+    private val pullRequestService: PullRequestService,
+    private val notificationEventRepository: NotificationEventRepository,
+    private val eventPublisher: ApplicationEventPublisher
 ) {
     private val logger = LoggerFactory.getLogger(PullRequestMergeEventListener::class.java)
 
@@ -92,18 +102,63 @@ class PullRequestMergeEventListener(
         }
     }
 
+    // yona actors/RelatedPullRequestMergingActor.java + PullRequestActor.processPullRequestMerging 대응.
+    // 다른 PR과 관련된 브랜치에 push가 발생했을 때, 관련 PR들의 병합/충돌 상태를 다시 검사한다.
+    // 이전에는 isMerging=true만 세팅하고 실제 재검사를 하지 않아 상태가 영구히 "병합중"으로
+    // 멈춰있던 버그였다(P1-05).
     @Async("taskExecutor")
     @EventListener
     @Transactional
     fun handleRelatedPullRequestMergeEvent(event: RelatedPullRequestMergeEvent) {
         logger.info("Handling RelatedPullRequestMergeEvent asynchronously for project: ${event.project.name}, branch: ${event.branch}")
-        
+
         val relatedPullRequests = pullRequestRepository.findRelatedPullRequests(event.project, event.branch)
         for (pullRequest in relatedPullRequests) {
+            val id = pullRequest.id ?: continue
+            val wasConflict = pullRequest.isConflict ?: false
+
             pullRequest.isMerging = true
             pullRequestRepository.save(pullRequest)
+
+            try {
+                pullRequestService.attemptMerge(id)
+            } catch (e: Exception) {
+                logger.error("[PR MERGE] Failed to re-check merge for related PR ID: $id", e)
+            }
+
+            val refreshed = pullRequestRepository.findById(id).orElse(pullRequest)
+            val isConflictNow = refreshed.isConflict ?: false
+
+            if (wasConflict != isConflictNow) {
+                notifyConflictStateChanged(refreshed, event.sender, isConflictNow)
+            }
+
+            refreshed.isMerging = false
+            pullRequestRepository.save(refreshed)
         }
-        
-        logger.info("[PR MERGE] Successfully updated ${relatedPullRequests.size} related PRs status for project: ${event.project.name}, branch: ${event.branch}")
+
+        logger.info("[PR MERGE] Successfully re-checked ${relatedPullRequests.size} related PRs for project: ${event.project.name}, branch: ${event.branch}")
+    }
+
+    private fun notifyConflictStateChanged(
+        pullRequest: com.github.search5.yona.domain.pullrequest.PullRequest,
+        sender: com.github.search5.yona.domain.user.User,
+        isConflictNow: Boolean
+    ) {
+        val stateLabel = if (isConflictNow) "충돌이 발생했습니다" else "충돌이 해소되었습니다"
+        val title = "[${pullRequest.toProject.name}] PR #${pullRequest.number} 관련 브랜치 변경으로 $stateLabel"
+
+        val notificationEvent = NotificationEvent(
+            title = title,
+            senderId = sender.id,
+            created = Instant.now(),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = pullRequest.id.toString(),
+            eventType = EventType.PULL_REQUEST_MERGED,
+            newValue = title,
+            receivers = mutableSetOf(pullRequest.contributor).apply { removeIf { it.id == sender.id } }
+        )
+        notificationEventRepository.save(notificationEvent)
+        eventPublisher.publishEvent(notificationEvent)
     }
 }
