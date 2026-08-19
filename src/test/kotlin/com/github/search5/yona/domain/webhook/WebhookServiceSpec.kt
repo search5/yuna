@@ -11,7 +11,34 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription
+import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository
+import org.eclipse.jgit.lib.CommitBuilder
+import org.eclipse.jgit.lib.Constants
+import org.eclipse.jgit.lib.FileMode
+import org.eclipse.jgit.lib.PersonIdent
+import org.eclipse.jgit.lib.TreeFormatter
+import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.revwalk.RevWalk
 import java.util.Optional
+
+private fun testCommit(message: String, authorName: String = "tester", authorEmail: String = "tester@yona.io"): RevCommit {
+    val repo = InMemoryRepository(DfsRepositoryDescription())
+    val inserter = repo.newObjectInserter()
+    val blobId = inserter.insert(Constants.OBJ_BLOB, "content".toByteArray())
+    val tree = TreeFormatter()
+    tree.append("file.txt", FileMode.REGULAR_FILE, blobId)
+    val treeId = inserter.insert(tree)
+    val commitBuilder = CommitBuilder()
+    commitBuilder.setTreeId(treeId)
+    val ident = PersonIdent(authorName, authorEmail)
+    commitBuilder.author = ident
+    commitBuilder.committer = ident
+    commitBuilder.message = message
+    val commitId = inserter.insert(commitBuilder)
+    inserter.flush()
+    return RevWalk(repo).use { it.parseCommit(commitId) }
+}
 
 class WebhookServiceSpec : DescribeSpec({
     val webhookRepository = mockk<WebhookRepository>()
@@ -137,6 +164,32 @@ class WebhookServiceSpec : DescribeSpec({
                 val jsonWebhookNoGitPush = webhookOf(gitPush = false, type = WebhookType.JSON)
 
                 webhookService.shouldDeliverToWebhook(jsonWebhookNoGitPush, EventType.NEW_COMMIT) shouldBe true
+            }
+        }
+
+        // yona Webhook.java의 push용 buildRequestBody(commits, refNames, sender) 대응 (P2-04).
+        describe("buildPayload - JSON 포맷 push 페이로드에 커밋 목록이 포함돼야 한다") {
+            it("PushedCommits 리소스면 ref/commits/head_commit/sender/pusher/repository를 포함해야 한다") {
+                val jsonWebhook = Webhook(
+                    id = 30L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.JSON
+                )
+                val sender = User(id = 5L, loginId = "gildong", name = "홍길동", email = "gildong@yona.io")
+                val commit = testCommit("fix bug", authorName = "gildong", authorEmail = "gildong@yona.io")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, sender, pushed)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.get("ref").get(0).asText() shouldBe "refs/heads/master"
+                json.get("commits").size() shouldBe 1
+                json.get("commits").get(0).get("id").asText() shouldBe commit.name
+                json.get("commits").get(0).get("message").asText() shouldBe "fix bug"
+                json.get("commits").get(0).get("author").get("name").asText() shouldBe "gildong"
+                json.get("head_commit").get("id").asText() shouldBe commit.name
+                json.get("sender").get("login").asText() shouldBe "gildong"
+                json.get("pusher").get("email").asText() shouldBe "gildong@yona.io"
+                json.get("repository").get("name").asText() shouldBe "test-project"
             }
         }
     }

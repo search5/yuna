@@ -96,13 +96,19 @@
 | P2-01 | [x] | ReservedWordsValidator(예약어 검증) 없음 | **완료** — 아래 완료 로그 참고 |
 | P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음. P1-19에서 재확인 — `AbstractPosting.history`/`AbstractPostingApp.addToHistory()`(yona `utils.diff_match_patch` 기반 워드단위 diff)도 이 항목과 동일한 미구현 의존성(diff_match_patch 라이브러리 포팅)이라 함께 묶임. yuna `Posting.history` 필드 자체는 이미 존재하나 실제로 채워지지 않음 |
 | P2-03 | [x] | 사이트 관리자 아바타 지정 API가 빈 스텁 | **완료** — 아래 완료 로그 참고 |
-| P2-04 | [ ] | 웹훅 JSON 페이로드 단순화 | 커밋 리스트 없이 event/sender/project만 포함 |
+| P2-04 | [x] | 웹훅 JSON 페이로드 단순화 | **완료** — 아래 완료 로그 참고 |
 | P2-05 | [ ] | 접근제어가 컨트롤러별 산발적 인라인 체크로 분산 | 전 컨트롤러(~40개) 일관성 전수 미검증 |
 | P2-06 | [x] | SVN 컨트롤러 라우트 커버리지 오탐 | **완료(검증만, 코드 변경 없음)** — `SvnController.kt`에 `@RequestMapping("/svn/{ownerName}/{projectName}/**")` catch-all이 여전히 존재함을 2026-08-20 재확인. 실제 결함 아님 |
 
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P2-04**: git push(NEW_COMMIT) 이벤트의 `WebhookType.JSON` 페이로드가 커밋 목록 없이 `{event, sender, project, resourceId, resourceType}`만 담고 있던 문제 수정. yona `models/Webhook.java`의 push 전용 `buildRequestBody(commits, refNames, sender)`(JSON 포맷)를 확인한 결과 GitHub 웹훅과 유사한 `ref`/`commits`(각 커밋의 id/message/timestamp/url/author/committer)/`head_commit`/`sender`/`pusher`/`repository` 구조였다.
+  - `WebhookServiceImpl.buildPayload()`의 `WebhookType.JSON` 분기에서 리소스가 `PushedCommits`이면 신규 `buildPushPayload()`로 위임하도록 분기 추가 — 이슈/게시글/댓글/PR 등 다른 리소스 타입의 JSON 페이로드는 기존 단순 구조를 그대로 유지(이 백로그 항목이 지목한 결함은 "커밋 리스트 누락"이라 범위를 push 페이로드로 한정).
+  - `buildPushPayload()`: `ref`(브랜치명 배열), `commits`(각 커밋의 SHA/전체 메시지/작성 시각/URL/author·committer 이름·이메일), `head_commit`(첫 커밋과 동일 객체), `sender`(loginId/id/avatar_url/type), `pusher`(name/email), `repository`(id/name/owner/html_url/private) 구성. `testable`을 위해 `buildPayload`를 `private`→`internal`로 변경.
+  - 테스트: `WebhookServiceSpec.kt` +1 test(JGit `RevCommit`을 실제로 구성해 push 페이로드의 각 필드를 검증). 인접 회귀: `domain/webhook/*`, `domain/event/*`(이 페이로드를 실제로 만드는 `GitPostReceiveEventListener` 연동), `YonaApplicationTests` 전체 재실행 통과.
+  - 검증: `./gradlew compileKotlin compileTestKotlin`, `./gradlew test --tests "com.github.search5.yona.domain.webhook.*" --tests "com.github.search5.yona.domain.event.*" --tests "com.github.search5.yona.YonaApplicationTests"` 모두 통과.
 
 - **2026-08-20 — P2-03**: `SiteApiController.setAttachmentToUserAvatar`가 요청을 받고도 아무 것도 하지 않고 `{status: 200}`만 반환하던 빈 스텁이던 문제 수정. 구현 과정에서 형제 엔드포인트 `noAvatarUsers`(11번)도 실제로는 필터링을 전혀 하지 않고 활성 사용자 전원을 반환하던 별개의 버그를 발견해 함께 고쳤다(같은 화면·같은 서비스 메서드가 쓰는 밀접한 코드라 분리하지 않음).
   - yona `SiteApp.setAttachmentToUserAvatar`를 확인한 결과 `avatarFileId`로 첨부파일을 찾아 이미지 MIME 타입인지 검사하고, `email`로 대상 사용자를 찾아 기존 아바타 첨부파일을 지우고 새 첨부파일을 그 자리로 옮기는 로직이었다. yuna의 아바타 모델은 `User.avatarId`라는 영속 필드가 아니라(그 필드는 `@Transient`, 조회 시점에만 채워짐) `Attachment(containerType=USER_AVATAR, containerId=user.id)` 컨테이너 조회 방식(`UserViewController.editUserInfo`가 이미 이 패턴 사용 중)임을 먼저 확인하고 동일한 패턴으로 구현.
