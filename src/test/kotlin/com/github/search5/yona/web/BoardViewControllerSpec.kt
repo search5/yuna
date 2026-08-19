@@ -36,6 +36,7 @@ class BoardViewControllerSpec : DescribeSpec({
     val postingCommentRepository = mockk<PostingCommentRepository>()
     val watchService = mockk<WatchService>()
     val attachmentRepository = mockk<AttachmentRepository>()
+    val repositoryService = mockk<com.github.search5.yona.domain.vcs.RepositoryService>()
     val objectMapper = ObjectMapper()
 
     val boardViewController = BoardViewController(
@@ -47,7 +48,9 @@ class BoardViewControllerSpec : DescribeSpec({
         postingCommentRepository,
         watchService,
         attachmentRepository,
-        objectMapper
+        objectMapper,
+        repositoryService,
+        "/tmp/yuna/git"
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(boardViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())

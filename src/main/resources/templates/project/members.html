@@ -1,190 +1,179 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${project.name} + ' - 멤버 관리'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .member-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-  }
-  .member-avatar {
-      border-radius: 50%;
-      margin-right: 10px;
-  }
-</style>
+<head th:replace="~{site/layout :: head(${project.name} + ' - ' + #{project.members})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
+    
+    <!-- Yona 원본 프로젝트 헤더 및 프로젝트 메뉴 탑재 -->
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'setting')}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <div th:replace="~{project/setting_menu :: menu(${project}, 'members')}"></div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <div class="col-md-9">
-        <div class="member-container">
-          <div th:replace="~{project/setting_menu :: menu(${project}, 'members')}"></div>
-          <h3 style="margin-top: 0; margin-bottom: 20px;">프로젝트 멤버 관리</h3>
-
-          <!-- 멤버 추가 폼 -->
-          <form id="add-member-form" class="form-inline" style="margin-bottom: 30px;">
-            <div class="form-group">
-              <input type="text" id="loginId" class="form-control" placeholder="추가할 사용자 ID" required>
+            <!-- 멤버 추가 폼 -->
+            <div class="inner-bubble">
+                <form class="nm" th:action="@{/{owner}/{name}/members(owner=${project.owner}, name=${project.name})}" method="post" id="addNewMember">
+                    <input type="text" class="text uname" id="loginId" name="loginId" required="required"
+                           autocomplete="off" th:placeholder="#{project.members.addMember}" style="width: 250px; margin-right: 5px;"/>
+                    <button type="submit" class="ybtn ybtn-success"><i class="yobicon-addfriend"></i> <span th:text="#{button.add}">등록</span></button>
+                </form>
             </div>
-            <div class="form-group">
-              <select id="role" class="form-control" required>
-                <option value="MEMBER">MEMBER</option>
-                <option value="MANAGER">MANAGER</option>
-              </select>
-            </div>
-            <button type="submit" class="btn btn-primary">멤버 추가</button>
-          </form>
 
-          <!-- 멤버 리스트 테이블 -->
-          <table class="table table-striped">
-            <thead>
-              <tr>
-                <th>사용자</th>
-                <th>아이디</th>
-                <th>권한</th>
-                <th>관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr th:each="pu : ${projectUsers}">
-                <td style="display: flex; align-items: center;">
-                  <img th:src="${pu.user.avatarUrl != null ? pu.user.avatarUrl : '/images/default-avatar-34.png'}" class="member-avatar" width="28" height="28" alt="avatar"/>
-                  <span th:text="${pu.user.name}">홍길동</span>
-                </td>
-                <td th:text="${pu.user.loginId}">loginId</td>
-                <td th:text="${pu.role.id}">MEMBER</td>
-                <td>
-                  <!-- 본인 제외 및 관리자 권한에 의해 삭제 처리 가능 -->
-                  <button class="btn btn-xs btn-danger delete-member-btn" th:data-user-id="${pu.user.id}" th:text="제거"></button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+            <!-- 멤버 목록 -->
+            <ul class="members project row-fluid" style="list-style: none; padding: 0; margin: 20px 0;">
+                <li class="member span6 span-hard-wrap" th:each="pu : ${projectUsers}" style="margin-bottom: 15px; min-height: 80px; box-sizing: border-box; display: inline-block; float: left;">
+                    <a th:href="@{/user/{loginId}(loginId=${pu.user.loginId})}" class="avatar-wrap mlarge pull-left mr10">
+                        <img th:src="${pu.user.avatarUrl != null ? pu.user.avatarUrl : '/images/default-avatar-128.png'}" width="64" height="64" class="img-rounded">
+                    </a>
+                    <div class="member-name" th:text="${pu.user.name}" style="font-weight: bold; font-size: 16px; margin-top: 5px;">홍길동</div>
+                    <div class="member-id" th:text="'@' + ${pu.user.loginId}" style="color: #666; font-size: 13px;">@loginId</div>
+                    
+                    <div class="member-setting" style="margin-top: 8px;">
+                        <!-- 소유자(Owner)가 아닐 경우만 변경 및 삭제 버튼 노출 -->
+                        <th:block th:if="${project.owner != pu.user.loginId}">
+                            <!-- 권한 변경 드롭다운 -->
+                            <div class="btn-group" th:data-name="'roleof-' + ${pu.user.loginId}" style="display: inline-block; margin-right: 5px;">
+                                <button class="btn dropdown-toggle large" data-toggle="dropdown" type="button">
+                                    <span class="d-label" th:text="#{'user.role.' + ${pu.role.id == 1 ? 'manager' : 'member'}}">MEMBER</span>
+                                    <span class="d-caret"><span class="caret"></span></span>
+                                </button>
+                                <ul class="dropdown-menu flat">
+                                    <li th:data-value="2" th:class="${pu.role.id == 2 ? 'active' : ''}" th:data-selected="${pu.role.id == 2}">
+                                        <a href="javascript:void(0)" class="role-apply-btn" data-role-id="2" th:data-user-id="${pu.user.id}" th:data-login-id="${pu.user.loginId}" th:text="#{user.role.member}">멤버</a>
+                                    </li>
+                                    <li th:data-value="1" th:class="${pu.role.id == 1 ? 'active' : ''}" th:data-selected="${pu.role.id == 1}">
+                                        <a href="javascript:void(0)" class="role-apply-btn" data-role-id="1" th:data-user-id="${pu.user.id}" th:data-login-id="${pu.user.loginId}" th:text="#{user.role.manager}">관리자</a>
+                                    </li>
+                                </ul>
+                            </div>
+                            <!-- 제거 버튼 -->
+                            <a href="javascript:void(0)" class="ybtn ybtn-danger ybtn-small delete-member-btn" th:data-user-id="${pu.user.id}" th:text="#{button.delete}">
+                                제거
+                            </a>
+                        </th:block>
+                        <th:block th:if="${project.owner == pu.user.loginId}">
+                            <span class="label owner" style="background-color: #f89406; color: #fff; padding: 2px 6px; border-radius: 3px;" th:text="#{user.role.owner}">소유자</span>
+                        </th:block>
+                    </div>
+                </li>
+            </ul>
 
-        <div>
-          <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" class="btn btn-default">프로젝트 홈으로</a>
+            <div style="clear: both;"></div>
+
+            <!-- 가입 신청 대기 목록 (Enrolled Users) -->
+            <th:block th:if="${project.enrolledUsers != null and !project.enrolledUsers.isEmpty()}">
+                <legend style="margin-top: 30px;">
+                    <h3 th:text="#{project.member.enrollment.request} + ' (' + ${project.enrolledUsers.size()} + ')'">가입 신청 대기 목록 (1)</h3>
+                </legend>
+                <div class="row-fluid enrollments-wrap" style="margin-bottom: 30px;">
+                    <div class="span2" th:each="user : ${project.enrolledUsers}" style="text-align: center; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-right: 15px; min-height: 140px; display: inline-block; float: left; width: 120px;">
+                        <div style="margin-bottom: 8px;">
+                            <a th:href="@{/user/{loginId}(loginId=${user.loginId})}">
+                                <img th:src="${user.avatarUrl != null ? user.avatarUrl : '/images/default-avatar-128.png'}" height="65" width="65" class="img-circle img-rounded"/>
+                            </a>
+                        </div>
+                        <div style="word-break: break-all; font-size: 13px;">
+                            <span><a th:href="@{/user/{loginId}(loginId=${user.loginId})}"><strong th:text="${user.name}">이름</strong></a></span><br/>
+                            <span th:text="'(' + ${user.loginId} + ')'" style="color: #666; font-size: 11px;">(아이디)</span>
+                            <div style="margin-top: 8px;">
+                                <button type="button" class="ybtn ybtn-info ybtn-mini blue enrollAcceptBtn" th:data-user-id="${user.id}" th:data-loginId="${user.loginId}"><i class="yobicon-addfriend"></i> <span th:text="#{button.add}">등록</span></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="clear: both;"></div>
+            </th:block>
         </div>
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
+    <th:block th:replace="~{site/layout :: scripts}"></th:block>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script th:inline="javascript">
-  $(document).ready(function() {
-      // 멤버 추가
-      $("#add-member-form").submit(function(e) {
-          e.preventDefault();
-          var projectId = [[${project.id}]];
-          var loginId = $("#loginId").val();
-          var role = $("#role").val();
+<script type="text/javascript" th:inline="javascript">
+    $(document).ready(function() {
+        var projectId = [[${project.id}]];
 
-          var requestData = {
-              loginId: loginId,
-              role: role
-          };
+        // 1. 멤버 추가 연동
+        $("#addNewMember").submit(function(e) {
+            e.preventDefault();
+            var loginId = $("#loginId").val().trim();
+            if (!loginId) return;
 
-          $.ajax({
-              url: '/api/projects/' + projectId + '/members',
-              type: 'POST',
-              contentType: 'application/json',
-              data: JSON.stringify(requestData),
-              success: function(result) {
-                  alert("멤버가 성공적으로 추가되었습니다.");
-                  window.location.reload();
-              },
-              error: function(xhr, status, error) {
-                  alert("추가 실패: " + xhr.responseText);
-              }
-          });
-      });
+            $.ajax({
+                url: '/api/projects/' + projectId + '/members?loginId=' + encodeURIComponent(loginId),
+                type: 'POST',
+                success: function(res) {
+                    window.location.reload();
+                },
+                error: function(xhr) {
+                    var errorMsg = "멤버 추가 실패";
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg += ": " + xhr.responseJSON.error;
+                    }
+                    alert(errorMsg);
+                }
+            });
+        });
 
-      // 멤버 제거
-      $(".delete-member-btn").click(function() {
-          var userId = $(this).data("user-id");
-          var projectId = [[${project.id}]];
+        // 2. 역할 변경 연동
+        $(".role-apply-btn").click(function(e) {
+            e.preventDefault();
+            var userId = $(this).data("user-id");
+            var roleId = $(this).data("role-id");
 
-          if (confirm("정말 이 멤버를 프로젝트에서 제거하시겠습니까?")) {
-              $.ajax({
-                  url: '/api/projects/' + projectId + '/members/' + userId,
-                  type: 'DELETE',
-                  success: function(result) {
-                      alert("멤버가 제거되었습니다.");
-                      window.location.reload();
-                  },
-                  error: function(xhr, status, error) {
-                      alert("제거 실패: " + xhr.responseText);
-                  }
-              });
-          }
-      });
-  });
+            $.ajax({
+                url: '/api/projects/' + projectId + '/members/' + userId + '/role?roleId=' + roleId,
+                type: 'PUT',
+                success: function(res) {
+                    window.location.reload();
+                },
+                error: function(xhr) {
+                    alert("역할 변경 실패");
+                }
+            });
+        });
+
+        // 3. 멤버 삭제 연동
+        $(".delete-member-btn").click(function(e) {
+            e.preventDefault();
+            var userId = $(this).data("user-id");
+
+            if (confirm("정말 이 멤버를 프로젝트에서 제거하시겠습니까?")) {
+                $.ajax({
+                    url: '/api/projects/' + projectId + '/members/' + userId,
+                    type: 'DELETE',
+                    success: function(res) {
+                        window.location.reload();
+                    },
+                    error: function(xhr) {
+                        alert("멤버 제거 실패");
+                    }
+                });
+            }
+        });
+
+        // 4. 가입 요청 승인 연동
+        $(".enrollAcceptBtn").click(function(e) {
+            e.preventDefault();
+            var userId = $(this).data("user-id");
+
+            $.ajax({
+                url: '/api/projects/' + projectId + '/members/' + userId + '/accept',
+                type: 'POST',
+                success: function(res) {
+                    window.location.reload();
+                },
+                error: function(xhr) {
+                    alert("가입 승인 실패");
+                }
+            });
+        });
+    });
 </script>
 </body>
 </html>

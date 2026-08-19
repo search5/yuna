@@ -1163,6 +1163,14 @@ input.white:-ms-input-placeholder {
   z-index: 1000;
   padding: 0;
 }
+.gnb-outer.project-header .gnb-inner .gnb-nav li a,
+.gnb-outer.project-header .gnb-inner .gnb-usermenu li a,
+.gnb-outer.project-header .gnb-inner .gnb-usermenu-dropdown a {
+  color: #FFF !important;
+}
+.gnb-outer.project-header .gnb-inner .gnb-nav li.divider {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
 .gnb-outer.project-header .gnb-inner .logo:before,
 .gnb-outer.project-header .gnb-inner .logo:after {
   display: none;

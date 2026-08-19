@@ -1,509 +1,366 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${pr.title} + ' - 풀 리퀘스트 - Yona'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .pr-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-  }
-  .pr-header {
-      border-bottom: 1px solid #eee;
-      padding-bottom: 15px;
-      margin-bottom: 15px;
-  }
-  .label-branch {
-      background-color: #e6ebf1;
-      color: #24292e;
-      padding: 2px 6px;
-      font-size: 12px;
-      font-family: monospace;
-      border-radius: 3px;
-      border: 1px solid #d1d5da;
-  }
-  .merge-status-box {
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 15px;
-      background-color: #fafbfc;
-      margin-bottom: 25px;
-  }
-  .commit-item {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-      font-size: 13px;
-  }
-  .commit-hash {
-      font-family: monospace;
-      font-weight: bold;
-      color: #0366d6;
-  }
-  
-  /* Tabs Styling */
-  .nav-tabs {
-      border-bottom: 1px solid #ddd;
-      margin-bottom: 20px;
-  }
-  .nav-tabs > li {
-      float: left;
-      margin-bottom: -1px;
-  }
-  .nav-tabs > li > a {
-      margin-right: 2px;
-      line-height: 1.42857143;
-      border: 1px solid transparent;
-      border-radius: 4px 4px 0 0;
-      color: #586069;
-      padding: 10px 15px;
-      text-decoration: none;
-      display: block;
-  }
-  .nav-tabs > li.active > a, .nav-tabs > li.active > a:hover {
-      color: #24292e;
-      background-color: #fff;
-      border: 1px solid #ddd;
-      border-bottom-color: transparent;
-      cursor: default;
-      font-weight: bold;
-  }
-  
-  /* Timeline Comment Styling */
-  .timeline-comment {
-      border: 1px solid #d1d5da;
-      border-radius: 3px;
-      margin-bottom: 15px;
-      background: #fff;
-  }
-  .timeline-comment-header {
-      background-color: #f6f8fa;
-      border-bottom: 1px solid #d1d5da;
-      padding: 8px 12px;
-      font-size: 12px;
-      color: #586069;
-  }
-  .timeline-comment-body {
-      padding: 15px;
-      font-size: 14px;
-      white-space: pre-wrap;
-  }
-</style>
+<head th:replace="~{site/layout :: head(title=${pr.title} + ' - ' + #{menu.pullRequest})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
+    
+    <!-- Yona 원본 프로젝트 헤더 및 프로젝트 메뉴 탑재 -->
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'pulls')}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <div class="pr-container" style="background: #fff; border: 1px solid #d8dee2; border-radius: 3px; padding: 20px; margin-bottom: 20px;">
+                <div class="pr-header" style="border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px;">
+                    <h3 style="margin-top: 0;">
+                        <span th:text="'#' + ${pr.number}" style="color: #999;">#1</span>
+                        <span th:text="${pr.title}">풀 리퀘스트 제목</span>
+                    </h3>
+                    
+                    <div style="font-size: 13px; color: #666; margin-bottom: 15px;">
+                        <span th:text="${pr.contributor.name}">요청자</span>님이
+                        <span th:title="${@templateHelper.getDateString(pr.created)}" th:text="${@templateHelper.agoOrDateString(pr.created)}">작성일</span>에 등록함
+                    </div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <div class="col-md-12">
-        <div class="pr-container">
-          <div class="pr-header">
-            <h3 style="margin-top: 0;">
-              <span th:text="'#' + ${pr.number}" style="color: #999;">#1</span>
-              <span th:text="${pr.title}">풀 리퀘스트 제목</span>
-            </h3>
-            
-            <div style="font-size: 13px; color: #666; margin-bottom: 15px;">
-              <span th:text="${pr.contributor.name}">요청자</span>님이
-              <span th:title="${@templateHelper.getDateString(pr.created)}" th:text="${@templateHelper.agoOrDateString(pr.created)}">작성일</span>에 등록함
-            </div>
-
-            <!-- 브랜치 매핑 -->
-            <div style="margin-bottom: 10px;">
-              <span class="label-branch" th:text="${pr.fromProject.name} + ':' + ${pr.fromBranch}">from-project:feature</span>
-              <span style="margin: 0 5px; color: #666;">에서</span>
-              <span class="label-branch" th:text="${pr.toProject.name} + ':' + ${pr.toBranch}">to-project:master</span>
-              <span style="margin-left: 5px; color: #666;">브랜치로 병합을 요청함</span>
-            </div>
-          </div>
-
-          <div style="font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin-bottom: 20px;" 
-               th:text="${pr.body}">
-            본문 내용
-          </div>
-        </div>
-
-        <!-- 연동된 자동 닫기 이슈 정보 -->
-        <div th:if="${referredIssues != null && !referredIssues.isEmpty()}" 
-             style="border: 1px solid #e1e4e8; border-radius: 6px; background-color: #f6f8fa; padding: 15px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <h5 style="margin-top: 0; font-weight: bold; color: #24292e; display: flex; align-items: center; gap: 6px;">
-            <i class="yobicon-alert" style="color: #6f42c1; font-size: 16px;"></i>
-            <span>이 풀 리퀘스트가 병합되면 다음 이슈가 자동으로 닫힙니다:</span>
-          </h5>
-          <ul style="margin-bottom: 0; padding-left: 20px; list-style-type: disc;">
-            <li th:each="issue : ${referredIssues}" style="margin-bottom: 6px; font-size: 13px; color: #586069;">
-              <a th:href="@{/{owner}/{projectName}/issue/{number}(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}"
-                 th:text="'#' + ${issue.number} + ' ' + ${issue.title}"
-                 style="font-weight: bold; color: #0366d6; text-decoration: none;">#123 이슈 제목</a>
-              <span th:if="${issue.state == T(com.github.search5.yona.domain.enumeration.State).CLOSED}" 
-                    style="margin-left: 8px; font-size: 10px; font-weight: bold; padding: 2px 6px; background-color: #cb2431; color: #fff; border-radius: 10px; display: inline-block;">CLOSED</span>
-              <span th:if="${issue.state != T(com.github.search5.yona.domain.enumeration.State).CLOSED}" 
-                    style="margin-left: 8px; font-size: 10px; font-weight: bold; padding: 2px 6px; background-color: #2cbe4e; color: #fff; border-radius: 10px; display: inline-block;">OPEN</span>
-            </li>
-          </ul>
-        </div>
-
-        <!-- 리뷰어 상태 및 참여 박스 -->
-        <div class="reviewer-status-box" style="border: 1px solid #d8dee2; border-radius: 3px; padding: 15px; background-color: #fafbfc; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <h4 style="margin-top: 0; font-weight: bold; color: #24292e;">
-            <i class="yobicon-users"></i> 리뷰어 (Reviewers)
-            <span th:if="${project.isUsingReviewerCount}" th:text="'(최소 리뷰어 수: ' + ${project.defaultReviewerCount} + '명 / 현재 참여: ' + ${pr.reviewers.size()} + '명)'" style="font-size: 13px; font-weight: normal; color: #586069;">(최소 리뷰어 수: 1명 / 현재 참여: 0명)</span>
-          </h4>
-          
-          <!-- 등록된 리뷰어 목록 -->
-          <div style="margin-bottom: 15px;">
-            <span th:if="${pr.reviewers.isEmpty()}" style="color: #6a737d; font-size: 13px;">등록된 리뷰어가 없습니다.</span>
-            <div th:unless="${pr.reviewers.isEmpty()}" style="display: flex; flex-wrap: wrap; gap: 8px;">
-              <span th:each="reviewer : ${pr.reviewers}" 
-                    style="display: inline-flex; align-items: center; background-color: #e1e4e8; border-radius: 12px; padding: 4px 10px; font-size: 12px; color: #24292e; font-weight: bold; margin-right: 5px; margin-bottom: 5px;">
-                <i class="yobicon-user" style="margin-right: 4px;"></i>
-                <span th:text="${reviewer.name}">리뷰어 이름</span>
-              </span>
-            </div>
-          </div>
-
-          <!-- 리뷰어 참여/해제 버튼 -->
-          <div th:if="${currentUser != null}">
-            <th:block th:with="isReviewer=${pr.reviewers.![id].contains(currentUser.id)}">
-              <button class="btn btn-sm btn-primary" id="btn-join-reviewer" th:if="${!isReviewer}">리뷰어 참여</button>
-              <button class="btn btn-sm btn-danger" id="btn-leave-reviewer" th:if="${isReviewer}">리뷰어 참여 취소</button>
-            </th:block>
-          </div>
-        </div>
-
-        <!-- 병합 상태 및 액션 박스 -->
-        <div class="merge-status-box">
-          <!-- 1. 병합 완료 상태 -->
-          <div th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).MERGED}">
-            <h4 style="color: #6f42c1; margin-top: 0;"><i class="yobicon-checkmark"></i> 이 풀 리퀘스트는 성공적으로 병합되었습니다.</h4>
-            <p style="margin-bottom: 0; color: #586069;">
-              <span th:text="${pr.receiver != null ? pr.receiver.name : '시스템'}">병합자</span>님이 병합을 처리하였습니다.
-            </p>
-          </div>
-
-          <!-- 2. 닫힘 상태 -->
-          <div th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).CLOSED}">
-            <h4 style="color: #cb2431; margin-top: 0;"><i class="yobicon-close"></i> 이 풀 리퀘스트는 닫혔습니다.</h4>
-            <p style="margin-bottom: 0; color: #586069;">병합이 수행되지 않고 요청이 반려되었습니다.</p>
-          </div>
-
-          <!-- 3. 열린 상태 -->
-          <div th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).OPEN}">
-            <!-- 3-A. 충돌 발생 -->
-            <div th:if="${pr.isConflict == true}">
-              <h4 style="color: #d9534f; margin-top: 0;"><i class="yobicon-alert"></i> 이 풀 리퀘스트는 대상 브랜치와 충돌이 발생했습니다.</h4>
-              <p style="color: #586069; margin-bottom: 0;">수동으로 충돌을 해결한 뒤 다시 커밋을 푸시하셔야 병합이 가능합니다.</p>
-            </div>
-            
-            <!-- 3-B. 병합 가능 -->
-            <div th:if="${pr.isConflict != true}">
-              <h4 style="color: #28a745; margin-top: 0;"><i class="yobicon-checkmark"></i> 이 풀 리퀘스트는 자동으로 병합할 수 있습니다.</h4>
-              <p style="color: #586069; margin-bottom: 15px;">충돌이 감지되지 않았으며, 즉시 병합을 실행할 수 있습니다.</p>
-              
-              <button class="btn btn-success" id="merge-btn" th:if="${currentUser != null}">병합하기 (Merge)</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tabs Navigation -->
-        <ul class="nav nav-tabs clearfix">
-          <li th:class="${tab == 'conversation' ? 'active' : ''}">
-            <a th:href="@{/{owner}/{projectName}/pull/{number}(owner=${project.owner}, projectName=${project.name}, number=${pr.number}, tab='conversation')}">
-              대화 (Conversation)
-            </a>
-          </li>
-          <li th:class="${tab == 'commits' ? 'active' : ''}">
-            <a th:href="@{/{owner}/{projectName}/pull/{number}(owner=${project.owner}, projectName=${project.name}, number=${pr.number}, tab='commits')}">
-              커밋 내역 (Commits)
-            </a>
-          </li>
-          <li th:class="${tab == 'changes' ? 'active' : ''}">
-            <a th:href="@{/{owner}/{projectName}/pull/{number}(owner=${project.owner}, projectName=${project.name}, number=${pr.number}, tab='changes')}">
-              파일 변경 내역 (Changes)
-            </a>
-          </li>
-        </ul>
-
-        <!-- Tabs Contents -->
-        <div class="tab-content" style="margin-top: 20px;">
-          <!-- 1. Conversation Tab -->
-          <div th:if="${tab == 'conversation'}">
-            <!-- Timeline of comments -->
-            <div th:if="${commentThreads != null && !commentThreads.isEmpty()}" style="margin-bottom: 30px;">
-              <div th:each="thread : ${commentThreads}" class="timeline-comment">
-                <div class="timeline-comment-header">
-                  <strong style="color: #24292e;" th:text="${thread.author?.loginId}">작성자</strong>
-                  <span th:title="${@templateHelper.getDateString(thread.createdDate)}" th:text="${@templateHelper.agoOrDateString(thread.createdDate)}">작성일</span>
-                  
-                  <span th:if="${thread.isOnPullRequest() && thread.id != null}" class="pull-right">
-                    <span th:class="'badge state ' + ${thread.state.toString().toLowerCase()}" 
-                          th:text="${thread.state == T(com.github.search5.yona.domain.pullrequest.CommentThread.ThreadState).OPEN ? '열림' : '닫힘'}">상태</span>
-                  </span>
+                    <!-- 브랜치 매핑 -->
+                    <div style="margin-bottom: 10px;">
+                        <span class="label-branch" style="background-color: #e6ebf1; color: #24292e; padding: 2px 6px; font-size: 12px; font-family: monospace; border-radius: 3px; border: 1px solid #d1d5da;" th:text="${pr.fromProject.name} + ':' + ${pr.fromBranch}">from-project:feature</span>
+                        <span style="margin: 0 5px; color: #666;">에서</span>
+                        <span class="label-branch" style="background-color: #e6ebf1; color: #24292e; padding: 2px 6px; font-size: 12px; font-family: monospace; border-radius: 3px; border: 1px solid #d1d5da;" th:text="${pr.toProject.name} + ':' + ${pr.toBranch}">to-project:master</span>
+                        <span style="margin-left: 5px; color: #666;">브랜치로 병합을 요청함</span>
+                    </div>
                 </div>
+
+                <div style="font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin-bottom: 20px;" th:text="${pr.body}">
+                    본문 내용
+                </div>
+            </div>
+
+            <!-- 연동된 자동 닫기 이슈 정보 -->
+            <div th:if="${referredIssues != null && !referredIssues.isEmpty()}" 
+                 style="border: 1px solid #e1e4e8; border-radius: 6px; background-color: #f6f8fa; padding: 15px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <h5 style="margin-top: 0; font-weight: bold; color: #24292e; display: flex; align-items: center; gap: 6px;">
+                    <i class="yobicon-alert" style="color: #6f42c1; font-size: 16px;"></i>
+                    <span>이 풀 리퀘스트가 병합되면 다음 이슈가 자동으로 닫힙니다:</span>
+                </h5>
+                <ul style="margin-bottom: 0; padding-left: 20px; list-style-type: disc;">
+                    <li th:each="issue : ${referredIssues}" style="margin-bottom: 6px; font-size: 13px; color: #586069;">
+                        <a th:href="@{/{owner}/{projectName}/issue/{number}(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}"
+                           th:text="'#' + ${issue.number} + ' ' + ${issue.title}"
+                           style="font-weight: bold; color: #0366d6; text-decoration: none;">#123 이슈 제목</a>
+                        <span th:if="${issue.state == T(com.github.search5.yona.domain.enumeration.State).CLOSED}" 
+                              style="margin-left: 8px; font-size: 10px; font-weight: bold; padding: 2px 6px; background-color: #cb2431; color: #fff; border-radius: 10px; display: inline-block;">CLOSED</span>
+                        <span th:if="${issue.state != T(com.github.search5.yona.domain.enumeration.State).CLOSED}" 
+                              style="margin-left: 8px; font-size: 10px; font-weight: bold; padding: 2px 6px; background-color: #2cbe4e; color: #fff; border-radius: 10px; display: inline-block;">OPEN</span>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- 리뷰어 상태 및 참여 박스 -->
+            <div class="reviewer-status-box" style="border: 1px solid #d8dee2; border-radius: 3px; padding: 15px; background-color: #fafbfc; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <h4 style="margin-top: 0; font-weight: bold; color: #24292e;">
+                    <i class="yobicon-users"></i> <span th:text="#{pullRequest.reviewer}">리뷰어</span>
+                    <span th:if="${project.isUsingReviewerCount}" th:text="'(최소 리뷰어 수: ' + ${project.defaultReviewerCount} + '명 / 현재 참여: ' + ${pr.reviewers.size()} + '명)'" style="font-size: 13px; font-weight: normal; color: #586069;">(최소 리뷰어 수: 1명 / 현재 참여: 0명)</span>
+                </h4>
                 
-                <div class="timeline-comment-body">
-                  <!-- 만약 코드 리뷰 스레드(CodeCommentThread)인 경우 코드 범위 출력 -->
-                  <div th:if="${thread instanceof T(com.github.search5.yona.domain.pullrequest.CodeCommentThread)}" 
-                       style="background-color: #fafbfc; border: 1px solid #e1e4e8; border-radius: 3px; padding: 8px 12px; margin-bottom: 10px; font-family: monospace; font-size: 12px;">
-                    <i class="yobicon-post2"></i> 파일: <span th:text="${thread.codeRange.path}">App.kt</span>, 
-                    라인: <span th:text="${thread.codeRange.endLine != null ? thread.codeRange.endLine + 1 : ''}">10</span>
-                  </div>
-                  
-                  <!-- 댓글들 리스트 -->
-                  <div th:each="comment : ${thread.reviewComments}" style="border-bottom: 1px solid #f6f8fa; padding-bottom: 8px; margin-bottom: 8px;">
-                    <div style="font-size: 11px; color: #586069; margin-bottom: 2px;">
-                      <strong th:text="${comment.author?.loginId}">댓글작성자</strong>
-                      <span th:title="${@templateHelper.getDateString(comment.createdDate)}" th:text="${@templateHelper.agoOrDateString(comment.createdDate)}">시간</span>
-                      
-                      <span class="edit pull-right" th:if="${currentUser != null && comment.author?.id == currentUser.id}">
-                        <button type="button" class="btn-transparent btn-comment-delete" 
-                                th:data-comment-id="${comment.id}" 
-                                style="background: none; border: none; font-size: 12px; cursor: pointer; color: #cb2431; padding: 0 4px;">
-                          <i class="yobicon-trash"></i>
-                        </button>
-                      </span>
+                <!-- 등록된 리뷰어 목록 -->
+                <div style="margin-bottom: 15px;">
+                    <span th:if="${pr.reviewers.isEmpty()}" style="color: #6a737d; font-size: 13px;">등록된 리뷰어가 없습니다.</span>
+                    <div th:unless="${pr.reviewers.isEmpty()}" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <span th:each="reviewer : ${pr.reviewers}" 
+                              style="display: inline-flex; align-items: center; background-color: #e1e4e8; border-radius: 12px; padding: 4px 10px; font-size: 12px; color: #24292e; font-weight: bold; margin-right: 5px; margin-bottom: 5px;">
+                            <i class="yobicon-user" style="margin-right: 4px;"></i>
+                            <span th:text="${reviewer.name}">리뷰어 이름</span>
+                        </span>
                     </div>
-                    <div style="font-size: 13px; color: #24292e; white-space: pre-wrap;" th:text="${comment.contents}">댓글 내용</div>
-                  </div>
-                  
-                  <!-- 대댓글 폼 -->
-                  <div class="write-comment-form" th:if="${currentUser != null}" style="margin-top: 15px;">
-                    <form th:action="@{/{owner}/{projectName}/pullRequest/{pullRequestId}/comments(owner=${project.owner}, projectName=${project.name}, pullRequestId=${pr.id})}" 
-                          method="post" class="review-form">
-                      <input type="hidden" name="thread.id" th:value="${thread.id}">
-                      <div class="write-comment-box" style="display: flex; align-items: flex-start;">
-                        <textarea name="contents" placeholder="답변을 입력하세요..." style="width: 100%; height: 40px; padding: 4px 6px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical; margin-right: 8px; font-size: 12px;" required></textarea>
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                          <button type="submit" class="ybtn ybtn-success ybtn-small" style="font-size: 11px; padding: 2px 6px;">댓글달기</button>
-                          <button type="button" class="ybtn ybtn-default ybtn-small btn-thread-state-toggle" 
-                                  th:data-thread-id="${thread.id}" 
-                                  th:data-current-state="${thread.state}" 
-                                  style="font-size: 11px; padding: 2px 6px;"
-                                  th:text="${thread.state == T(com.github.search5.yona.domain.pullrequest.CommentThread.ThreadState).OPEN ? '닫기' : '열기'}">닫기</button>
+                </div>
+
+                <!-- 리뷰어 참여/해제 버튼 -->
+                <div th:if="${currentUser != null}">
+                    <th:block th:with="isReviewer=${pr.reviewers.![id].contains(currentUser.id)}">
+                        <button class="ybtn ybtn-success ybtn-small" id="btn-join-reviewer" th:if="${!isReviewer}">리뷰어 참여</button>
+                        <button class="ybtn ybtn-danger ybtn-small" id="btn-leave-reviewer" th:if="${isReviewer}">리뷰어 참여 취소</button>
+                    </th:block>
+                </div>
+            </div>
+
+            <!-- 병합 상태 및 액션 박스 -->
+            <div class="merge-status-box" style="border: 1px solid #d8dee2; border-radius: 3px; padding: 15px; background-color: #fafbfc; margin-bottom: 25px;">
+                <!-- 1. 병합 완료 상태 -->
+                <div th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).MERGED}">
+                    <h4 style="color: #6f42c1; margin-top: 0;"><i class="yobicon-checkmark"></i> 이 풀 리퀘스트는 성공적으로 병합되었습니다.</h4>
+                    <p style="margin-bottom: 0; color: #586069;">
+                        <span th:text="${pr.receiver != null ? pr.receiver.name : '시스템'}">병합자</span>님이 병합을 처리하였습니다.
+                    </p>
+                </div>
+
+                <!-- 2. 닫힘 상태 -->
+                <div th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).CLOSED}">
+                    <h4 style="color: #cb2431; margin-top: 0;"><i class="yobicon-close"></i> 이 풀 리퀘스트는 닫혔습니다.</h4>
+                    <p style="margin-bottom: 0; color: #586069;">병합이 수행되지 않고 요청이 반려되었습니다.</p>
+                </div>
+
+                <!-- 3. 열린 상태 -->
+                <div th:if="${pr.state == T(com.github.search5.yona.domain.enumeration.State).OPEN}">
+                    <!-- 3-A. 충돌 발생 -->
+                    <div th:if="${pr.isConflict == true}">
+                        <h4 style="color: #d9534f; margin-top: 0;"><i class="yobicon-alert"></i> 이 풀 리퀘스트는 대상 브랜치와 충돌이 발생했습니다.</h4>
+                        <p style="color: #586069; margin-bottom: 0;">수동으로 충돌을 해결한 뒤 다시 커밋을 푸시하셔야 병합이 가능합니다.</p>
+                    </div>
+                    
+                    <!-- 3-B. 병합 가능 -->
+                    <div th:if="${pr.isConflict != true}">
+                        <h4 style="color: #28a745; margin-top: 0;"><i class="yobicon-checkmark"></i> 이 풀 리퀘스트는 자동으로 병합할 수 있습니다.</h4>
+                        <p style="color: #586069; margin-bottom: 15px;">충돌이 감지되지 않았으며, 즉시 병합을 실행할 수 있습니다.</p>
+                        
+                        <button class="ybtn ybtn-success" id="merge-btn" th:if="${currentUser != null}">병합하기 (Merge)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs Navigation -->
+            <ul class="nav nav-tabs clearfix" style="border-bottom: 1px solid #ddd; margin-bottom: 20px; list-style: none; padding: 0;">
+                <li th:class="${tab == 'conversation' ? 'active' : ''}" style="float: left; margin-bottom: -1px;">
+                    <a th:href="@{/{owner}/{projectName}/pull/{number}(owner=${project.owner}, projectName=${project.name}, number=${pr.number}, tab='conversation')}"
+                       style="margin-right: 2px; line-height: 1.42857143; border: 1px solid transparent; border-radius: 4px 4px 0 0; color: #586069; padding: 10px 15px; text-decoration: none; display: block;">
+                        대화 (Conversation)
+                    </a>
+                </li>
+                <li th:class="${tab == 'commits' ? 'active' : ''}" style="float: left; margin-bottom: -1px;">
+                    <a th:href="@{/{owner}/{projectName}/pull/{number}(owner=${project.owner}, projectName=${project.name}, number=${pr.number}, tab='commits')}"
+                       style="margin-right: 2px; line-height: 1.42857143; border: 1px solid transparent; border-radius: 4px 4px 0 0; color: #586069; padding: 10px 15px; text-decoration: none; display: block;">
+                        커밋 내역 (Commits)
+                    </a>
+                </li>
+                <li th:class="${tab == 'changes' ? 'active' : ''}" style="float: left; margin-bottom: -1px;">
+                    <a th:href="@{/{owner}/{projectName}/pull/{number}(owner=${project.owner}, projectName=${project.name}, number=${pr.number}, tab='changes')}"
+                       style="margin-right: 2px; line-height: 1.42857143; border: 1px solid transparent; border-radius: 4px 4px 0 0; color: #586069; padding: 10px 15px; text-decoration: none; display: block;">
+                        파일 변경 내역 (Changes)
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Tabs Contents -->
+            <div class="tab-content" style="margin-top: 20px;">
+                <!-- 1. Conversation Tab -->
+                <div th:if="${tab == 'conversation'}">
+                    <!-- Timeline of comments -->
+                    <div th:if="${commentThreads != null && !commentThreads.isEmpty()}" style="margin-bottom: 30px;">
+                        <div th:each="thread : ${commentThreads}" class="timeline-comment" style="border: 1px solid #d1d5da; border-radius: 3px; margin-bottom: 15px; background: #fff;">
+                            <div class="timeline-comment-header" style="background-color: #f6f8fa; border-bottom: 1px solid #d1d5da; padding: 8px 12px; font-size: 12px; color: #586069;">
+                                <strong style="color: #24292e;" th:text="${thread.author?.loginId}">작성자</strong>
+                                <span th:title="${@templateHelper.getDateString(thread.createdDate)}" th:text="${@templateHelper.agoOrDateString(thread.createdDate)}">작성일</span>
+                                
+                                <span th:if="${thread.isOnPullRequest() && thread.id != null}" class="pull-right">
+                                    <span th:class="'badge state ' + ${thread.state.toString().toLowerCase()}" 
+                                          th:text="${thread.state == T(com.github.search5.yona.domain.pullrequest.CommentThread.ThreadState).OPEN ? '열림' : '닫힘'}">상태</span>
+                                </span>
+                            </div>
+                            
+                            <div class="timeline-comment-body" style="padding: 15px; font-size: 14px; white-space: pre-wrap;">
+                                <!-- 만약 코드 리뷰 스레드(CodeCommentThread)인 경우 코드 범위 출력 -->
+                                <div th:if="${thread instanceof T(com.github.search5.yona.domain.pullrequest.CodeCommentThread)}" 
+                                     style="background-color: #fafbfc; border: 1px solid #e1e4e8; border-radius: 3px; padding: 8px 12px; margin-bottom: 10px; font-family: monospace; font-size: 12px;">
+                                    <i class="yobicon-post2"></i> 파일: <span th:text="${thread.codeRange.path}">App.kt</span>, 
+                                    라인: <span th:text="${thread.codeRange.endLine != null ? thread.codeRange.endLine + 1 : ''}">10</span>
+                                </div>
+                                
+                                <!-- 댓글들 리스트 -->
+                                <div th:each="comment : ${thread.reviewComments}" style="border-bottom: 1px solid #f6f8fa; padding-bottom: 8px; margin-bottom: 8px;">
+                                    <div style="font-size: 11px; color: #586069; margin-bottom: 2px;">
+                                        <strong th:text="${comment.author?.loginId}">댓글작성자</strong>
+                                        <span th:title="${@templateHelper.getDateString(comment.createdDate)}" th:text="${@templateHelper.agoOrDateString(comment.createdDate)}">시간</span>
+                                        
+                                        <span class="edit pull-right" th:if="${currentUser != null && comment.author?.id == currentUser.id}">
+                                            <button type="button" class="btn-transparent btn-comment-delete" 
+                                                    th:data-comment-id="${comment.id}" 
+                                                    style="background: none; border: none; font-size: 12px; cursor: pointer; color: #cb2431; padding: 0 4px;">
+                                                <i class="yobicon-trash"></i>
+                                            </button>
+                                        </span>
+                                    </div>
+                                    <div style="font-size: 13px; color: #24292e; white-space: pre-wrap;" th:text="${comment.contents}">댓글 내용</div>
+                                </div>
+                                
+                                <!-- 대댓글 폼 -->
+                                <div class="write-comment-form" th:if="${currentUser != null}" style="margin-top: 15px;">
+                                    <form th:action="@{/{owner}/{projectName}/pullRequest/{pullRequestId}/comments(owner=${project.owner}, projectName=${project.name}, pullRequestId=${pr.id})}" 
+                                          method="post" class="review-form">
+                                        <input type="hidden" name="thread.id" th:value="${thread.id}">
+                                        <div class="write-comment-box" style="display: flex; align-items: flex-start;">
+                                            <textarea name="contents" placeholder="답변을 입력하세요..." style="width: 100%; height: 40px; padding: 4px 6px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical; margin-right: 8px; font-size: 12px;" required></textarea>
+                                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                                <button type="submit" class="ybtn ybtn-success ybtn-small" style="font-size: 11px; padding: 2px 6px;">댓글달기</button>
+                                                <button type="button" class="ybtn ybtn-default ybtn-small btn-thread-state-toggle" 
+                                                        th:data-thread-id="${thread.id}" 
+                                                        th:data-current-state="${thread.state}" 
+                                                        style="font-size: 11px; padding: 2px 6px;"
+                                                        th:text="${thread.state == T(com.github.search5.yona.domain.pullrequest.CommentThread.ThreadState).OPEN ? '닫기' : '열기'}">닫기</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Global Conversation Comment Form -->
-            <div class="timeline-comment" th:if="${currentUser != null}" style="border-color: #28a745;">
-              <div class="timeline-comment-header" style="background-color: #dcffe4; border-bottom-color: #28a745; color: #24292e; font-weight: bold;">
-                PR 대화에 새 의견 남기기
-              </div>
-              <div class="timeline-comment-body">
-                <form th:action="@{/{owner}/{projectName}/pullRequest/{pullRequestId}/comments(owner=${project.owner}, projectName=${project.name}, pullRequestId=${pr.id})}" 
-                      method="post">
-                  <div class="write-comment-box">
-                    <textarea name="contents" placeholder="풀 리퀘스트에 대화 댓글을 남기세요..." style="width: 100%; height: 80px; padding: 8px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical; margin-bottom: 10px; font-size: 13px;" required></textarea>
-                    <div class="right-txt" style="text-align: right;">
-                      <button type="submit" class="ybtn ybtn-success ybtn-small">댓글 등록</button>
                     </div>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
 
-          <!-- 2. Commits Tab -->
-          <div th:if="${tab == 'commits'}">
-            <div th:if="${mergeResult != null && mergeResult.gitCommits != null && !mergeResult.gitCommits.isEmpty()}" style="border: 1px solid #d8dee2; border-radius: 3px; background: #fff;">
-              <div th:each="commit : ${mergeResult.gitCommits}" class="commit-item">
-                <span class="commit-hash" th:text="${#strings.substring(commit.getId(), 0, 7)}">abcdefg</span>
-                <span style="margin: 0 5px; color: #ccc;">|</span>
-                <span th:text="${commit.getShortMessage()}">커밋 메시지</span>
-                <small class="pull-right" style="color: #666;" th:text="${commit.getAuthorName()}">작성자</small>
-              </div>
-            </div>
-            <div class="alert alert-info" th:if="${mergeResult == null || mergeResult.gitCommits == null || mergeResult.gitCommits.isEmpty()}">
-              변경할 커밋이 없습니다.
-            </div>
-          </div>
-
-          <!-- 3. Changes Tab -->
-          <div th:if="${tab == 'changes'}">
-            <!-- 변경 사항이 없는 경우 -->
-            <div class="alert alert-info" th:if="${diffs == null or diffs.isEmpty()}">
-              변경된 내역이 없습니다. (No changes)
-            </div>
-
-            <!-- 변경 사항이 있는 경우 디프 리스트 출력 -->
-            <div class="diff-body discommentable" th:if="${diffs != null and !diffs.isEmpty()}">
-              <div th:each="diff : ${diffs}" class="diff-partial-outer" th:id="${diff.pathB != null ? diff.pathB : diff.pathA}">
-                <div class="diff-partial-inner">
-                  <div class="diff-partial-meta clearfix" style="background-color: #fafbfc; border: 1px solid #d1d5da; border-bottom: none; padding: 10px; border-top-left-radius: 3px; border-top-right-radius: 3px;">
-                    <span class="filename" style="font-weight: bold; font-family: monospace; color: #24292e;" 
-                          th:text="${diff.pathB != null ? diff.pathB : diff.pathA}">파일명</span>
-                  </div>
-
-                  <div class="diff-partial-code" style="border: 1px solid #d1d5da; border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; overflow: auto; margin-bottom: 20px;">
-                    <table class="diff-container show-comments" style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 12px;">
-                      <tbody>
-                        <!-- 1. 신규 파일 추가인 경우 (ADD) -->
-                        <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).ADD}">
-                          <tr class="range">
-                            <td colspan="3" class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
-                                th:text="'@@ -0,0 +1,' + ${diff.b.size()} + ' @@'"></td>
-                          </tr>
-                          <th:block th:each="i : ${#numbers.sequence(0, diff.b.size() - 1)}">
-                            <tr class="add diff-line-tr" style="background-color: #e6ffed;"
-                                th:data-path="${diff.pathB}"
-                                th:data-line-num-b="${i}"
-                                data-kind="ADD">
-                              <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" class="add-comment-btn-cell">+</td>
-                              <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
-                              <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'+' + ${diff.b.getString(i)}"></pre></td>
-                            </tr>
-                            
-                            <th:block th:with="lineVal=${i}, pathVal=${diff.pathB}, sideVal='B'">
-                              <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
-                            </th:block>
-                          </th:block>
-                        </th:block>
-
-                        <!-- 2. 파일 삭제인 경우 (DELETE) -->
-                        <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).DELETE}">
-                          <tr class="range">
-                            <td colspan="3" class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
-                                th:text="'@@ -1,' + ${diff.a.size()} + ' +0,0 @@'"></td>
-                          </tr>
-                          <th:block th:each="i : ${#numbers.sequence(0, diff.a.size() - 1)}">
-                            <tr class="remove diff-line-tr" style="background-color: #ffeef0;"
-                                th:data-path="${diff.pathA}"
-                                th:data-line-num-a="${i}"
-                                data-kind="REMOVE">
-                              <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
-                              <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" class="add-comment-btn-cell">+</td>
-                              <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'-' + ${diff.a.getString(i)}"></pre></td>
-                            </tr>
-
-                            <th:block th:with="lineVal=${i}, pathVal=${diff.pathA}, sideVal='A'">
-                              <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
-                            </th:block>
-                          </th:block>
-                        </th:block>
-
-                        <!-- 3. 수정/이동인 경우 (MODIFY, RENAME 등) -->
-                        <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).MODIFY or diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).RENAME or diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).COPY}">
-                          <tr th:if="${diff.isBinaryA or diff.isBinaryB}">
-                            <td colspan="3" class="isBinary" style="padding: 10px; color: #666; font-style: italic;">이진(Binary) 파일이 변경되었습니다.</td>
-                          </tr>
-                          
-                          <th:block th:if="${!diff.isBinaryA and !diff.isBinaryB and diff.getHunks() != null}" th:each="hunk : ${diff.getHunks()}">
-                            <tr class="range">
-                              <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;">...</td>
-                              <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;">...</td>
-                              <td class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
-                                  th:text="'@@ -' + ${hunk.beginA + 1} + ',' + ${hunk.endA - hunk.beginA} + ' +' + ${hunk.beginB + 1} + ',' + ${hunk.endB - hunk.beginB} + ' @@'"></td>
-                            </tr>
-                            
-                            <th:block th:each="line : ${hunk.lines}">
-                              <tr class="diff-line-tr" 
-                                  th:style="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? 'background-color: #e6ffed;' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? 'background-color: #ffeef0;' : '')}"
-                                  th:data-path="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? diff.pathA : diff.pathB}"
-                                  th:data-line-num-a="${line.numA}"
-                                  th:data-line-num-b="${line.numB}"
-                                  th:data-kind="${line.kind}">
-                                <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" 
-                                    th:text="${line.numA != null ? line.numA + 1 : '+'}" class="add-comment-btn-cell"></td>
-                                <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" 
-                                    th:text="${line.numB != null ? line.numB + 1 : '+'}"></td>
-                                <td class="code" style="padding-left: 10px;">
-                                  <pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" 
-                                       th:text="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? '+' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? '-' : ' ')} + ${line.content}"></pre>
-                                </td>
-                              </tr>
-
-                              <th:block th:with="lineVal=${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? line.numA : line.numB}, 
-                                                 sideVal=${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? 'A' : 'B'}">
-                                <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
-                              </th:block>
-                            </th:block>
-                          </th:block>
-                        </th:block>
-                      </tbody>
-                    </table>
-                  </div>
+                    <!-- Global Conversation Comment Form -->
+                    <div class="timeline-comment" th:if="${currentUser != null}" style="border: 1px solid #28a745; border-radius: 3px; margin-bottom: 15px; background: #fff;">
+                        <div class="timeline-comment-header" style="background-color: #dcffe4; border-bottom: 1px solid #28a745; color: #24292e; font-weight: bold; padding: 8px 12px; font-size: 12px;">
+                            PR 대화에 새 의견 남기기
+                        </div>
+                        <div class="timeline-comment-body" style="padding: 15px; font-size: 14px; white-space: pre-wrap;">
+                            <form th:action="@{/{owner}/{projectName}/pullRequest/{pullRequestId}/comments(owner=${project.owner}, projectName=${project.name}, pullRequestId=${pr.id})}" 
+                                  method="post">
+                                <div class="write-comment-box">
+                                    <textarea name="contents" placeholder="풀 리퀘스트에 대화 댓글을 남기세요..." style="width: 100%; height: 80px; padding: 8px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical; margin-bottom: 10px; font-size: 13px;" required></textarea>
+                                    <div class="right-txt" style="text-align: right;">
+                                        <button type="submit" class="ybtn ybtn-success ybtn-small">댓글 등록</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
-              </div>
+
+                <!-- 2. Commits Tab -->
+                <div th:if="${tab == 'commits'}">
+                    <div th:if="${mergeResult != null && mergeResult.gitCommits != null && !mergeResult.gitCommits.isEmpty()}" style="border: 1px solid #d8dee2; border-radius: 3px; background: #fff;">
+                        <div th:each="commit : ${mergeResult.gitCommits}" class="commit-item" style="padding: 10px; border-bottom: 1px solid #eee; font-size: 13px;">
+                            <span class="commit-hash" style="font-family: monospace; font-weight: bold; color: #0366d6;" th:text="${#strings.substring(commit.getId(), 0, 7)}">abcdefg</span>
+                            <span style="margin: 0 5px; color: #ccc;">|</span>
+                            <span th:text="${commit.getShortMessage()}">커밋 메시지</span>
+                            <small class="pull-right" style="color: #666;" th:text="${commit.getAuthorName()}">작성자</small>
+                        </div>
+                    </div>
+                    <div class="alert alert-info" th:if="${mergeResult == null || mergeResult.gitCommits == null || mergeResult.gitCommits.isEmpty()}">
+                        변경할 커밋이 없습니다.
+                    </div>
+                </div>
+
+                <!-- 3. Changes Tab -->
+                <div th:if="${tab == 'changes'}">
+                    <!-- 변경 사항이 없는 경우 -->
+                    <div class="alert alert-info" th:if="${diffs == null or diffs.isEmpty()}">
+                        변경된 내역이 없습니다. (No changes)
+                    </div>
+
+                    <!-- 변경 사항이 있는 경우 디프 리스트 출력 -->
+                    <div class="diff-body discommentable" th:if="${diffs != null and !diffs.isEmpty()}">
+                        <div th:each="diff : ${diffs}" class="diff-partial-outer" th:id="${diff.pathB != null ? diff.pathB : diff.pathA}">
+                            <div class="diff-partial-inner">
+                                <div class="diff-partial-meta clearfix" style="background-color: #fafbfc; border: 1px solid #d1d5da; border-bottom: none; padding: 10px; border-top-left-radius: 3px; border-top-right-radius: 3px;">
+                                    <span class="filename" style="font-weight: bold; font-family: monospace; color: #24292e;" 
+                                          th:text="${diff.pathB != null ? diff.pathB : diff.pathA}">파일명</span>
+                                </div>
+
+                                <div class="diff-partial-code" style="border: 1px solid #d1d5da; border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; overflow: auto; margin-bottom: 20px;">
+                                    <table class="diff-container show-comments" style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 12px;">
+                                        <tbody>
+                                            <!-- 1. 신규 파일 추가인 경우 (ADD) -->
+                                            <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).ADD}">
+                                                <tr class="range">
+                                                    <td colspan="3" class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
+                                                        th:text="'@@ -0,0 +1,' + ${diff.b.size()} + ' @@'"></td>
+                                                </tr>
+                                                <th:block th:each="i : ${#numbers.sequence(0, diff.b.size() - 1)}">
+                                                    <tr class="add diff-line-tr" style="background-color: #e6ffed;"
+                                                        th:data-path="${diff.pathB}"
+                                                        th:data-line-num-b="${i}"
+                                                        data-kind="ADD">
+                                                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" class="add-comment-btn-cell">+</td>
+                                                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
+                                                        <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'+' + ${diff.b.getString(i)}"></pre></td>
+                                                    </tr>
+                                                    
+                                                    <th:block th:with="lineVal=${i}, pathVal=${diff.pathB}, sideVal='B'">
+                                                        <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
+                                                    </th:block>
+                                                </th:block>
+                                            </th:block>
+
+                                            <!-- 2. 파일 삭제인 경우 (DELETE) -->
+                                            <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).DELETE}">
+                                                <tr class="range">
+                                                    <td colspan="3" class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
+                                                        th:text="'@@ -1,' + ${diff.a.size()} + ' +0,0 @@'"></td>
+                                                </tr>
+                                                <th:block th:each="i : ${#numbers.sequence(0, diff.a.size() - 1)}">
+                                                    <tr class="remove diff-line-tr" style="background-color: #ffeef0;"
+                                                        th:data-path="${diff.pathA}"
+                                                        th:data-line-num-a="${i}"
+                                                        data-kind="REMOVE">
+                                                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
+                                                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" class="add-comment-btn-cell">+</td>
+                                                        <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'-' + ${diff.a.getString(i)}"></pre></td>
+                                                    </tr>
+
+                                                    <th:block th:with="lineVal=${i}, pathVal=${diff.pathA}, sideVal='A'">
+                                                        <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
+                                                    </th:block>
+                                                </th:block>
+                                            </th:block>
+
+                                            <!-- 3. 수정/이동인 경우 (MODIFY, RENAME 등) -->
+                                            <th:block th:if="${diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).MODIFY or diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).RENAME or diff.changeType == T(org.eclipse.jgit.diff.DiffEntry.ChangeType).COPY}">
+                                                <tr th:if="${diff.isBinaryA or diff.isBinaryB}">
+                                                    <td colspan="3" class="isBinary" style="padding: 10px; color: #666; font-style: italic;">이진(Binary) 파일이 변경되었습니다.</td>
+                                                </tr>
+                                                
+                                                <th:block th:if="${!diff.isBinaryA and !diff.isBinaryB and diff.getHunks() != null}" th:each="hunk : ${diff.getHunks()}">
+                                                    <tr class="range">
+                                                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;">...</td>
+                                                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;">...</td>
+                                                        <td class="hunk" style="background-color: #e6ebf1; color: #586069; padding: 4px 10px;" 
+                                                            th:text="'@@ -' + ${hunk.beginA + 1} + ',' + ${hunk.endA - hunk.beginA} + ' +' + ${hunk.beginB + 1} + ',' + ${hunk.endB - hunk.beginB} + ' @@'"></td>
+                                                    </tr>
+                                                    
+                                                    <th:block th:each="line : ${hunk.lines}">
+                                                        <tr class="diff-line-tr" 
+                                                            th:style="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? 'background-color: #e6ffed;' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? 'background-color: #ffeef0;' : '')}"
+                                                            th:data-path="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? diff.pathA : diff.pathB}"
+                                                            th:data-line-num-a="${line.numA}"
+                                                            th:data-line-num-b="${line.numB}"
+                                                            th:data-kind="${line.kind}">
+                                                            <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" 
+                                                                th:text="${line.numA != null ? line.numA + 1 : '+'}" class="add-comment-btn-cell"></td>
+                                                            <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" 
+                                                                th:text="${line.numB != null ? line.numB + 1 : '+'}"></td>
+                                                            <td class="code" style="padding-left: 10px;">
+                                                                <pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" 
+                                                                     th:text="${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).ADD ? '+' : (line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? '-' : ' ')} + ${line.content}"></pre>
+                                                            </td>
+                                                        </tr>
+
+                                                        <th:block th:with="lineVal=${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? line.numA : line.numB}, 
+                                                                           sideVal=${line.kind == T(com.github.search5.yona.domain.vcs.DiffLineType).REMOVE ? 'A' : 'B'}">
+                                                            <th:block th:insert="~{code/compare :: renderLineComments(${commentThreads}, ${diff}, ${lineVal}, ${sideVal})}"></th:block>
+                                                        </th:block>
+                                                    </th:block>
+                                                </th:block>
+                                            </th:block>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
 
-        <div style="margin-top: 30px; margin-bottom: 40px;">
-          <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name})}" class="btn btn-default">목록으로</a>
+            <div style="margin-top: 30px; margin-bottom: 40px;">
+                <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name})}" class="ybtn" th:text="#{button.list}">목록으로</a>
+            </div>
         </div>
-
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script th:inline="javascript">
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
+<script type="text/javascript" th:inline="javascript">
   $(document).ready(function() {
       const currentUser = [[${currentUser != null}]];
       const prPostCommentUrl = "[[@{/{owner}/{projectName}/pullRequest/{pullRequestId}/comments(owner=${project.owner}, projectName=${project.name}, pullRequestId=${pr.id})}]]";

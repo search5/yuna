@@ -37,7 +37,9 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val projectUserRepository: ProjectUserRepository,
     private val roleRepository: RoleRepository,
     private val postingRepository: PostingRepository,
-    private val issueRepository: IssueRepository
+    private val issueRepository: IssueRepository,
+    private val issueLabelRepository: com.github.search5.yona.domain.issue.IssueLabelRepository,
+    private val issueLabelCategoryRepository: com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -76,6 +78,23 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     isCodeAccessibleMemberOnly = false
                 )
             )
+            val category = issueLabelCategoryRepository.findAll().find { it.project.id == publicProj.id }
+                ?: issueLabelCategoryRepository.save(
+                    com.github.search5.yona.domain.issue.IssueLabelCategory(
+                        name = "테스트카테고리",
+                        project = publicProj
+                    )
+                )
+
+            val label = issueLabelRepository.findAll().find { it.category.id == category.id }
+                ?: issueLabelRepository.save(
+                    com.github.search5.yona.domain.issue.IssueLabel(
+                        name = "테스트라벨",
+                        color = "#FF0000",
+                        category = category,
+                        project = publicProj
+                    )
+                )
 
             // 프로젝트 2: 공개 프로젝트이지만 코드는 멤버전용인 프로젝트
             val codeMemberOnlyProj = projectRepository.findAll().find { it.name == "memberonly-proj" } ?: projectRepository.save(
@@ -267,6 +286,28 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     val disabledBox = doc.select(".write-comment-box[data-login='required']")
                     disabledBox.size shouldBe 1
                     disabledBox.select("textarea.comment.disabled").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-4] 게시판 목록 뷰(board/list.html) 렌더링 동치성 검증") {
+                it("게시판 목록 조회 시 라벨 드롭다운 필터 및 단축키 도움말 조각이 렌더링되어야 한다") {
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj/posts")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val html = result.response.contentAsString
+                    val doc = Jsoup.parse(html)
+
+                    // 1. 라벨 드롭다운 필터 존재 여부 검증
+                    doc.select(".board-labels").size shouldNotBe 0
+                    doc.select(".board-labels select").size shouldNotBe 0
+
+                    // 2. 단축키 도움말 조각 존재 여부 검증
+                    doc.select("#helpKeys").size shouldNotBe 0
+                    doc.select(".board-footer").size shouldNotBe 0
                 }
             }
         }

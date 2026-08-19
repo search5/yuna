@@ -19,6 +19,11 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.issue.IssueLabelRepository
+import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
+import com.github.search5.yona.domain.issue.IssueLabelCategory
+
 @Component("templateHelper")
 class TemplateHelper(
     private val messageSource: MessageSource,
@@ -27,7 +32,10 @@ class TemplateHelper(
     private val issueRepository: IssueRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val postingRepository: PostingRepository,
-    private val projectUserRepository: ProjectUserRepository
+    private val projectUserRepository: ProjectUserRepository,
+    private val issueLabelRepository: IssueLabelRepository,
+    private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
+    private val milestoneRepository: MilestoneRepository
 ) {
 
     fun agoOrDateString(instant: Instant?): String {
@@ -233,6 +241,43 @@ class TemplateHelper(
         return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
             .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
             .orElse(false)
+    }
+
+    fun getLabelCategories(project: Project?): List<IssueLabelCategory> {
+        if (project == null) return emptyList()
+        return issueLabelCategoryRepository.findByProject(project)
+    }
+
+    fun getLabelsByCategory(category: IssueLabelCategory?): List<IssueLabel> {
+        if (category == null) return emptyList()
+        return issueLabelRepository.findByCategory(category)
+    }
+
+    fun getProjectLabels(project: Project?): List<IssueLabel> {
+        if (project == null) return emptyList()
+        return issueLabelRepository.findByProject(project)
+    }
+
+    fun canBeDeleted(issue: Issue?, comments: List<com.github.search5.yona.domain.issue.IssueComment>?): Boolean {
+        if (issue == null) return false
+        if (comments.isNullOrEmpty()) return true
+        return comments.all { it.authorLoginId == issue.authorLoginId }
+    }
+
+    fun getAssignableUsers(project: Project?): List<com.github.search5.yona.domain.user.User> {
+        if (project == null || project.id == null) return emptyList()
+        return projectUserRepository.findByProjectId(project.id!!).map { it.user }
+    }
+
+    fun getOpenMilestones(project: Project?): List<com.github.search5.yona.domain.milestone.Milestone> {
+        if (project == null) return emptyList()
+        return milestoneRepository.findByProjectAndState(project, com.github.search5.yona.domain.enumeration.State.OPEN)
+    }
+
+    fun isMac(): Boolean {
+        val request = (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() as? org.springframework.web.context.request.ServletRequestAttributes)?.request
+        val userAgent = request?.getHeader("User-Agent") ?: return false
+        return userAgent.contains("Macintosh", ignoreCase = true)
     }
 }
 

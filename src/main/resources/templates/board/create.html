@@ -5,8 +5,8 @@
 <body class="theme-default prj" id="html-body">
 <div id="main" class="main">
     <div th:replace="~{site/layout :: gnb}"></div>
-    <div th:replace="~{site/layout :: projectHeader}"></div>
-    <div th:replace="~{site/layout :: projectMenu('BOARD')}"></div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'board')}"></div>
 
     <div class="page-wrap-outer">
         <div class="project-page-wrap">
@@ -44,6 +44,7 @@
                             <span th:text="#{post.notice.label}">공지로 등록</span>
                         </label>
 
+                        <input type="hidden" id="readme" name="readme" th:value="${readme}">
                         <input type="hidden" id="issueTemplate" name="issueTemplate" th:value="${param.issueTemplate}">
                         <input type="hidden" id="branch" name="branch" th:value="${param.branch}">
                         <input type="hidden" id="path" name="path" th:value="${param.path}">

@@ -5,8 +5,8 @@
 <body class="theme-default prj" id="html-body">
 <div id="main" class="main">
     <div th:replace="~{site/layout :: gnb}"></div>
-    <div th:replace="~{site/layout :: projectHeader}"></div>
-    <div th:replace="~{site/layout :: projectMenu('BOARD')}"></div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'board')}"></div>
 
     <div class="page-wrap-outer">
         <div class="project-page-wrap board-view">
@@ -59,6 +59,7 @@
                         </div>
 
                         <button type="button" id="translate" class="icon btn-transparent-with-fontsize-lineheight ml10" data-toggle="tooltip" th:title="#{button.translation}"><i class="yobicon-lang"></i></button>
+                        <div class="watcher-list" style="margin-top: 10px;"></div>
 
                         <span class="act-row">
                             <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:onclick="|window.location='/${project.owner}/${project.name}/post/${post.number}/editform'|"><i class="yobicon-edit-2"></i></button>
@@ -134,8 +135,24 @@
                                 <a th:href="@{/{owner}/{projectName}/post/new(owner=${project.owner}, projectName=${project.name})}" class="ybtn ybtn-success" th:text="#{post.write}">글쓰기</a>
                             </dd>
                         </dl>
+
+                        <!-- labels -->
+                        <th:block th:with="projectLabels=${@templateHelper.getProjectLabels(project)}">
+                            <div th:if="${projectLabels != null and !projectLabels.isEmpty()}">
+                                <div th:if="${isAllowedUpdate}">
+                                    <div th:replace="~{issue/partial_select_label :: selectLabel(${projectLabels}, ${post.labels}, '', '', ${project})}"></div>
+                                </div>
+                                <div th:unless="${isAllowedUpdate}">
+                                    <div th:replace="~{issue/partial_show_selected_label :: showLabel(${post.labels}, '')}"></div>
+                                </div>
+                            </div>
+                        </th:block>
                     </div>
                 </div>
+            </div>
+
+            <div class="board-footer" style="margin-top: 15px; margin-bottom: 15px;">
+                <div th:replace="~{help/keymap}" th:with="section='boardDetail'"></div>
             </div>
         </div>
     </div>

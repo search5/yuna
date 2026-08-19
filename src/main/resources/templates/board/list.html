@@ -18,6 +18,13 @@
                         <input name="filter" class="textbox" type="text" th:placeholder="#{project.searchPlaceholder}" th:value="${filter}">
                         <button type="submit" class="search-btn"><i class="yobicon-search"></i></button>
                     </div>
+
+                    <!-- board labels filter -->
+                    <th:block th:with="projectLabels=${@templateHelper.getProjectLabels(project)}">
+                        <div th:if="${projectLabels != null and !projectLabels.isEmpty()}" class="board-labels" style="display: inline-block; vertical-align: middle; margin-left: 10px;">
+                            <div th:replace="~{issue/partial_select_label :: selectLabel(${projectLabels}, null, '', '', ${project})}"></div>
+                        </div>
+                    </th:block>
                 </form>
                 <div class="pull-right">
                     <a th:href="@{/{owner}/{projectName}/post/new(owner=${project.owner}, projectName=${project.name})}" class="ybtn ybtn-success" th:text="#{post.write}">글쓰기</a>
@@ -63,6 +70,7 @@
                             <a th:href="@{/{owner}/{projectName}/post/{number}(owner=${project.owner}, projectName=${project.name}, number=${notice.number})}" class="title" th:text="${notice.title}">
                                 공지 제목
                             </a>
+                            <span th:each="label : ${notice.labels}" class="label issue-label list-label active" th:style="'background: ' + ${label.color} + '; color: #fff; padding: 1px 4px; border-radius: 2px; font-size: 11px; margin-left: 4px; display: inline-block;'" th:text="${label.name}">라벨</span>
                         </div>
                         <div class="infos">
                             <a th:href="@{/user/{loginId}(loginId=${notice.authorLoginId})}" class="infos-item infos-link-item" data-toggle="tooltip" data-placement="bottom" th:title="${notice.authorLoginId}" th:text="${notice.authorName}">
@@ -93,6 +101,7 @@
                             <a th:href="@{/{owner}/{projectName}/post/{number}(owner=${project.owner}, projectName=${project.name}, number=${post.number})}" class="title" th:text="${post.title}">
                                 게시글 제목
                             </a>
+                            <span th:each="label : ${post.labels}" class="label issue-label list-label active" th:style="'background: ' + ${label.color} + '; color: #fff; padding: 1px 4px; border-radius: 2px; font-size: 11px; margin-left: 4px; display: inline-block;'" th:text="${label.name}">라벨</span>
                         </div>
                         <div class="infos">
                             <a th:href="@{/user/{loginId}(loginId=${post.authorLoginId})}" class="infos-item infos-link-item" data-toggle="tooltip" data-placement="bottom" th:title="${post.authorLoginId}" th:text="${post.authorName}">
@@ -117,18 +126,33 @@
             <!-- pagination.js가 채워질 페이징 바 영역 -->
             <div id="pagination"></div>
 
+            <div class="board-footer" style="margin-top: 15px; margin-bottom: 15px;">
+                <div th:replace="~{help/keymap}" th:with="section='boardList'"></div>
+            </div>
         </div>
     </div>
 </div>
 
 <th:block th:replace="~{site/layout :: scripts}"></th:block>
+<th:block th:replace="~{common/select2 :: select2}"></th:block>
 <script type="text/javascript" src="/javascripts/lib/jquery.pageslide.js"></script>
 <script type="text/javascript" src="/javascripts/service/yona.twoColumnMode.js"></script>
-<script type="text/javascript">
+<script type="text/javascript" th:inline="javascript">
     $(document).ready(function() {
         $yobi.loadModule("board.List", {
             "elPagination": $('#pagination'),
             "nTotalPages" : [[${postingPage.totalPages}]]
+        });
+
+        // 단축키 "N" 바인딩 복원
+        var projectOwner = [[${project.owner}]];
+        var projectName = [[${project.name}]];
+        yobi.ShortcutKey.setKeymapLink({
+            "N": "/" + projectOwner + "/" + projectName + "/post/new"
+        });
+
+        $('.board-labels select').on('change', function(e){
+            $("#option_form").submit();
         });
     });
 </script>

@@ -661,6 +661,62 @@ class IssueViewController(
             ""
         }
     }
+
+    @org.springframework.web.bind.annotation.PostMapping(value = ["/{owner}/{projectName}/issue/{number}/editform", "/{owner}/{projectName}/issue/{number}/edit"])
+    fun editIssue(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable number: Long,
+        @org.springframework.web.bind.annotation.ModelAttribute request: IssueForm,
+        authentication: Authentication?
+    ): String {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return "error/403"
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return "error/404"
+
+        if (issue.authorLoginId != loginUser.loginId && !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            return "error/403"
+        }
+
+        val assigneeUser = request.assigneeLoginId?.let { 
+            if (it.isNotBlank()) userRepository.findByLoginId(it).orElse(null) else null 
+        }
+
+        issue.title = request.title
+        issue.body = request.body ?: ""
+        
+        if (!request.dueDate.isNullOrBlank()) {
+            try {
+                val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                val localDate = java.time.LocalDate.parse(request.dueDate, formatter)
+                issue.dueDate = java.time.ZonedDateTime.of(localDate, java.time.LocalTime.MIDNIGHT, java.time.ZoneId.systemDefault()).toInstant()
+            } catch (e: Exception) {
+                // ignore
+            }
+        } else {
+            issue.dueDate = null
+        }
+
+        val parentIssue = request.parentIssueId?.let { issueRepository.findById(it).orElse(null) }
+        issue.parent = parentIssue
+
+        issueService.updateIssue(
+            issueId = issue.id!!,
+            title = request.title,
+            body = request.body ?: "",
+            updater = loginUser,
+            assigneeUser = assigneeUser,
+            milestoneId = request.milestoneId,
+            labelIds = request.labelIds
+        )
+
+        return "redirect:/$owner/$projectName/issue/$number"
+    }
 }
 
 class IssueMassUpdateForm {
@@ -683,3 +739,13 @@ class AssigneeIdForm {
 class MilestoneIdForm {
     var id: Long? = null
 }
+
+data class IssueForm(
+    var title: String = "",
+    var body: String? = "",
+    var assigneeLoginId: String? = null,
+    var milestoneId: Long? = null,
+    var dueDate: String? = null,
+    var labelIds: List<Long>? = null,
+    var parentIssueId: Long? = null
+)

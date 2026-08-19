@@ -16,38 +16,59 @@
               <div class="siteintro-wrap">
                   <h1 class="site-heading">21st Century Software Development Platform</h1>
                   <ul class="site-features">
-                      <li>오직 당신이 해야 할 일에만 집중하세요</li>
+                      <li>Just focus on what you have to do</li>
                   </ul>
               </div>
               <div class="signup-btn">
-                  <a th:href="@{/signup}" class="ybtn ybtn-success ybtn-padding">
-                      Yona 시작하기
+                  <a th:href="@{/signup}" class="ybtn ybtn-success ybtn-padding" th:text="#{button.signup('Yona')}">
+                      Sign up for Yona
                   </a>
               </div>
           </div>
       </div>
       <div class="feature">
-          <h2><span>주요 기능</span></h2>
+          <h2><span th:text="#{title.features}">Key features</span></h2>
           <ul class="feature-wrap row" style="list-style: none; padding: 0;">
               <li>
                   <div class="feature-image"><i class="yobicon-cgicenter"></i></div>
                   <div class="feature-info">
-                      <h3 class="feature-title">무제한 프로젝트</h3>
-                      <p class="feature-desc">필요한 만큼 마음껏 프로젝트 저장소를 생성하세요.</p>
+                      <h3 class="feature-title" th:text="#{title.unlimitedProjects}">Project / Organization</h3>
+                      <p class="feature-desc" th:text="#{site.features.unlimitedProjects}">Work based on projects/organizations supported by proper roles</p>
                   </div>
               </li>
               <li>
                   <div class="feature-image"><i class="yobicon-code"></i></div>
                   <div class="feature-info">
-                      <h3 class="feature-title">코드 관리</h3>
-                      <p class="feature-desc">Git 저장소를 브라우저에서 편리하게 브라우징할 수 있습니다.</p>
+                      <h3 class="feature-title" th:text="#{title.codeManagement}">Code management</h3>
+                      <p class="feature-desc" th:text="#{site.features.codeManagement}">Your code is safely stored in a version controlled system.</p>
                   </div>
               </li>
               <li>
                   <div class="feature-image"><i class="yobicon-articles"></i></div>
                   <div class="feature-info">
-                      <h3 class="feature-title">이슈 트래커</h3>
-                      <p class="feature-desc">단순하고 강력한 이슈 관리 시스템으로 업무를 조율하세요.</p>
+                      <h3 class="feature-title" th:text="#{title.issueTracker}">Issue tracker</h3>
+                      <p class="feature-desc" th:text="#{site.features.issueTracker}">Yona provides an issue tracker to help you deal with your issues more easily and clearly.</p>
+                  </div>
+              </li>
+              <li>
+                  <div class="feature-image"><i class="yobicon-lock"></i></div>
+                  <div class="feature-info">
+                      <h3 class="feature-title" th:text="#{title.privateProject}">Private repositories</h3>
+                      <p class="feature-desc" th:text="#{site.features.privateRepositories}">Keep your code private at your private repositories.</p>
+                  </div>
+              </li>
+              <li>
+                  <div class="feature-image"><i class="yobicon-preview"></i></div>
+                  <div class="feature-info">
+                      <h3 class="feature-title" th:text="#{title.codeReview}">Code review</h3>
+                      <p class="feature-desc" th:text="#{site.features.codeReview}">Review all changes in the code with your team before merging. Code discussion will help improve your code.</p>
+                  </div>
+              </li>
+              <li>
+                  <div class="feature-image"><i class="yobicon-friends"></i></div>
+                  <div class="feature-info">
+                      <h3 class="feature-title" th:text="#{title.workTeam}">Team play</h3>
+                      <p class="feature-desc" th:text="#{site.features.workTeam}">Yona provides a simple and easy team management tool to help you build teams for projects.</p>
                   </div>
               </li>
           </ul>

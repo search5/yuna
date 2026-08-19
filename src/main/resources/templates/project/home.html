@@ -63,7 +63,7 @@
                             <!-- 1. README 탭 -->
                             <div th:if="${tabId == 'readme'}" class="bubble-wrap gray readme">
                                 <p class="default" th:if="${readmeHtml == null}">
-                                    <span th:text="#{project.readme.help}">README.md will be shown here if you add it to the code repository's root directory.</span>
+                                    <span th:text="#{project.readme}">README.md will be shown here if you add it to the code repository's root directory.</span>
                                     <br><br>
                                     <a th:if="${project.isCodeEnabled}" th:href="@{/{owner}/{name}/postform?readme=true(owner=${project.owner}, name=${project.name})}" class="ybtn" th:text="#{project.readme.create}">create README</a>
                                 </p>
