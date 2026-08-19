@@ -50,7 +50,7 @@
 | P1-09 | [x] | RecentIssue(최근 본 이슈) 부재 | `models/RecentIssue.java` | `domain/issue/{RecentIssue,RecentIssueRepository,RecentIssueService}.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P1-10 | [x] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` | **완료** |
 | P1-11 | [x] | 라벨 카테고리 수정 기능 없음 | `IssueLabelApp.java:390` | 위와 동일 | **완료** |
-| P1-12 | [ ] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 |
+| P1-12 | [x] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 | **완료** |
 | P1-13 | [ ] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` |
 | P1-14 | [ ] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | (해당 없음) |
 | P1-15 | [ ] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | (해당 없음) |
@@ -221,6 +221,12 @@
   - `IssueLabelService`/`IssueLabelServiceImpl`에 `updateCategory(categoryId, name, isExclusive)` 추가 — 대상 카테고리 조회(없으면 `IllegalArgumentException`) 후, **같은 프로젝트 내 다른 카테고리가 이미 같은 이름을 쓰고 있으면**(자기 자신 제외) 신규 `DuplicateLabelCategoryNameException`을 던져 거부 — yona가 `lc.name.equals(category.name) && !lc.id.equals(category.id)` 조건으로 `badRequest`를 반환하던 것과 동일한 동작.
   - `IssueLabelController`에 `PUT /api/projects/{projectId}/labels/categories/{categoryId}` 추가 — `isProjectManager` 권한 검사 후 서비스 호출, `DuplicateLabelCategoryNameException`을 `400 Bad Request`로 매핑(이 코드베이스에 전역 `@ExceptionHandler`가 없어 컨트롤러에서 직접 catch — yona가 이 케이스만 명시적으로 400을 반환하는 것과 동일하게, 다른 도메인 예외(`InvalidBranchOperationException` 등)처럼 그냥 흘려보내지 않고 여기서는 의도적으로 매핑함).
   - 테스트: `IssueLabelServiceImplSpec.kt` +4 tests(정상 수정, 카테고리 없음, 이름 중복 시 예외, 자기 자신과 이름이 같으면 중복 아님). `IssueLabelControllerSpec.kt` +3(관리자 200 OK, 이름 중복 400, 비관리자 403). 커버리지: `updateCategory` 메서드 LINE 100%(8/8)·BRANCH 83%(5/6).
+  - 검증: `./gradlew test --tests "IssueLabelServiceImplSpec" --tests "IssueLabelControllerSpec" --tests "YonaApplicationTests"` 전체 통과.
+
+- **2026-08-19 — P1-12**: 다른 프로젝트의 라벨 세트를 그대로 복사해오는 기능이 yuna에 없던 문제 해결(yona `IssueLabelApp.copyLabels()`/`IssueLabel.copyIssueLabels()` 대응).
+  - `IssueLabelService`/`IssueLabelServiceImpl`에 `copyLabels(fromProjectId, toProjectId)` 추가 — 원본 프로젝트의 모든 라벨을 순회하며, **라벨 이름이 대상 프로젝트에 이미 있으면 건너뛰고**(P1-10/P0에서 이미 확립된 "프로젝트 내 라벨 이름 유일성" 기준과 동일 — yona 원본의 category+name 복합 유일성 대신 이 코드베이스가 처음부터 택한 단순화), 카테고리는 이름이 같은 게 대상 프로젝트에 있으면 재사용하고 없으면 새로 생성한 뒤 라벨을 새로 만들어 저장.
+  - `IssueLabelController`에 `POST /api/projects/{projectId}/labels/copy`(body: `fromProjectId`) 추가 — 대상 프로젝트는 `isProjectManager`(생성 권한, yona `@IsCreatable(ISSUE_LABEL)` 대응), 원본 프로젝트는 `checkReadPermission`(yona `AccessControl.isAllowed(..., READ)` 대응)으로 각각 별도 권한 검사.
+  - 테스트: `IssueLabelServiceImplSpec.kt` +4 tests(신규 카테고리+라벨 복사, 카테고리 재사용, 라벨 이름 중복 시 건너뜀, 원본 프로젝트 없음). `IssueLabelControllerSpec.kt` +3(정상 복사 200 OK, 대상 프로젝트 비관리자 403, 원본 프로젝트 비공개+비멤버 403). 커버리지: `copyLabels` 메서드 LINE 100%(22/22)·BRANCH 100%(6/6).
   - 검증: `./gradlew test --tests "IssueLabelServiceImplSpec" --tests "IssueLabelControllerSpec" --tests "YonaApplicationTests"` 전체 통과.
 
 ### 검증 방법

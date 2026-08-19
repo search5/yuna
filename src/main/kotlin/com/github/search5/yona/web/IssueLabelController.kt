@@ -162,6 +162,32 @@ class IssueLabelController(
         }
     }
 
+    // yona IssueLabelApp.copyLabels() 대응 (P1-12). 대상(projectId) 프로젝트에는 생성 권한(관리자),
+    // 원본(fromProjectId) 프로젝트에는 읽기 권한이 있어야 한다(yona AccessControl.isAllowed(..., READ)).
+    @PostMapping("/copy")
+    fun copyLabels(
+        @PathVariable projectId: Long,
+        @RequestBody request: CopyLabelsRequest,
+        authentication: Authentication?
+    ): ResponseEntity<List<IssueLabel>> {
+        val toProject = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isProjectManager(projectId, user.id!!)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val fromProject = projectRepository.findById(request.fromProjectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        if (!checkReadPermission(fromProject, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val copied = issueLabelService.copyLabels(fromProjectId = request.fromProjectId, toProjectId = projectId)
+        return ResponseEntity.ok(copied)
+    }
+
     @DeleteMapping("/{labelId}")
     fun deleteLabel(
         @PathVariable projectId: Long,
@@ -218,5 +244,9 @@ class IssueLabelController(
     data class UpdateCategoryRequest(
         val name: String,
         val isExclusive: Boolean?
+    )
+
+    data class CopyLabelsRequest(
+        val fromProjectId: Long
     )
 }

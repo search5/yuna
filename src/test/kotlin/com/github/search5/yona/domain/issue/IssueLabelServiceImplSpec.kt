@@ -115,4 +115,81 @@ class IssueLabelServiceImplSpec : DescribeSpec({
             result.isExclusive shouldBe true
         }
     }
+
+    describe("IssueLabelServiceImpl.copyLabels") {
+        val fromProject = Project(id = 2L, name = "FromProject", owner = "gildong")
+        val toProject = Project(id = 3L, name = "ToProject", owner = "gildong")
+
+        it("원본 프로젝트의 라벨/카테고리를 대상 프로젝트에 복사해야 한다(카테고리·라벨 모두 신규)") {
+            val fromCategory = IssueLabelCategory(id = 20L, name = "버그", isExclusive = true, project = fromProject)
+            val fromLabel = IssueLabel(id = 30L, category = fromCategory, color = "#ff0000", name = "critical", project = fromProject)
+
+            every { projectRepository.findById(2L) } returns Optional.of(fromProject)
+            every { projectRepository.findById(3L) } returns Optional.of(toProject)
+            every { issueLabelRepository.findByProject(fromProject) } returns listOf(fromLabel)
+            every { issueLabelCategoryRepository.findByProjectAndName(toProject, "버그") } returns null
+
+            val savedCategory = slot<IssueLabelCategory>()
+            every { issueLabelCategoryRepository.save(capture(savedCategory)) } answers {
+                firstArg<IssueLabelCategory>().apply { id = 21L }
+            }
+            every { issueLabelRepository.findByProjectAndName(toProject, "critical") } returns null
+
+            val savedLabel = slot<IssueLabel>()
+            every { issueLabelRepository.save(capture(savedLabel)) } answers { firstArg() }
+
+            val result = service.copyLabels(fromProjectId = 2L, toProjectId = 3L)
+
+            savedCategory.captured.name shouldBe "버그"
+            savedCategory.captured.isExclusive shouldBe true
+            savedCategory.captured.project shouldBe toProject
+            savedLabel.captured.name shouldBe "critical"
+            savedLabel.captured.color shouldBe "#ff0000"
+            savedLabel.captured.project shouldBe toProject
+            result.size shouldBe 1
+        }
+
+        it("대상 프로젝트에 같은 이름의 카테고리가 이미 있으면 재사용하고 새로 만들지 않아야 한다") {
+            val fromCategory = IssueLabelCategory(id = 20L, name = "버그", isExclusive = true, project = fromProject)
+            val fromLabel = IssueLabel(id = 30L, category = fromCategory, color = "#ff0000", name = "critical", project = fromProject)
+            val existingCategory = IssueLabelCategory(id = 99L, name = "버그", isExclusive = true, project = toProject)
+
+            every { projectRepository.findById(2L) } returns Optional.of(fromProject)
+            every { projectRepository.findById(3L) } returns Optional.of(toProject)
+            every { issueLabelRepository.findByProject(fromProject) } returns listOf(fromLabel)
+            every { issueLabelCategoryRepository.findByProjectAndName(toProject, "버그") } returns existingCategory
+            every { issueLabelRepository.findByProjectAndName(toProject, "critical") } returns null
+            every { issueLabelRepository.save(any()) } answers { firstArg() }
+
+            service.copyLabels(fromProjectId = 2L, toProjectId = 3L)
+
+            verify(exactly = 0) { issueLabelCategoryRepository.save(any()) }
+        }
+
+        it("대상 프로젝트에 같은 이름의 라벨이 이미 있으면 건너뛰어야 한다") {
+            val fromCategory = IssueLabelCategory(id = 20L, name = "버그", isExclusive = true, project = fromProject)
+            val fromLabel = IssueLabel(id = 30L, category = fromCategory, color = "#ff0000", name = "critical", project = fromProject)
+            val existingLabel = IssueLabel(id = 88L, category = fromCategory, color = "#000000", name = "critical", project = toProject)
+
+            every { projectRepository.findById(2L) } returns Optional.of(fromProject)
+            every { projectRepository.findById(3L) } returns Optional.of(toProject)
+            every { issueLabelRepository.findByProject(fromProject) } returns listOf(fromLabel)
+            every { issueLabelCategoryRepository.findByProjectAndName(toProject, "버그") } returns null
+            every { issueLabelCategoryRepository.save(any()) } answers { firstArg<IssueLabelCategory>().apply { id = 21L } }
+            every { issueLabelRepository.findByProjectAndName(toProject, "critical") } returns existingLabel
+
+            val result = service.copyLabels(fromProjectId = 2L, toProjectId = 3L)
+
+            result.size shouldBe 0
+            verify(exactly = 0) { issueLabelRepository.save(any()) }
+        }
+
+        it("원본 프로젝트가 없으면 IllegalArgumentException을 던져야 한다") {
+            every { projectRepository.findById(2L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                service.copyLabels(fromProjectId = 2L, toProjectId = 3L)
+            }
+        }
+    }
 })

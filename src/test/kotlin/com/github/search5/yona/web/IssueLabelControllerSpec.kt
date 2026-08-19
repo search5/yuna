@@ -260,6 +260,63 @@ class IssueLabelControllerSpec : DescribeSpec({
             }
         }
 
+        describe("POST /api/projects/{projectId}/labels/copy") {
+            val fromProject = Project(id = 2L, name = "FromProject", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val copiedLabel = IssueLabel(id = 400L, category = category, color = "#ff0000", name = "critical", project = project)
+
+            it("대상 프로젝트 관리자이고 원본 프로젝트를 읽을 수 있으면 200 OK와 복사된 라벨 목록을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { projectRepository.findById(2L) } returns Optional.of(fromProject)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
+                every { issueLabelService.copyLabels(2L, 1L) } returns listOf(copiedLabel)
+
+                mockMvc.perform(
+                    post("/api/projects/1/labels/copy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"fromProjectId": 2}""")
+                        .principal(managerAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0].name").value("critical"))
+            }
+
+            it("대상 프로젝트의 관리자가 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+
+                mockMvc.perform(
+                    post("/api/projects/1/labels/copy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"fromProjectId": 2}""")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueLabelService.copyLabels(any(), any()) }
+            }
+
+            it("원본 프로젝트가 비공개이고 원본 프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                val privateFromProject = Project(id = 2L, name = "PrivateFromProject", owner = "owner", projectScope = ProjectScope.PRIVATE)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { projectRepository.findById(2L) } returns Optional.of(privateFromProject)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 20L) } returns false
+
+                mockMvc.perform(
+                    post("/api/projects/1/labels/copy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"fromProjectId": 2}""")
+                        .principal(managerAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueLabelService.copyLabels(any(), any()) }
+            }
+        }
+
         describe("DELETE /api/projects/{projectId}/labels/categories/{categoryId}") {
             it("관리자가 라벨 카테고리를 삭제하면 200 OK를 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)

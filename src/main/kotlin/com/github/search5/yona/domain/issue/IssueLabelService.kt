@@ -7,6 +7,7 @@ interface IssueLabelService {
     fun createCategory(projectId: Long, name: String, isExclusive: Boolean): IssueLabelCategory
     fun updateLabel(labelId: Long, name: String, color: String, categoryId: Long): IssueLabel
     fun updateCategory(categoryId: Long, name: String, isExclusive: Boolean): IssueLabelCategory
+    fun copyLabels(fromProjectId: Long, toProjectId: Long): List<IssueLabel>
     fun deleteLabel(labelId: Long)
     fun deleteCategory(categoryId: Long)
 }

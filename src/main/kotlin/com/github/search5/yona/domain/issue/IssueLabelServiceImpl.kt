@@ -93,6 +93,45 @@ class IssueLabelServiceImpl(
         return issueLabelCategoryRepository.save(category)
     }
 
+    // yona IssueLabel.copyIssueLabels()/copyIssueLabel()/copyIssueLabelCategory() 대응.
+    // 원본 프로젝트의 라벨을 대상 프로젝트로 복사하되, 같은 이름의 카테고리/라벨이 이미 있으면
+    // 재사용(재생성하지 않음)한다. createLabel()과 동일하게 project 내 라벨 이름 유일성 기준으로 판단.
+    override fun copyLabels(fromProjectId: Long, toProjectId: Long): List<IssueLabel> {
+        val fromProject = projectRepository.findById(fromProjectId)
+            .orElseThrow { IllegalArgumentException("Project not found: $fromProjectId") }
+        val toProject = projectRepository.findById(toProjectId)
+            .orElseThrow { IllegalArgumentException("Project not found: $toProjectId") }
+
+        val copiedLabels = mutableListOf<IssueLabel>()
+
+        for (fromLabel in issueLabelRepository.findByProject(fromProject)) {
+            if (issueLabelRepository.findByProjectAndName(toProject, fromLabel.name) != null) {
+                continue
+            }
+
+            val category = issueLabelCategoryRepository.findByProjectAndName(toProject, fromLabel.category.name)
+                ?: issueLabelCategoryRepository.save(
+                    IssueLabelCategory(
+                        name = fromLabel.category.name,
+                        isExclusive = fromLabel.category.isExclusive,
+                        project = toProject
+                    )
+                )
+
+            val copiedLabel = issueLabelRepository.save(
+                IssueLabel(
+                    category = category,
+                    color = fromLabel.color,
+                    name = fromLabel.name,
+                    project = toProject
+                )
+            )
+            copiedLabels.add(copiedLabel)
+        }
+
+        return copiedLabels
+    }
+
     override fun deleteLabel(labelId: Long) {
         issueLabelRepository.deleteIssueMappings(labelId)
         issueLabelRepository.deletePostingMappings(labelId)
