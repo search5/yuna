@@ -1,5 +1,6 @@
 package com.github.search5.yona.config
 
+import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.user.YonaUserDetails
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
@@ -8,6 +9,8 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.security.authentication.BadCredentialsException
+import org.springframework.security.authentication.DisabledException
+import org.springframework.security.authentication.LockedException
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.userdetails.UserDetailsService
@@ -81,6 +84,82 @@ class YonaAuthenticationProviderSpec : DescribeSpec({
             shouldThrow<BadCredentialsException> {
                 authenticationProvider.authenticate(authRequest)
             }
+        }
+
+        it("계정 상태가 LOCKED인 사용자는 비밀번호가 맞아도 LockedException이 발생해야 한다") {
+            // Given
+            val salt = "test-salt"
+            val rawPassword = "myPassword123!"
+            val expectedHashed = getLegacyHashedPassword(rawPassword, salt)
+
+            val userDetails = YonaUserDetails(
+                id = 1L,
+                loginId = "lockedUser",
+                passwordVal = expectedHashed,
+                passwordSalt = salt,
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_LOCKED")),
+                state = UserState.LOCKED
+            )
+
+            every { userDetailsService.loadUserByUsername("lockedUser") } returns userDetails
+
+            val authRequest = UsernamePasswordAuthenticationToken("lockedUser", rawPassword)
+
+            // When & Then
+            shouldThrow<LockedException> {
+                authenticationProvider.authenticate(authRequest)
+            }
+        }
+
+        it("계정 상태가 DELETED인 사용자는 비밀번호가 맞아도 DisabledException이 발생해야 한다") {
+            // Given
+            val salt = "test-salt"
+            val rawPassword = "myPassword123!"
+            val expectedHashed = getLegacyHashedPassword(rawPassword, salt)
+
+            val userDetails = YonaUserDetails(
+                id = 1L,
+                loginId = "deletedUser",
+                passwordVal = expectedHashed,
+                passwordSalt = salt,
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_DELETED")),
+                state = UserState.DELETED
+            )
+
+            every { userDetailsService.loadUserByUsername("deletedUser") } returns userDetails
+
+            val authRequest = UsernamePasswordAuthenticationToken("deletedUser", rawPassword)
+
+            // When & Then
+            shouldThrow<DisabledException> {
+                authenticationProvider.authenticate(authRequest)
+            }
+        }
+
+        it("계정 상태가 ACTIVE가 아니어도 LOCKED/DELETED가 아니면(SITE_ADMIN 등) 정상 인증되어야 한다") {
+            // Given
+            val salt = "test-salt"
+            val rawPassword = "myPassword123!"
+            val expectedHashed = getLegacyHashedPassword(rawPassword, salt)
+
+            val userDetails = YonaUserDetails(
+                id = 1L,
+                loginId = "adminUser",
+                passwordVal = expectedHashed,
+                passwordSalt = salt,
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_SITE_ADMIN")),
+                state = UserState.SITE_ADMIN
+            )
+
+            every { userDetailsService.loadUserByUsername("adminUser") } returns userDetails
+
+            val authRequest = UsernamePasswordAuthenticationToken("adminUser", rawPassword)
+
+            // When
+            val authResult = authenticationProvider.authenticate(authRequest)
+
+            // Then
+            authResult.isAuthenticated shouldBe true
         }
     }
 })

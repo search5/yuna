@@ -1,0 +1,67 @@
+package com.github.search5.yona.domain.webhook
+
+import com.github.search5.yona.domain.board.PostingCommentRepository
+import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.notification.NotificationEvent
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.user.UserRepository
+import org.slf4j.LoggerFactory
+import org.springframework.context.event.EventListener
+import org.springframework.scheduling.annotation.Async
+import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
+
+/**
+ * yona의 NotificationEvent.webhookRequest(...)에 대응.
+ * 이슈/댓글 등 도메인 서비스가 이미 publish하고 있던 NotificationEvent를
+ * 구독해 해당 프로젝트에 등록된 웹훅으로 실제 전송한다(이전에는 아무도 구독하지 않아 미발송이었음).
+ *
+ * PULL_REQUEST 등 WebhookService가 아직 payload를 만들 수 없는 리소스 타입은
+ * 조용히 스킵한다 — payload 지원 확장은 별도 작업(P0-03 완료 로그 참고).
+ */
+@Component
+class WebhookNotificationEventListener(
+    private val webhookService: WebhookService,
+    private val userRepository: UserRepository,
+    private val issueRepository: IssueRepository,
+    private val postingRepository: PostingRepository,
+    private val issueCommentRepository: IssueCommentRepository,
+    private val postingCommentRepository: PostingCommentRepository
+) {
+    private val logger = LoggerFactory.getLogger(WebhookNotificationEventListener::class.java)
+
+    @Async("taskExecutor")
+    @EventListener
+    @Transactional(readOnly = true)
+    fun handleNotificationEvent(event: NotificationEvent) {
+        val sender = event.senderId?.let { userRepository.findById(it).orElse(null) } ?: return
+        val (project, resource) = resolveResource(event.resourceType, event.resourceId) ?: run {
+            logger.debug("웹훅 대상 리소스를 찾지 못해 스킵: resourceType=${event.resourceType}, resourceId=${event.resourceId}")
+            return
+        }
+
+        webhookService.sendWebhook(project, event.eventType, sender, resource)
+    }
+
+    private fun resolveResource(resourceType: ResourceType, resourceId: String): Pair<Project, Any>? {
+        val id = resourceId.toLongOrNull() ?: return null
+        return when (resourceType) {
+            ResourceType.ISSUE_POST ->
+                issueRepository.findById(id).orElse(null)?.let { it.project to it }
+
+            ResourceType.BOARD_POST ->
+                postingRepository.findById(id).orElse(null)?.let { it.project to it }
+
+            ResourceType.ISSUE_COMMENT ->
+                issueCommentRepository.findById(id).orElse(null)?.let { it.issue.project to it }
+
+            ResourceType.NONISSUE_COMMENT ->
+                postingCommentRepository.findById(id).orElse(null)?.let { it.posting.project to it }
+
+            else -> null
+        }
+    }
+}

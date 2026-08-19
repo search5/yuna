@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.data.domain.PageImpl
@@ -27,6 +28,7 @@ import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.milestone.MilestoneService
 import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.user.FavoriteIssueRepository
+import com.github.search5.yona.domain.attachment.Attachment
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 
 import com.github.search5.yona.domain.project.RecentProjectRepository
@@ -172,6 +174,82 @@ class IssueViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("issue/create"))
                     .andExpect(model().attributeExists("project", "issueTemplate"))
+            }
+        }
+
+        describe("POST /{owner}/{projectName}/issues - 임시 업로드 첨부파일 연결") {
+            it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 생성된 이슈에 연결되어야 한다") {
+                val user = User(id = 10L, loginId = "testuser", name = "테스터")
+                val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+                val savedIssue = Issue(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
+
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every {
+                    issueService.createIssue(any(), any(), any(), any(), any())
+                } returns savedIssue
+
+                val attachment1 = Attachment(id = 900L, containerType = com.github.search5.yona.domain.enumeration.ResourceType.NOT_A_RESOURCE, containerId = "")
+                val attachment2 = Attachment(id = 901L, containerType = com.github.search5.yona.domain.enumeration.ResourceType.NOT_A_RESOURCE, containerId = "")
+                every { attachmentRepository.findById(900L) } returns Optional.of(attachment1)
+                every { attachmentRepository.findById(901L) } returns Optional.of(attachment2)
+                every { attachmentRepository.save(any()) } returns attachment1
+
+                val auth = UsernamePasswordAuthenticationToken("testuser", "pass")
+
+                val result = issueViewController.createIssue(
+                    owner = "owner",
+                    projectName = "TestProj",
+                    title = "제목",
+                    body = "본문",
+                    parentIssueId = null,
+                    targetProjectId = null,
+                    assigneeLoginId = null,
+                    milestoneId = null,
+                    dueDate = null,
+                    labelIds = null,
+                    isDraft = false,
+                    temporaryUploadFiles = "900,901",
+                    authentication = auth
+                )
+
+                result shouldBe "redirect:/owner/TestProj/issue/5"
+                attachment1.containerType shouldBe com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST
+                attachment1.containerId shouldBe "100"
+                attachment2.containerType shouldBe com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST
+                attachment2.containerId shouldBe "100"
+            }
+
+            it("temporaryUploadFiles가 없으면 첨부파일 연결 로직 없이도 정상 생성되어야 한다") {
+                val user = User(id = 10L, loginId = "testuser", name = "테스터")
+                val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+                val savedIssue = Issue(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
+
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every {
+                    issueService.createIssue(any(), any(), any(), any(), any())
+                } returns savedIssue
+
+                val auth = UsernamePasswordAuthenticationToken("testuser", "pass")
+
+                val result = issueViewController.createIssue(
+                    owner = "owner",
+                    projectName = "TestProj",
+                    title = "제목",
+                    body = "본문",
+                    parentIssueId = null,
+                    targetProjectId = null,
+                    assigneeLoginId = null,
+                    milestoneId = null,
+                    dueDate = null,
+                    labelIds = null,
+                    isDraft = false,
+                    temporaryUploadFiles = null,
+                    authentication = auth
+                )
+
+                result shouldBe "redirect:/owner/TestProj/issue/5"
             }
         }
     }

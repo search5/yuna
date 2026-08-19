@@ -1,0 +1,108 @@
+# yona → yuna 동치성 회귀 백로그
+
+`yona`(Play/Java)에서 `yuna`(Spring Boot/Kotlin)로 이식하며 발견된 기능 격차를 중요도 순으로 번호를 매겨 정리한 작업 백로그다. 원본 감사 리포트: 이 세션에서 생성한 아티팩트 "요나·유나 동치성 감사" 참고.
+
+## 진행 규칙 (TDD + JaCoCo)
+
+1. 항목마다 **먼저 실패하는 회귀 테스트**를 작성한다 (yona의 기대 동작을 yuna에서 명세).
+2. 테스트가 레드 상태임을 확인한 뒤, 최소 구현으로 그린으로 만든다.
+3. `./gradlew test`는 `build.gradle.kts`에 설정된 JaCoCo(`jacocoTestReport`)로 `finalizedBy` 연결되어 있어, 테스트를 돌릴 때마다 `build/reports/jacoco/test/jacocoTestReport.xml`(+ html)에 커버리지가 자동 갱신된다.
+4. 각 항목을 마치면 아래 표의 상태를 `[x]`로 바꾸고, 관련 커밋/테스트 파일 경로와 커버리지 수치를 "비고"에 남긴다.
+5. 번호는 고정 ID다 — 순서가 바뀌어도 번호는 재사용하지 않는다.
+
+상태 기호: `[x]` 완료 · `[~]` 진행중 · `[ ]` 대기
+
+---
+
+## P0 — 치명적 (보안 / 데이터 손실 / 핵심 기능 마비)
+
+| # | 상태 | 제목 | yona 근거 | yuna 대상 | 비고 |
+|---|---|---|---|---|---|
+| P0-01 | [ ] | 알림 메일 발송 파이프라인 부재 | `models/NotificationMail.java:99-575` | `domain/notification/*` | `NotificationEvent`를 소비해 실제 메일을 보내는 `@EventListener`/`@Scheduled` 없음 |
+| P0-02 | [ ] | IMAP 수신메일→이슈/댓글 생성 부재 | `app/mailbox/*` | (해당 없음) | 서브시스템 자체 신규 구축 필요 |
+| P0-03 | [x] | 웹훅 발송 미연결 | `WebhookServiceImpl.kt:48-66` | `domain/webhook/WebhookNotificationEventListener.kt`(신규) | **완료(범위 조정, 아래 참고)** |
+| P0-04 | [x] | 웹훅 gitPush 필터 로직 반전 | `models/NotificationEvent.java:604-680` | `domain/webhook/WebhookServiceImpl.kt` | **완료** |
+| P0-05 | [x] | 이슈 생성 시 첨부파일 연결 안 됨 | `AbstractPostingApp.java:224` | `web/IssueViewController.kt` | **완료** — `temporaryUploadFiles` 파라미터 추가, MilestoneViewController와 동일 패턴 |
+| P0-06 | [x] | 게시글 생성 시 첨부파일 연결 안 됨 | `AbstractPostingApp.java:241` | `web/BoardViewController.kt` | **완료** — `PostingForm.temporaryUploadFiles` 추가, 동일 패턴 |
+| P0-07 | [ ] | 사이트 백업/복원 데이터 유실 | `app/data/DataService.java` (44 Exchanger) | `web/SiteApiController.kt:222-302` | users/projects만 포함 → 이슈·댓글·라벨 등 확장 필요 |
+| P0-08 | [x] | 마크다운 새니타이저 XSS 약화 | `utils/Markdown.java` (OWASP allowlist) | `domain/support/MarkdownServiceImpl.kt` | **완료** — OWASP java-html-sanitizer allowlist 정책으로 교체, 11개 테스트 |
+| P0-09 | [x] | 프로젝트 이전 수락 인가 검증 누락 | `ProjectApp.java:657` | `domain/project/ProjectServiceImpl.kt` | **완료** — `ProjectServiceImplSpec.kt` 5개 테스트, `acceptTransfer` 인가 로직 커버 |
+| P0-10 | [x] | git push 예약 ref 보호 훅 부재 | `RejectPushToReservedRefs.java` | `domain/vcs/GitPushHooks.kt`, `config/GitServletConfig.kt` | **완료** |
+| P0-11 | [x] | git push 시 커밋 알림 이벤트 훅 부재 | `NotifyPushedCommits.java`, `UpdateLastPushedDate.java` | `domain/vcs/GitPushHooks.kt`, `config/GitServletConfig.kt` | **완료(범위 조정, 아래 참고)** |
+| P0-12 | [x] | 브랜치 삭제 시 관련 PR 정리 훅 부재 | `PullRequestCheck.java` | `domain/vcs/GitPushHooks.kt` | **완료** — 브랜치 삭제 → 관련 열린 PR 자동 삭제 |
+| P0-13 | [x] | LOCKED/DELETED 계정 로그인 차단 안 됨 | `UserApp.java:207-233` | `config/YonaAuthenticationProvider.kt` | **완료** — `YonaAuthenticationProviderSpec.kt`, 94%/100% (명령어/분기) 커버리지 |
+| P0-14 | [ ] | PullRequest 라우트 누락 | `conf/routes` (PullRequestApp) | `web/PullRequestController.kt`, `PullRequestViewController.kt` | doClone, closedPullRequests, editPullRequestForm, deleteFromBranch/restoreFromBranch |
+| P0-15 | [ ] | Board 라우트 누락 (postlabel) | `conf/routes` (BoardApp) | `web/BoardController.kt` | 게시글 라벨 첨부 API |
+| P0-16 | [ ] | CodeHistory 라우트 누락 (커밋 댓글) | `conf/routes` (CodeHistoryApp) | `web/CodeHistoryController.kt` | newComment/deleteComment on commit |
+
+## P1 — 주요 (기능 결손 / 권한 로직 오류)
+
+| # | 상태 | 제목 | yona 근거 | yuna 대상 |
+|---|---|---|---|---|
+| P1-01 | [ ] | LDAP 인증 부재 | `utils/LdapService.java` | `config/`, `domain/user/` |
+| P1-02 | [ ] | API 토큰 인증 미작동 | `UserApp.java` (`Yona-Token`) | 인증 필터 신규 필요 |
+| P1-03 | [ ] | OAuth 다중 계정 연동/병합 소실 | `models/LinkedAccount.java` | `config/oauth2/CustomOAuth2UserService.kt` |
+| P1-04 | [ ] | 이메일 도메인 allowlist 미시행 | `UserApp.java:385-499` | `web/AuthController.kt` |
+| P1-05 | [ ] | Related-PR 재병합 로직 스텁 | `RelatedPullRequestMergingActor.java` | `domain/event/PullRequestMergeEventListener.kt:95-108` |
+| P1-06 | [ ] | 커밋→이슈 자동 참조 리스너가 로깅만 함 | `IssueReferredFromCommitEventActor.java` | `domain/event/GitPostReceiveEventListener.kt` |
+| P1-07 | [ ] | 이슈 타임라인(IssueEvent) 부재 | `models/IssueEvent.java` | `domain/issue/` |
+| P1-08 | [ ] | PR 타임라인(PullRequestEvent) 부재 | `models/PullRequestEvent.java` | `domain/pullrequest/` |
+| P1-09 | [ ] | RecentIssue(최근 본 이슈) 부재 | `models/RecentIssue.java` | (해당 없음) |
+| P1-10 | [ ] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` |
+| P1-11 | [ ] | 라벨 카테고리 수정 기능 없음 | `IssueLabelApp.java:390` | 위와 동일 |
+| P1-12 | [ ] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 |
+| P1-13 | [ ] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` |
+| P1-14 | [ ] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | (해당 없음) |
+| P1-15 | [ ] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | (해당 없음) |
+| P1-16 | [ ] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` |
+| P1-17 | [ ] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` |
+| P1-18 | [ ] | 게시판 알림 미발송 | `BoardApp.java:255,360,386` | `domain/board/PostingServiceImpl.kt` |
+| P1-19 | [ ] | 게시판 편집이력/댓글수/라벨필터 저하 | `AbstractPostingApp.java:106-140` | `web/BoardViewController.kt`, `domain/board/PostingServiceImpl.kt` |
+| P1-20 | [ ] | CodeCommentThread.isOutdated() 없음 | `CodeCommentThread.java:76-123` | `domain/comment/CodeCommentThread.kt` |
+| P1-21 | [ ] | Watch 권한 필터링(allowedWatchersOnly) 무시됨 | `models/Watch.java:160-187` | `domain/watch/WatchServiceImpl.kt:55-77` |
+| P1-22 | [ ] | 프로젝트별 알림 뮤트 토글 미반영 | `models/NotificationEvent.java:486-511` | `domain/issue/IssueServiceImpl.kt`, `domain/comment/CommentServiceImpl.kt` |
+| P1-23 | [ ] | SVN 권한 모델 단순화 | `SvnApp.java:119-131` | `config/svn/SvnAuthorizationFilter.kt:48-67` |
+| P1-24 | [ ] | 최근 push된 브랜치 추적(PushedBranch) 기능 없음 | `models/PushedBranch.java`, `UpdateRecentlyPushedBranch.java` | (해당 없음) | P0-11에서 범위 분리 — 신규 엔티티/리포지토리 생성 필요, "삭제된 브랜치 복원" UI가 이 데이터에 의존 |
+| P1-25 | [ ] | git push(NEW_COMMIT) 이벤트는 웹훅이 발송되지 않음 | `NotificationEvent.java:604-680`(push 부분) | `domain/event/GitPostReceiveEventListener.kt`, `domain/webhook/WebhookServiceImpl.kt` | P0-03에서 범위 분리 — 커밋은 DB 엔티티가 아니라 `resourceId`로 재조회 불가, `WebhookServiceImpl.getResourceType/getResourceId/buildPayload`에 COMMIT 케이스 추가 + `processCommitsNotification`에서 `eventPublisher.publishEvent(notificationEvent)` 호출 필요 |
+| P1-26 | [ ] | PULL_REQUEST 리소스 타입은 웹훅 payload를 만들 수 없음 | `Webhook.java:674-729`(PR 부분) | `domain/webhook/WebhookServiceImpl.kt` (`buildPayload`, `getResourceType`) | P0-03에서 범위 분리 — `CodeReviewServiceImpl`이 발행하는 PR 리뷰 NotificationEvent가 `WebhookNotificationEventListener`에서 조용히 스킵됨(PullRequest 조회/payload 케이스 미지원) |
+
+## P2 — 참고 (경미 / 확인 필요)
+
+| # | 상태 | 제목 | 비고 |
+|---|---|---|---|
+| P2-01 | [ ] | ReservedWordsValidator(예약어 검증) 없음 | 로그인ID/프로젝트명이 라우트 경로와 충돌 가능 |
+| P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음 |
+| P2-03 | [ ] | 사이트 관리자 아바타 지정 API가 빈 스텁 | `SiteApiController.kt:314-322` |
+| P2-04 | [ ] | 웹훅 JSON 페이로드 단순화 | 커밋 리스트 없이 event/sender/project만 포함 |
+| P2-05 | [ ] | 접근제어가 컨트롤러별 산발적 인라인 체크로 분산 | 전 컨트롤러(~40개) 일관성 전수 미검증 |
+| P2-06 | [ ] | SVN 컨트롤러 라우트 커버리지 오탐 | catch-all 매핑으로 실제론 문제 없음 — 조치 불요, 기록만 |
+
+---
+
+## 완료 로그
+
+- **2026-08-19 — P0-13**: `YonaAuthenticationProvider`가 계정 상태(LOCKED/DELETED)를 확인하지 않고 비밀번호만 검증하던 문제 수정. `YonaUserDetails`에 `state` 필드 추가(`isAccountNonLocked`/`isEnabled`가 실제 상태 반영), `UserDetailsServiceImpl`이 `user.state` 전달, `YonaAuthenticationProvider.authenticate()`가 사전 검사로 `LockedException`/`DisabledException` 발생. 테스트: `config/YonaAuthenticationProviderSpec.kt` (5 tests, all pass). 커버리지: `YonaAuthenticationProvider` INSTRUCTION 94%(111/118) · BRANCH 100%(8/8), `YonaUserDetails` BRANCH 100%(4/4).
+- **2026-08-19 — P0-09**: `ProjectServiceImpl.acceptTransfer()`가 수락자(acceptorId)와 이관 목적지(destination)를 비교하지 않아 confirmKey만 알면 누구나 이전을 수락할 수 있던 문제 수정. `isAuthorizedToAcceptTransfer()` 추가 — 목적지가 사용자 loginId면 본인만, 조직명이면 해당 조직의 `ORG_ADMIN`만 허용. `OrganizationRepository`/`OrganizationUserRepository`를 생성자에 주입. 테스트: `domain/project/ProjectServiceImplSpec.kt` (신규 파일, 5 tests, all pass).
+- **2026-08-19 — P0-08**: `MarkdownServiceImpl.sanitize()`가 정규식 blocklist(`<script>`, `javascript:`, `onload=`, `onerror=`만 처리)였던 것을 OWASP `owasp-java-html-sanitizer` 기반 allowlist 정책으로 교체. yona `utils/Markdown.java`의 `Sanitizers.FORMATTING/IMAGES/STYLES/TABLES/BLOCKS` + 커스텀 element/attribute 허용목록을 그대로 이식하되, **의도적으로 `allowUrlProtocols`에서 `file`·`zpl` 프로토콜은 제외**(원본 정책을 그대로 베끼면 로컬 파일 노출 등 별도 취약점이 생기므로, http/https/mailto만 허용). `onclick` 등 임의 이벤트 핸들러, `<svg>`, `data:` URI 스크립트 삽입이 모두 제거됨을 확인. 의존성 `com.googlecode.owasp-java-html-sanitizer:owasp-java-html-sanitizer:20240325.1` 추가. 테스트: `domain/support/MarkdownServiceImplSpec.kt` (8개 신규 케이스 추가, 총 11 tests, all pass). 커버리지: INSTRUCTION 95.6%(393/411).
+
+- **2026-08-19 — P0-10/11/12**: `GitServletConfig`가 순정 `GitServlet`만 사용해 pre/post-receive 훅이 전혀 없던 문제를 `ReceivePackFactory`로 교체해 해결. 신규 `domain/vcs/GitPushHooks.kt`에 두 훅 구현:
+  - `RejectPushToReservedRefsPreReceiveHook`(P0-10): `refs/yobi`, `refs/yobi/*`로의 push를 `REJECTED_OTHER_REASON`으로 거부.
+  - `YunaPostReceiveHook`(P0-11, P0-12): push마다 `project.lastPushedDate` 갱신, 이미 존재하지만 한 번도 발행되지 않던 `GitPostReceiveEvent`를 실제로 publish(→ 기존 `GitPostReceiveEventListener`의 커밋 알림 로직이 처음으로 실제 동작하게 됨), 브랜치 삭제(`refs/heads/*`, DELETE) 시 `PullRequestRepository.findRelatedPullRequests`로 연관된 열린 PR을 조회해 삭제.
+  - `GitServletConfig`에 `ProjectRepository`/`PullRequestRepository`/`UserRepository`/`ApplicationEventPublisher`를 주입하고, `GitAuthorizationFilter`와 동일한 URI 정규식으로 프로젝트를 식별, `SecurityContextHolder`에서 현재 로그인 사용자를 조회해 훅에 전달.
+  - **범위 조정**: yona의 `UpdateRecentlyPushedBranch`(최근 push 브랜치 목록 추적, `PushedBranch` 엔티티)는 신규 엔티티 생성이 필요한 별도 규모의 작업이라 P1-24로 분리했다.
+  - 테스트: `domain/vcs/GitPushHooksSpec.kt`(신규, 8 tests) — 순수 훅 로직 단위테스트로 100%에 가까운 커버리지 확보. `GitServletConfig`의 `ReceivePackFactory` 배선 자체는 실제 git 프로토콜 통신이 필요해 통합테스트로 별도 커버하지 않음(다른 `*Config` 클래스들과 동일한 이 저장소의 기존 관례). 커버리지: `RejectPushToReservedRefsPreReceiveHook` INSTRUCTION 100%(41/41)·BRANCH 100%(6/6), `YunaPostReceiveHook` INSTRUCTION 99%(134/135)·BRANCH 75%(6/8).
+
+- **2026-08-19 — P0-05/06**: 이슈/게시글 생성 컨트롤러가 `temporaryUploadFiles`(콤마 구분 첨부파일 ID 목록) 파라미터를 받지 않아, 글쓰기 화면에서 미리 업로드한 파일이 `NOT_A_RESOURCE` 상태로 방치되고 실제 이슈/게시글에 연결되지 않던 문제 수정.
+  - `IssueViewController.createIssue`에 `temporaryUploadFiles: String?` 파라미터 추가 — 생성된 이슈 ID로 `ResourceType.ISSUE_POST` 컨테이너 갱신.
+  - `BoardViewController.createPost`의 `PostingForm`에 `temporaryUploadFiles` 필드 추가 — 생성된 게시글 ID로 `ResourceType.BOARD_POST` 컨테이너 갱신.
+  - 기존 `MilestoneViewController.createMilestone`의 인라인 구현 패턴을 그대로 재사용해 코드베이스 내 일관성 유지.
+  - 테스트: `IssueViewControllerSpec.kt` +2 tests, `BoardViewControllerSpec.kt` +1 test, 모두 pass.
+
+- **2026-08-19 — P0-03/04**: `WebhookServiceImpl.sendWebhook()`을 호출하는 곳이 코드베이스 어디에도 없어 웹훅이 생성만 되고 실제로는 한 번도 발송되지 않던 문제, 그리고 `gitPush` 플래그가 push 이벤트가 아닌 나머지 모든 이벤트(이슈/댓글/PR 등)를 억제해버리던 로직 반전을 함께 수정.
+  - P0-04(로직 반전): `shouldDeliverToWebhook(webhook, eventType)`을 `internal fun`으로 분리해 순수 로직으로 테스트 가능하게 만들고, "NEW_COMMIT이 아니면 항상 전송, NEW_COMMIT이면 gitPush=true이거나 webhookType=JSON일 때만 전송"으로 정정(yona `NotificationEvent.java:604-680` 동작과 일치).
+  - P0-03(미연결): 신규 `WebhookNotificationEventListener`(`@Async @EventListener fun handleNotificationEvent(event: NotificationEvent)`)를 추가. 이슈 생성/상태변경/담당자변경/마일스톤변경(`IssueServiceImpl`), 이슈 공유(`IssueShareServiceImpl`), 댓글(`CommentServiceImpl`)이 이미 `eventPublisher.publishEvent(notificationEvent)`로 발행하고 있었지만 그동안 아무도 구독하지 않던 `NotificationEvent`를 구독해, `resourceType`/`resourceId`로 실제 엔티티(Issue/Posting/IssueComment/PostingComment)를 재조회한 뒤 `webhookService.sendWebhook(project, eventType, sender, resource)`를 호출.
+  - **범위 조정(의도적으로 다루지 않은 부분, P1-25/P1-26으로 분리)**: git push(NEW_COMMIT) 이벤트와 PULL_REQUEST 리뷰 이벤트는 각각 별도 이유로 이번 패스에서 제외 — 전자는 커밋이 DB 엔티티가 아니라 `resourceId` 재조회 패턴 자체가 안 맞고, 후자는 `WebhookServiceImpl.buildPayload`가 애초에 PullRequest 타입을 지원하지 않아 리스너만 고쳐선 끝까지 동작하지 않는다. 두 경우 모두 리스너가 "조용히 스킵"하도록 구현해 예외/크래시는 없지만, 실제 발송은 아직 안 된다 — 백로그에 명시적으로 남겨 은폐하지 않음.
+  - 테스트: `WebhookServiceSpec.kt` +4 tests(gitPush 정책), `WebhookNotificationEventListenerSpec.kt`(신규) 7 tests. `WebhookNotificationEventListener` 커버리지 INSTRUCTION 94%(191/203).
+
+### 검증 방법
+전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

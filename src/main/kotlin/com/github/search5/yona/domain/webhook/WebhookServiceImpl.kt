@@ -55,14 +55,28 @@ class WebhookServiceImpl(
         if (webhooks.isEmpty()) return
 
         for (webhook in webhooks) {
-            // gitPush 이벤트 전용 조건 분기
-            if (webhook.gitPush && eventType != com.github.search5.yona.domain.enumeration.EventType.NEW_COMMIT) {
+            if (!shouldDeliverToWebhook(webhook, eventType)) {
                 continue
             }
 
             val payload = buildPayload(webhook, eventType, sender, resource)
             sendRequestAsync(webhook.payloadUrl, webhook.secret, payload)
         }
+    }
+
+    /**
+     * gitPush 플래그는 "push(NEW_COMMIT) 이벤트를 보낼지"만 결정한다.
+     * 이슈/게시글/댓글/PR 등 push가 아닌 이벤트는 이 플래그와 무관하게 항상 전송된다.
+     * 단, JSON 포맷 웹훅은 gitPush 설정과 무관하게 push 이벤트를 항상 받는다(yona 원본 동작).
+     */
+    internal fun shouldDeliverToWebhook(
+        webhook: Webhook,
+        eventType: com.github.search5.yona.domain.enumeration.EventType
+    ): Boolean {
+        if (eventType != com.github.search5.yona.domain.enumeration.EventType.NEW_COMMIT) {
+            return true
+        }
+        return webhook.gitPush || webhook.webhookType == WebhookType.JSON
     }
 
     private fun buildPayload(

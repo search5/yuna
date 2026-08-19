@@ -4,6 +4,7 @@ plugins {
 	id("org.springframework.boot") version "4.0.6"
 	id("io.spring.dependency-management") version "1.1.7"
 	kotlin("plugin.jpa") version "2.2.21"
+	jacoco
 }
 
 group = "com.github.search5"
@@ -60,6 +61,9 @@ dependencies {
 	// JSoup
 	implementation("org.jsoup:jsoup:1.17.2")
 
+	// OWASP HTML Sanitizer (allowlist 기반 XSS 방지, yona Markdown.java와 동등 정책)
+	implementation("com.googlecode.owasp-java-html-sanitizer:owasp-java-html-sanitizer:20240325.1")
+
 	// Apache Commons Lang3
 	implementation("org.apache.commons:commons-lang3:3.14.0")
 
@@ -105,4 +109,32 @@ tasks.withType<Test> {
 	environment("TESTCONTAINERS_RYUK_DISABLED", "true")
 	environment("TESTCONTAINERS_CONTAINER_STARTUP_TIMEOUT", "120")
 	environment("TESTCONTAINERS_HOST_OVERRIDE", "127.0.0.1")
+	finalizedBy(tasks.jacocoTestReport)
+}
+
+jacoco {
+	toolVersion = "0.8.12"
+}
+
+tasks.jacocoTestReport {
+	dependsOn(tasks.test)
+	reports {
+		xml.required.set(true)
+		html.required.set(true)
+		csv.required.set(false)
+	}
+}
+
+tasks.jacocoTestCoverageVerification {
+	dependsOn(tasks.jacocoTestReport)
+	violationRules {
+		rule {
+			// 회귀 감사 백로그(docs/PARITY_BACKLOG.md) 항목을 구현할 때마다
+			// 해당 클래스 단위로 커버리지를 개별 확인한다. 전역 최소치는
+			// 아직 레거시 코드가 많아 0으로 두고 리포트만 강제 생성한다.
+			limit {
+				minimum = "0.00".toBigDecimal()
+			}
+		}
+	}
 }

@@ -13,7 +13,9 @@ import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.attachment.Attachment
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.data.domain.PageImpl
@@ -120,6 +122,29 @@ class BoardViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("board/create"))
                     .andExpect(model().attributeExists("project"))
+            }
+        }
+
+        describe("POST /{owner}/{projectName}/posts - 임시 업로드 첨부파일 연결") {
+            it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 생성된 게시글에 연결되어야 한다") {
+                val savedPosting = Posting(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
+
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { postingService.createPosting(1L, any(), 10L) } returns savedPosting
+
+                val attachment = Attachment(id = 900L, containerType = ResourceType.NOT_A_RESOURCE, containerId = "")
+                every { attachmentRepository.findById(900L) } returns Optional.of(attachment)
+                every { attachmentRepository.save(any()) } returns attachment
+
+                val request = PostingForm(title = "제목", body = "본문", temporaryUploadFiles = "900")
+
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
+
+                result shouldBe "redirect:/owner/TestProj/post/5"
+                attachment.containerType shouldBe ResourceType.BOARD_POST
+                attachment.containerId shouldBe "100"
             }
         }
     }
