@@ -54,7 +54,7 @@
 | P1-13 | [x] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` | **완료** |
 | P1-14 | [x] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | `web/MentionController.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P1-15 | [x] | pushed-branch 삭제 API 없음 | `ProjectApp.java:236` | `web/ProjectController.kt` | **완료(P1-24와 함께 구현, 아래 참고)** |
-| P1-16 | [ ] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` |
+| P1-16 | [x] | Project enroll() 중복 멤버십 가드 누락 | `EnrollProjectApp.java` | `domain/project/ProjectUserServiceImpl.kt:30` | **완료** |
 | P1-17 | [ ] | 조직 멤버 추가 시 게스트 역할 검증 누락 | `OrganizationApp.java` (validateForAddMember) | `domain/organization/OrganizationServiceImpl.kt` |
 | P1-18 | [ ] | 게시판 알림 미발송 | `BoardApp.java:255,360,386` | `domain/board/PostingServiceImpl.kt` |
 | P1-19 | [ ] | 게시판 편집이력/댓글수/라벨필터 저하 | `AbstractPostingApp.java:106-140` | `web/BoardViewController.kt`, `domain/board/PostingServiceImpl.kt` |
@@ -257,3 +257,9 @@
   - **범위를 넘어 추가한 것(라우트 표엔 없음)**: yona는 이 데이터를 별도 JSON API가 아니라 `partial_recently_pushed_branches.scala.html` 뷰에 임베드해 보여주므로 전용 조회 라우트가 없다. 하지만 삭제 API만 있고 조회할 방법이 없으면 실질적으로 쓸 수 없어(P0-16과 같은 논리), `GET /api/{owner}/{projectName}/pushedBranches`(최근 1시간 이내 push분만, yona `getRecentlyPushedBranches()`와 동일 기준)를 함께 추가했다.
   - 테스트: `GitPushHooksSpec.kt` +6(신규 브랜치 저장, 기존 브랜치 pushedDate 갱신, PR이 이미 추적 중이면 미저장, 태그 미추적, 오래된 기록 정리, 삭제 브랜치 레코드 정리) — 기존 8개 포함 총 14 tests. `ProjectControllerSpec.kt` +5(비회원 조회 403, 멤버 조회 200, 멤버 삭제 200, 존재하지 않는 id 삭제도 200, 비멤버 삭제 403) — 기존 `ProjectTransferForkSpec.kt`도 생성자 파라미터 추가에 맞춰 갱신(회귀 없음).
   - 검증: `./gradlew test --tests "GitPushHooksSpec" --tests "ProjectControllerSpec" --tests "ProjectTransferForkSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.
+
+- **2026-08-20 — P1-16**: `ProjectUserServiceImpl.enroll()`이 (1) 이미 그 프로젝트 멤버인 유저의 중복 가입 신청을 막지 않고, (2) 이미 대기 중인 신청이 있어도 재호출 시마다 매니저들에게 "가입 신청" 알림을 중복 발행하던 문제 수정(yona `EnrollProjectApp.enroll()`의 `ProjectUser.isGuest()`/`User.enrolled()` 이중 가드 대응).
+  - `enroll()`에 두 단계 가드 추가: (1) `projectUserRepository.existsByProjectIdAndUserId`로 이미 멤버인지 확인해, 맞으면 `IllegalArgumentException`을 던진다(yona `ProjectUser.isGuest()`가 아니면 `badRequest()` — 이 저장소는 이미 `ProjectMemberController.enroll()`이 예외를 400으로 매핑하고 있어 컨트롤러 수정 없이 자연히 동일 응답이 됨). (2) `user.enrolledProjects.any { it.id == project.id }`로 이미 대기 중인 신청인지 확인해, 맞으면 알림 발행 없이 조용히 반환(yona `User.enrolled()` 분기와 동일 — 이 경우는 에러가 아니라 그냥 무시).
+  - `user.enrolledProjects.contains(project)`(참조 동등성) 대신 `.any { it.id == project.id }`(ID 동등성)를 사용 — 같은 트랜잭션이라도 `project`/`user.enrolledProjects`가 서로 다른 조회 경로로 로드된 별개 인스턴스일 수 있어 참조 비교는 신뢰할 수 없다.
+  - 테스트: `ProjectUserServiceSpec.kt`(실제 MariaDB 통합테스트) +2(이미 멤버인 유저의 가입 신청은 예외, 중복 가입 신청 시 대기 목록/알림 모두 1건만 유지) — 기존 4건 포함 총 6 tests. `ProjectViewControllerIntegrationSpec`/`YonaApplicationTests` 재실행으로 회귀 없음 확인(기존 enroll 호출은 신규 유저의 최초 신청이라 새 가드에 영향받지 않음).
+  - 검증: `./gradlew test --tests "ProjectUserServiceSpec" --tests "ProjectViewControllerIntegrationSpec" --tests "YonaApplicationTests"` 전체 통과, `./gradlew compileKotlin compileTestKotlin` 전체 컴파일 성공.

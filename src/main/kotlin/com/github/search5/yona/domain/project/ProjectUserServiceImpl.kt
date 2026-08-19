@@ -33,6 +33,17 @@ class ProjectUserServiceImpl(
         val user = userRepository.findById(userId)
             .orElseThrow { IllegalArgumentException("User with ID $userId not found") }
 
+        // yona ProjectUser.isGuest() 가드 대응 (P1-16): 이미 프로젝트 멤버라면 가입 신청 자체를 거부한다.
+        if (projectUserRepository.existsByProjectIdAndUserId(projectId, userId)) {
+            throw IllegalArgumentException("이미 프로젝트 멤버입니다.")
+        }
+
+        // yona User.enrolled() 가드 대응 (P1-16): 이미 대기 중인 가입 신청이 있으면 조용히 무시하고
+        // 중복 알림을 발생시키지 않는다(yona도 이 경우 badRequest가 아니라 그냥 ok()를 반환).
+        if (user.enrolledProjects.any { it.id == project.id }) {
+            return
+        }
+
         user.enroll(project)
         userRepository.save(user)
 
