@@ -1,12 +1,17 @@
 package com.github.search5.yona.domain.pullrequest
 
 import com.github.search5.yona.AbstractIntegrationTest
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
+import com.github.search5.yona.domain.watch.Watch
+import com.github.search5.yona.domain.watch.WatchRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.eclipse.jgit.api.Git
@@ -26,7 +31,10 @@ class CodeReviewServiceSpec @Autowired constructor(
     private val pullRequestCommitRepository: PullRequestCommitRepository,
     private val repositoryService: RepositoryService,
     private val pullRequestEventRepository: PullRequestEventRepository,
-    private val notificationEventRepository: com.github.search5.yona.domain.notification.NotificationEventRepository
+    private val notificationEventRepository: com.github.search5.yona.domain.notification.NotificationEventRepository,
+    private val notificationMailRepository: com.github.search5.yona.domain.notification.NotificationMailRepository,
+    private val commitCommentRepository: CommitCommentRepository,
+    private val watchRepository: WatchRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -38,9 +46,12 @@ class CodeReviewServiceSpec @Autowired constructor(
             lateinit var otherUser: User
 
             beforeEach {
+                watchRepository.deleteAll()
+                commitCommentRepository.deleteAll()
                 reviewCommentRepository.deleteAll()
                 commentThreadRepository.deleteAll()
                 pullRequestEventRepository.deleteAll()
+                notificationMailRepository.deleteAll()
                 notificationEventRepository.deleteAll()
                 pullRequestRepository.deleteAll()
                 projectRepository.deleteAll()
@@ -53,7 +64,7 @@ class CodeReviewServiceSpec @Autowired constructor(
                     User(loginId = "other", name = "타인", email = "other@yona.io")
                 )
                 project = projectRepository.save(
-                    Project(name = "test-repo", owner = "owner-x", vcs = "GIT")
+                    Project(name = "test-repo", owner = "owner-x", vcs = "GIT", projectScope = ProjectScope.PUBLIC)
                 )
                 pullRequest = pullRequestRepository.save(
                     PullRequest(
@@ -96,6 +107,167 @@ class CodeReviewServiceSpec @Autowired constructor(
                 val codeThread = comment.thread as CodeCommentThread
                 codeThread.codeRange.path shouldBe "src/main/kotlin/App.kt"
                 codeThread.state shouldBe CommentThread.ThreadState.OPEN
+            }
+
+            // yona NotificationEvent.forNewComment(sender, pullRequest, newComment) 대응 (P1-50)
+            describe("리뷰 댓글 알림 (P1-50)") {
+                it("PR 위 리뷰 댓글을 작성하면 PR 감시자에게 NEW_REVIEW_COMMENT 알림이 발행되어야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
+
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "댓글 내용", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    val event = events.first()
+                    event.eventType shouldBe EventType.NEW_REVIEW_COMMENT
+                    event.resourceType shouldBe ResourceType.REVIEW_COMMENT
+                    event.resourceId shouldBe comment.id.toString()
+                    event.newValue shouldBe "댓글 내용"
+                    event.senderId shouldBe user.id
+                    event.receivers.map { it.id } shouldBe listOf(otherUser.id)
+                }
+
+                it("댓글에 멘션된 사용자는 감시자가 아니어도 수신자에 포함되어야 한다") {
+                    val mentioned = userRepository.save(User(loginId = "mentioned1", name = "멘션대상", email = "mentioned1@yona.io"))
+
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "@mentioned1 확인 부탁드려요", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().receivers.map { it.id } shouldBe listOf(mentioned.id)
+                }
+
+                it("작성자 본인은 수신자에서 제외되어야 한다") {
+                    watchRepository.save(Watch(user = user, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
+
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "댓글 내용", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+
+                it("기존 스레드에 답글을 달아도(threadId != null) 알림이 발행되어야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
+                    val first = codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "첫 댓글", codeRange = null, threadId = null, currentUser = user
+                    )
+                    notificationMailRepository.deleteAll()
+                    notificationEventRepository.deleteAll()
+
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "답글", codeRange = null, threadId = first.thread!!.id, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().newValue shouldBe "답글"
+                }
+
+                it("PR 밖(commitId만 있는) 리뷰 댓글은 프로젝트 감시자에게 NEW_REVIEW_COMMENT 알림이 발행되어야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PROJECT, resourceId = project.id.toString()))
+
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "deadbeef",
+                        contents = "커밋에 대한 댓글", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().eventType shouldBe EventType.NEW_REVIEW_COMMENT
+                    events.first().receivers.map { it.id } shouldBe listOf(otherUser.id)
+                }
+
+                it("수신자가 없으면 알림을 저장하지 않아야 한다") {
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "아무도 안 볼 댓글", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+            }
+
+            // yona NotificationEvent.forNewSVNCommitComment(project, codeComment, author) 대응 (P1-50).
+            // legacy는 이 경로만 이벤트 타입이 NEW_COMMENT(NEW_REVIEW_COMMENT 아님)다.
+            describe("커밋 댓글(CommitComment) 알림 (P1-50)") {
+                it("커밋 댓글을 작성하면 프로젝트 감시자에게 NEW_COMMENT 알림이 발행되어야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PROJECT, resourceId = project.id.toString()))
+
+                    val comment = codeReviewService.createCommitComment(
+                        project = project, commitId = "cafebabe", contents = "커밋 댓글 내용",
+                        path = null, line = null, side = null, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    val event = events.first()
+                    event.eventType shouldBe EventType.NEW_COMMENT
+                    event.resourceType shouldBe ResourceType.COMMIT_COMMENT
+                    event.resourceId shouldBe comment.id.toString()
+                    event.newValue shouldBe "커밋 댓글 내용"
+                }
+            }
+
+            // yona NotificationEvent.afterStateChanged(CommentThread.ThreadState, CommentThread) 대응 (P1-50)
+            describe("리뷰 스레드 상태 변경 알림 (P1-50)") {
+                it("스레드를 닫으면(open->closed) PR 감시자에게 REVIEW_THREAD_STATE_CHANGED 알림이 발행되어야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "댓글", codeRange = null, threadId = null, currentUser = otherUser
+                    )
+                    notificationMailRepository.deleteAll()
+                    notificationEventRepository.deleteAll()
+
+                    codeReviewService.updateThreadState(comment.thread!!.id!!, CommentThread.ThreadState.CLOSED, user)
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    val event = events.first()
+                    event.eventType shouldBe EventType.REVIEW_THREAD_STATE_CHANGED
+                    event.resourceType shouldBe ResourceType.COMMENT_THREAD
+                    event.oldValue shouldBe "OPEN"
+                    event.newValue shouldBe "CLOSED"
+                    event.receivers.map { it.id } shouldBe listOf(otherUser.id)
+                }
+
+                it("이미 같은 상태면 알림을 발행하지 않아야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "댓글", codeRange = null, threadId = null, currentUser = otherUser
+                    )
+                    notificationMailRepository.deleteAll()
+                    notificationEventRepository.deleteAll()
+
+                    codeReviewService.updateThreadState(comment.thread!!.id!!, CommentThread.ThreadState.OPEN, user)
+
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+
+                it("상태를 바꾼 본인은 수신자에서 제외되어야 한다") {
+                    watchRepository.save(Watch(user = user, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "댓글", codeRange = null, threadId = null, currentUser = otherUser
+                    )
+                    notificationMailRepository.deleteAll()
+                    notificationEventRepository.deleteAll()
+
+                    codeReviewService.updateThreadState(comment.thread!!.id!!, CommentThread.ThreadState.CLOSED, user)
+
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
             }
 
             it("리뷰어를 추가하면 NotificationEvent와 PullRequestEvent가 모두 생성되어야 한다(P1-39)") {

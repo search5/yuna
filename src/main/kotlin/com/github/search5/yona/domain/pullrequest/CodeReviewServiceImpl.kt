@@ -12,7 +12,9 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.watch.WatchService
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -32,7 +34,9 @@ class CodeReviewServiceImpl(
     private val projectUserRepository: ProjectUserRepository,
     private val attachmentService: AttachmentService,
     private val pullRequestCommitRepository: PullRequestCommitRepository,
-    private val pullRequestEventRepository: PullRequestEventRepository
+    private val pullRequestEventRepository: PullRequestEventRepository,
+    private val commentService: CommentService,
+    private val watchService: WatchService
 ) : CodeReviewService {
 
     override fun createReviewComment(
@@ -108,7 +112,61 @@ class CodeReviewServiceImpl(
             pullRequestRepository.save(pullRequest)
         }
 
+        publishNewReviewCommentNotification(project, targetThread, savedComment, currentUser)
+
         return savedComment
+    }
+
+    // yona NotificationEvent.forNewComment(sender, pullRequest, newComment)(PR 위) /
+    // forNewCommitComment(project, comment, commitId, author)(PR 밖 커밋 위) 대응. 새 댓글이든
+    // 기존 스레드에 대한 답글이든 legacy는 구분 없이 항상 이 알림을 발행한다(PullRequestApp.newComment/
+    // CodeHistoryApp.newCommitComment 모두 스레드 신규/기존 분기 이후 조건 없이 호출).
+    private fun publishNewReviewCommentNotification(project: Project, thread: CommentThread, comment: ReviewComment, sender: User) {
+        val mentioned = commentService.extractMentionedUsers(comment.contents)
+        val receivers = mutableSetOf<User>()
+        receivers.addAll(mentioned)
+
+        val pullRequest = thread.pullRequest
+        val title: String
+        if (pullRequest != null) {
+            title = "[${pullRequest.toProject.name}] 풀 리퀘스트 #${pullRequest.number}에 새 리뷰 댓글이 등록되었습니다."
+            receivers.addAll(
+                watchService.findActualWatchers(
+                    baseWatchers = emptySet(),
+                    resourceType = ResourceType.PULL_REQUEST,
+                    resourceId = pullRequest.id.toString(),
+                    projectId = pullRequest.toProject.id,
+                    eventType = EventType.NEW_REVIEW_COMMENT
+                )
+            )
+        } else {
+            // yona commit.getWatchers(project)(커밋 단위 감시자) 대응 — yuna는 커밋을 감시 대상으로
+            // 등록하는 UI/데이터 모델이 없어(P1-25/46에서도 같은 제약 확인) 프로젝트 감시자로 대체한다.
+            title = "[${project.name}] 커밋 리뷰에 새 댓글이 등록되었습니다."
+            receivers.addAll(
+                watchService.findActualWatchers(
+                    baseWatchers = emptySet(),
+                    resourceType = ResourceType.PROJECT,
+                    resourceId = project.id.toString(),
+                    projectId = project.id,
+                    eventType = EventType.NEW_REVIEW_COMMENT
+                )
+            )
+        }
+        receivers.removeIf { it.id == sender.id }
+        if (receivers.isEmpty()) return
+
+        val notificationEvent = NotificationEvent(
+            title = title,
+            senderId = sender.id,
+            created = Instant.now(),
+            resourceType = ResourceType.REVIEW_COMMENT,
+            resourceId = comment.id.toString(),
+            eventType = EventType.NEW_REVIEW_COMMENT,
+            newValue = comment.contents,
+            receivers = receivers
+        )
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
     }
 
     override fun deleteReviewComment(commentId: Long, currentUser: User) {
@@ -159,7 +217,44 @@ class CodeReviewServiceImpl(
             ResourceType.COMMIT_COMMENT,
             saved.id.toString()
         )
+
+        publishNewCommitCommentNotification(project, saved, currentUser)
+
         return saved
+    }
+
+    // yona NotificationEvent.forNewSVNCommitComment(project, codeComment, author) 대응.
+    // legacy는 이벤트 타입을 NEW_REVIEW_COMMENT가 아니라 NEW_COMMENT로 남긴다(CommitComment는
+    // ReviewComment와 다른 모델이라 별도 분기).
+    private fun publishNewCommitCommentNotification(project: Project, comment: CommitComment, sender: User) {
+        val mentioned = commentService.extractMentionedUsers(comment.contents)
+        val receivers = mutableSetOf<User>()
+        receivers.addAll(mentioned)
+        // yona commit.getWatchers(project) 대응 — createReviewComment의 커밋 단위 분기와 동일한 이유로
+        // 프로젝트 감시자로 대체한다.
+        receivers.addAll(
+            watchService.findActualWatchers(
+                baseWatchers = emptySet(),
+                resourceType = ResourceType.PROJECT,
+                resourceId = project.id.toString(),
+                projectId = project.id,
+                eventType = EventType.NEW_COMMENT
+            )
+        )
+        receivers.removeIf { it.id == sender.id }
+        if (receivers.isEmpty()) return
+
+        val notificationEvent = NotificationEvent(
+            title = "[${project.name}] 커밋 리뷰에 새 댓글이 등록되었습니다.",
+            senderId = sender.id,
+            created = Instant.now(),
+            resourceType = ResourceType.COMMIT_COMMENT,
+            resourceId = comment.id.toString(),
+            eventType = EventType.NEW_COMMENT,
+            newValue = comment.contents,
+            receivers = receivers
+        )
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
     }
 
     override fun deleteCommitComment(commentId: Long, currentUser: User) {
@@ -189,9 +284,62 @@ class CodeReviewServiceImpl(
     ): CommentThread {
         val thread = commentThreadRepository.findById(threadId)
             .orElseThrow { IllegalArgumentException("CommentThread not found for id: $threadId") }
+        val oldState = thread.state
+        if (oldState == state) {
+            return thread
+        }
 
         thread.state = state
-        return commentThreadRepository.save(thread)
+        val saved = commentThreadRepository.save(thread)
+
+        publishThreadStateChangedNotification(saved, oldState, currentUser)
+
+        return saved
+    }
+
+    // yona NotificationEvent.afterStateChanged(CommentThread.ThreadState, CommentThread) 대응.
+    private fun publishThreadStateChangedNotification(thread: CommentThread, oldState: CommentThread.ThreadState, sender: User) {
+        val pullRequest = thread.pullRequest
+        val title: String
+        val watchers: Set<User>
+        if (pullRequest != null) {
+            title = "[${pullRequest.toProject.name}] 풀 리퀘스트 #${pullRequest.number}의 리뷰 스레드 상태가 변경되었습니다."
+            watchers = watchService.findActualWatchers(
+                baseWatchers = emptySet(),
+                resourceType = ResourceType.PULL_REQUEST,
+                resourceId = pullRequest.id.toString(),
+                projectId = pullRequest.toProject.id,
+                eventType = EventType.REVIEW_THREAD_STATE_CHANGED
+            )
+        } else {
+            val project = thread.project ?: return
+            title = "[${project.name}] 리뷰 스레드 상태가 변경되었습니다."
+            // yona commit.getWatchers(project) 대응 — createReviewComment의 커밋 단위 분기와 동일한 이유로
+            // 프로젝트 감시자로 대체한다.
+            watchers = watchService.findActualWatchers(
+                baseWatchers = emptySet(),
+                resourceType = ResourceType.PROJECT,
+                resourceId = project.id.toString(),
+                projectId = project.id,
+                eventType = EventType.REVIEW_THREAD_STATE_CHANGED
+            )
+        }
+
+        val receivers = watchers.filterTo(mutableSetOf()) { it.id != sender.id }
+        if (receivers.isEmpty()) return
+
+        val notificationEvent = NotificationEvent(
+            title = title,
+            senderId = sender.id,
+            created = Instant.now(),
+            resourceType = ResourceType.COMMENT_THREAD,
+            resourceId = thread.id.toString(),
+            eventType = EventType.REVIEW_THREAD_STATE_CHANGED,
+            oldValue = oldState.name,
+            newValue = thread.state.name,
+            receivers = receivers
+        )
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
     }
 
     override fun addReviewer(pullRequestId: Long, reviewerId: Long) {
