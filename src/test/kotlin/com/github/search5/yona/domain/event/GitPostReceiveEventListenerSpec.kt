@@ -1,35 +1,66 @@
 package com.github.search5.yona.domain.event
 
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueEventRepository
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.project.GitService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.webhook.WebhookService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription
+import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository
+import org.eclipse.jgit.lib.CommitBuilder
+import org.eclipse.jgit.lib.Constants
+import org.eclipse.jgit.lib.FileMode
+import org.eclipse.jgit.lib.PersonIdent
+import org.eclipse.jgit.lib.TreeFormatter
+import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.revwalk.RevWalk
+
+private fun testCommit(message: String): RevCommit {
+    val repo = InMemoryRepository(DfsRepositoryDescription())
+    val inserter = repo.newObjectInserter()
+    val blobId = inserter.insert(Constants.OBJ_BLOB, "content".toByteArray())
+    val tree = TreeFormatter()
+    tree.append("file.txt", FileMode.REGULAR_FILE, blobId)
+    val treeId = inserter.insert(tree)
+    val commitBuilder = CommitBuilder()
+    commitBuilder.setTreeId(treeId)
+    val ident = PersonIdent("tester", "tester@yona.io")
+    commitBuilder.author = ident
+    commitBuilder.committer = ident
+    commitBuilder.message = message
+    val commitId = inserter.insert(commitBuilder)
+    inserter.flush()
+    return RevWalk(repo).use { it.parseCommit(commitId) }
+}
 
 class GitPostReceiveEventListenerSpec : DescribeSpec({
     val gitService = mockk<GitService>()
     val notificationEventRepository = mockk<NotificationEventRepository>(relaxed = true)
     val issueRepository = mockk<IssueRepository>()
     val issueEventRepository = mockk<IssueEventRepository>()
+    val webhookService = mockk<WebhookService>(relaxed = true)
 
     val listener = GitPostReceiveEventListener(
-        gitService, notificationEventRepository, issueRepository, issueEventRepository
+        gitService, notificationEventRepository, issueRepository, issueEventRepository, webhookService
     )
 
     val project = Project(id = 1L, name = "yona-project", owner = "gildong")
     val sender = User(id = 9L, loginId = "gildong", name = "길동", email = "gildong@example.com")
 
     beforeTest {
-        io.mockk.clearMocks(issueRepository, issueEventRepository, answers = false)
+        io.mockk.clearMocks(issueRepository, issueEventRepository, webhookService, notificationEventRepository, answers = false)
     }
 
     describe("GitPostReceiveEventListener.recordReferredIssues") {
@@ -73,6 +104,30 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
             listener.recordReferredIssues("fixes #1 and #2", "jkl012", project, sender)
 
             verify(exactly = 2) { issueEventRepository.save(any()) }
+        }
+    }
+
+    describe("GitPostReceiveEventListener.processCommitsNotification (P1-25, yona Webhook.sendRequestToPayloadUrl(commits,...) 대응)") {
+        it("push된 커밋이 있으면 NotificationEvent를 저장하고 NEW_COMMIT 웹훅을 발송해야 한다") {
+            val commit = testCommit("fix bug")
+            val savedNotification = slot<NotificationEvent>()
+            every { notificationEventRepository.save(capture(savedNotification)) } answers { firstArg() }
+
+            listener.processCommitsNotification(listOf(commit), listOf("refs/heads/master"), project, sender)
+
+            savedNotification.captured.eventType shouldBe EventType.NEW_COMMIT
+            savedNotification.captured.senderId shouldBe sender.id
+
+            verify(exactly = 1) {
+                webhookService.sendWebhook(project, EventType.NEW_COMMIT, sender, any())
+            }
+        }
+
+        it("push된 커밋이 없으면 알림도 웹훅도 발생시키지 않아야 한다") {
+            listener.processCommitsNotification(emptyList(), listOf("refs/heads/master"), project, sender)
+
+            verify(exactly = 0) { notificationEventRepository.save(any()) }
+            verify(exactly = 0) { webhookService.sendWebhook(any(), any(), any(), any()) }
         }
     }
 })
