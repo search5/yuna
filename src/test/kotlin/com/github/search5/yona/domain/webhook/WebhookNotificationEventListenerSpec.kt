@@ -12,6 +12,8 @@ import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
@@ -28,17 +30,18 @@ class WebhookNotificationEventListenerSpec : DescribeSpec({
     val postingRepository = mockk<PostingRepository>()
     val issueCommentRepository = mockk<IssueCommentRepository>()
     val postingCommentRepository = mockk<PostingCommentRepository>()
+    val pullRequestRepository = mockk<PullRequestRepository>()
 
     val listener = WebhookNotificationEventListener(
         webhookService, userRepository, issueRepository, postingRepository,
-        issueCommentRepository, postingCommentRepository
+        issueCommentRepository, postingCommentRepository, pullRequestRepository
     )
 
     val project = Project(id = 1L, name = "yona-project", owner = "gildong")
     val sender = User(id = 9L, loginId = "gildong", name = "길동")
 
     beforeTest {
-        io.mockk.clearMocks(webhookService, userRepository, issueRepository, postingRepository, issueCommentRepository, postingCommentRepository, answers = false)
+        io.mockk.clearMocks(webhookService, userRepository, issueRepository, postingRepository, issueCommentRepository, postingCommentRepository, pullRequestRepository, answers = false)
         every { userRepository.findById(9L) } returns Optional.of(sender)
     }
 
@@ -125,10 +128,31 @@ class WebhookNotificationEventListenerSpec : DescribeSpec({
             verify(exactly = 0) { webhookService.sendWebhook(any(), any(), any(), any()) }
         }
 
-        it("아직 지원하지 않는 리소스 타입(PULL_REQUEST)은 조용히 스킵해야 한다") {
+        it("PULL_REQUEST 타입 NotificationEvent를 받으면 해당 PR의 toProject로 웹훅을 발송해야 한다 (P1-26)") {
+            val contributor = User(id = 20L, loginId = "contributor", name = "기여자")
+            val pullRequest = PullRequest(
+                id = 500L, title = "PR 제목", toProject = project, fromProject = project,
+                toBranch = "master", fromBranch = "feature", contributor = contributor
+            )
+            every { pullRequestRepository.findById(500L) } returns Optional.of(pullRequest)
+
             val event = NotificationEvent(
                 title = "PR 리뷰", senderId = 9L, created = Instant.now(),
                 resourceType = ResourceType.PULL_REQUEST, resourceId = "500",
+                eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+            )
+
+            listener.handleNotificationEvent(event)
+
+            verify(exactly = 1) { webhookService.sendWebhook(project, EventType.PULL_REQUEST_REVIEW_STATE_CHANGED, sender, pullRequest) }
+        }
+
+        it("PULL_REQUEST 타입인데 대상 PR을 찾을 수 없으면 웹훅을 발송하지 않아야 한다") {
+            every { pullRequestRepository.findById(999L) } returns Optional.empty()
+
+            val event = NotificationEvent(
+                title = "PR 리뷰", senderId = 9L, created = Instant.now(),
+                resourceType = ResourceType.PULL_REQUEST, resourceId = "999",
                 eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
             )
 

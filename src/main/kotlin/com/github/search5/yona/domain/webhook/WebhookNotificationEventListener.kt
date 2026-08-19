@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
@@ -19,8 +20,9 @@ import org.springframework.transaction.annotation.Transactional
  * 이슈/댓글 등 도메인 서비스가 이미 publish하고 있던 NotificationEvent를
  * 구독해 해당 프로젝트에 등록된 웹훅으로 실제 전송한다(이전에는 아무도 구독하지 않아 미발송이었음).
  *
- * PULL_REQUEST 등 WebhookService가 아직 payload를 만들 수 없는 리소스 타입은
- * 조용히 스킵한다 — payload 지원 확장은 별도 작업(P0-03 완료 로그 참고).
+ * PULL_REQUEST는 P1-26에서 지원 추가됨(WebhookServiceImpl.buildPayload/getResourceType 포함).
+ * 그 외 아직 payload를 만들 수 없는 리소스 타입(예: COMMIT — P1-25에서 별도 직접 경로로 처리됨)은
+ * 조용히 스킵한다.
  */
 @Component
 class WebhookNotificationEventListener(
@@ -29,7 +31,8 @@ class WebhookNotificationEventListener(
     private val issueRepository: IssueRepository,
     private val postingRepository: PostingRepository,
     private val issueCommentRepository: IssueCommentRepository,
-    private val postingCommentRepository: PostingCommentRepository
+    private val postingCommentRepository: PostingCommentRepository,
+    private val pullRequestRepository: PullRequestRepository
 ) {
     private val logger = LoggerFactory.getLogger(WebhookNotificationEventListener::class.java)
 
@@ -60,6 +63,9 @@ class WebhookNotificationEventListener(
 
             ResourceType.NONISSUE_COMMENT ->
                 postingCommentRepository.findById(id).orElse(null)?.let { it.posting.project to it }
+
+            ResourceType.PULL_REQUEST ->
+                pullRequestRepository.findById(id).orElse(null)?.let { it.toProject to it }
 
             else -> null
         }
