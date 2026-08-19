@@ -1,7 +1,13 @@
 package com.github.search5.yona.domain.board
 
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.notification.NotificationEvent
+import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.enumeration.EventType
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -17,8 +23,41 @@ class PostingServiceImpl(
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
     private val attachmentService: AttachmentService,
-    private val postingCommentRepository: PostingCommentRepository
+    private val postingCommentRepository: PostingCommentRepository,
+    private val watchService: WatchService,
+    private val notificationEventRepository: NotificationEventRepository,
+    private val eventPublisher: ApplicationEventPublisher
 ) : PostingService {
+
+    // yona NotificationEvent.afterNewPost/afterResourceDeleted 대응 (P1-18)
+    private fun publishNotification(
+        posting: Posting,
+        actor: User,
+        eventType: EventType,
+        title: String
+    ) {
+        val notificationEvent = NotificationEvent(
+            title = title,
+            senderId = actor.id,
+            created = Instant.now(),
+            resourceType = ResourceType.BOARD_POST,
+            resourceId = posting.id.toString(),
+            eventType = eventType,
+            newValue = title
+        )
+
+        val receivers = watchService.findActualWatchers(
+            baseWatchers = setOf(actor),
+            resourceType = ResourceType.BOARD_POST,
+            resourceId = posting.id.toString(),
+            projectId = posting.project.id
+        ).toMutableSet()
+        receivers.removeIf { it.id == actor.id }
+        notificationEvent.receivers = receivers
+
+        notificationEventRepository.save(notificationEvent)
+        eventPublisher.publishEvent(notificationEvent)
+    }
 
     override fun getPostings(projectId: Long, pageable: Pageable): Page<Posting> {
         val project = projectRepository.findById(projectId)
@@ -57,7 +96,12 @@ class PostingServiceImpl(
         posting.createdDate = Instant.now()
         posting.updatedDate = Instant.now()
 
-        return postingRepository.save(posting)
+        val saved = postingRepository.save(posting)
+
+        val title = "[${project.name}] 새 게시글: ${saved.title}"
+        publishNotification(saved, author, EventType.NEW_POSTING, title)
+
+        return saved
     }
 
     @Transactional
@@ -86,7 +130,13 @@ class PostingServiceImpl(
     override fun deletePosting(projectId: Long, number: Long, authorId: Long) {
         val posting = getPosting(projectId, number)
             ?: throw IllegalArgumentException("포스팅을 찾을 수 없습니다.")
-        
+        val actor = userRepository.findById(authorId)
+            .orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
+
+        // yona NotificationEvent.afterResourceDeleted(): 실제 삭제 전에 알림을 발행한다.
+        val title = "[${posting.project.name}] 게시글 삭제: ${posting.title}"
+        publishNotification(posting, actor, EventType.RESOURCE_DELETED, title)
+
         // 연관된 댓글의 첨부파일도 일괄 삭제
         val comments = postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(posting.id!!)
         for (comment in comments) {
