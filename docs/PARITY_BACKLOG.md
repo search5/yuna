@@ -94,7 +94,7 @@
 | # | 상태 | 제목 | 비고 |
 |---|---|---|---|
 | P2-01 | [x] | ReservedWordsValidator(예약어 검증) 없음 | **완료** — 아래 완료 로그 참고 |
-| P2-02 | [ ] | DiffUtil 워드단위 diff 하이라이팅 없음 | 알림에 변경분 하이라이트 없음. P1-19에서 재확인 — `AbstractPosting.history`/`AbstractPostingApp.addToHistory()`(yona `utils.diff_match_patch` 기반 워드단위 diff)도 이 항목과 동일한 미구현 의존성(diff_match_patch 라이브러리 포팅)이라 함께 묶임. yuna `Posting.history` 필드 자체는 이미 존재하나 실제로 채워지지 않음. **2026-08-20 재검토 결과 이번 세션에서 착수하지 않기로 결정**: 확인해보니 `history`를 채우는 코드가 이슈/게시글 수정 경로 어디에도 전혀 없어(단순 누락이 아니라 완전 미구현) 신규 word-diff 라이브러리 의존성 추가(`diff_match_patch` 직접 포팅 또는 `io.github.java-diff-utils` 등 대체 라이브러리 도입) 여부부터 결정해야 하는데, 이는 build.gradle.kts에 새 외부 의존성을 추가하는 결정이라 세션 종료 직전에 사용자 확인 없이 밀어붙이기보다 다음 세션에서 라이브러리 선택을 논의 후 진행하는 것이 안전하다고 판단 |
+| P2-02 | [x] | DiffUtil 워드단위 diff 하이라이팅 없음 | **완료** — 사용자 요청으로 yona 원본 `diff_match_patch` 알고리즘을 그대로 포팅. 아래 완료 로그 참고 |
 | P2-03 | [x] | 사이트 관리자 아바타 지정 API가 빈 스텁 | **완료** — 아래 완료 로그 참고 |
 | P2-04 | [x] | 웹훅 JSON 페이로드 단순화 | **완료** — 아래 완료 로그 참고 |
 | P2-05 | [ ] | 접근제어가 컨트롤러별 산발적 인라인 체크로 분산 | 전 컨트롤러(~40개) 일관성 전수 미검증. **2026-08-20 재검토**: 이 항목은 단일 결함 수정이 아니라 "~40개 컨트롤러에 흩어진 인라인 권한 체크(`checkReadPermission`/`isManagerOrAuthor` 등 패턴)가 서로 일관된 규칙을 따르는지"를 전수 확인하는 감사(audit) 작업이라, 이번 세션에 남은 시간 예산 안에서 제대로 수행하면 표면적으로 훑는 수준에 그쳐 실효성이 낮다고 판단해 착수하지 않음. 향후 별도 세션에서 컨트롤러별 권한 체크 패턴을 표로 정리하고 불일치를 찾는 감사 작업으로 진행하는 것을 권장 |
@@ -103,6 +103,15 @@
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P2-02**: 알림/이력에 변경분 diff 하이라이트가 전혀 없던 문제 해결. 이전 재검토에서는 새 외부 의존성 도입 여부를 사용자 확인 없이 결정하기 애매해 보류했으나, 사용자가 "yona 원본의 알고리즘 그대로 가져와"라고 명시적으로 요청해 새 라이브러리를 추가하는 대신 yona가 실제로 쓰던 Google diff-match-patch(Apache 2.0)를 그대로 이식했다.
+  - `src/main/java/com/github/search5/yona/util/diff_match_patch.java`(신규): yona `app/utils/diff_match_patch.java`(2413줄, Myers diff + `diff_cleanupEfficiency` 등 전체 API)를 **패키지 선언 한 줄만** `package utils;` → `package com.github.search5.yona.util;`로 바꿔 완전히 그대로 복사. 순수 `java.util.*`/`java.util.regex.*`만 의존해 yona 전용 타입에 의존하지 않으므로 그대로 컴파일됨. Kotlin `kotlin("jvm")` 플러그인이 `src/main/java`를 기본 소스셋으로 인식해 별도 빌드 설정 변경 없이 Kotlin에서 바로 interop 호출 가능함을 확인.
+  - `domain/support/DiffUtil.kt`(신규): yona `utils/DiffUtil.java`(알림 메일/텍스트용 하이라이트 렌더러, `Diff_EditCost=8`)를 Kotlin으로 포팅. `getDiffText`(HTML, DELETE=빨간 배경/INSERT=초록 배경 span, 100자 초과 EQUAL 구간은 앞뒤 50자만 남기고 말줄임), `getDiffPlainText`(텍스트, `---`/`+++` 접두사) 두 함수 모두 원본 test/utils/DiffUtilTest.java의 10개 케이스를 그대로 포팅해 검증(`DiffUtilSpec.kt`) — 전부 최초 실행에 통과해 알고리즘 이식이 정확함을 확인.
+  - `domain/support/HistoryUtil.kt`(신규): yona `AbstractPostingApp.java`의 `addToHistory()`/`getHistoryMadeBy()`/(로컬) `getDiffText()`를 포팅(이력용은 `Diff_EditCost=16`으로 알림용과 다른 상수 — 원본 그대로 구분 유지). 수정자 이름/아이디 + 삽입·삭제 건수 배지가 담긴 헤더를 만들고, `diff-deleted`/`diff-added`/`diff-ellipsis` CSS 클래스로 렌더링한 diff 본문을 이어붙여 기존 history 앞에 누적한다. **범위 조정**: yona의 이슈 초안(draft) 최초 발행 시 history를 초기화하는 분기(`isPublish`)는 이식하지 않음 — yuna가 아직 이슈 초안 발행 플로우 자체를 포팅하지 않아 적용 지점이 없다.
+  - `NotificationMailEventListener.buildHtmlContent()`: `ISSUE_BODY_CHANGED`/`POSTING_BODY_CHANGED` 이벤트는 `DiffUtil.getDiffText(oldValue, newValue)`로 렌더링한 뒤 `<div>`로만 감싸고(이미 자체적으로 HTML 이스케이프+span을 생성하므로 기존 `renderHtml()`의 추가 이스케이프를 적용하면 안 됨), 그 외 이벤트 타입은 기존 escape-후-줄바꿈 렌더링을 그대로 유지.
+  - `PostingServiceImpl.updatePosting()`/`IssueServiceImpl.updateIssue()`: 본문이 실제로 바뀌면(`HistoryUtil.appendHistory`) `history` 필드를 갱신하도록 배선 — 지금까지 존재만 하고 채워지지 않던 필드가 처음으로 실제 사용됨.
+  - 테스트: `DiffUtilSpec.kt`(신규, yona `DiffUtilTest.java` 10개 케이스 그대로 포팅), `HistoryUtilSpec.kt`(신규, 4 tests), `NotificationMailEventListenerSpec.kt` +2 tests(ISSUE/POSTING BODY_CHANGED가 DiffUtil로 렌더링됨), `PostingServiceSpec.kt` +2 tests(본문 변경 시 history 기록/미변경 시 미기록), `IssueServiceSpec.kt` +1 test(본문 변경 시 history 기록). 인접 회귀: `domain/support/*`, `domain/board/*`, `domain/issue/*`, `domain/notification/*`, `web/Board*`, `web/Issue*`, `YonaApplicationTests` 전체 재실행 통과.
+  - 검증: `./gradlew compileKotlin compileJava compileTestKotlin`, `./gradlew test --tests "com.github.search5.yona.domain.support.*" --tests "com.github.search5.yona.domain.board.*" --tests "com.github.search5.yona.domain.issue.*" --tests "com.github.search5.yona.domain.notification.*" --tests "com.github.search5.yona.web.Board*" --tests "com.github.search5.yona.web.Issue*" --tests "com.github.search5.yona.YonaApplicationTests"` 모두 통과.
 
 - **2026-08-20 — P2-04**: git push(NEW_COMMIT) 이벤트의 `WebhookType.JSON` 페이로드가 커밋 목록 없이 `{event, sender, project, resourceId, resourceType}`만 담고 있던 문제 수정. yona `models/Webhook.java`의 push 전용 `buildRequestBody(commits, refNames, sender)`(JSON 포맷)를 확인한 결과 GitHub 웹훅과 유사한 `ref`/`commits`(각 커밋의 id/message/timestamp/url/author/committer)/`head_commit`/`sender`/`pusher`/`repository` 구조였다.
   - `WebhookServiceImpl.buildPayload()`의 `WebhookType.JSON` 분기에서 리소스가 `PushedCommits`이면 신규 `buildPushPayload()`로 위임하도록 분기 추가 — 이슈/게시글/댓글/PR 등 다른 리소스 타입의 JSON 페이로드는 기존 단순 구조를 그대로 유지(이 백로그 항목이 지목한 결함은 "커밋 리스트 누락"이라 범위를 push 페이로드로 한정).

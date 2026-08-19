@@ -171,6 +171,54 @@ class NotificationMailEventListenerSpec : DescribeSpec({
             }
         }
 
+        describe("본문 변경 diff 하이라이트 (P2-02, yona NotificationEvent.getMessage()의 DiffUtil.getDiffText 대응)") {
+            it("ISSUE_BODY_CHANGED면 DiffUtil로 렌더링한 삭제/삽입 하이라이트가 메일 본문에 포함돼야 한다") {
+                val receiver = User(id = 1L, loginId = "u1", name = "사용자1", email = "u1@example.com")
+                val event = NotificationEvent(
+                    id = 200L,
+                    title = "이슈 본문 변경",
+                    created = Instant.now(),
+                    resourceType = ResourceType.ISSUE_POST,
+                    resourceId = "1",
+                    eventType = EventType.ISSUE_BODY_CHANGED,
+                    oldValue = "old text",
+                    newValue = "new text",
+                    receivers = mutableSetOf(receiver)
+                )
+                val captured = slot<String>()
+                every {
+                    mailService.sendHtmlMailWithReplyTo(any(), any(), any(), capture(captured), any())
+                } just Runs
+
+                listener.handleNotificationEvent(event)
+
+                captured.captured shouldBe "<div>${com.github.search5.yona.domain.support.DiffUtil.getDiffText("old text", "new text")}</div>"
+            }
+
+            it("POSTING_BODY_CHANGED도 동일하게 DiffUtil 렌더링을 사용해야 한다") {
+                val receiver = User(id = 1L, loginId = "u1", name = "사용자1", email = "u1@example.com")
+                val event = NotificationEvent(
+                    id = 201L,
+                    title = "게시글 본문 변경",
+                    created = Instant.now(),
+                    resourceType = ResourceType.BOARD_POST,
+                    resourceId = "1",
+                    eventType = EventType.POSTING_BODY_CHANGED,
+                    oldValue = "old body",
+                    newValue = "new body",
+                    receivers = mutableSetOf(receiver)
+                )
+                val captured = slot<String>()
+                every {
+                    mailService.sendHtmlMailWithReplyTo(any(), any(), any(), capture(captured), any())
+                } just Runs
+
+                listener.handleNotificationEvent(event)
+
+                captured.captured shouldBe "<div>${com.github.search5.yona.domain.support.DiffUtil.getDiffText("old body", "new body")}</div>"
+            }
+        }
+
         describe("Reply-To 헤더 (P1-28, yona NotificationMail.getReplyTo() 대응)") {
             it("ISSUE_POST 리소스면 owner/project detail이 담긴 plus-address를 Reply-To로 설정해야 한다") {
                 val project = Project(owner = "gildong", name = "yona-project")

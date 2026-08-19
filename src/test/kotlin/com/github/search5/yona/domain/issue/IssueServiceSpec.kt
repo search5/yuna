@@ -157,6 +157,31 @@ class IssueServiceSpec @Autowired constructor(
                 issueEvents.first().senderLoginId shouldBe "tester4"
             }
 
+            it("updateIssue로 본문을 변경하면 변경 이력(history)이 기록되어야 한다(P2-02)") {
+                val author = userRepository.save(User(loginId = "tester4b", name = "테스터4B", email = "tester4b@yona.io"))
+                val project = projectRepository.save(Project(name = "body-history-project", owner = "tester4b"))
+                val issue = Issue(
+                    title = "본문 이력 테스트", body = "원래 본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                val updated = issueService.updateIssue(
+                    issueId = savedIssue.id!!,
+                    title = savedIssue.title,
+                    body = "변경된 본문",
+                    updater = author,
+                    assigneeUser = null,
+                    milestoneId = null,
+                    labelIds = null
+                )
+
+                updated.history shouldNotBe null
+                updated.history!!.contains("history-made-by") shouldBe true
+                updated.history!!.contains("테스터4B") shouldBe true
+            }
+
             it("updateIssue로 본문이 바뀌지 않으면 ISSUE_BODY_CHANGED 이벤트가 생성되지 않아야 한다") {
                 val author = userRepository.save(User(loginId = "tester5", name = "테스터5", email = "tester5@yona.io"))
                 val project = projectRepository.save(Project(name = "body-nochange-project", owner = "tester5"))
