@@ -49,7 +49,7 @@
 | P1-08 | [x] | PR 타임라인(PullRequestEvent) 부재 | `models/PullRequestEvent.java` | `domain/pullrequest/PullRequestEvent.kt`(신규), `PullRequestServiceImpl.kt`, `domain/event/PullRequestMergeEventListener.kt`, `web/PullRequestController.kt` | **완료(범위 조정, 아래 참고)** |
 | P1-09 | [x] | RecentIssue(최근 본 이슈) 부재 | `models/RecentIssue.java` | `domain/issue/{RecentIssue,RecentIssueRepository,RecentIssueService}.kt`(신규) | **완료(범위 조정, 아래 참고)** |
 | P1-10 | [x] | 라벨 수정 기능 없음 | `IssueLabelApp.java:276` | `web/IssueLabelController.kt`, `domain/issue/IssueLabelServiceImpl.kt` | **완료** |
-| P1-11 | [ ] | 라벨 카테고리 수정 기능 없음 | `IssueLabelApp.java:390` | 위와 동일 |
+| P1-11 | [x] | 라벨 카테고리 수정 기능 없음 | `IssueLabelApp.java:390` | 위와 동일 | **완료** |
 | P1-12 | [ ] | 라벨 복사(copyLabels) 기능 없음 | `IssueLabelApp.java:485` | 위와 동일 |
 | P1-13 | [ ] | 프로젝트 라벨 attach/detach 없음 | `ProjectApp.java` (labels) | `web/LabelController.kt` |
 | P1-14 | [ ] | 멘션 자동완성(mentionList) 없음 | `ProjectApp.java:225-227` | (해당 없음) |
@@ -216,6 +216,12 @@
   - `IssueLabelService`/`IssueLabelServiceImpl`에 `updateLabel(labelId, name, color, categoryId)` 추가 — 대상 라벨과 신규 카테고리를 각각 조회해(둘 중 하나라도 없으면 `IllegalArgumentException`) 라벨의 `name`/`color`/`category`를 덮어쓰고 저장. yona의 `update()`와 동일하게 **이름/색상 중복 검사는 하지 않음**(`newLabel()`의 dedupe와는 다른 동작 — 원본 그대로 이식).
   - `IssueLabelController`에 `PUT /api/projects/{projectId}/labels/{labelId}` 추가 — 기존 `createLabel`/`deleteLabel`과 동일하게 `isProjectManager` 기준으로 권한 검사(yona `@IsAllowed(Operation.UPDATE, resourceType=ISSUE_LABEL)`에 대응).
   - 테스트: `IssueLabelServiceImplSpec.kt`(신규) 3 tests(정상 수정, 라벨 없음, 카테고리 없음) — 기존 `IssueLabelServiceImpl`의 다른 메서드들과 달리 새로 작성한 로직은 mockk 기반으로 직접 단위테스트함. `IssueLabelControllerSpec.kt` +2(관리자 200 OK, 비관리자 403). 커버리지: `updateLabel` 메서드 단독 LINE 100%(8/8)·INSTRUCTION 100%(46/46) — 클래스 전체 수치(LINE 23.6%)는 이번 작업 범위 밖의 기존 미검증 메서드(getLabels/createLabel 등)가 함께 집계된 것으로, 그쪽은 원래부터 컨트롤러 mock 테스트로만 간접 커버되던 이 파일의 기존 관례임.
+
+- **2026-08-19 — P1-11**: 라벨 카테고리(이슈 라벨을 묶는 상위 분류)를 생성/삭제만 할 수 있고 이름·exclusive 여부를 수정할 방법이 없던 문제 해결(yona `IssueLabelApp.updateCategory()` 대응).
+  - `IssueLabelService`/`IssueLabelServiceImpl`에 `updateCategory(categoryId, name, isExclusive)` 추가 — 대상 카테고리 조회(없으면 `IllegalArgumentException`) 후, **같은 프로젝트 내 다른 카테고리가 이미 같은 이름을 쓰고 있으면**(자기 자신 제외) 신규 `DuplicateLabelCategoryNameException`을 던져 거부 — yona가 `lc.name.equals(category.name) && !lc.id.equals(category.id)` 조건으로 `badRequest`를 반환하던 것과 동일한 동작.
+  - `IssueLabelController`에 `PUT /api/projects/{projectId}/labels/categories/{categoryId}` 추가 — `isProjectManager` 권한 검사 후 서비스 호출, `DuplicateLabelCategoryNameException`을 `400 Bad Request`로 매핑(이 코드베이스에 전역 `@ExceptionHandler`가 없어 컨트롤러에서 직접 catch — yona가 이 케이스만 명시적으로 400을 반환하는 것과 동일하게, 다른 도메인 예외(`InvalidBranchOperationException` 등)처럼 그냥 흘려보내지 않고 여기서는 의도적으로 매핑함).
+  - 테스트: `IssueLabelServiceImplSpec.kt` +4 tests(정상 수정, 카테고리 없음, 이름 중복 시 예외, 자기 자신과 이름이 같으면 중복 아님). `IssueLabelControllerSpec.kt` +3(관리자 200 OK, 이름 중복 400, 비관리자 403). 커버리지: `updateCategory` 메서드 LINE 100%(8/8)·BRANCH 83%(5/6).
+  - 검증: `./gradlew test --tests "IssueLabelServiceImplSpec" --tests "IssueLabelControllerSpec" --tests "YonaApplicationTests"` 전체 통과.
 
 ### 검증 방법
 전체 스위트(Testcontainers 포함)는 시간이 오래 걸려 항목별로는 `./gradlew test --tests "<FQCN>"`으로 개별 검증했고, 교차 영향 여부는 `./gradlew compileKotlin compileTestKotlin`으로 전체 컴파일을 확인했다(정상). 세 항목 모두 적용 후 전체 컴파일 성공.

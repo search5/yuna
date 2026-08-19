@@ -77,6 +77,22 @@ class IssueLabelServiceImpl(
         return issueLabelRepository.save(label)
     }
 
+    // yona IssueLabelApp.updateCategory() 대응. 같은 프로젝트 내 다른 카테고리와 이름이 겹치면 거부한다.
+    override fun updateCategory(categoryId: Long, name: String, isExclusive: Boolean): IssueLabelCategory {
+        val category = issueLabelCategoryRepository.findById(categoryId)
+            .orElseThrow { IllegalArgumentException("Category not found: $categoryId") }
+
+        val duplicate = issueLabelCategoryRepository.findByProjectAndName(category.project, name)
+        if (duplicate != null && duplicate.id != categoryId) {
+            throw DuplicateLabelCategoryNameException("이미 존재하는 카테고리 이름입니다: $name")
+        }
+
+        category.name = name
+        category.isExclusive = isExclusive
+
+        return issueLabelCategoryRepository.save(category)
+    }
+
     override fun deleteLabel(labelId: Long) {
         issueLabelRepository.deleteIssueMappings(labelId)
         issueLabelRepository.deletePostingMappings(labelId)
