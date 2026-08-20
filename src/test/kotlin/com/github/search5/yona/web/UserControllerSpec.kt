@@ -6,6 +6,8 @@ import com.github.search5.yona.domain.user.Email
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserService
+import com.github.search5.yona.domain.user.UserSetting
+import com.github.search5.yona.domain.user.UserSettingRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -24,11 +26,12 @@ class UserControllerSpec : DescribeSpec({
     val userService = mockk<UserService>()
     val userRepository = mockk<UserRepository>()
     val recentIssueService = mockk<RecentIssueService>()
-    val userController = UserController(userService, userRepository, recentIssueService)
+    val userSettingRepository = mockk<UserSettingRepository>()
+    val userController = UserController(userService, userRepository, recentIssueService, userSettingRepository)
     val mockMvc = MockMvcBuilders.standaloneSetup(userController).build()
 
     beforeTest {
-        io.mockk.clearMocks(userService, userRepository, recentIssueService)
+        io.mockk.clearMocks(userService, userRepository, recentIssueService, userSettingRepository)
     }
 
     describe("UserController 웹 API 테스트") {
@@ -215,6 +218,42 @@ class UserControllerSpec : DescribeSpec({
             it("로그인하지 않았다면 401을 반환해야 한다") {
                 mockMvc.perform(get("/api/users/me/recent-issues"))
                     .andExpect(status().isUnauthorized)
+            }
+        }
+
+        // yona UserApp.java:1372-1380 setDefaultLoginPage() 대응 (P2-11)
+        describe("POST /user/setDefaultLoginPage") {
+            it("설정이 없던 사용자면 새로 만들어 기본 페이지를 저장해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userSettingRepository.findByUserId(1L) } returns Optional.empty()
+                every { userSettingRepository.save(any()) } answers { firstArg() }
+
+                mockMvc.perform(
+                    post("/user/setDefaultLoginPage")
+                        .param("path", "notifications")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.defaultLoginPage").value("notifications"))
+
+                verify(exactly = 1) { userSettingRepository.save(match { it.loginDefaultPage == "notifications" && it.user == testUser }) }
+            }
+
+            it("이미 설정이 있던 사용자면 기존 설정을 갱신해야 한다") {
+                val existing = UserSetting(id = 100L, user = testUser, loginDefaultPage = "issues")
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userSettingRepository.findByUserId(1L) } returns Optional.of(existing)
+                every { userSettingRepository.save(any()) } answers { firstArg() }
+
+                mockMvc.perform(
+                    post("/user/setDefaultLoginPage")
+                        .param("path", "pull-requests")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.defaultLoginPage").value("pull-requests"))
+
+                verify(exactly = 1) { userSettingRepository.save(match { it.id == 100L && it.loginDefaultPage == "pull-requests" }) }
             }
         }
     }

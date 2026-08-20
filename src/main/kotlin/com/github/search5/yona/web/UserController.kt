@@ -5,6 +5,8 @@ import com.github.search5.yona.domain.user.Email
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserService
+import com.github.search5.yona.domain.user.UserSetting
+import com.github.search5.yona.domain.user.UserSettingRepository
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -18,7 +20,8 @@ import java.util.Base64
 class UserController(
     private val userService: UserService,
     private val userRepository: UserRepository,
-    private val recentIssueService: RecentIssueService
+    private val recentIssueService: RecentIssueService,
+    private val userSettingRepository: UserSettingRepository
 ) {
 
     private fun getLoginUserId(authentication: Authentication?): Long {
@@ -297,4 +300,22 @@ class UserController(
         val password: String,
         val retypedPassword: String
     )
+
+    // yona UserApp.java:1372-1380 setDefaultLoginPage() 대응 (P2-11). 로그인 후 사이트 루트로
+    // 접속했을 때 이동할 "기본 페이지"를 사용자별로 저장한다(리다이렉트 소비는 IndexController).
+    @PostMapping("/user/setDefaultLoginPage")
+    fun setDefaultLoginPage(
+        @RequestParam(required = false) path: String?,
+        authentication: Authentication?
+    ): ResponseEntity<Map<String, String?>> {
+        if (authentication == null) throw IllegalArgumentException("Unauthorized")
+        val user = userRepository.findByLoginId(authentication.name)
+            .orElseThrow { IllegalArgumentException("User not found") }
+
+        val userSetting = userSettingRepository.findByUserId(user.id!!).orElseGet { UserSetting(user = user) }
+        userSetting.loginDefaultPage = path
+        userSettingRepository.save(userSetting)
+
+        return ResponseEntity.ok(mapOf("defaultLoginPage" to userSetting.loginDefaultPage))
+    }
 }

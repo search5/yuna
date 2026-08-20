@@ -6,6 +6,8 @@ import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.UserSetting
+import com.github.search5.yona.domain.user.UserSettingRepository
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.board.PostingRepository
@@ -33,6 +35,7 @@ class IndexControllerSpec : DescribeSpec({
     val pullRequestRepository = mockk<PullRequestRepository>()
     val organizationRepository = mockk<OrganizationRepository>()
     val milestoneRepository = mockk<MilestoneRepository>()
+    val userSettingRepository = mockk<UserSettingRepository>()
 
     val indexController = IndexController(
         notificationEventRepository,
@@ -42,7 +45,8 @@ class IndexControllerSpec : DescribeSpec({
         postingRepository,
         pullRequestRepository,
         organizationRepository,
-        milestoneRepository
+        milestoneRepository,
+        userSettingRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(indexController).build()
 
@@ -55,6 +59,7 @@ class IndexControllerSpec : DescribeSpec({
             postingRepository,
             pullRequestRepository,
             organizationRepository,
+            userSettingRepository,
             milestoneRepository
         )
     }
@@ -77,6 +82,7 @@ class IndexControllerSpec : DescribeSpec({
         describe("GET /") {
             it("로그인된 유저가 접속 시 최근 20개의 알림 목록을 모델에 담고 index 뷰를 반환해야 한다") {
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userSettingRepository.findByUserId(10L) } returns Optional.empty()
                 every { notificationEventRepository.findByReceiver(user, PageRequest.of(0, 20)) } returns PageImpl(listOf(event))
                 every { issueRepository.findAllById(any()) } returns emptyList()
                 every { userRepository.findAllById(any()) } returns emptyList()
@@ -97,6 +103,21 @@ class IndexControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("index"))
                     .andExpect(model().attributeDoesNotExist("notifications"))
+            }
+
+            // yona Application.java:45-52 index()의 loginDefaultPage 리다이렉트 대응 (P2-11)
+            it("기본 페이지가 설정된 로그인 유저가 접속하면 해당 경로로 리다이렉트해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userSettingRepository.findByUserId(10L) } returns Optional.of(
+                    UserSetting(id = 1L, user = user, loginDefaultPage = "notifications")
+                )
+
+                mockMvc.perform(
+                    get("/")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("notifications"))
             }
         }
 
