@@ -27,6 +27,38 @@ class IssueLabelServiceImplSpec : DescribeSpec({
         clearMocks(issueLabelRepository, issueLabelCategoryRepository, projectRepository, answers = false)
     }
 
+    // yona IssueLabel.exists()(project+category+name 복합 유일성) 대응 (P1-54). 같은 프로젝트라도
+    // 카테고리가 다르면 같은 이름의 라벨을 허용해야 한다 — project+name 단일 유일성이었던
+    // 기존 축약을 legacy와 동일하게 되돌린다.
+    describe("IssueLabelServiceImpl.createLabel") {
+        it("같은 프로젝트라도 카테고리가 다르면 같은 이름의 라벨을 새로 생성해야 한다") {
+            every { projectRepository.findById(1L) } returns Optional.of(project)
+            every { issueLabelCategoryRepository.findById(11L) } returns Optional.of(newCategory)
+            every { issueLabelRepository.findByProjectAndCategoryAndName(project, newCategory, "버그") } returns null
+
+            val captured = slot<IssueLabel>()
+            every { issueLabelRepository.save(capture(captured)) } answers { firstArg() }
+
+            val result = service.createLabel(projectId = 1L, categoryId = 11L, name = "버그", color = "#ff0000")
+
+            captured.captured.name shouldBe "버그"
+            captured.captured.category shouldBe newCategory
+            result.name shouldBe "버그"
+        }
+
+        it("같은 프로젝트+카테고리+이름이 이미 있으면 기존 라벨을 재사용해야 한다") {
+            val existing = IssueLabel(id = 200L, category = oldCategory, color = "#ff0000", name = "버그", project = project)
+            every { projectRepository.findById(1L) } returns Optional.of(project)
+            every { issueLabelCategoryRepository.findById(10L) } returns Optional.of(oldCategory)
+            every { issueLabelRepository.findByProjectAndCategoryAndName(project, oldCategory, "버그") } returns existing
+
+            val result = service.createLabel(projectId = 1L, categoryId = 10L, name = "버그", color = "#000000")
+
+            result shouldBe existing
+            verify(exactly = 0) { issueLabelRepository.save(any()) }
+        }
+    }
+
     describe("IssueLabelServiceImpl.updateLabel") {
         it("라벨의 이름/색상/카테고리를 변경 후 저장해야 한다") {
             val label = IssueLabel(id = 100L, category = oldCategory, color = "#111111", name = "옛 이름", project = project)
@@ -133,7 +165,7 @@ class IssueLabelServiceImplSpec : DescribeSpec({
             every { issueLabelCategoryRepository.save(capture(savedCategory)) } answers {
                 firstArg<IssueLabelCategory>().apply { id = 21L }
             }
-            every { issueLabelRepository.findByProjectAndName(toProject, "critical") } returns null
+            every { issueLabelRepository.findByProjectAndCategoryAndName(toProject, any(), "critical") } returns null
 
             val savedLabel = slot<IssueLabel>()
             every { issueLabelRepository.save(capture(savedLabel)) } answers { firstArg() }
@@ -158,7 +190,7 @@ class IssueLabelServiceImplSpec : DescribeSpec({
             every { projectRepository.findById(3L) } returns Optional.of(toProject)
             every { issueLabelRepository.findByProject(fromProject) } returns listOf(fromLabel)
             every { issueLabelCategoryRepository.findByProjectAndName(toProject, "버그") } returns existingCategory
-            every { issueLabelRepository.findByProjectAndName(toProject, "critical") } returns null
+            every { issueLabelRepository.findByProjectAndCategoryAndName(toProject, existingCategory, "critical") } returns null
             every { issueLabelRepository.save(any()) } answers { firstArg() }
 
             service.copyLabels(fromProjectId = 2L, toProjectId = 3L)
@@ -176,7 +208,7 @@ class IssueLabelServiceImplSpec : DescribeSpec({
             every { issueLabelRepository.findByProject(fromProject) } returns listOf(fromLabel)
             every { issueLabelCategoryRepository.findByProjectAndName(toProject, "버그") } returns null
             every { issueLabelCategoryRepository.save(any()) } answers { firstArg<IssueLabelCategory>().apply { id = 21L } }
-            every { issueLabelRepository.findByProjectAndName(toProject, "critical") } returns existingLabel
+            every { issueLabelRepository.findByProjectAndCategoryAndName(toProject, any(), "critical") } returns existingLabel
 
             val result = service.copyLabels(fromProjectId = 2L, toProjectId = 3L)
 

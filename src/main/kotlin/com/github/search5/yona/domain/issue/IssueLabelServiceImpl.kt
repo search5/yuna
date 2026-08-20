@@ -32,7 +32,8 @@ class IssueLabelServiceImpl(
         val category = issueLabelCategoryRepository.findById(categoryId)
             .orElseThrow { IllegalArgumentException("Category not found: $categoryId") }
         
-        val existing = issueLabelRepository.findByProjectAndName(project, name)
+        // yona IssueLabel.exists()(project+category+name 복합 유일성) 대응 (P1-54).
+        val existing = issueLabelRepository.findByProjectAndCategoryAndName(project, category, name)
         if (existing != null) {
             return existing
         }
@@ -95,7 +96,9 @@ class IssueLabelServiceImpl(
 
     // yona IssueLabel.copyIssueLabels()/copyIssueLabel()/copyIssueLabelCategory() 대응.
     // 원본 프로젝트의 라벨을 대상 프로젝트로 복사하되, 같은 이름의 카테고리/라벨이 이미 있으면
-    // 재사용(재생성하지 않음)한다. createLabel()과 동일하게 project 내 라벨 이름 유일성 기준으로 판단.
+    // 재사용(재생성하지 않음)한다. yona copyIssueLabelCategory()가 카테고리를 먼저 찾거나 만든 뒤
+    // copyIssueLabel().exists()(project+category+name 복합 유일성, P1-54)로 중복을 판단하는 순서를
+    // 그대로 따른다 — 카테고리를 먼저 정해야 그 카테고리 기준으로 중복 여부를 물을 수 있다.
     override fun copyLabels(fromProjectId: Long, toProjectId: Long): List<IssueLabel> {
         val fromProject = projectRepository.findById(fromProjectId)
             .orElseThrow { IllegalArgumentException("Project not found: $fromProjectId") }
@@ -105,10 +108,6 @@ class IssueLabelServiceImpl(
         val copiedLabels = mutableListOf<IssueLabel>()
 
         for (fromLabel in issueLabelRepository.findByProject(fromProject)) {
-            if (issueLabelRepository.findByProjectAndName(toProject, fromLabel.name) != null) {
-                continue
-            }
-
             val category = issueLabelCategoryRepository.findByProjectAndName(toProject, fromLabel.category.name)
                 ?: issueLabelCategoryRepository.save(
                     IssueLabelCategory(
@@ -117,6 +116,10 @@ class IssueLabelServiceImpl(
                         project = toProject
                     )
                 )
+
+            if (issueLabelRepository.findByProjectAndCategoryAndName(toProject, category, fromLabel.name) != null) {
+                continue
+            }
 
             val copiedLabel = issueLabelRepository.save(
                 IssueLabel(
