@@ -1,8 +1,12 @@
 package com.github.search5.yona.config.svn
 
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectService
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
@@ -90,6 +94,7 @@ class SvnAuthorizationFilterSpec : DescribeSpec({
             val project = Project(id = 1L, owner = "gildong", name = "private-repo", vcs = "SUBVERSION", projectScope = ProjectScope.PRIVATE)
             every { projectService.findByOwnerAndName("gildong", "private-repo") } returns project
             every { projectService.isMember(1L, "chulsoo") } returns false
+            every { userRepository.findByLoginId("chulsoo") } returns Optional.of(User(id = 9L, loginId = "chulsoo", name = "철수"))
 
             val auth = UsernamePasswordAuthenticationToken("chulsoo", "password", AuthorityUtils.createAuthorityList("ROLE_ACTIVE"))
             SecurityContextHolder.setContext(SecurityContextImpl(auth))
@@ -134,6 +139,61 @@ class SvnAuthorizationFilterSpec : DescribeSpec({
             val project = Project(id = 2L, owner = "gildong", name = "protected-repo", vcs = "SUBVERSION", projectScope = ProjectScope.PROTECTED)
             every { projectService.findByOwnerAndName("gildong", "protected-repo") } returns project
             every { projectService.isMember(2L, "chulsoo") } returns false
+            val user = User(id = 9L, loginId = "chulsoo", name = "철수")
+            every { userRepository.findByLoginId("chulsoo") } returns Optional.of(user)
+
+            val auth = UsernamePasswordAuthenticationToken("chulsoo", "password", AuthorityUtils.createAuthorityList("ROLE_ACTIVE"))
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_FORBIDDEN
+            verify(exactly = 0) { filterChain.doFilter(any(), any()) }
+        }
+
+        // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-64). PROTECTED 프로젝트는 직접 멤버가
+        // 아니어도 그 프로젝트가 속한 조직의 구성원이면 SVN 접근이 허용돼야 한다 — P1-57이 웹
+        // 컨트롤러 전체에 이식했지만 이 필터는 그 범위 밖이었던 것을 바로잡는다.
+        it("PROTECTED 프로젝트 요청 시 직접 멤버는 아니지만 조직 그룹멤버인 인증된 유저는 통과되어야 한다 (P1-64)") {
+            val request = MockHttpServletRequest("PROPFIND", "/svn/gildong/protected-repo/trunk")
+            val response = MockHttpServletResponse()
+            val org = Organization(id = 1L, name = "org1")
+            val project = Project(
+                id = 2L, owner = "gildong", name = "protected-repo", vcs = "SUBVERSION",
+                projectScope = ProjectScope.PROTECTED, organization = org
+            )
+            val user = User(id = 9L, loginId = "chulsoo", name = "철수")
+            org.organizationUsers.add(OrganizationUser(id = 100L, user = user, organization = org, role = Role(id = RoleType.ORG_MEMBER.roleType)))
+
+            every { projectService.findByOwnerAndName("gildong", "protected-repo") } returns project
+            every { projectService.isMember(2L, "chulsoo") } returns false
+            every { userRepository.findByLoginId("chulsoo") } returns Optional.of(user)
+
+            val auth = UsernamePasswordAuthenticationToken("chulsoo", "password", AuthorityUtils.createAuthorityList("ROLE_ACTIVE"))
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_OK
+            verify(exactly = 1) { filterChain.doFilter(any(), any()) }
+        }
+
+        // yona isAllowedIfGroupMember()는 PRIVATE 프로젝트에는 적용되지 않는다(PUBLIC/PROTECTED만) —
+        // 조직 그룹멤버라도 PRIVATE 저장소는 여전히 직접 멤버만 접근 가능해야 한다.
+        it("PRIVATE 프로젝트는 조직 그룹멤버라도 직접 멤버가 아니면 여전히 403을 응답해야 한다 (P1-64)") {
+            val request = MockHttpServletRequest("PROPFIND", "/svn/gildong/private-repo/trunk")
+            val response = MockHttpServletResponse()
+            val org = Organization(id = 1L, name = "org1")
+            val project = Project(
+                id = 3L, owner = "gildong", name = "private-repo", vcs = "SUBVERSION",
+                projectScope = ProjectScope.PRIVATE, organization = org
+            )
+            val user = User(id = 9L, loginId = "chulsoo", name = "철수")
+            org.organizationUsers.add(OrganizationUser(id = 101L, user = user, organization = org, role = Role(id = RoleType.ORG_MEMBER.roleType)))
+
+            every { projectService.findByOwnerAndName("gildong", "private-repo") } returns project
+            every { projectService.isMember(3L, "chulsoo") } returns false
+            every { userRepository.findByLoginId("chulsoo") } returns Optional.of(user)
 
             val auth = UsernamePasswordAuthenticationToken("chulsoo", "password", AuthorityUtils.createAuthorityList("ROLE_ACTIVE"))
             SecurityContextHolder.setContext(SecurityContextImpl(auth))
