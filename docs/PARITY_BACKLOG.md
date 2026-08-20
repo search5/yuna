@@ -138,12 +138,20 @@
 | P2-08 | [x] | P2-04(웹훅 push JSON payload)가 커밋 목록/head_commit 골격은 갖췄지만, 필드 단위로 대조하면 아직 레거시와 다른 지점이 4곳 남아있음 | `app/models/Webhook.java:554-562 buildSenderJSON()`(`site_admin` 필드 포함), `:571-580 buildRepositoryJSON()`(`overview`=프로젝트 설명 필드 포함), `:705-720 buildJSONFromCommit()`(`url`이 `getBaseUrl()`(스킴+호스트)+`RouteUtil.getUrl(project)`+`/commit/`+sha로 절대 URL, `timestamp`는 `SimpleDateFormat("yyyy-MM-dd'T'hh:mm:ssZ")`로 포맷) | `domain/webhook/WebhookServiceImpl.kt` | **완료** — 아래 완료 로그 참고 |
 | P2-09 | [x] | git 프로토콜(clone/push)로만 프로젝트에 접근하는 사용자는 "최근 방문 프로젝트"에 기록되지 않음(웹 UI로 한 번이라도 들어가면 잡힘 — 영향 작음) | `app/controllers/GitApp.java:137 service()`(`user.visits(project)` → `RecentProject.addNew(user, project)`, `app/models/User.java:856-862`) | `config/GitServletConfig.kt`, `config/git/GitProjectVisitRecorder.kt`(신규), `domain/project/RecentProjectRepository.kt` | **완료** — 아래 완료 로그 참고 |
 | P2-10 | [x] | **표현 정정**: "yona 1시간 기본값 대비 24배 차이"는 코드 레벨 fallback만 본 것 — 실제 배포용 conf 템플릿(`application.conf.default:253`)엔 6시간으로 오버라이드돼 있어 정확히는 6시간 대비 4배 차이. yona는 값을 설정 가능하게 하고 0 이하면 폴링 자체를 비활성화하는데 yuna는 둘 다 하드코딩(메커니즘 자체는 동일 — git ls-remote+semver 비교) | `app/models/YobiUpdate.java:40-41`(기본 확인 주기 1시간이나 `conf/application.conf.default:253`에서 6시간으로 오버라이드), `:52-67 onStart()`(`interval <= 0`이면 스케줄러 자체를 등록하지 않음) | `domain/support/YonaUpdateService.kt` | **완료** — 아래 완료 로그 참고 |
-| P2-11 | [ ] | [불확실] 로그인 후 이동할 기본 페이지를 사용자별로 기억하는 기능(`UserSetting.loginDefaultPage`)에 대응하는 yuna 코드를 찾지 못함 | `app/controllers/UserApp.java:1373-1382 setDefaultLoginPage()`, `app/models/UserSetting.java` | (grep 결과 `UserSetting`/`loginDefaultPage` 관련 yuna 파일 전혀 없음) | 2026-08-20 사용자 요청 감사에서 발견, 순수 UX 편의 기능이라 우선순위 낮을 수 있음. 추가 확인 필요 — 착수 여부는 사용자 결정 대기 |
+| P2-11 | [x] | **불확실 해소**: 백엔드만 없는 게 아니라 **프론트엔드(템플릿)는 이미 `POST /user/setDefaultLoginPage` 호출 버튼을 갖고 있었음**(`index.html`/`mySeriesMenuTab.html`) — 즉 사용자에게 노출된 버튼을 누르면 404가 나는 실제 버그. 로그인 후 이동할 기본 페이지를 사용자별로 기억하는 기능(`UserSetting.loginDefaultPage`) | `app/controllers/UserApp.java:1372-1380 setDefaultLoginPage()`, `app/models/UserSetting.java`, `app/controllers/Application.java:45-52 index()`(`loginDefaultPage`가 설정돼 있으면 사이트 루트 접속 시 그 경로로 redirect) | `domain/user/{UserSetting,UserSettingRepository}.kt`(신규), `web/UserController.kt`, `web/IndexController.kt` | **완료** — 아래 완료 로그 참고 |
 | P2-12 | [ ] | [불확실] 이슈 담당자(assignee) 기반 권한 오버라이드가 일부 엔드포인트에서만 적용됨 | `app/utils/AccessControl.java isAllowedIfAssignee`(담당자에게도 author와 동급 권한 부여) | `web/IssueController.kt`(`changeState`(285-303행)에서만 `isAssignee` 인라인 체크 존재, `updateIssue`/`moveIssue`/`publishIssue`/`deleteIssue`(180/217/247/269행)는 `isManagerOrAuthor`만 사용) | 2026-08-20 사용자 요청 감사에서 발견. yona의 ASSIGN_ISSUE 규칙상 담당자는 대개 프로젝트 멤버/조직 그룹멤버라 멤버십 체크로 이미 커버될 가능성 있어 실제 영향 범위 불확실 — 추가 확인 필요. 착수 여부는 사용자 결정 대기 |
 
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P2-11**: 로그인 후 이동할 "기본 페이지"를 사용자별로 기억하는 기능 신규 이식.
+  - 착수 전 [불확실] 재확인 중 발견: 등록 당시엔 "yuna 코드 전혀 없음"으로만 파악했으나, 실제로는 **프론트엔드 템플릿(`index.html`, `common/mySeriesMenuTab.html`)이 이미 `POST /user/setDefaultLoginPage?path=...`를 호출하는 "기본 페이지로 지정" 버튼을 갖고 있었음** — 백엔드 라우트만 누락돼, 배포된 상태로는 사용자가 그 버튼을 누르면 404가 나는 실제 동작하는 버그였다(순수 미착수 기능이 아니었음).
+  - `domain/user/UserSetting.kt`/`UserSettingRepository.kt` 신규 — yona `models/UserSetting.java`의 `User`와의 OneToOne + `loginDefaultPage` 문자열 필드 그대로 이식.
+  - `UserController.kt`에 `POST /user/setDefaultLoginPage` 신규 — yona `UserApp.java:1372-1380`과 동일하게 기존 설정 없으면 새로 만들고, `path` 쿼리 파라미터로 저장, `{"defaultLoginPage": path}` JSON 응답.
+  - `IndexController.kt`의 `index()`(`GET /`)에 yona `Application.java:45-52`와 동일한 리다이렉트 로직 추가 — 로그인 사용자에게 `loginDefaultPage`가 설정돼 있으면 알림 목록 조회 없이 그 경로로 즉시 redirect.
+  - 테스트: `UserSettingRepositorySpec.kt` 신규 2건, `UserControllerSpec.kt` +2(신규 설정 저장/기존 설정 갱신), `IndexControllerSpec.kt` +1(기본 페이지 설정 시 리다이렉트) + 기존 로그인 유저 테스트에 `userSettingRepository.findByUserId` 스텁 추가.
+  - 검증: `./gradlew test --tests "...UserSettingRepositorySpec" --tests "...UserControllerSpec" --tests "...IndexControllerSpec"` 전체 통과.
 
 - **2026-08-20 — P2-10**: 자체 업데이트(신규 버전) 확인 주기를 설정 가능하게 만들고 legacy 기본값에 맞춤.
   - 구현 전 재확인(P1-74/P1-82 교훈): 최초 등록 문구("1시간 vs 24시간, 24배 차이")는 yona `YobiUpdate.java` 코드 레벨 fallback만 보고 실제 배포용 conf 템플릿을 대조하지 않은 것이었음 — `conf/application.conf.default:253`에 `application.update.notification.interval = 6h`로 명시적 오버라이드가 있어, 실제 legacy 배포 시 동작은 6시간 간격이 맞다. 백로그 문구를 정정한 뒤 구현.

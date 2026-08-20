@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.UserSettingRepository
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.board.PostingRepository
@@ -29,7 +30,8 @@ class IndexController(
     private val postingRepository: PostingRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val organizationRepository: OrganizationRepository,
-    private val milestoneRepository: MilestoneRepository
+    private val milestoneRepository: MilestoneRepository,
+    private val userSettingRepository: UserSettingRepository
 ) {
 
     data class NotificationViewDto(
@@ -51,10 +53,16 @@ class IndexController(
         return userRepository.findByLoginId(authentication.name).orElse(null)
     }
 
+    // yona Application.java:45-52 index()의 loginDefaultPage 리다이렉트 대응 (P2-11)
     @GetMapping("/")
     fun index(authentication: Authentication?, model: Model): String {
         val user = getLoginUser(authentication)
         if (user != null) {
+            val loginDefaultPage = userSettingRepository.findByUserId(user.id!!).orElse(null)?.loginDefaultPage
+            if (!loginDefaultPage.isNullOrBlank()) {
+                return "redirect:$loginDefaultPage"
+            }
+
             val pageable = PageRequest.of(0, 20)
             val notificationPage = notificationEventRepository.findByReceiver(user, pageable)
             val mappedList = mapNotificationsToView(notificationPage.content)
