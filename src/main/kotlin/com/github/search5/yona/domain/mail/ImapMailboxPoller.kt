@@ -1,80 +1,175 @@
 package com.github.search5.yona.domain.mail
 
-import jakarta.mail.Flags
-import jakarta.mail.Folder
+import com.github.search5.yona.domain.support.PropertyName
+import com.github.search5.yona.domain.support.PropertyService
+import jakarta.annotation.PostConstruct
+import jakarta.annotation.PreDestroy
+import jakarta.mail.FolderClosedException
 import jakarta.mail.Message
 import jakarta.mail.Multipart
 import jakarta.mail.Part
 import jakarta.mail.Session
+import jakarta.mail.event.MessageCountEvent
+import jakarta.mail.event.MessageCountListener
 import jakarta.mail.internet.InternetAddress
 import jakarta.mail.internet.MimeMessage
-import jakarta.mail.search.FlagTerm
+import org.eclipse.angus.mail.imap.IMAPFolder
+import org.eclipse.angus.mail.imap.IMAPStore
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
-import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
+import java.time.Instant
 import java.util.Properties
+import java.util.concurrent.ScheduledFuture
 
 /**
- * yona의 mailbox/MailboxService.java + IMAPMessageUtil.java 대응.
- * yona는 IDLE 명령 우선 + 폴링 폴백, 커스텀 lastSeenUID 추적 방식이지만,
- * yuna는 IMAP `\Seen` 플래그를 북마크로 삼는 폴링 전용 방식으로 단순화했다
- * (별도 상태 테이블 없이 멱등적으로 동작, 단 IDLE 대비 최대 polling-interval만큼 지연 발생).
+ * yona의 mailbox/MailboxService.java + mailbox/EmailHandler.java 대응 (P1-55, 전면 재작업).
  *
- * 실제 IMAP 서버 연결(`connectAndProcess`)은 순수 글루 코드라 단위테스트 대상에서 제외했다
- * (이 저장소의 다른 *Config류 인프라 배선과 동일한 관례) — 라우팅/생성 비즈니스 로직은
- * IncomingMailProcessingService에 전부 위임되어 있으며 그쪽은 전체 커버됨.
- * 다만 `toInboundEmailMessage`(본문/첨부파일 MIME 파싱, P1-29)는 실제 `jakarta.mail`
- * 객체를 구성해 단위테스트 가능하고 실제로 커버돼 있다(ImapMailboxPollerSpec).
+ * yona와 완전히 동일한 설계로 이식했다: IMAP `IDLE` 명령으로 실시간 push를 우선 시도하고, 서버가
+ * IDLE을 지원하지 않을 때만 폴링(`polling-interval-ms`, 기본 5분)으로 폴백한다. 진행 상황은 메일함의
+ * `\Seen` 플래그가 아니라 `Property`(P1-55 신규, yona `models/Property.java` 대응) 테이블에 저장하는
+ * UID 워터마크(`MAILBOX_LAST_SEEN_UID`)+UID 유효성(`MAILBOX_LAST_UID_VALIDITY`)으로 별도 추적하며,
+ * 폴더는 항상 `READ_ONLY`로 열어 메일함 자체(다른 IMAP 클라이언트가 보는 읽음 상태)는 절대 건드리지
+ * 않는다 — 이전 버전(`\Seen` 플래그를 자체 북마크로 재활용)은 외부에서 먼저 읽힌 메일을 영구히
+ * 스킵해버리는 위험이 있어 폐기했다.
+ *
+ * 실제 IMAP 서버 연결/스레드 관리는 순수 글루 코드라 단위테스트 대상에서 제외했다(이 저장소의 다른
+ * *Config류 인프라 배선과 동일한 관례) — 다만 UID 구간 조회 여부 판단(`shouldFetchByUidRange`)과
+ * 워터마크 전진 규칙(`advancedSeenUid`)은 순수 함수로 분리해 실제로 단위테스트한다.
+ * `toInboundEmailMessage`(본문/첨부파일 MIME 파싱, P1-29/P1-47)도 기존과 동일하게 커버된다.
  */
 @Component
 @ConditionalOnProperty(prefix = "yuna.mailbox.imap", name = ["enabled"], havingValue = "true")
 class ImapMailboxPoller(
     private val incomingMailProcessingService: IncomingMailProcessingService,
+    private val propertyService: PropertyService,
+    private val taskScheduler: TaskScheduler,
     @Value("\${yuna.mailbox.imap.host}") private val host: String,
     @Value("\${yuna.mailbox.imap.user}") private val user: String,
     @Value("\${yuna.mailbox.imap.password}") private val password: String,
     @Value("\${yuna.mailbox.imap.ssl:true}") private val useSsl: Boolean,
-    @Value("\${yuna.mailbox.imap.folder:inbox}") private val folderName: String
+    @Value("\${yuna.mailbox.imap.folder:inbox}") private val folderName: String,
+    @Value("\${yuna.mailbox.imap.polling-interval-ms:300000}") private val pollingIntervalMs: Long
 ) {
     private val logger = LoggerFactory.getLogger(ImapMailboxPoller::class.java)
 
-    @Scheduled(fixedDelayString = "\${yuna.mailbox.imap.polling-interval-ms:300000}")
-    fun poll() {
+    private var store: IMAPStore? = null
+    private var folder: IMAPFolder? = null
+    private var idleThread: Thread? = null
+    private var pollingTask: ScheduledFuture<*>? = null
+    @Volatile private var isStopping = false
+
+    // yona MailboxService.start() 대응.
+    @PostConstruct
+    fun start() {
         try {
-            connectAndProcess()
+            store = connect()
+            val opened = store!!.getFolder(folderName) as IMAPFolder
+            opened.open(jakarta.mail.Folder.READ_ONLY)
+            folder = opened
         } catch (e: Exception) {
-            logger.error("IMAP 수신함 폴링 실패", e)
+            logger.error("IMAP 폴더를 여는 데 실패했습니다", e)
+            return
+        }
+
+        handleNewMessagesAndStartListener()
+    }
+
+    // yona MailboxService.stop() 대응.
+    @PreDestroy
+    fun stop() {
+        if (folder == null && store == null) {
+            return
+        }
+
+        isStopping = true
+
+        try {
+            pollingTask?.cancel(false)
+            folder?.close(false)
+            store?.close()
+        } catch (e: Exception) {
+            logger.warn("IMAP 메일함 종료 중 오류가 발생했습니다", e)
         }
     }
 
-    private fun connectAndProcess() {
+    private fun connect(): IMAPStore {
         val protocol = if (useSsl) "imaps" else "imap"
         val props = Properties()
         props["mail.store.protocol"] = protocol
 
         val session = Session.getDefaultInstance(props)
-        val store = session.getStore(protocol)
+        val newStore = session.getStore(protocol) as IMAPStore
+        newStore.connect(host, user, password)
+        return newStore
+    }
+
+    private fun reopenFolder(): IMAPFolder {
+        val currentStore = store
+        val reconnected = if (currentStore == null || !currentStore.isConnected) {
+            connect().also { store = it }
+        } else {
+            currentStore
+        }
+
+        val reopened = reconnected.getFolder(folderName) as IMAPFolder
+        reopened.open(jakarta.mail.Folder.READ_ONLY)
+        return reopened
+    }
+
+    // yona MailboxService.handleNewMessagesAndStartListener() 대응.
+    private fun handleNewMessagesAndStartListener() {
+        val currentFolder = folder ?: return
         try {
-            store.connect(host, user, password)
-            val folder = store.getFolder(folderName)
-            folder.open(Folder.READ_WRITE)
-            try {
-                val unseen = folder.search(FlagTerm(Flags(Flags.Flag.SEEN), false))
-                logger.info("IMAP 수신함에서 처리할 새 메일 ${unseen.size}건 발견")
-                for (message in unseen) {
-                    processMessage(message)
-                }
-            } finally {
-                folder.close(true)
-            }
-        } finally {
-            store.close()
+            handleNewMessages(currentFolder)
+        } catch (e: Exception) {
+            logger.error("신규 메일 처리에 실패했습니다", e)
+        }
+
+        try {
+            startEmailListener(currentFolder)
+        } catch (e: Exception) {
+            logger.info("IMAP 서버가 IDLE 명령을 지원하지 않아 폴링으로 대체합니다: ${e.message}")
+            startEmailPolling()
         }
     }
 
-    private fun processMessage(message: Message) {
+    // yona EmailHandler.handleNewMessages(IMAPFolder) 대응.
+    private fun handleNewMessages(targetFolder: IMAPFolder) {
+        val lastUidValidity = propertyService.getLong(PropertyName.MAILBOX_LAST_UID_VALIDITY)
+        val lastSeenUid = propertyService.getLong(PropertyName.MAILBOX_LAST_SEEN_UID)
+
+        val uidValidity = targetFolder.uidValidity
+
+        if (shouldFetchByUidRange(lastUidValidity, lastSeenUid, uidValidity)) {
+            val messages = targetFolder.getMessagesByUID(lastSeenUid!! + 1, targetFolder.uidNext)
+            handleMessages(targetFolder, messages.toList())
+        }
+
+        propertyService.set(PropertyName.MAILBOX_LAST_UID_VALIDITY, uidValidity)
+    }
+
+    // yona EmailHandler.handleNewMessages()의 "lastUIDValidity == uidValidity && lastSeenUID != null"
+    // 조건 대응. 순수 함수로 분리해 단위테스트한다.
+    internal fun shouldFetchByUidRange(lastUidValidity: Long?, lastSeenUid: Long?, currentUidValidity: Long): Boolean {
+        return lastUidValidity != null && lastUidValidity == currentUidValidity && lastSeenUid != null
+    }
+
+    // yona EmailHandler.handleMessages(IMAPFolder, Message[]) 대응. 처리 중 장애가 나도 이미 처리된
+    // 메일을 다시 놓치지 않도록 UID 오름차순으로 정렬해 순서대로 처리한다(yona 주석의 크래시 시나리오와
+    // 동일한 이유).
+    private fun handleMessages(targetFolder: IMAPFolder, messages: List<Message>) {
+        val sorted = messages.sortedBy { targetFolder.getUID(it) }
+        for (message in sorted) {
+            handleMessage(targetFolder, message)
+        }
+    }
+
+    // yona EmailHandler.handleMessage(IMAPMessage) 대응. 실제 리소스 생성 로직은
+    // IncomingMailProcessingService(P0-02)에 전부 위임돼 있다 — 중복 메일 판별도 그쪽에서 이미 한다.
+    private fun handleMessage(targetFolder: IMAPFolder, message: Message) {
         try {
             val inbound = toInboundEmailMessage(message)
             val outcomes = incomingMailProcessingService.process(inbound)
@@ -82,12 +177,99 @@ class ImapMailboxPoller(
         } catch (e: Exception) {
             logger.error("메일 처리 실패: ${runCatching { message.subject }.getOrNull()}", e)
         } finally {
+            // yona MailboxService.updateLastSeenUID()와 동일하게, 처리 성공/실패와 무관하게 워터마크를
+            // 전진시킨다(재시도하지 않음) — legacy도 동일하게 동작한다.
             try {
-                message.setFlag(Flags.Flag.SEEN, true)
+                updateLastSeenUid(targetFolder, message)
             } catch (e: Exception) {
-                logger.warn("SEEN 플래그 설정 실패", e)
+                logger.warn("워터마크(lastSeenUid) 갱신에 실패했습니다", e)
             }
         }
+    }
+
+    private fun updateLastSeenUid(targetFolder: IMAPFolder, message: Message) {
+        val uid = targetFolder.getUID(message)
+        val currentSeenUid = propertyService.getLong(PropertyName.MAILBOX_LAST_SEEN_UID)
+        val advanced = advancedSeenUid(currentSeenUid, uid) ?: return
+        propertyService.set(PropertyName.MAILBOX_LAST_SEEN_UID, advanced)
+    }
+
+    // yona MailboxService.updateLastSeenUID()의 "uid <= lastSeenUID면 갱신하지 않는다" 대응. 순수
+    // 함수로 분리해 단위테스트한다. 갱신이 필요 없으면 null을 반환한다.
+    internal fun advancedSeenUid(currentSeenUid: Long?, candidateUid: Long): Long? {
+        if (currentSeenUid != null && candidateUid <= currentSeenUid) {
+            return null
+        }
+        return candidateUid
+    }
+
+    // yona MailboxService.startEmailListener() 대응.
+    private fun startEmailListener(targetFolder: IMAPFolder) {
+        if (!(targetFolder.store as IMAPStore).hasCapability("IDLE")) {
+            throw UnsupportedOperationException("IMAP 서버가 IDLE 명령을 지원하지 않습니다")
+        }
+
+        targetFolder.addMessageCountListener(object : MessageCountListener {
+            override fun messagesAdded(e: MessageCountEvent) {
+                try {
+                    handleMessages(targetFolder, e.messages.toList())
+                } catch (ex: Exception) {
+                    logger.error("IDLE로 수신한 메일 처리 중 예기치 못한 오류가 발생했습니다", ex)
+                }
+            }
+
+            override fun messagesRemoved(e: MessageCountEvent) {
+                // no-op (yona와 동일)
+            }
+        })
+
+        idleThread = Thread {
+            logger.info("IMAP 메일 수신 스레드를 시작합니다")
+            var currentFolder = targetFolder
+            while (!isStopping) {
+                try {
+                    currentFolder.idle()
+                } catch (e: FolderClosedException) {
+                    if (isStopping) break
+                    logger.info("IMAP 폴더가 닫혀 다시 엽니다")
+                    try {
+                        currentFolder = reopenFolder()
+                        folder = currentFolder
+                    } catch (reopenEx: Exception) {
+                        logger.warn("IMAP 폴더를 다시 여는 데 실패했습니다; 중단합니다", reopenEx)
+                        break
+                    }
+                } catch (e: Exception) {
+                    logger.warn("IDLE 명령 실행에 실패했습니다; 중단합니다", e)
+                    break
+                }
+            }
+            logger.info("IMAP 메일 수신 스레드를 종료합니다")
+        }.apply {
+            isDaemon = true
+            name = "imap-idle-thread"
+            start()
+        }
+    }
+
+    // yona MailboxService.startEmailPolling() 대응 — IDLE 미지원 서버에 대한 폴백.
+    private fun startEmailPolling() {
+        pollingTask = taskScheduler.scheduleWithFixedDelay(
+            {
+                try {
+                    var currentFolder = folder
+                    if (currentFolder == null || !currentFolder.isOpen) {
+                        currentFolder = reopenFolder()
+                        folder = currentFolder
+                    }
+                    handleNewMessages(currentFolder)
+                } catch (e: Exception) {
+                    logger.error("IMAP 폴링 중 오류가 발생했습니다", e)
+                }
+            },
+            Instant.now(),
+            java.time.Duration.ofMillis(pollingIntervalMs)
+        )
     }
 
     internal fun toInboundEmailMessage(message: Message): InboundEmailMessage {
