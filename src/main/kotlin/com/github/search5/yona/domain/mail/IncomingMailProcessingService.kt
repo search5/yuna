@@ -18,6 +18,7 @@ import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.googlecode.htmlcompressor.compressor.HtmlCompressor
 import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -30,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional
  * 검증 가능하다.
  *
  * 의도적으로 다루지 않는 범위(follow-up, docs/PARITY_BACKLOG.md 참고):
- *  - MIME multipart/HTML 본문 파싱, cid 이미지 치환 (텍스트 본문만 처리 — 첨부파일 저장은 P1-29에서 구현됨)
+ *  - HTML 본문의 cid 이미지 치환은 P1-47, HtmlCompressor를 통한 태그 사이 개행 제거는 P1-61에서 구현됨
  *  - 코드리뷰(COMMENT_THREAD)/커밋(COMMIT_COMMENT) 댓글 스레드로의 답장 라우팅은 P1-30에서 구현됨.
  *    Reply-To 헤더 자체가 이미 리소스 상세 주소(owner/project/<resourceType>/<resourceId>,
  *    resolveDirectResource() 대응)로 설정되므로 수신 주소만으로도 스레드를 찾을 수 있고, 여기에 더해
@@ -63,6 +64,7 @@ class IncomingMailProcessingService(
     private val inboundBaseAddress: String
 ) {
     private val logger = LoggerFactory.getLogger(IncomingMailProcessingService::class.java)
+    private val htmlCompressor = HtmlCompressor()
 
     private data class ResolvedThread(
         val resourceType: ResourceType,
@@ -176,8 +178,10 @@ class IncomingMailProcessingService(
         }
         val cidAttachments = attachAttachments(outcome, message.attachments, sender)
 
-        // yona CreationViaEmail.postprocessForHTML/replaceCidWithAttachments 대응 (P1-47).
-        if (message.isHtml && cidAttachments.isNotEmpty()) {
+        // yona CreationViaEmail.postprocessForHTML() 대응 (P1-47/P1-61). cid: 첨부가 없어도
+        // HtmlCompressor 압축은 시도해야 하므로(yona도 항상 postprocessForHTML을 호출) HTML이면 무조건 진입 —
+        // 실제로 바뀐 게 없으면 postprocessHtmlBody 내부에서 저장을 건너뛴다.
+        if (message.isHtml) {
             postprocessHtmlBody(outcome, cidAttachments)
         }
 
@@ -218,47 +222,55 @@ class IncomingMailProcessingService(
         return cidMap
     }
 
-    // yona CreationViaEmail.replaceCidWithAttachments() 대응 (P1-47). 이미 생성된 리소스의 본문에서
-    // cid: 참조를 실제 저장된 첨부파일 URL로 치환해 갱신한다. Issue/Posting 본문은 Markdown 기준이지만
-    // 렌더링 시점에 항상 OWASP sanitizer를 거치므로(MarkdownServiceImpl, P0-08) 원본 HTML을 그대로
-    // 저장해도 안전하다.
+    // yona CreationViaEmail.postprocessForHTML() 대응 (P1-47/P1-61). 이미 생성된 리소스의 본문에서
+    // cid: 참조를 실제 저장된 첨부파일 URL로 치환하고 HtmlCompressor로 압축해 갱신한다. Issue/Posting
+    // 본문은 Markdown 기준이지만 렌더링 시점에 항상 OWASP sanitizer를 거치므로(MarkdownServiceImpl,
+    // P0-08) 원본 HTML을 그대로 저장해도 안전하다.
     private fun postprocessHtmlBody(outcome: IncomingMailOutcome, cidAttachments: Map<String, Attachment>) {
         when (outcome) {
             is IncomingMailOutcome.IssueCreated -> {
                 val issue = issueRepository.findById(outcome.issueId).orElse(null) ?: return
-                val replaced = replaceCidWithAttachments(issue.body ?: "", cidAttachments) ?: return
-                issue.body = replaced
+                val processed = postprocessForHtml(issue.body ?: "", cidAttachments) ?: return
+                issue.body = processed
                 issueRepository.save(issue)
             }
             is IncomingMailOutcome.IssueCommentCreated -> {
                 val comment = issueCommentRepository.findById(outcome.commentId).orElse(null) ?: return
-                val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
-                comment.contents = replaced
+                val processed = postprocessForHtml(comment.contents, cidAttachments) ?: return
+                comment.contents = processed
                 issueCommentRepository.save(comment)
             }
             is IncomingMailOutcome.PostingCommentCreated -> {
                 val comment = postingCommentRepository.findById(outcome.commentId).orElse(null) ?: return
-                val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
-                comment.contents = replaced
+                val processed = postprocessForHtml(comment.contents, cidAttachments) ?: return
+                comment.contents = processed
                 postingCommentRepository.save(comment)
             }
             is IncomingMailOutcome.ReviewCommentCreated -> {
                 val comment = reviewCommentRepository.findById(outcome.commentId).orElse(null) ?: return
-                val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
-                comment.contents = replaced
+                val processed = postprocessForHtml(comment.contents, cidAttachments) ?: return
+                comment.contents = processed
                 reviewCommentRepository.save(comment)
             }
             is IncomingMailOutcome.CommitCommentCreated -> {
                 val comment = commitCommentRepository.findById(outcome.commentId).orElse(null) ?: return
-                val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
-                comment.contents = replaced
+                val processed = postprocessForHtml(comment.contents, cidAttachments) ?: return
+                comment.contents = processed
                 commitCommentRepository.save(comment)
             }
             else -> return
         }
     }
 
-    // cid: 참조가 하나도 치환되지 않으면 null을 반환해 불필요한 저장을 막는다.
+    // yona postprocessForHTML()의 "1. cid 치환 2. HtmlCompressor로 태그 사이 개행 제거" 순서 그대로 (P1-61).
+    // 결과가 원본과 동일하면(치환도 압축도 실질적 변화 없음) null을 반환해 불필요한 저장을 막는다.
+    private fun postprocessForHtml(html: String, cidAttachments: Map<String, Attachment>): String? {
+        val cidReplaced = replaceCidWithAttachments(html, cidAttachments) ?: html
+        val compressed = htmlCompressor.compress(cidReplaced)
+        return if (compressed == html) null else compressed
+    }
+
+    // cid: 참조가 하나도 치환되지 않으면 null을 반환한다.
     private fun replaceCidWithAttachments(html: String, attachments: Map<String, Attachment>): String? {
         val doc = Jsoup.parse(html)
         var replacedAny = false
