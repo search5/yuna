@@ -13,6 +13,25 @@ interface ProjectRepository : JpaRepository<Project, Long> {
     fun findByOwner(owner: String): List<Project>
     fun countByLabelsId(labelId: Long): Long
 
+    // yona Project.findByPreviousPlaceOf(previousOwnerLoginId, previousName) 대응 (P1-76) —
+    // 대소문자 무시 비교(yona `.ieq(...)`) + 가장 최근 변경 건 우선(`previousNameChangedTime desc`).
+    fun findFirstByPreviousOwnerLoginIdIgnoreCaseAndPreviousNameIgnoreCaseOrderByPreviousNameChangedTimeDesc(
+        previousOwnerLoginId: String,
+        previousName: String
+    ): Optional<Project>
+
+    // yona Project.findByOwnerAndProjectName()의 "현재 이름으로 못 찾으면 예전 이름으로 재시도" 폴백
+    // 대응 (P1-76). Kotlin 인터페이스 default 메서드로 둬 모든 호출부가 공용으로 재사용한다.
+    fun findByOwnerAndNameOrPreviousPlace(owner: String, name: String): Optional<Project> {
+        val direct = findByOwnerAndName(owner, name)
+        if (direct.isPresent) {
+            return direct
+        }
+        return findFirstByPreviousOwnerLoginIdIgnoreCaseAndPreviousNameIgnoreCaseOrderByPreviousNameChangedTimeDesc(
+            owner, name
+        )
+    }
+
     @Query("""
         SELECT DISTINCT p.id FROM Project p 
         LEFT JOIN p.projectUsers pu 

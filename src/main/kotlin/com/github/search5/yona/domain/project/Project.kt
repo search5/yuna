@@ -24,6 +24,13 @@ class Project(
 
     var createdDate: Instant? = null,
 
+    // yona Project.java:131-133 previousOwnerLoginId/previousName/previousNameChangedTime 대응
+    // (P1-76) — 이전(transfer)/이름 변경 시의 예전 위치를 기록해, 예전 owner/name으로 들어온 요청도
+    // (git remote 등) 계속 이 프로젝트로 폴백 조회될 수 있게 한다.
+    var previousOwnerLoginId: String? = null,
+    var previousName: String? = null,
+    var previousNameChangedTime: Instant? = null,
+
     var lastIssueNumber: Long = 0,
     var lastPostingNumber: Long = 0,
 

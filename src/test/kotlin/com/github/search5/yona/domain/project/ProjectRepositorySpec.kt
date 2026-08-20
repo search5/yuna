@@ -70,6 +70,66 @@ class ProjectRepositorySpec @Autowired constructor(
                 projects.size shouldBe 2
                 projects.map { it.name } shouldBe listOf("project-1", "project-2")
             }
+
+            // yona Project.findByPreviousPlaceOf()/findByOwnerAndProjectName()의 폴백 대응 (P1-76).
+            it("현재 owner/name으로 조회되면 예전 위치는 확인하지 않고 그대로 반환해야 한다") {
+                projectRepository.save(
+                    Project(
+                        name = "current-name", owner = "current-owner", createdDate = Instant.now(),
+                        previousOwnerLoginId = "old-owner", previousName = "old-name",
+                        previousNameChangedTime = Instant.now()
+                    )
+                )
+
+                val found = projectRepository.findByOwnerAndNameOrPreviousPlace("current-owner", "current-name").orElse(null)
+
+                found shouldNotBe null
+                found.name shouldBe "current-name"
+            }
+
+            it("현재 owner/name으로 못 찾으면 예전 위치(previousOwnerLoginId/previousName)로 폴백해야 한다") {
+                projectRepository.save(
+                    Project(
+                        name = "new-name", owner = "new-owner", createdDate = Instant.now(),
+                        previousOwnerLoginId = "old-owner", previousName = "old-name",
+                        previousNameChangedTime = Instant.now()
+                    )
+                )
+
+                val found = projectRepository.findByOwnerAndNameOrPreviousPlace("old-owner", "old-name").orElse(null)
+
+                found shouldNotBe null
+                found.name shouldBe "new-name"
+                found.owner shouldBe "new-owner"
+            }
+
+            it("예전 위치로도 못 찾으면 빈 결과를 반환해야 한다") {
+                val found = projectRepository.findByOwnerAndNameOrPreviousPlace("nobody", "nothing")
+
+                found.isPresent shouldBe false
+            }
+
+            it("같은 예전 위치로 여러 번 이전됐으면 가장 최근 변경 건을 우선해야 한다") {
+                projectRepository.save(
+                    Project(
+                        name = "stale-current-name", owner = "stale-current-owner", createdDate = Instant.now(),
+                        previousOwnerLoginId = "old-owner", previousName = "old-name",
+                        previousNameChangedTime = Instant.now().minusSeconds(3600)
+                    )
+                )
+                projectRepository.save(
+                    Project(
+                        name = "fresh-current-name", owner = "fresh-current-owner", createdDate = Instant.now(),
+                        previousOwnerLoginId = "old-owner", previousName = "old-name",
+                        previousNameChangedTime = Instant.now()
+                    )
+                )
+
+                val found = projectRepository.findByOwnerAndNameOrPreviousPlace("old-owner", "old-name").orElse(null)
+
+                found shouldNotBe null
+                found.name shouldBe "fresh-current-name"
+            }
         }
     }
 }

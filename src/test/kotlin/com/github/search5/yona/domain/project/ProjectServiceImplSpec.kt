@@ -13,6 +13,7 @@ import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -182,6 +183,67 @@ class ProjectServiceImplSpec : DescribeSpec({
             projectService.acceptTransfer(51L, "correct-key", 2L)
 
             orgOwnedProject.organization shouldBe null
+        }
+
+        // yona Project.recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom() 대응 (P1-76).
+        it("이전 완료 시 예전 owner/name이 기록돼야 한다(previousOwnerLoginId/previousName)") {
+            val pt = pendingTransfer("intended-owner")
+            val destUser = User(id = 2L, loginId = "intended-owner", name = "받는사람")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            every {
+                projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(50L, false, any())
+            } returns Optional.of(pt)
+            every { userRepository.findById(2L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("intended-owner") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns project
+            every { projectUserRepository.findByProjectIdAndUserId(10L, 1L) } returns Optional.empty()
+            every { userRepository.findByLoginId("intended-owner") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(10L, 2L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(50L, "correct-key", 2L)
+
+            project.previousOwnerLoginId shouldBe "sender"
+            project.previousName shouldBe "yona-project"
+            project.previousNameChangedTime shouldNotBe null
+        }
+
+        it("24시간 이내에 이미 예전 위치가 기록됐으면 다시 덮어쓰지 않아야 한다") {
+            val recentChange = Instant.now().minusSeconds(3600) // 1시간 전
+            val projectWithRecentHistory = Project(
+                id = 12L, name = "yona-project", owner = "sender", vcs = "GIT",
+                previousOwnerLoginId = "very-old-owner", previousName = "very-old-name",
+                previousNameChangedTime = recentChange
+            )
+            val pt = ProjectTransfer(
+                id = 52L, project = projectWithRecentHistory, sender = sender, destination = "intended-owner",
+                confirmKey = "correct-key", newProjectName = "yona-project", requested = Instant.now()
+            )
+            val destUser = User(id = 2L, loginId = "intended-owner", name = "받는사람")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            every {
+                projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(52L, false, any())
+            } returns Optional.of(pt)
+            every { userRepository.findById(2L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("intended-owner") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns projectWithRecentHistory
+            every { projectUserRepository.findByProjectIdAndUserId(12L, 1L) } returns Optional.empty()
+            every { userRepository.findByLoginId("intended-owner") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(12L, 2L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(52L, "correct-key", 2L)
+
+            // 24시간이 안 지났으므로 예전 기록이 "sender/yona-project"로 갱신되지 않고 그대로 유지돼야 한다.
+            projectWithRecentHistory.previousOwnerLoginId shouldBe "very-old-owner"
+            projectWithRecentHistory.previousName shouldBe "very-old-name"
+            projectWithRecentHistory.previousNameChangedTime shouldBe recentChange
         }
 
         it("confirmKey가 일치하지 않으면 인가 검사 전에 예외가 발생해야 한다") {
