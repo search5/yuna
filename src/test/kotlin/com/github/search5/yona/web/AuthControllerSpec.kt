@@ -3,6 +3,7 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserService
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -13,7 +14,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
 class AuthControllerSpec : DescribeSpec({
     val userService = mockk<UserService>()
-    val authController = AuthController(userService, "")
+    val authController = AuthController(userService, "", false)
     val viewResolver = org.springframework.web.servlet.view.InternalResourceViewResolver().apply {
         setPrefix("/templates/")
         setSuffix(".html")
@@ -87,6 +88,54 @@ class AuthControllerSpec : DescribeSpec({
                 verify(exactly = 1) { userService.createUser(any()) }
             }
 
+            // yona UserApp.java:1218-1224 isUsingSignUpConfirm()/:1260-1275 createNewUser() 대응 (P1-77).
+            it("관리자 승인 대기 설정이 켜져 있으면 신규 유저가 LOCKED 상태로 생성되고 승인 대기 안내로 리다이렉트되어야 한다") {
+                val confirmController = AuthController(userService, "", true)
+                val confirmViewResolver = org.springframework.web.servlet.view.InternalResourceViewResolver().apply {
+                    setPrefix("/templates/")
+                    setSuffix(".html")
+                }
+                val confirmMockMvc = MockMvcBuilders.standaloneSetup(confirmController)
+                    .setViewResolvers(confirmViewResolver)
+                    .build()
+
+                every { userService.isLoginIdExist("gildong") } returns false
+                val savedUserSlot = io.mockk.slot<User>()
+                every { userService.createUser(capture(savedUserSlot)) } answers { savedUserSlot.captured }
+
+                confirmMockMvc.perform(
+                    post("/signup")
+                        .param("loginId", "gildong")
+                        .param("name", "홍길동")
+                        .param("email", "gildong@example.com")
+                        .param("password", "pass123")
+                        .param("retypedPassword", "pass123")
+                )
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/users/loginform?signupRequested"))
+
+                savedUserSlot.captured.state shouldBe com.github.search5.yona.domain.user.UserState.LOCKED
+            }
+
+            it("관리자 승인 대기 설정이 꺼져 있으면(기본값) 기존과 동일하게 즉시 활성 상태로 생성되어야 한다") {
+                every { userService.isLoginIdExist("gildong") } returns false
+                val savedUserSlot = io.mockk.slot<User>()
+                every { userService.createUser(capture(savedUserSlot)) } answers { savedUserSlot.captured }
+
+                mockMvc.perform(
+                    post("/signup")
+                        .param("loginId", "gildong")
+                        .param("name", "홍길동")
+                        .param("email", "gildong@example.com")
+                        .param("password", "pass123")
+                        .param("retypedPassword", "pass123")
+                )
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/users/loginform?signupSuccess"))
+
+                savedUserSlot.captured.state shouldBe com.github.search5.yona.domain.user.UserState.ACTIVE
+            }
+
             it("비밀번호 재입력이 일치하지 않으면 회원가입 폼이 유지되어야 한다") {
                 // Given
                 every { userService.isLoginIdExist("gildong") } returns false
@@ -108,7 +157,7 @@ class AuthControllerSpec : DescribeSpec({
             }
 
             it("허용된 이메일 도메인 설정이 있고 그 목록에 없는 도메인이면 가입이 거부되어야 한다") {
-                val restrictedController = AuthController(userService, "allowed.com")
+                val restrictedController = AuthController(userService, "allowed.com", false)
                 val restrictedViewResolver = org.springframework.web.servlet.view.InternalResourceViewResolver().apply {
                     setPrefix("/templates/")
                     setSuffix(".html")

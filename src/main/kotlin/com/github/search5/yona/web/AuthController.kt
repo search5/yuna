@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.user.EmailDomainValidator
 import com.github.search5.yona.domain.user.ReservedWordsValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserService
+import com.github.search5.yona.domain.user.UserState
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
@@ -17,7 +18,10 @@ import org.springframework.web.bind.annotation.RequestParam
 class AuthController(
     private val userService: UserService,
     @Value("\${yuna.signup.allowed-email-domains:}")
-    private val allowedEmailDomains: String
+    private val allowedEmailDomains: String,
+    // yona UserApp.java:1218-1224 isUsingSignUpConfirm()(signup.require.admin.confirm) 대응 (P1-77).
+    @Value("\${yuna.signup.require-admin-confirm:false}")
+    private val requireAdminConfirm: Boolean
 ) {
 
     @GetMapping("/login")
@@ -91,8 +95,19 @@ class AuthController(
         user.password = hashed
         user.passwordSalt = salt
 
+        // yona UserApp.java:1260-1275 createNewUser()의 "관리자 승인 대기면 State.LOCKED로 생성"
+        // 대응 (P1-77). 로그인 시 LOCKED 계정 차단 자체는 이미 YonaAuthenticationProvider(P0-13)가
+        // 이 설정과 무관하게 항상 수행하므로, 여기서는 가입 시점의 초기 상태 결정만 담당한다.
+        if (requireAdminConfirm) {
+            user.state = UserState.LOCKED
+        }
+
         userService.createUser(user)
-        return "redirect:/users/loginform?signupSuccess"
+        return if (requireAdminConfirm) {
+            "redirect:/users/loginform?signupRequested"
+        } else {
+            "redirect:/users/loginform?signupSuccess"
+        }
     }
 
     private fun hashPassword(password: String, salt: String): String {
