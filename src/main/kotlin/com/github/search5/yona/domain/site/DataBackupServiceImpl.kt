@@ -5,6 +5,10 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
+import java.sql.Timestamp
+import java.sql.Types
+import java.time.Instant
+import java.time.format.DateTimeParseException
 import javax.sql.DataSource
 
 /**
@@ -24,6 +28,17 @@ import javax.sql.DataSource
  * 그대로 캡처해뒀다가 복원 시 그 값으로 되돌린다. 백업된 행들의 `max(id)+1`을 복원 시점에
  * 재계산하는 방식(이전 구현)은 export 이전에 이미 삭제된 행으로 생긴 시퀀스 갭을 없애버려
  * 그 ID가 재사용될 수 있었는데, 이 방식은 yona처럼 갭을 그대로 보존한다.
+ *
+ * datetime(`Instant`) 컬럼 왕복 버그 수정(2026-08-20) — `exportAll()`이 `Instant` 값을 JSON에
+ * ISO-8601 문자열로 직렬화하는데, `importAll()`은 이를 타입 정보 없는 `Map<String, Any?>`로
+ * 역직렬화해 평범한 String이 된다. 이 String을 그대로 바인딩하면 MariaDB가 ISO-8601('T'/'Z')을
+ * datetime으로 파싱하지 못해 `DataIntegrityViolationException`을 던진다(해당 컬럼이 NULL인
+ * 행/테이블에서는 증상이 없어 "가끔 실패하는 flake"처럼 보였지만, 실제로는 datetime 컬럼에
+ * 값이 있는 모든 테이블에서 100% 결정적으로 재현됐다). `insertRow()`가 각 테이블의 실제 JDBC
+ * 컬럼 타입(`dateTimeColumns()`)을 조회해 TIMESTAMP/DATE/TIME 계열이면 String을 다시
+ * `Instant`→`Timestamp`로 변환해 바인딩하도록 수정했다. yona는 애초에 `DefaultExchanger`의
+ * `putTimestamp()`/`timestamp()` 헬퍼로 각 필드를 타입 그대로 다루기 때문에 이 문제 자체가
+ * 없었다 — 자동 테이블 탐지 방식으로 단순화하며 새로 생긴, yona에는 없던 결함이었다.
  */
 @Service
 class DataBackupServiceImpl(
@@ -63,8 +78,9 @@ class DataBackupServiceImpl(
         try {
             for ((table, rows) in dump) {
                 jdbcTemplate.update("DELETE FROM $table")
+                val dateTimeColumns = dateTimeColumns(table)
                 for (row in rows) {
-                    insertRow(table, row)
+                    insertRow(table, row, dateTimeColumns)
                 }
                 sequences[table]?.let { restoreSequence(table, dialect, it) }
             }
@@ -87,14 +103,55 @@ class DataBackupServiceImpl(
         }
     }
 
-    private fun insertRow(table: String, row: Map<String, Any?>) {
+    // 원인 진단(2026-08-20, 사용자 요청으로 근본 원인 추적): `exportAll()`이 `Instant` 컬럼 값을
+    // ObjectMapper로 직렬화하면 JSON에는 ISO-8601 문자열(`"2026-08-20T06:21:04.973Z"`)로 남는데,
+    // `importAll()`이 이를 타입 정보 없는 `Map<String, Any?>`로 역직렬화하면 그 값은 그냥 평범한
+    // Kotlin String이 된다. 이 String을 그대로 PreparedStatement에 바인딩하면 MariaDB가
+    // `'yyyy-MM-dd HH:mm:ss[.f...]'` 형식이 아닌 ISO-8601('T'/'Z' 포함)을 datetime으로 파싱하지
+    // 못해 `DataIntegrityViolationException`을 던진다. 이 값이 있는 테이블에 대해서만 재현되므로
+    // (해당 컬럼이 전부 NULL인 테이블/행에서는 증상이 없음) "가끔 실패하는 flake"처럼 보였지만,
+    // 실제로는 datetime 컬럼에 값이 있는 모든 테이블에서 100% 결정적으로 재현되는 버그였다.
+    // 컬럼의 실제 JDBC 타입을 조회해 TIMESTAMP/DATE/TIME 계열이면 String -> Instant -> Timestamp로
+    // 되돌려 바인딩한다.
+    private fun insertRow(table: String, row: Map<String, Any?>, dateTimeColumns: Set<String>) {
         if (row.isEmpty()) {
             return
         }
         val columns = row.keys.toList()
         val placeholders = columns.joinToString(",") { "?" }
         val sql = "INSERT INTO $table (${columns.joinToString(",")}) VALUES ($placeholders)"
-        jdbcTemplate.update(sql, *columns.map { row[it] }.toTypedArray())
+        val values = columns.map { column -> coerceForInsert(row[column], column.lowercase() in dateTimeColumns) }
+        jdbcTemplate.update(sql, *values.toTypedArray())
+    }
+
+    private fun coerceForInsert(value: Any?, isDateTimeColumn: Boolean): Any? {
+        if (!isDateTimeColumn || value !is String) {
+            return value
+        }
+        return try {
+            Timestamp.from(Instant.parse(value))
+        } catch (e: DateTimeParseException) {
+            value
+        }
+    }
+
+    // 대상 테이블에서 TIMESTAMP/DATE/TIME 계열 컬럼명을 조회한다(컬럼명은 소문자로 정규화 —
+    // `row`의 키가 `ColumnMapRowMapper`가 반환하는 실제 컬럼명과 대소문자까지 일치해야 매칭된다).
+    private fun dateTimeColumns(table: String): Set<String> {
+        dataSource.connection.use { connection ->
+            val columns = mutableSetOf<String>()
+            connection.metaData.getColumns(connection.catalog, connection.schema, table, null).use { rs ->
+                while (rs.next()) {
+                    val jdbcType = rs.getInt("DATA_TYPE")
+                    if (jdbcType == Types.TIMESTAMP || jdbcType == Types.DATE || jdbcType == Types.TIME ||
+                        jdbcType == Types.TIMESTAMP_WITH_TIMEZONE || jdbcType == Types.TIME_WITH_TIMEZONE
+                    ) {
+                        columns.add(rs.getString("COLUMN_NAME").lowercase())
+                    }
+                }
+            }
+            return columns
+        }
     }
 
     // yona DefaultExchanger.exportData()의 hasSequence() 분기 대응 (P2-07) — export 시점에

@@ -1,6 +1,8 @@
 package com.github.search5.yona.domain.site
 
 import com.github.search5.yona.AbstractIntegrationTest
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -10,6 +12,7 @@ import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
+import java.time.Instant
 import javax.sql.DataSource
 
 /**
@@ -21,6 +24,7 @@ class DataBackupServiceIntegrationSpec @Autowired constructor(
     private val dataBackupService: DataBackupService,
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
+    private val organizationRepository: OrganizationRepository,
     private val dataSource: DataSource
 ) : AbstractIntegrationTest() {
 
@@ -116,6 +120,28 @@ class DataBackupServiceIntegrationSpec @Autowired constructor(
                 )
 
                 nextValueAfterRestore shouldBe nextValueAtExport
+            }
+
+            // "가끔 전체 스위트에서만 실패하는 flake"로 보였던 문제의 실체 — datetime(Instant) 컬럼에
+            // 실제 값(NULL이 아닌)이 있는 행이 하나라도 있으면 100% 결정적으로 재현되는 버그였다.
+            // exportAll()이 Instant를 JSON에 ISO-8601 문자열로 직렬화하는데, importAll()은 이를
+            // 타입 정보 없는 Map<String, Any?>로 역직렬화해 평범한 String이 되고, 그 String을 그대로
+            // PreparedStatement에 바인딩하면 MariaDB가 ISO-8601('T'/'Z')을 datetime으로 파싱하지
+            // 못해 거부한다(`insertRow`의 `dateTimeColumns` 기반 String→Timestamp 변환으로 수정).
+            it("created 값이 있는 organization 행도 export/import 왕복 시 실패하지 않아야 한다") {
+                val saved = organizationRepository.save(
+                    Organization(name = "datetime-roundtrip-org-${System.nanoTime()}", created = Instant.now(), descr = "datetime 왕복 검증용")
+                )
+
+                val backup = dataBackupService.exportAll()
+                dataBackupService.importAll(backup)
+
+                val restoredCount = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM organization WHERE id = ?",
+                    Int::class.java,
+                    saved.id
+                )
+                restoredCount shouldBe 1
             }
         }
     }
