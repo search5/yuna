@@ -11,7 +11,9 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.core.spec.style.DescribeSpec
+import io.mockk.Runs
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -96,6 +98,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             issueLabelService, issueRepository, postingRepository, pullRequestRepository, milestoneRepository,
             watchService, recentProjectRepository
         )
+        every { recentProjectRepository.recordVisit(any(), any()) } just Runs
     }
 
     describe("ProjectViewController 템플릿 연동 테스트") {

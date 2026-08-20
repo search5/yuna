@@ -1,5 +1,6 @@
 package com.github.search5.yona.config
 
+import com.github.search5.yona.config.git.GitProjectVisitRecorder
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.User
@@ -37,7 +38,8 @@ class GitServletConfig(
     private val pullRequestRepository: PullRequestRepository,
     private val userRepository: UserRepository,
     private val pushedBranchRepository: PushedBranchRepository,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val gitProjectVisitRecorder: GitProjectVisitRecorder
 ) {
     private val logger = LoggerFactory.getLogger(GitServletConfig::class.java)
 
@@ -119,6 +121,9 @@ class GitServletConfig(
                 if (req.requestURI.contains("/info/lfs/")) {
                     lfsServlet.service(req, res)
                 } else {
+                    // yona GitApp.java:129-136 대응 (P2-09) — git 프로토콜로만 접근하는 사용자도
+                    // "최근 방문 프로젝트"에 기록되도록 실제 RPC 처리 전에 방문을 남긴다.
+                    gitProjectVisitRecorder.recordIfApplicable(req)
                     gitServlet.service(req, res)
                 }
             }
