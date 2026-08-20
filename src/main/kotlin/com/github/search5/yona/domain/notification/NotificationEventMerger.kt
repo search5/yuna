@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import org.springframework.stereotype.Component
 
 /**
@@ -20,14 +21,18 @@ import org.springframework.stereotype.Component
  * (P1-07 계열 작업), legacy는 이 모두를 `issue.asResource()`(=ISSUE_POST)로 취급하므로,
  * 댓글의 컨테이너 키와 맞아떨어지도록 [selfMergeKey]에서 ISSUE_POST로 정규화한다.
  *
- * REVIEW_THREAD_STATE_CHANGED/NEW_REVIEW_COMMENT는 이 이식 시점 기준 yuna에 실제 프로듀서가
- * 없는 이벤트 타입이라(P1-27과 무관한 별도 미구현 기능) 분기 자체는 legacy와 동일하게 유지하되,
- * 컨테이너 키 정규화는 시도하지 않고 항상 단독 이벤트로 남는다.
+ * NEW_REVIEW_COMMENT(컨테이너=COMMENT_THREAD, [ReviewComment.thread])도 legacy `event.getResource()
+ * .getContainer()`와 동일하게 [containerMergeKey]에서 정규화한다(P1-51). REVIEW_THREAD_STATE_CHANGED
+ * 이벤트는 [CodeReviewServiceImpl]이 이미 `resourceType=COMMENT_THREAD`로 발행하므로 [selfMergeKey]가
+ * 별도 정규화 없이 그대로 키로 쓸 수 있다. NEW_COMMENT로 발행되는 COMMIT_COMMENT(P1-50)는 legacy에서도
+ * "커밋 상태변경" 개념 자체가 없어 대응되는 self-key가 결코 존재하지 않으므로(항상 미스) 컨테이너 키를
+ * 계산해도 동작에 차이가 없어 정규화하지 않는다.
  */
 @Component
 class NotificationEventMerger(
     private val issueCommentRepository: IssueCommentRepository,
-    private val postingCommentRepository: PostingCommentRepository
+    private val postingCommentRepository: PostingCommentRepository,
+    private val reviewCommentRepository: ReviewCommentRepository
 ) {
     private data class MergeKey(val resourceType: ResourceType, val resourceId: String, val senderId: Long?)
 
@@ -102,6 +107,12 @@ class NotificationEventMerger(
                 val id = event.resourceId.toLongOrNull() ?: return null
                 val comment = postingCommentRepository.findById(id).orElse(null) ?: return null
                 MergeKey(ResourceType.BOARD_POST, comment.posting.id.toString(), event.senderId)
+            }
+            ResourceType.REVIEW_COMMENT -> {
+                val id = event.resourceId.toLongOrNull() ?: return null
+                val comment = reviewCommentRepository.findById(id).orElse(null) ?: return null
+                val threadId = comment.thread?.id ?: return null
+                MergeKey(ResourceType.COMMENT_THREAD, threadId.toString(), event.senderId)
             }
             else -> null
         }
