@@ -1,10 +1,12 @@
-# P2-05: 접근제어 중앙화
+# P1-85(구 P2-05): 접근제어 중앙화
 
 ## Context
 
 yona(레거시)는 `app/utils/AccessControl.java` 단일 클래스가 `isAllowed(User, Resource, Operation)`이라는 하나의 진입점으로 모든 리소스(이슈/게시글/PR/댓글/프로젝트/마일스톤/조직/웹훅 등)의 READ/UPDATE/DELETE/ACCEPT/CLOSE/REOPEN/WATCH/LEAVE/ASSIGN_ISSUE 권한을 판단한다. yuna(포팅 대상)는 이 규칙이 ~40개 컨트롤러에 각자 다른 이름(`checkReadPermission`, `isManagerOrAuthor`, `isProjectManager` 등)의 인라인 헬퍼로 흩어져 있어, 규칙이 일관되게 적용되는지 보장되지 않는다.
 
-이번 세션 동안 이미 이 산발적 구조 때문에 발생한 구체적 버그를 여러 건 고쳤다(P1-78 PR 리뷰어 권한 누락, P1-82 이슈 공유자 READ 미연결, P2-12 담당자 권한 오버라이드 누락). 사용자가 이 근본 원인(P2-05)을 직접 지적하며 중앙화를 명시적으로 지시했다: *"접근제어가 컨트롤러별 산발적 인라인 체크가 아니라 레거시 요나처럼 중앙화된 방식으로. Spring/Kotlin 문법에 맞게, 레거시 기능이 축약되지 않도록."*
+이번 세션 동안 이미 이 산발적 구조 때문에 발생한 구체적 버그를 여러 건 고쳤다(P1-78 PR 리뷰어 권한 누락, P1-82 이슈 공유자 READ 미연결, P1-86(구 P2-12) 담당자 권한 오버라이드 누락). 사용자가 이 근본 원인(P1-85, 등록 당시 번호는 P2-05)을 직접 지적하며 중앙화를 명시적으로 지시했다: *"접근제어가 컨트롤러별 산발적 인라인 체크가 아니라 레거시 요나처럼 중앙화된 방식으로. Spring/Kotlin 문법에 맞게, 레거시 기능이 축약되지 않도록."*
+
+**2026-08-20 재분류**: 이 항목은 "경미/확인 필요"인 P2가 아니라 "기능 결손/권한 로직 오류"인 P1에 해당한다는 사용자 지적으로 P2-05 → P1-85로 재번호됐다(P1-82와 같은 yona `AccessControl.java:244-248` 규칙에서 파생된 두 갈래인데 섹션이 갈려 있던 것이 발단).
 
 전수조사 결과 이 작업은 27개 파일(컨트롤러 24 + 인프라 3), 6개 인라인 패턴 그룹(~40회 반복), 서비스 계층의 독자적 권한판단 2곳, 그리고 **WebhookController의 인증 자체 부재**라는 별도 심각도의 결함까지 포함하는 대규모 리팩터링임이 확인됐다. 한 세션에 전부 끝내는 것은 현실적이지 않아, 안전하게 끊어갈 수 있는 첫 단계(인프라 전환 + 중앙 서비스 구축)를 이번 세션의 범위로 잡는다.
 
@@ -57,17 +59,20 @@ yona(레거시)는 `app/utils/AccessControl.java` 단일 클래스가 `isAllowed
 - **이 단계에서 어떤 컨트롤러도 새 함수를 호출하지 않는다** — 순수 추가라 실제 API 응답은 전혀 안 바뀐다.
 - **검증**: `AccessControlSpec.kt` 그린 + 전체 `./gradlew test` 그린(기존 스펙 전부 무영향 확인).
 
-## 후속 단계 (미착수, 백로그 별도 항목으로 등록)
+## 후속 단계 (미착수, 백로그 별도 항목으로 등록 완료 — 2026-08-20)
 
-- 그룹 A/A'(`checkReadPermission` 계열, 17곳) 실제 교체 — PUBLIC+게스트, sharer 두 결함이 실제로 고쳐지는 단계.
-- 그룹 B/C/D(`checkWritePermission`, 매니저/작성자/담당자, `isProjectManager`, 9~13곳) — 일부는 yona 대비 더 엄격할 가능성이 있어 교체 전 대조 확인 필요.
-- 그룹 E(`checkCodeAccessibility`, `checkWatchPermission`, `isOrgAdmin`) 및 나머지 리소스 타입(WEBHOOK, ATTACHMENT, ORGANIZATION, PROJECT_TRANSFER 이관 여부).
-- **`WebhookController`의 인증 자체 부재** — `webhooks()`/`newWebhook()`/`deleteWebhook()` 세 엔드포인트에 `authentication` 파라미터가 아예 없어 미인증 사용자가 임의 프로젝트 웹훅(payload URL, secret 포함)을 조회/생성/삭제 가능한 상태. 이건 "산발적 인라인 체크" 범주가 아니라 "체크 자체 없음"이므로 별도 항목으로 즉시 등록하고, 최우선순위임을 명시한다.
-- `CommentServiceImpl.hasPermission()`(yona보다 엄격 — 현재 작성자/MANAGER만 허용, yona는 일반 멤버 전원 허용), `ProjectServiceImpl.isAuthorizedToAcceptTransfer()`(yona와 이미 일치, 이관 여부만 검토 대상) — 발견 사실만 기록, 착수는 사용자 결정 대기.
+등록 당시 P2-13~17로 임시 번호를 매겼으나, "경미/확인 필요"인 P2가 아니라 대부분 "확정된 권한 로직 오류"임이 밝혀져 P1로 재분류했다(P1-85와 마찬가지 사유). `docs/PARITY_BACKLOG.md`의 최신 번호가 정본이며, 아래는 매핑 기록이다.
+
+- **P1-87(구 P2-13, 최우선)**: `WebhookController`의 인증 자체 부재 — `webhooks()`/`newWebhook()`/`deleteWebhook()` 세 엔드포인트에 `authentication` 파라미터가 아예 없어 미인증 사용자가 임의 프로젝트 웹훅(payload URL, secret 포함)을 조회/생성/삭제 가능한 상태. "산발적 인라인 체크"가 아니라 "체크 자체 없음"이라 다른 항목보다 우선.
+- **P1-88(구 P2-14)**: 그룹 A/A'(`checkReadPermission` 계열, 17곳) 실제 교체 — PUBLIC+게스트, sharer 두 결함이 실제로 고쳐지는 단계.
+- **P2-15(구 P2-15, 유지)**: 그룹 B/C/D(`checkWritePermission`, 매니저/작성자/담당자, `isProjectManager`, 9~13곳) — yona 대비 더 엄격한지 아직 미확정이라 "확인 필요" 상태로 P2에 유지.
+- **P1-89(P2-16에서 분리)**: `WatchController.checkWatchPermission`이 WATCH 연산에 READ 규칙을 잘못 재사용 중(게스트 워치 부당 차단) — 이미 확정된 회귀 버그라 P1로 분리.
+- **P2-16(축소, 유지)**: 그룹 E 잔여(`checkCodeAccessibility`, `isOrgAdmin`) 및 나머지 리소스 타입(ATTACHMENT, ORGANIZATION, PROJECT_TRANSFER 이관 여부) — 아직 미확정이라 P2에 유지. `ProjectServiceImpl.isAuthorizedToAcceptTransfer()`(yona와 이미 일치, 이관 여부만 검토 대상)도 여기 포함.
+- **P1-90(구 P2-17)**: `CommentServiceImpl.hasPermission()`이 yona보다 엄격(현재 작성자/MANAGER만 허용, yona는 일반 멤버 전원 허용) — 확정된 권한 축소 버그.
 
 ## 검증 (착수 시)
 
 - 1a 완료 시점: `./gradlew test` 전체 그린 (동작 불변 확인).
 - 1b 완료 시점: `./gradlew test --tests "com.github.search5.yona.config.security.AccessControlSpec"` 그린 + 전체 `./gradlew test` 그린.
-- `docs/PARITY_BACKLOG.md`: P2-05 행을 진행 상태에 맞게 갱신 + 완료 로그에 실제로 한 일과 다음 단계 명시.
+- `docs/PARITY_BACKLOG.md`: P1-85 행을 진행 상태에 맞게 갱신 + 완료 로그에 실제로 한 일과 다음 단계 명시.
 - git: 1a와 1b를 별도 커밋으로 분리(전자는 순수 리팩터링, 후자는 addition-only).
