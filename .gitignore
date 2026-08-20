@@ -38,3 +38,6 @@ out/
 
 ### Kotlin ###
 .kotlin
+.serena
+.claude
+.claude/
