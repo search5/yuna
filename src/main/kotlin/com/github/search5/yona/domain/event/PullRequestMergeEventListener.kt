@@ -136,7 +136,10 @@ class PullRequestMergeEventListener(
             pullRequestRepository.save(pullRequest)
 
             try {
-                pullRequestService.attemptMerge(id)
+                // yona RelatedPullRequestMergingActor도 processPullRequestMerging()을 거치므로,
+                // 새 커밋 발견 시 PullRequestCommit 영속화/PullRequestEvent 기록/리뷰어 초기화/알림
+                // 발행, diff 소멸 시 자동 MERGED 전환까지 processMergeCheck()가 모두 수행한다(P1-52).
+                pullRequestService.processMergeCheck(id, event.sender, isNewPullRequest = false)
             } catch (e: Exception) {
                 logger.error("[PR MERGE] Failed to re-check merge for related PR ID: $id", e)
             }
