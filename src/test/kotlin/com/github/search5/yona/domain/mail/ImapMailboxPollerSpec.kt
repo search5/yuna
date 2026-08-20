@@ -12,13 +12,18 @@ import java.util.Properties
 // yona mailbox/CreationViaEmail.java의 MIME 파트 트리 순회(processPart 등) 대응 (P1-29).
 // 실제 jakarta.mail 객체를 구성해 IMAP 서버 연결 없이도 파싱 로직을 검증한다.
 class ImapMailboxPollerSpec : DescribeSpec({
+    val propertyService = mockk<com.github.search5.yona.domain.support.PropertyService>(relaxed = true)
+    val taskScheduler = mockk<org.springframework.scheduling.TaskScheduler>(relaxed = true)
     val poller = ImapMailboxPoller(
         incomingMailProcessingService = mockk(relaxed = true),
+        propertyService = propertyService,
+        taskScheduler = taskScheduler,
         host = "localhost",
         user = "yona",
         password = "secret",
         useSsl = true,
-        folderName = "inbox"
+        folderName = "inbox",
+        pollingIntervalMs = 300000L
     )
     val session = Session.getDefaultInstance(Properties())
 
@@ -139,6 +144,42 @@ class ImapMailboxPollerSpec : DescribeSpec({
             result.textBody shouldBe "<p>사진: <img src=\"cid:image1\"></p>"
             result.attachments.size shouldBe 1
             result.attachments[0].contentId shouldBe "image1"
+        }
+    }
+
+    // yona EmailHandler.handleNewMessages()의 "lastUIDValidity == uidValidity && lastSeenUID != null"
+    // 조건 대응 (P1-55). 이 조건이 성립할 때만 UID 구간 조회로 새 메일을 찾는다.
+    describe("ImapMailboxPoller.shouldFetchByUidRange") {
+        it("이전 기록이 전혀 없으면(최초 실행) false여야 한다") {
+            poller.shouldFetchByUidRange(lastUidValidity = null, lastSeenUid = null, currentUidValidity = 100L) shouldBe false
+        }
+
+        it("uidValidity가 이전과 다르면(메일함이 재생성됨) false여야 한다") {
+            poller.shouldFetchByUidRange(lastUidValidity = 99L, lastSeenUid = 5L, currentUidValidity = 100L) shouldBe false
+        }
+
+        it("lastSeenUid가 없으면 uidValidity가 같아도 false여야 한다") {
+            poller.shouldFetchByUidRange(lastUidValidity = 100L, lastSeenUid = null, currentUidValidity = 100L) shouldBe false
+        }
+
+        it("uidValidity가 같고 lastSeenUid가 있으면 true여야 한다") {
+            poller.shouldFetchByUidRange(lastUidValidity = 100L, lastSeenUid = 5L, currentUidValidity = 100L) shouldBe true
+        }
+    }
+
+    // yona MailboxService.updateLastSeenUID()의 "uid <= lastSeenUID면 갱신하지 않는다" 대응 (P1-55).
+    describe("ImapMailboxPoller.advancedSeenUid") {
+        it("기존 워터마크가 없으면 새 uid를 그대로 반환해야 한다") {
+            poller.advancedSeenUid(currentSeenUid = null, candidateUid = 7L) shouldBe 7L
+        }
+
+        it("새 uid가 기존보다 크면 새 uid를 반환해야 한다") {
+            poller.advancedSeenUid(currentSeenUid = 5L, candidateUid = 7L) shouldBe 7L
+        }
+
+        it("새 uid가 기존보다 작거나 같으면 null(갱신 불필요)을 반환해야 한다") {
+            poller.advancedSeenUid(currentSeenUid = 7L, candidateUid = 7L) shouldBe null
+            poller.advancedSeenUid(currentSeenUid = 7L, candidateUid = 3L) shouldBe null
         }
     }
 })
