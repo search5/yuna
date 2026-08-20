@@ -1,8 +1,11 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.WebhookType
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.webhook.Webhook
 import com.github.search5.yona.domain.webhook.WebhookService
@@ -19,21 +22,25 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
 
+// yona ProjectApp.java:1268,1283,1313 @IsAllowed(Operation.UPDATE)(resourceType 기본값 PROJECT)
+// 대응(P1-87) — 세 엔드포인트 전부 매니저 또는 조직관리자만 허용됨을 검증한다.
 class WebhookControllerSpec : DescribeSpec({
     val webhookService = mockk<WebhookService>()
     val projectRepository = mockk<ProjectRepository>()
     val userRepository = mockk<UserRepository>()
+    val accessControl = mockk<AccessControl>()
 
-    val webhookController = WebhookController(webhookService, projectRepository, userRepository)
+    val webhookController = WebhookController(webhookService, projectRepository, userRepository, accessControl)
     val mockMvc = MockMvcBuilders.standaloneSetup(webhookController).build()
 
     beforeTest {
-        io.mockk.clearMocks(webhookService, projectRepository, userRepository)
+        io.mockk.clearMocks(webhookService, projectRepository, userRepository, accessControl)
     }
 
     describe("WebhookController API 단위 테스트") {
         val userAuth = UsernamePasswordAuthenticationToken("owner", "password")
         val project = Project(id = 1L, owner = "owner", name = "test-project")
+        val managerUser = User(id = 100L, loginId = "owner", name = "owner")
         val webhook = Webhook(
             id = 10L,
             project = project,
@@ -42,6 +49,11 @@ class WebhookControllerSpec : DescribeSpec({
             gitPush = false,
             webhookType = WebhookType.SIMPLE
         )
+
+        beforeTest {
+            every { userRepository.findByLoginId("owner") } returns Optional.of(managerUser)
+            every { accessControl.isAllowed(managerUser, project, Operation.UPDATE) } returns true
+        }
 
         describe("GET /projects/{owner}/{projectName}/webhooks") {
             it("웹훅 설정 페이지 뷰를 정상 반환한다") {
@@ -107,6 +119,50 @@ class WebhookControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
 
                 verify(exactly = 1) { webhookService.deleteWebhook(10L) }
+            }
+        }
+
+        describe("권한 검사 (P1-87)") {
+            it("비로그인 사용자는 웹훅 목록 조회가 403으로 거부된다") {
+                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { accessControl.isAllowed(null, project, Operation.UPDATE) } returns false
+
+                mockMvc.perform(get("/projects/owner/test-project/webhooks"))
+                    .andExpect(status().isForbidden)
+            }
+
+            it("프로젝트 매니저가 아닌 로그인 사용자는 웹훅 생성이 403으로 거부된다") {
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                val stranger = User(id = 200L, loginId = "stranger", name = "stranger")
+                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { accessControl.isAllowed(stranger, project, Operation.UPDATE) } returns false
+
+                mockMvc.perform(
+                    post("/projects/owner/test-project/webhooks")
+                        .param("payloadUrl", "http://localhost:8080/hook")
+                        .param("webhookType", "SIMPLE")
+                        .principal(strangerAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { webhookService.createWebhook(any(), any(), any(), any(), any()) }
+            }
+
+            it("프로젝트 매니저가 아닌 로그인 사용자는 웹훅 삭제가 403으로 거부된다") {
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                val stranger = User(id = 200L, loginId = "stranger", name = "stranger")
+                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { accessControl.isAllowed(stranger, project, Operation.UPDATE) } returns false
+
+                mockMvc.perform(
+                    delete("/projects/owner/test-project/webhooks/10")
+                        .principal(strangerAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { webhookService.deleteWebhook(any()) }
             }
         }
     }
