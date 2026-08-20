@@ -10,7 +10,9 @@ import org.springframework.stereotype.Repository
 @Repository
 interface IssueLabelRepository : JpaRepository<IssueLabel, Long> {
     fun findByProject(project: Project): List<IssueLabel>
-    fun findByProjectAndName(project: Project, name: String): IssueLabel?
+
+    // yona IssueLabel.exists()(project.id+category+name 복합 유일성) 대응 (P1-54).
+    fun findByProjectAndCategoryAndName(project: Project, category: IssueLabelCategory, name: String): IssueLabel?
     fun findByCategory(category: IssueLabelCategory): List<IssueLabel>
 
     @Modifying
