@@ -186,6 +186,11 @@ class IssueServiceImpl(
             issue.labels.clear()
         }
 
+        // yona Issue.checkLabels() 대응 (P1-80) — AbstractPostingApp.editPosting()가 이슈 수정마다
+        // 호출하는 검증(생성 시점에는 호출 안 함, yona도 동일). 같은 배타(exclusive) 카테고리의
+        // 라벨을 두 개 이상 붙일 수 없다.
+        checkExclusiveLabelCategories(issue.labels)
+
         val savedIssue = issueRepository.save(issue)
 
         if (oldBody != body) {
@@ -498,6 +503,24 @@ class IssueServiceImpl(
         // yona IssueApp.addIssueMovedNotification()의 IssueEvent.addFromNotificationEvent(notiEvent,
         // originalIssue, loginId) 대응 (P1-70) — 알림과 함께 이슈 타임라인에도 이동 이력을 남긴다.
         recordIssueEvent(issue, EventType.ISSUE_MOVED, mover.loginId!!, oldValue, newValue)
+    }
+
+    // yona Issue.checkLabels() 대응 (P1-80) — 같은 배타(exclusive) 카테고리의 라벨이 두 개
+    // 이상이면 거부한다. yona는 Set 순회 순서에 의존하지 않고 "이미 본 배타 카테고리"를 누적하며
+    // 검사하므로, 라벨이 몇 개든 어떤 순서로 순회되든 동일한 결과가 나온다.
+    private fun checkExclusiveLabelCategories(labels: Set<IssueLabel>) {
+        val seenExclusiveCategories = mutableSetOf<Long>()
+        for (label in labels) {
+            val categoryId = label.category.id ?: continue
+            if (categoryId in seenExclusiveCategories) {
+                throw IssueLabelExclusiveCategoryException(
+                    "This category does not allow an issue to have two or more labels of the category"
+                )
+            }
+            if (label.category.isExclusive) {
+                seenExclusiveCategories.add(categoryId)
+            }
+        }
     }
 
     // yona models/IssueEvent.java의 add()/addWithoutSkipEvent() 대응(draft-time 병합/취소, P1-38).
