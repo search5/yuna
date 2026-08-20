@@ -3,6 +3,7 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.attachment.Attachment
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -114,16 +115,19 @@ class AttachmentControllerSpec : DescribeSpec({
         describe("GET /files/{id} (파일 다운로드)") {
             it("존재하는 파일 ID로 요청하면 파일 스트림과 적절한 헤더를 반환한다") {
                 every { attachmentRepository.findById(100L) } returns Optional.of(attachment)
-                
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every { accessControl.isAllowedAttachment(loginUser, attachment, Operation.READ) } returns true
+
                 val tempFile = File.createTempFile("yuna-test", "txt")
                 tempFile.writeText("Hello World")
                 tempFile.deleteOnExit()
-                
+
                 every { attachmentService.getFile(attachment) } returns tempFile
 
                 mockMvc.perform(
                     get("/files/100")
                         .param("action", "download")
+                        .principal(userAuth)
                 )
                     .andExpect(status().isOk)
                     .andExpect(header().string("Content-Type", "text/plain"))
@@ -133,14 +137,29 @@ class AttachmentControllerSpec : DescribeSpec({
 
             it("If-None-Match 헤더 값이 파일 ETag와 일치하면 304 Not Modified를 반환한다") {
                 every { attachmentRepository.findById(100L) } returns Optional.of(attachment)
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every { accessControl.isAllowedAttachment(loginUser, attachment, Operation.READ) } returns true
 
                 val eTag = "\"somehash123-inline\""
 
                 mockMvc.perform(
                     get("/files/100")
                         .header("If-None-Match", eTag)
+                        .principal(userAuth)
                 )
                     .andExpect(status().isNotModified)
+            }
+
+            it("읽기 권한이 없으면 403 Forbidden을 반환한다 (P1-96, 보안)") {
+                every { attachmentRepository.findById(100L) } returns Optional.of(attachment)
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every { accessControl.isAllowedAttachment(loginUser, attachment, Operation.READ) } returns false
+
+                mockMvc.perform(
+                    get("/files/100")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
             }
         }
 
@@ -170,6 +189,10 @@ class AttachmentControllerSpec : DescribeSpec({
 
         describe("GET /files (파일 목록 조회)") {
             it("컨테이너 타입과 ID로 조회 시 첨부된 파일 목록 JSON을 반환한다") {
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every {
+                    accessControl.isAllowedAttachment(loginUser, match { it.containerType == ResourceType.ISSUE_POST && it.containerId == "10" }, Operation.READ)
+                } returns true
                 every {
                     attachmentRepository.findByContainerTypeAndContainerId(
                         ResourceType.ISSUE_POST,
@@ -181,10 +204,26 @@ class AttachmentControllerSpec : DescribeSpec({
                     get("/files")
                         .param("containerType", "ISSUE_POST")
                         .param("containerId", "10")
+                        .principal(userAuth)
                 )
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.attachments[0].id").value("100"))
                     .andExpect(jsonPath("$.attachments[0].name").value("test-file.txt"))
+            }
+
+            it("컨테이너 읽기 권한이 없으면 403 Forbidden을 반환한다 (P1-96, 보안)") {
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every {
+                    accessControl.isAllowedAttachment(loginUser, match { it.containerType == ResourceType.ISSUE_POST && it.containerId == "10" }, Operation.READ)
+                } returns false
+
+                mockMvc.perform(
+                    get("/files")
+                        .param("containerType", "ISSUE_POST")
+                        .param("containerId", "10")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
             }
         }
     }

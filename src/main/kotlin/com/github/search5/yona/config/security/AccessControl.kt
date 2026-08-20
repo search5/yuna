@@ -583,6 +583,10 @@ class AccessControl(
         }
 
         if (attachment.containerType == ResourceType.USER_AVATAR) {
+            // yona AccessControl.java:130-138 isGlobalResourceAllowed()의 READ 분기("PROJECT가 아닌
+            // 리소스는 누구나 읽을 수 있다")가 USER_AVATAR에도 그대로 적용된다 — READ는 익명 포함 항상
+            // 허용, UPDATE/DELETE만 본인 확인(:186 case USER_AVATAR: user.id.toString().equals(...)).
+            if (operation == Operation.READ) return true
             val ownerId = attachment.containerId.toLongOrNull()
             return user?.id != null && user.id == ownerId
         }

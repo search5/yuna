@@ -1,6 +1,7 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -57,7 +58,11 @@ class BranchApiController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        // yona BranchApp.java:71-72 @IsAllowed(Operation.DELETE)(resourceType 기본값 PROJECT) 대응
+        // (P1-97) — PROJECT 리소스의 DELETE는 매니저/조직관리자 전용이다(isGlobalResourceAllowed()의
+        // PROJECT 케이스, ProjectUser.isManager || OrganizationUser.isAdmin) — 일반 멤버 전원 허용이
+        // 아니다. 기존엔 단순 멤버십만 확인해 일반 멤버도 브랜치를 삭제할 수 있던 과잉 허용 버그였다.
+        if (!accessControl.isAllowed(loginUser, project, Operation.DELETE)) {
             return "error/403"
         }
 

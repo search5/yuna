@@ -3,6 +3,7 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.attachment.Attachment
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -107,10 +108,18 @@ class AttachmentController(
     fun getFile(
         @PathVariable("id") id: Long,
         @RequestParam(value = "action", required = false) action: String?,
-        request: HttpServletRequest
+        request: HttpServletRequest,
+        principal: java.security.Principal?
     ): ResponseEntity<Resource> {
         val attachment = attachmentRepository.findById(id).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+
+        // yona AccessControl.java:255-259 ATTACHMENT READ(컨테이너의 READ 권한으로 위임) 대응 (P1-96,
+        // 보안). 다운로드/인라인 조회 둘 다 이 게이트를 거친다 — 이전에는 권한 체크 자체가 없었다.
+        val loginUser = principal?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (!accessControl.isAllowedAttachment(loginUser, attachment, Operation.READ)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
 
         val dispositionType = if (action == "download") "attachment" else "inline"
         val eTag = "\"${attachment.hash}-$dispositionType\""
@@ -211,7 +220,8 @@ class AttachmentController(
     @GetMapping("/files")
     fun getFileList(
         @RequestParam(value = "containerType", required = false) containerType: String?,
-        @RequestParam(value = "containerId", required = false) containerId: String?
+        @RequestParam(value = "containerId", required = false) containerId: String?,
+        principal: java.security.Principal?
     ): ResponseEntity<Map<String, Any>> {
         if (containerType.isNullOrBlank() || containerId.isNullOrBlank()) {
             return ResponseEntity.ok(mapOf("attachments" to emptyList<Any>()))
@@ -221,6 +231,15 @@ class AttachmentController(
             ResourceType.valueOf(containerType)
         } catch (e: Exception) {
             ResourceType.NOT_A_RESOURCE
+        }
+
+        // yona AccessControl.java:255-259 ATTACHMENT READ 대응 (P1-96, 보안). 목록 조회는 특정 첨부가
+        // 아니라 컨테이너 단위 질의이므로, containerType/containerId만으로 동일한 컨테이너 권한 위임
+        // 로직(isAllowedAttachment)을 재사용한다(id/name/hash 등은 이 판정에 쓰이지 않아 더미로 둬도 안전).
+        val loginUser = principal?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        val containerProbe = Attachment(containerType = resType, containerId = containerId)
+        if (!accessControl.isAllowedAttachment(loginUser, containerProbe, Operation.READ)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(resType, containerId)
