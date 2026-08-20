@@ -295,9 +295,13 @@ class NotificationMailDigestScheduler(
         return "<${resourceType.resource()}/$resourceId@$hostname>"
     }
 
-    // yona EventEmail.addReferences() 대응. 현재 실제로 발생하는 이벤트 중 컨테이너를 갖는 것은
-    // ISSUE_COMMENT/NONISSUE_COMMENT뿐이라(NEW_REVIEW_COMMENT/REVIEW_THREAD_STATE_CHANGED는 아직
-    // 생산되지 않음 — PARITY_BACKLOG 참고) 그 범위까지만 References를 채운다.
+    // yona EventEmail.addReferences() 대응. resource.getContainer()가 COMMENT_THREAD면 그 스레드의
+    // "첫 리뷰 댓글" Message-ID를 참조하고(legacy 특수 케이스), 그 외 컨테이너가 있으면 컨테이너 자체의
+    // Message-ID를 참조한다(default 케이스). REVIEW_COMMENT의 컨테이너는 COMMENT_THREAD, COMMIT_COMMENT의
+    // 컨테이너는 COMMIT이다(P1-50에서 NEW_REVIEW_COMMENT/NEW_COMMENT/REVIEW_THREAD_STATE_CHANGED 생산이
+    // 실제로 배선된 뒤 이 References 매핑도 함께 갱신). COMMENT_THREAD 자신(REVIEW_THREAD_STATE_CHANGED)은
+    // legacy에서도 컨테이너가 없어(CommentThread.asResource()가 getContainer()를 오버라이드하지 않음)
+    // References를 채우지 않는다.
     private fun computeReferences(event: NotificationEvent): String? {
         return when (event.resourceType) {
             ResourceType.ISSUE_COMMENT -> {
@@ -307,6 +311,17 @@ class NotificationMailDigestScheduler(
             ResourceType.NONISSUE_COMMENT -> {
                 val comment = event.resourceId.toLongOrNull()?.let { postingCommentRepository.findById(it).orElse(null) } ?: return null
                 computeMessageId(ResourceType.BOARD_POST, comment.posting.id.toString())
+            }
+            ResourceType.REVIEW_COMMENT -> {
+                val comment = event.resourceId.toLongOrNull()?.let { reviewCommentRepository.findById(it).orElse(null) } ?: return null
+                val threadId = comment.thread?.id ?: return null
+                val firstComment = reviewCommentRepository.findByThreadIdOrderByCreatedDateAsc(threadId).firstOrNull() ?: return null
+                computeMessageId(ResourceType.REVIEW_COMMENT, firstComment.id.toString())
+            }
+            ResourceType.COMMIT_COMMENT -> {
+                val comment = event.resourceId.toLongOrNull()?.let { commitCommentRepository.findById(it).orElse(null) } ?: return null
+                val projectId = comment.project?.id ?: return null
+                computeMessageId(ResourceType.COMMIT, "$projectId:${comment.commitId}")
             }
             else -> null
         }

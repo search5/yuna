@@ -255,5 +255,91 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
 
             messageIdSlot.captured shouldBe "<issue_post/1@yona.example.com>"
         }
+
+        it("REVIEW_COMMENT 이벤트는 References로 스레드의 첫 리뷰 댓글 Message-ID를 채운다") {
+            val project = Project(id = 3L, name = "proj", owner = "owner")
+            val thread = com.github.search5.yona.domain.pullrequest.CodeCommentThread(id = 10L, project = project)
+            val firstComment = com.github.search5.yona.domain.pullrequest.ReviewComment(id = 50L, thread = thread)
+            val newComment = com.github.search5.yona.domain.pullrequest.ReviewComment(id = 55L, thread = thread)
+
+            val user = receiver(2L)
+            val event = NotificationEvent(
+                id = 1L, title = "제목", created = Instant.now(),
+                resourceType = ResourceType.REVIEW_COMMENT, resourceId = "55",
+                eventType = EventType.NEW_REVIEW_COMMENT, newValue = "댓글 내용",
+                receivers = mutableSetOf(user)
+            )
+            val mail = NotificationMail(id = 101L, notificationEvent = event)
+            every { notificationMailRepository.findByNotificationEvent_CreatedBeforeOrderByNotificationEvent_CreatedAsc(any()) } returns listOf(mail)
+            every { notificationMailRepository.delete(mail) } returns Unit
+            every { notificationEventMerger.mergeEvents(listOf(event)) } returns listOf(MergedNotificationEvent(event))
+            every { reviewCommentRepository.existsById(55L) } returns true
+            every { reviewCommentRepository.findById(55L) } returns Optional.of(newComment)
+            every { reviewCommentRepository.findByThreadIdOrderByCreatedDateAsc(10L) } returns listOf(firstComment, newComment)
+            every { messageResolver.getMessage(any<MergedNotificationEvent>(), any()) } returns "메시지"
+            every { messageResolver.getPlainMessage(any<MergedNotificationEvent>(), any()) } returns "평문 메시지"
+
+            val referencesSlot = slot<String>()
+            every {
+                mailService.sendNotificationMail(any(), any(), any(), any(), any(), any(), any(), any(), capture(referencesSlot), any())
+            } returns Unit
+
+            scheduler().sendMail()
+
+            referencesSlot.captured shouldBe "<review_comment/50@yona.example.com>"
+        }
+
+        it("COMMIT_COMMENT 이벤트는 References로 커밋 리소스의 Message-ID를 채운다") {
+            val project = Project(id = 3L, name = "proj", owner = "owner")
+            val commitComment = com.github.search5.yona.domain.pullrequest.CommitComment(id = 77L, project = project, commitId = "abc123")
+
+            val user = receiver(2L)
+            val event = NotificationEvent(
+                id = 1L, title = "제목", created = Instant.now(),
+                resourceType = ResourceType.COMMIT_COMMENT, resourceId = "77",
+                eventType = EventType.NEW_COMMENT, newValue = "댓글 내용",
+                receivers = mutableSetOf(user)
+            )
+            val mail = NotificationMail(id = 102L, notificationEvent = event)
+            every { notificationMailRepository.findByNotificationEvent_CreatedBeforeOrderByNotificationEvent_CreatedAsc(any()) } returns listOf(mail)
+            every { notificationMailRepository.delete(mail) } returns Unit
+            every { notificationEventMerger.mergeEvents(listOf(event)) } returns listOf(MergedNotificationEvent(event))
+            every { commitCommentRepository.existsById(77L) } returns true
+            every { commitCommentRepository.findById(77L) } returns Optional.of(commitComment)
+            every { messageResolver.getMessage(any<MergedNotificationEvent>(), any()) } returns "메시지"
+            every { messageResolver.getPlainMessage(any<MergedNotificationEvent>(), any()) } returns "평문 메시지"
+
+            val referencesSlot = slot<String>()
+            every {
+                mailService.sendNotificationMail(any(), any(), any(), any(), any(), any(), any(), any(), capture(referencesSlot), any())
+            } returns Unit
+
+            scheduler().sendMail()
+
+            referencesSlot.captured shouldBe "<commit/3:abc123@yona.example.com>"
+        }
+
+        it("REVIEW_THREAD_STATE_CHANGED 이벤트(컨테이너 없음)는 References를 채우지 않는다") {
+            val user = receiver(2L)
+            val event = NotificationEvent(
+                id = 1L, title = "제목", created = Instant.now(),
+                resourceType = ResourceType.COMMENT_THREAD, resourceId = "10",
+                eventType = EventType.REVIEW_THREAD_STATE_CHANGED, oldValue = "OPEN", newValue = "CLOSED",
+                receivers = mutableSetOf(user)
+            )
+            val mail = NotificationMail(id = 103L, notificationEvent = event)
+            every { notificationMailRepository.findByNotificationEvent_CreatedBeforeOrderByNotificationEvent_CreatedAsc(any()) } returns listOf(mail)
+            every { notificationMailRepository.delete(mail) } returns Unit
+            every { notificationEventMerger.mergeEvents(listOf(event)) } returns listOf(MergedNotificationEvent(event))
+            every { commentThreadRepository.existsById(10L) } returns true
+            every { messageResolver.getMessage(any<MergedNotificationEvent>(), any()) } returns "메시지"
+            every { messageResolver.getPlainMessage(any<MergedNotificationEvent>(), any()) } returns "평문 메시지"
+
+            scheduler().sendMail()
+
+            verify(exactly = 1) {
+                mailService.sendNotificationMail(any(), any(), any(), any(), any(), any(), any(), any(), isNull(), any())
+            }
+        }
     }
 })
