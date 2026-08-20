@@ -45,14 +45,14 @@ class WebhookServiceSpec : DescribeSpec({
     val webhookThreadRepository = mockk<WebhookThreadRepository>()
     val projectRepository = mockk<ProjectRepository>()
 
-    val webhookService = WebhookServiceImpl(webhookRepository, webhookThreadRepository)
+    val webhookService = WebhookServiceImpl(webhookRepository, webhookThreadRepository, "https://yona.example.com")
 
     beforeTest {
         io.mockk.clearMocks(webhookRepository, webhookThreadRepository, projectRepository)
     }
 
     describe("WebhookService 비즈니스 테스트") {
-        val project = Project(id = 1L, name = "test-project", owner = "owner")
+        val project = Project(id = 1L, name = "test-project", owner = "owner", overview = "테스트 프로젝트 설명")
         val webhook = Webhook(
             id = 10L,
             project = project,
@@ -190,6 +190,50 @@ class WebhookServiceSpec : DescribeSpec({
                 json.get("sender").get("login").asText() shouldBe "gildong"
                 json.get("pusher").get("email").asText() shouldBe "gildong@yona.io"
                 json.get("repository").get("name").asText() shouldBe "test-project"
+            }
+
+            // yona Webhook.java의 buildSenderJSON()/buildRepositoryJSON()/buildJSONFromCommit() 필드
+            // 4곳(site_admin/overview/절대 URL/timestamp 포맷) 대응 (P2-08).
+            it("sender.site_admin/repository.overview/절대 URL/timestamp 포맷까지 legacy와 일치해야 한다") {
+                val jsonWebhook = Webhook(
+                    id = 31L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.JSON
+                )
+                val siteAdminSender = User(
+                    id = 6L, loginId = "admin", name = "관리자", email = "admin@yona.io",
+                    state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN
+                )
+                val commit = testCommit("admin commit", authorName = "admin", authorEmail = "admin@yona.io")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, siteAdminSender, pushed)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.get("sender").get("site_admin").asBoolean() shouldBe true
+                json.get("repository").get("overview").asText() shouldBe "테스트 프로젝트 설명"
+                json.get("repository").get("html_url").asText() shouldBe "https://yona.example.com/owner/test-project"
+                json.get("commits").get(0).get("url").asText() shouldBe
+                    "https://yona.example.com/owner/test-project/commit/${commit.name}"
+
+                val expectedTimestamp = commit.authorIdent.`when`.toInstant()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'hh:mm:ssZ"))
+                json.get("commits").get(0).get("timestamp").asText() shouldBe expectedTimestamp
+            }
+
+            it("일반 사용자가 push하면 sender.site_admin은 false여야 한다") {
+                val jsonWebhook = Webhook(
+                    id = 32L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.JSON
+                )
+                val normalSender = User(id = 7L, loginId = "gildong", name = "홍길동", email = "gildong@yona.io")
+                val commit = testCommit("normal commit")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, normalSender, pushed)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.get("sender").get("site_admin").asBoolean() shouldBe false
             }
         }
     }
