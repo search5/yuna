@@ -44,12 +44,12 @@ class SearchServiceImpl(
         }
 
         val processedKeyword = "%${keyword.lowercase()}%"
-        val result = getSearchResultCounts(keyword, allowedProjectIds)
+        val result = getSearchResultCounts(keyword, allowedProjectIds, user?.id)
         result.searchType = searchType
         result.updateSearchType()
 
         when (result.searchType) {
-            SearchType.ISSUE -> result.issues = issueRepository.searchIssues(allowedProjectIds, processedKeyword, pageable)
+            SearchType.ISSUE -> result.issues = issueRepository.searchIssues(allowedProjectIds, processedKeyword, user?.id, pageable)
             SearchType.USER -> result.users = userRepository.searchUsers(processedKeyword, pageable)
             SearchType.PROJECT -> result.projects = projectRepository.searchProjects(allowedProjectIds, processedKeyword, pageable)
             SearchType.POST -> result.posts = postingRepository.searchPostings(allowedProjectIds, processedKeyword, pageable)
@@ -103,12 +103,12 @@ class SearchServiceImpl(
         }
 
         val processedKeyword = "%${keyword.lowercase()}%"
-        val result = getSearchResultCounts(keyword, groupProjectIds)
+        val result = getSearchResultCounts(keyword, groupProjectIds, user?.id)
         result.searchType = searchType
         result.updateSearchType()
 
         when (result.searchType) {
-            SearchType.ISSUE -> result.issues = issueRepository.searchIssues(groupProjectIds, processedKeyword, pageable)
+            SearchType.ISSUE -> result.issues = issueRepository.searchIssues(groupProjectIds, processedKeyword, user?.id, pageable)
             SearchType.USER -> result.users = userRepository.searchUsers(processedKeyword, pageable)
             SearchType.PROJECT -> result.projects = projectRepository.searchProjects(groupProjectIds, processedKeyword, pageable)
             SearchType.POST -> result.posts = postingRepository.searchPostings(groupProjectIds, processedKeyword, pageable)
@@ -122,13 +122,13 @@ class SearchServiceImpl(
         return result
     }
 
-    private fun getSearchResultCounts(keyword: String, projectIds: List<Long>): SearchResult {
+    private fun getSearchResultCounts(keyword: String, projectIds: List<Long>, userId: Long?): SearchResult {
         val processedKeyword = "%${keyword.lowercase()}%"
         return SearchResult(
             keyword = keyword,
             usersCount = userRepository.countSearchUsers(processedKeyword),
             projectsCount = projectRepository.countSearchProjects(projectIds, processedKeyword),
-            issuesCount = issueRepository.countSearchIssues(projectIds, processedKeyword),
+            issuesCount = issueRepository.countSearchIssues(projectIds, processedKeyword, userId),
             postsCount = postingRepository.countSearchPostings(projectIds, processedKeyword),
             milestonesCount = milestoneRepository.countSearchMilestones(projectIds, processedKeyword),
             issueCommentsCount = issueCommentRepository.countSearchIssueComments(projectIds, processedKeyword),

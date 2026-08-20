@@ -50,7 +50,7 @@ class SearchServiceSpec : DescribeSpec({
             // counts mock
             every { userRepository.countSearchUsers("%test%") } returns 0
             every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 0
-            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%") } returns 1
+            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%", 10L) } returns 1
             every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
             every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 0
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
@@ -59,7 +59,7 @@ class SearchServiceSpec : DescribeSpec({
 
             // search result mock
             val expectedIssues: Page<com.github.search5.yona.domain.issue.Issue> = PageImpl(emptyList())
-            every { issueRepository.searchIssues(listOf(1L, 2L), "%test%", pageable) } returns expectedIssues
+            every { issueRepository.searchIssues(listOf(1L, 2L), "%test%", 10L, pageable) } returns expectedIssues
 
             val result = searchService.searchInAll("test", SearchType.AUTO, loginUser, pageable)
 
@@ -93,7 +93,7 @@ class SearchServiceSpec : DescribeSpec({
             every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(1L, 2L)
             every { userRepository.countSearchUsers("%test%") } returns 0
             every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 3
-            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%") } returns 0
+            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
             every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 0
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
@@ -113,7 +113,7 @@ class SearchServiceSpec : DescribeSpec({
             every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(1L, 2L)
             every { userRepository.countSearchUsers("%test%") } returns 5
             every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 0
-            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%") } returns 0
+            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
             every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 0
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
@@ -133,7 +133,7 @@ class SearchServiceSpec : DescribeSpec({
             every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(1L, 2L)
             every { userRepository.countSearchUsers("%test%") } returns 0
             every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 0
-            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%") } returns 0
+            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
             every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 1
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0

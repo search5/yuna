@@ -28,21 +28,46 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
     fun findByMilestoneAndState(milestone: Milestone, state: State): List<Issue>
     fun findByAuthorId(authorId: Long): List<Issue>
 
+    // yona Search.java:112-127 issuesEL()의 "(Project && Keyword) || (Author && Keyword) ||
+    // (Assignee && Keyword)" 대응 (P1-81) — 프로젝트 접근권한과 무관하게 본인이 작성했거나
+    // 담당자로 지정된 이슈는 항상 검색에 노출된다(equalsUserTemplate()가 익명 사용자는 건너뛰므로
+    // userId가 null이면 이 두 분기는 자연히 무효화된다). assignee는 LEFT JOIN으로 명시해야 한다 —
+    // 암묵적 경로 탐색(i.assignee.user.id)은 Hibernate가 INNER JOIN으로 컴파일해, OR로 묶은
+    // 다른 분기가 매치돼야 할 담당자 없는 이슈까지 통째로 결과에서 사라지게 만든다.
     @Query("""
-        SELECT i FROM Issue i 
-        WHERE i.project.id IN :projectIds 
-          AND (i.title LIKE :keyword 
-               OR i.body LIKE :keyword)
+        SELECT i FROM Issue i
+        LEFT JOIN i.assignee a
+        LEFT JOIN a.user au
+        WHERE (i.project.id IN :projectIds
+               AND (i.title LIKE :keyword OR i.body LIKE :keyword))
+           OR (:userId IS NOT NULL AND i.authorId = :userId
+               AND (i.title LIKE :keyword OR i.body LIKE :keyword))
+           OR (:userId IS NOT NULL AND au.id = :userId
+               AND (i.title LIKE :keyword OR i.body LIKE :keyword))
     """)
-    fun searchIssues(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Issue>
+    fun searchIssues(
+        @Param("projectIds") projectIds: List<Long>,
+        @Param("keyword") keyword: String,
+        @Param("userId") userId: Long?,
+        pageable: Pageable
+    ): Page<Issue>
 
     @Query("""
-        SELECT COUNT(i) FROM Issue i 
-        WHERE i.project.id IN :projectIds 
-          AND (i.title LIKE :keyword 
-               OR i.body LIKE :keyword)
+        SELECT COUNT(i) FROM Issue i
+        LEFT JOIN i.assignee a
+        LEFT JOIN a.user au
+        WHERE (i.project.id IN :projectIds
+               AND (i.title LIKE :keyword OR i.body LIKE :keyword))
+           OR (:userId IS NOT NULL AND i.authorId = :userId
+               AND (i.title LIKE :keyword OR i.body LIKE :keyword))
+           OR (:userId IS NOT NULL AND au.id = :userId
+               AND (i.title LIKE :keyword OR i.body LIKE :keyword))
     """)
-    fun countSearchIssues(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
+    fun countSearchIssues(
+        @Param("projectIds") projectIds: List<Long>,
+        @Param("keyword") keyword: String,
+        @Param("userId") userId: Long?
+    ): Int
 
     @Query("""
         SELECT i FROM Issue i 
