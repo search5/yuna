@@ -8,7 +8,10 @@ import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
@@ -75,10 +78,15 @@ class VoteControllerSpec : DescribeSpec({
 
         val userAuth = UsernamePasswordAuthenticationToken("tester", "password")
 
+        beforeTest {
+            user.projectUsers.clear()
+        }
+
         it("이슈 투표 요청 시 302 리다이렉트와 함께 해당 이슈 상세 뷰로 이동해야 한다") {
             every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
             every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
             every { issueService.voteIssue(50L, user) } returns Unit
 
@@ -96,6 +104,7 @@ class VoteControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
             every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
             every { issueService.unvoteIssue(50L, user) } returns Unit
 
@@ -113,6 +122,7 @@ class VoteControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
             every { issueCommentRepository.findById(100L) } returns Optional.of(comment)
             every { issueService.voteComment(100L, user) } returns Unit
 
@@ -130,6 +140,7 @@ class VoteControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
             every { issueCommentRepository.findById(100L) } returns Optional.of(comment)
             every { issueService.unvoteComment(100L, user) } returns Unit
 
@@ -169,6 +180,7 @@ class VoteControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
             every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
             every { issueService.voteIssue(50L, user) } returns Unit
 

@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
@@ -9,7 +10,6 @@ import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.milestone.MilestoneService
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.ProjectRepository
-import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.attachment.AttachmentRepository
@@ -93,10 +93,8 @@ class MilestoneViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
-            }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         // 파라미터 값에 따라 이넘 조회
@@ -129,10 +127,8 @@ class MilestoneViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
-            }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val milestone = milestoneService.getMilestone(id) ?: return "error/404"

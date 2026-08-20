@@ -79,8 +79,14 @@ class PullRequestControllerSpec : DescribeSpec({
         val memberRole = Role(id = RoleType.MEMBER.roleType)
         val managerRole = Role(id = RoleType.MANAGER.roleType)
 
-        val projectUser = ProjectUser(id = 100L, user = user, project = project, role = memberRole)
-        val projectManagerUser = ProjectUser(id = 101L, user = managerUser, project = project, role = managerRole)
+        // isMemberOf()/isManagerOf()는 project.id/role.id만 보고 .user는 읽지 않는다 — 여기서 user 자신을
+        // .user로 넣으면 PullRequest.contributor로 그대로 직렬화될 때 user->projectUsers->user 순환 참조로
+        // Jackson이 무한 재귀에 빠진다(IssueSharer.kt의 기존 @JsonIgnore 사례와 동일한 문제군). 멤버십 판정에는
+        // 영향 없는 더미 User로 배선해 순환을 끊는다.
+        val projectUser = ProjectUser(id = 100L, user = User(id = 999_910L, loginId = "_membership_placeholder"), project = project, role = memberRole)
+        val projectManagerUser = ProjectUser(id = 101L, user = User(id = 999_911L, loginId = "_membership_placeholder"), project = project, role = managerRole)
+        user.projectUsers.add(projectUser)
+        managerUser.projectUsers.add(projectManagerUser)
 
         val pullRequest = PullRequest(
             id = 50L,

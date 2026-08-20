@@ -4,6 +4,7 @@ import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.board.PostingService
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -38,10 +39,7 @@ class BoardController(
     }
 
     private fun checkReadPermission(project: Project, user: User?): Boolean {
-        if (project.projectScope == ProjectScope.PUBLIC) return true
-        if (user == null) return false
-        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            accessControl.isAllowedIfGroupMember(project, user)
+        return accessControl.isAllowed(user, project, Operation.READ)
     }
 
     private fun checkWritePermission(project: Project, user: User?): Boolean {

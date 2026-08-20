@@ -117,8 +117,10 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/pulls") {
             it("비공개 프로젝트일 때 멤버라면 200 OK와 pullrequest/list 뷰를 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { pullRequestRepository.findByToProjectAndState(project, State.OPEN, any<Pageable>()) } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
@@ -161,8 +163,10 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/closedPullRequests") {
             it("멤버라면 CLOSED와 MERGED 상태를 모두 포함한 목록을 pullrequest/list 뷰로 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 901L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every {
                     pullRequestRepository.findByToProjectAndStateIn(project, listOf(State.CLOSED, State.MERGED), any<Pageable>())
@@ -187,8 +191,10 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/sentPullRequests") {
             it("멤버라면 이 프로젝트가 출발지(fromProject)인 PR 목록을 pullrequest/list 뷰로 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 902L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every {
                     pullRequestRepository.findByFromProject(project, any<Pageable>())
@@ -204,11 +210,13 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/pull/{number}") {
             it("멤버라면 200 OK와 pullrequest/view 뷰를 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 903L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
-                
+
                 val mergeResult = PullRequestMergeResult(pullRequest = pullRequest)
                 every { pullRequestService.attemptMerge(50L) } returns mergeResult
                 every { commentThreadRepository.findByPullRequest(pullRequest) } returns emptyList()
@@ -223,11 +231,13 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/pull/{number}/changes") {
             it("멤버라면 200 OK와 pullrequest/view 뷰를 반환하고 diffs 모델을 주입해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 904L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
-                
+
                 val mergeResult = PullRequestMergeResult(pullRequest = pullRequest)
                 every { pullRequestService.attemptMerge(50L) } returns mergeResult
                 every { pullRequestService.getDiff(pullRequest) } returns emptyList()
@@ -243,11 +253,13 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/pullRequest/{number}/changes/{commitId}") {
             it("멤버라면 200 OK와 특정 커밋 변경 사항을 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 905L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
-                
+
                 val mergeResult = PullRequestMergeResult(pullRequest = pullRequest)
                 every { pullRequestService.attemptMerge(50L) } returns mergeResult
                 every { pullRequestService.getDiff(pullRequest, "abcdefg") } returns emptyList()

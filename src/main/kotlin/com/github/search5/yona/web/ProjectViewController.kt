@@ -2,6 +2,7 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectService
@@ -84,10 +85,8 @@ class ProjectViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
-            }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         if (loginUser != null) {
@@ -259,10 +258,8 @@ class ProjectViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
-            }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val projectUsers = projectUserRepository.findByProjectId(project.id!!)
@@ -389,10 +386,12 @@ class ProjectViewController(
             ?: throw org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
+        if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 throw org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied")
             }
+        } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            throw org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied")
         }
 
         val repository = repositoryService.getRepository(project)

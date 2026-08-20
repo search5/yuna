@@ -95,6 +95,8 @@ class IssueControllerSpec : DescribeSpec({
 
         val projectUser = ProjectUser(id = 100L, user = user, project = project, role = memberRole)
         val projectManagerUser = ProjectUser(id = 101L, user = managerUser, project = project, role = managerRole)
+        user.projectUsers.add(projectUser)
+        managerUser.projectUsers.add(projectManagerUser)
 
         val issue = Issue(id = 5L, number = 5L, title = "이슈 제목", body = "이슈 내용", project = project, authorId = user.id, state = State.OPEN)
 

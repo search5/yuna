@@ -14,6 +14,7 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
@@ -94,6 +95,8 @@ class CommentControllerSpec : DescribeSpec({
 
         val issueComment = IssueComment(id = 100L, contents = "이슈댓글", issue = issue, authorId = user.id, authorLoginId = user.loginId, authorName = user.name)
         val postingComment = PostingComment(id = 200L, contents = "게시판댓글", posting = posting, authorId = user.id, authorLoginId = user.loginId, authorName = user.name)
+
+        user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
 
         describe("POST /api/projects/{projectId}/issues/{number}/comments (이슈 댓글 작성)") {
             it("권한이 있는 멤버가 호출 시 201 Created를 반환해야 한다") {

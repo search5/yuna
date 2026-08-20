@@ -1,9 +1,9 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.ProjectRepository
-import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
@@ -116,13 +116,7 @@ class PullRequestViewController(
         project: com.github.search5.yona.domain.project.Project,
         loginUser: com.github.search5.yona.domain.user.User?
     ): Boolean {
-        if (project.projectScope == ProjectScope.PUBLIC) {
-            return true
-        }
-        return loginUser != null && (
-            projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) ||
-                accessControl.isAllowedIfGroupMember(project, loginUser)
-        )
+        return accessControl.isAllowed(loginUser, project, Operation.READ)
     }
 
     private fun renderList(
@@ -152,10 +146,8 @@ class PullRequestViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
-            }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: return "error/404"
@@ -347,10 +339,8 @@ class PullRequestViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
-            }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: return "error/404"

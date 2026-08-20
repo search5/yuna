@@ -86,6 +86,8 @@ class BoardControllerSpec : DescribeSpec({
 
         val projectUser = ProjectUser(id = 100L, user = user, project = project, role = memberRole)
         val projectManagerUser = ProjectUser(id = 101L, user = managerUser, project = project, role = managerRole)
+        user.projectUsers.add(projectUser)
+        managerUser.projectUsers.add(projectManagerUser)
 
         val posting = Posting(id = 50L, title = "포스트 제목", body = "포스트 내용", project = project, authorId = user.id, number = 1L)
 

@@ -2,19 +2,27 @@ package com.github.search5.yona.domain.comment
 
 import com.github.search5.yona.AbstractIntegrationTest
 import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.board.PostingComment
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectUser
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleRepository
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
@@ -27,6 +35,8 @@ class CommentServiceSpec @Autowired constructor(
     private val issueRepository: IssueRepository,
     private val issueCommentRepository: IssueCommentRepository,
     private val projectRepository: ProjectRepository,
+    private val projectUserRepository: ProjectUserRepository,
+    private val roleRepository: RoleRepository,
     private val userRepository: UserRepository,
     private val notificationEventRepository: NotificationEventRepository,
     private val postingRepository: PostingRepository,
@@ -41,8 +51,10 @@ class CommentServiceSpec @Autowired constructor(
                 issueRepository.deleteAll()
                 postingCommentRepository.deleteAll()
                 postingRepository.deleteAll()
+                projectUserRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
+                roleRepository.deleteAll()
             }
 
             it("멘션이 포함된 댓글을 작성하면 댓글이 저장되고 멘션된 사용자가 알림 수신자에 포함되어야 한다") {
@@ -113,6 +125,65 @@ class CommentServiceSpec @Autowired constructor(
 
                 commentService.deletePostingComment(comment1.id!!, commenter)
                 postingRepository.findById(posting.id!!).orElseThrow().numOfComments shouldBe 1
+            }
+
+            it("작성자도 매니저도 아닌 일반 프로젝트 멤버가 이슈 댓글을 수정할 수 있어야 한다 (P1-90, yona AccessControl.java:280-282 UPDATE는 isMemberOf만 있으면 허용)") {
+                val roleMember = roleRepository.save(Role(id = RoleType.MEMBER.roleType, name = "MEMBER"))
+                val author = userRepository.save(User(loginId = "issuewriter", name = "작성자", email = "issuewriter@yona.io"))
+                val otherMember = userRepository.save(User(loginId = "othermember", name = "다른멤버", email = "othermember@yona.io"))
+                val project = projectRepository.save(Project(name = "member-update-project", owner = "issuewriter"))
+                // AccessControl.isMemberOf()는 DB 조회가 아니라 User.projectUsers 엔티티 컬렉션을 직접 읽는다.
+                // projectUserRepository.save()만으로는 이미 메모리에 들고 있는 otherMember 인스턴스의
+                // projectUsers가 갱신되지 않으므로(재조회 전까지 지연 컬렉션이 초기화되지 않음) 양쪽에 반영한다.
+                val projectUser = projectUserRepository.save(ProjectUser(project = project, user = otherMember, role = roleMember))
+                otherMember.projectUsers.add(projectUser)
+
+                val issue = issueRepository.save(
+                    Issue(title = "이슈", body = "본문", project = project, authorId = author.id, authorLoginId = author.loginId, authorName = author.name)
+                )
+                val comment = issueCommentRepository.save(
+                    IssueComment(contents = "원본 댓글", issue = issue, authorId = author.id, authorLoginId = author.loginId, authorName = author.name, projectId = project.id)
+                )
+
+                val updated = commentService.updateIssueComment(comment.id!!, "다른 멤버가 수정한 댓글", otherMember)
+
+                updated.contents shouldBe "다른 멤버가 수정한 댓글"
+            }
+
+            it("프로젝트 멤버가 아닌 사용자는 이슈 댓글을 수정할 수 없어야 한다") {
+                val roleMember = roleRepository.save(Role(id = RoleType.MEMBER.roleType, name = "MEMBER"))
+                val author = userRepository.save(User(loginId = "issuewriter2", name = "작성자", email = "issuewriter2@yona.io"))
+                val stranger = userRepository.save(User(loginId = "stranger", name = "외부인", email = "stranger@yona.io"))
+                val project = projectRepository.save(Project(name = "non-member-project", owner = "issuewriter2"))
+
+                val issue = issueRepository.save(
+                    Issue(title = "이슈", body = "본문", project = project, authorId = author.id, authorLoginId = author.loginId, authorName = author.name)
+                )
+                val comment = issueCommentRepository.save(
+                    IssueComment(contents = "원본 댓글", issue = issue, authorId = author.id, authorLoginId = author.loginId, authorName = author.name, projectId = project.id)
+                )
+
+                shouldThrow<IllegalArgumentException> {
+                    commentService.updateIssueComment(comment.id!!, "외부인이 시도한 수정", stranger)
+                }
+            }
+
+            it("작성자도 매니저도 아닌 일반 프로젝트 멤버가 게시글 댓글을 삭제할 수 있어야 한다 (P1-90)") {
+                val roleMember = roleRepository.save(Role(id = RoleType.MEMBER.roleType, name = "MEMBER"))
+                val author = userRepository.save(User(loginId = "postwriter", name = "글쓴이", email = "postwriter@yona.io"))
+                val otherMember = userRepository.save(User(loginId = "othermember2", name = "다른멤버2", email = "othermember2@yona.io"))
+                val project = projectRepository.save(Project(name = "member-delete-project", owner = "postwriter"))
+                val projectUser = projectUserRepository.save(ProjectUser(project = project, user = otherMember, role = roleMember))
+                otherMember.projectUsers.add(projectUser)
+
+                val posting = postingRepository.save(Posting(title = "글", body = "본문", project = project, number = 1L))
+                val comment = postingCommentRepository.save(
+                    PostingComment(contents = "댓글", posting = posting, authorId = author.id, authorLoginId = author.loginId, authorName = author.name, projectId = project.id)
+                )
+
+                commentService.deletePostingComment(comment.id!!, otherMember)
+
+                postingCommentRepository.findById(comment.id!!).isPresent shouldBe false
             }
         }
     }
