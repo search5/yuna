@@ -478,6 +478,9 @@ class IssueServiceImpl(
     // legacy와 마찬가지로 mover 자신을 수신자에서 제외하지 않는다 — 본인이 watcher/author/assignee/
     // voter였다면 자신이 실행한 이동에 대한 알림도 함께 받는다(다른 알림들과 달리 self-제외가 없음).
     private fun publishIssueMovedNotification(previous: Project, issue: Issue, receivers: Set<User>, mover: User) {
+        val oldValue = "${previous.owner}/${previous.name}"
+        val newValue = "${issue.project.owner}/${issue.project.name}"
+
         val notificationEvent = NotificationEvent(
             title = "Re: [${issue.project.name}] ${issue.title} (#${issue.number})",
             senderId = mover.id,
@@ -485,12 +488,16 @@ class IssueServiceImpl(
             resourceType = ResourceType.ISSUE_POST,
             resourceId = issue.id.toString(),
             eventType = EventType.ISSUE_MOVED,
-            oldValue = "${previous.owner}/${previous.name}",
-            newValue = "${issue.project.owner}/${issue.project.name}"
+            oldValue = oldValue,
+            newValue = newValue
         )
         notificationEvent.receivers = receivers.toMutableSet()
 
         notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
+
+        // yona IssueApp.addIssueMovedNotification()의 IssueEvent.addFromNotificationEvent(notiEvent,
+        // originalIssue, loginId) 대응 (P1-70) — 알림과 함께 이슈 타임라인에도 이동 이력을 남긴다.
+        recordIssueEvent(issue, EventType.ISSUE_MOVED, mover.loginId!!, oldValue, newValue)
     }
 
     // yona models/IssueEvent.java의 add()/addWithoutSkipEvent() 대응(draft-time 병합/취소, P1-38).
