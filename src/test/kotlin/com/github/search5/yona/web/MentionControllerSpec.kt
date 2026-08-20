@@ -131,6 +131,7 @@ class MentionControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("owner", "p") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(11L, 1L) } returns true
+            me.projectUsers.add(ProjectUser(id = 9001L, user = me, project = project, role = memberRole))
             every { projectUserRepository.findByProjectId(11L) } returns listOf(
                 ProjectUser(id = 900L, user = me, project = project, role = memberRole),
                 ProjectUser(id = 901L, user = other, project = project, role = memberRole)
@@ -168,6 +169,7 @@ class MentionControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("owner", "p2") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(meEnglishSpeaker)
             every { projectUserRepository.existsByProjectIdAndUserId(12L, 1L) } returns true
+            meEnglishSpeaker.projectUsers.add(ProjectUser(id = 9002L, user = meEnglishSpeaker, project = project, role = memberRole))
             every { projectUserRepository.findByProjectId(12L) } returns listOf(
                 ProjectUser(id = 902L, user = bilingual, project = project, role = memberRole)
             )
@@ -212,6 +214,7 @@ class MentionControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("owner", "p2") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(13L, 1L) } returns true
+            me.projectUsers.add(ProjectUser(id = 9003L, user = me, project = project, role = memberRole))
             every { projectUserRepository.findByProjectId(13L) } returns listOf(
                 ProjectUser(id = 902L, user = admin, project = project, role = memberRole)
             )
@@ -238,6 +241,7 @@ class MentionControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("owner", "p5") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(20L, 1L) } returns true
+            me.projectUsers.add(ProjectUser(id = 9004L, user = me, project = project, role = memberRole))
             every { projectUserRepository.findByProjectId(20L) } returns emptyList()
             every { issueRepository.findByProjectAndNumber(project, 3L) } returns issue
             every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(600L) } returns listOf(
@@ -275,6 +279,7 @@ class MentionControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("owner", "p6") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(21L, 1L) } returns true
+            me.projectUsers.add(ProjectUser(id = 9005L, user = me, project = project, role = memberRole))
             every { projectUserRepository.findByProjectId(21L) } returns emptyList()
             every { issueRepository.findByProject(project) } returns listOf(issue)
             every { watchRepository.findByResourceTypeAndResourceId(ResourceType.PROJECT, "21") } returns listOf(watch)
@@ -301,6 +306,7 @@ class MentionControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("owner", "p7") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(22L, 1L) } returns true
+            me.projectUsers.add(ProjectUser(id = 9006L, user = me, project = project, role = memberRole))
             every { projectUserRepository.findByProjectId(22L) } returns emptyList()
             every { issueRepository.findByProjectAndNumber(project, 4L) } returns issue
             every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(800L) } returns emptyList()
@@ -339,6 +345,7 @@ class MentionControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndName("owner", "cd1") } returns Optional.of(project)
                 every { userRepository.findByLoginId("me") } returns Optional.of(me)
                 every { projectUserRepository.existsByProjectIdAndUserId(30L, 1L) } returns true
+                me.projectUsers.add(ProjectUser(id = 9007L, user = me, project = project, role = memberRole))
                 every { projectUserRepository.findByProjectId(30L) } returns emptyList()
                 every { repositoryService.getRepository(project) } returns repo
                 every { repo.getCommit("abc123") } returns commit
@@ -388,6 +395,7 @@ class MentionControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndName("owner", "pr1") } returns Optional.of(project)
                 every { userRepository.findByLoginId("me") } returns Optional.of(me)
                 every { projectUserRepository.existsByProjectIdAndUserId(31L, 1L) } returns true
+                me.projectUsers.add(ProjectUser(id = 9008L, user = me, project = project, role = memberRole))
                 every { projectUserRepository.findByProjectId(31L) } returns emptyList()
                 every { pullRequestRepository.findById(950L) } returns Optional.of(pullRequest)
                 every { commentThreadRepository.findByPullRequest(pullRequest) } returns listOf(thread)
@@ -411,6 +419,7 @@ class MentionControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndName("owner", "pr2") } returns Optional.of(project)
                 every { userRepository.findByLoginId("me") } returns Optional.of(me)
                 every { projectUserRepository.existsByProjectIdAndUserId(32L, 1L) } returns true
+                me.projectUsers.add(ProjectUser(id = 9009L, user = me, project = project, role = memberRole))
                 every { pullRequestRepository.findById(9999L) } returns Optional.empty()
 
                 mockMvc.perform(
@@ -430,6 +439,7 @@ class MentionControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("owner", "p3") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(14L, 1L) } returns true
+            me.projectUsers.add(ProjectUser(id = 9010L, user = me, project = project, role = memberRole))
             every { issueRepository.findForMention(project, "", PageRequest.of(0, 20)) } returns listOf(issue)
 
             mockMvc.perform(
@@ -448,6 +458,7 @@ class MentionControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("owner", "p4") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(15L, 1L) } returns true
+            me.projectUsers.add(ProjectUser(id = 9011L, user = me, project = project, role = memberRole))
 
             mockMvc.perform(
                 get("/api/owner/p4/mentionList")

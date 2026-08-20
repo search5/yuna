@@ -78,6 +78,8 @@ class MilestoneControllerSpec : DescribeSpec({
 
         val projectUser = ProjectUser(id = 100L, user = user, project = project, role = memberRole)
         val projectManagerUser = ProjectUser(id = 101L, user = managerUser, project = project, role = managerRole)
+        user.projectUsers.add(projectUser)
+        managerUser.projectUsers.add(projectManagerUser)
 
         val milestone = Milestone(id = 30L, title = "마일스톤 1", contents = "상세 내용", state = State.OPEN, project = project)
 

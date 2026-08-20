@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingComment
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueCommentRepository
@@ -40,10 +41,7 @@ class CommentController(
     }
 
     private fun checkReadPermission(project: Project, user: User?): Boolean {
-        if (project.projectScope == ProjectScope.PUBLIC) return true
-        if (user == null) return false
-        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            accessControl.isAllowedIfGroupMember(project, user)
+        return accessControl.isAllowed(user, project, Operation.READ)
     }
 
     // 이슈 댓글 생성

@@ -130,8 +130,10 @@ class ProjectViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}") {
             it("비공개 프로젝트일 때 멤버라면 200 OK와 project/home 뷰를 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = managerRole))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { projectUserRepository.findByProjectId(1L) } returns listOf(projectUser)
                 every { watchService.isWatching(any(), any(), any()) } returns false
@@ -178,8 +180,10 @@ class ProjectViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/members") {
             it("멤버라면 200 OK와 project/members 뷰를 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 901L, user = memberUser, project = project, role = managerRole))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { projectUserRepository.findByProjectId(1L) } returns listOf(projectUser)
 

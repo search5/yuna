@@ -1,11 +1,11 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.board.PostingService
 import com.github.search5.yona.domain.project.ProjectRepository
-import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.PageRequest
@@ -60,10 +60,8 @@ class BoardViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
-            }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val actualPage = if (pageNum != null) {
@@ -115,10 +113,8 @@ class BoardViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
-            }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val posting = postingService.getPosting(project.id!!, number) ?: return "error/404"

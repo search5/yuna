@@ -78,6 +78,8 @@ class IssueLabelControllerSpec : DescribeSpec({
 
         val projectUser = ProjectUser(id = 100L, user = user, project = project, role = memberRole)
         val projectManagerUser = ProjectUser(id = 101L, user = managerUser, project = project, role = managerRole)
+        user.projectUsers.add(projectUser)
+        managerUser.projectUsers.add(projectManagerUser)
 
         val category = IssueLabelCategory(id = 200L, name = "카테고리 1", isExclusive = false, project = project)
         val label = IssueLabel(id = 300L, category = category, color = "#ffffff", name = "버그", project = project)

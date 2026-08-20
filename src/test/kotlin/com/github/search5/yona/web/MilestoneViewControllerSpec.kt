@@ -11,7 +11,10 @@ import com.github.search5.yona.domain.milestone.MilestoneService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.attachment.AttachmentRepository
@@ -87,14 +90,19 @@ class MilestoneViewControllerSpec : DescribeSpec({
     describe("MilestoneViewController 템플릿 연동 테스트") {
         val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
         val user = User(id = 10L, loginId = "testuser", name = "테스트유저")
+        // isAllowed(user, project, Operation.READ)는 엔티티 관계(user.isMemberOf) 기반이라, 이 describe
+        // 블록에서 공유되는 `user`를 직접 멤버로 바꾸면 아래 "비멤버 403" 테스트가 깨진다 — 필요한 개별
+        // 테스트에서만 별도의 memberUser를 만들어 쓴다.
         val milestone = Milestone(id = 2L, title = "마일스톤 테스트", project = project)
 
         val userAuth = UsernamePasswordAuthenticationToken("testuser", "password")
 
         describe("GET /{owner}/{projectName}/milestones") {
             it("비공개 프로젝트일 때 멤버라면 200 OK와 milestone/list 뷰를 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { milestoneService.getMilestones(1L, State.OPEN) } returns listOf(milestone)
                 every { issueRepository.findByMilestone(milestone) } returns emptyList()
@@ -138,8 +146,10 @@ class MilestoneViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/milestone/{id}") {
             it("멤버라면 200 OK와 milestone/view 뷰를 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 901L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { milestoneService.getMilestone(2L) } returns milestone
                 every { issueRepository.findByMilestone(milestone) } returns emptyList()

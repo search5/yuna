@@ -1,8 +1,8 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.project.ProjectRepository
-import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.user.UserRepository
@@ -38,10 +38,12 @@ class CompareViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         
         // 권한 검증
-        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
+        if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
+        } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val repository = repositoryService.getRepository(project)

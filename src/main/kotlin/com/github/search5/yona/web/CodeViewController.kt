@@ -1,8 +1,8 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.project.ProjectRepository
-import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
@@ -45,10 +45,12 @@ class CodeViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
+        if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
+        } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val repository = repositoryService.getRepository(project)
@@ -88,10 +90,12 @@ class CodeViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
+        if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
+        } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val decodedBranch = java.net.URLDecoder.decode(branch, "UTF-8")
@@ -124,10 +128,12 @@ class CodeViewController(
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
+        if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
             }
+        } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
         val decodedRev = java.net.URLDecoder.decode(rev, "UTF-8")
@@ -202,10 +208,12 @@ class CodeViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
+        if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
+        } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val decodedBranch = java.net.URLDecoder.decode(branch, "UTF-8")
@@ -241,10 +249,12 @@ class CodeViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
+        if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
+        } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return "error/403"
         }
 
         val repository = repositoryService.getRepository(project)

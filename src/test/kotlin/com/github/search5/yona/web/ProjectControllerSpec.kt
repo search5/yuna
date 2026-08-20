@@ -267,6 +267,7 @@ class ProjectControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns true
+                user.projectUsers.add(ProjectUser(id = 400L, user = user, project = branchProject, role = Role(id = RoleType.MEMBER.roleType)))
                 every { pushedBranchRepository.findByProjectAndPushedDateAfter(branchProject, any()) } returns listOf(branch)
 
                 mockMvc.perform(

@@ -21,6 +21,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueEvent
@@ -46,10 +47,7 @@ class IssueController(
     }
 
     private fun checkReadPermission(project: Project, user: User?): Boolean {
-        if (project.projectScope == ProjectScope.PUBLIC) return true
-        if (user == null) return false
-        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            accessControl.isAllowedIfGroupMember(project, user)
+        return accessControl.isAllowed(user, project, Operation.READ)
     }
 
     // yona AccessControl.java:250-259,274-279 대응 (P1-82). 이슈 단건 READ는 프로젝트 수준
