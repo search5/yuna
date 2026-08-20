@@ -139,11 +139,17 @@
 | P2-09 | [x] | git 프로토콜(clone/push)로만 프로젝트에 접근하는 사용자는 "최근 방문 프로젝트"에 기록되지 않음(웹 UI로 한 번이라도 들어가면 잡힘 — 영향 작음) | `app/controllers/GitApp.java:137 service()`(`user.visits(project)` → `RecentProject.addNew(user, project)`, `app/models/User.java:856-862`) | `config/GitServletConfig.kt`, `config/git/GitProjectVisitRecorder.kt`(신규), `domain/project/RecentProjectRepository.kt` | **완료** — 아래 완료 로그 참고 |
 | P2-10 | [x] | **표현 정정**: "yona 1시간 기본값 대비 24배 차이"는 코드 레벨 fallback만 본 것 — 실제 배포용 conf 템플릿(`application.conf.default:253`)엔 6시간으로 오버라이드돼 있어 정확히는 6시간 대비 4배 차이. yona는 값을 설정 가능하게 하고 0 이하면 폴링 자체를 비활성화하는데 yuna는 둘 다 하드코딩(메커니즘 자체는 동일 — git ls-remote+semver 비교) | `app/models/YobiUpdate.java:40-41`(기본 확인 주기 1시간이나 `conf/application.conf.default:253`에서 6시간으로 오버라이드), `:52-67 onStart()`(`interval <= 0`이면 스케줄러 자체를 등록하지 않음) | `domain/support/YonaUpdateService.kt` | **완료** — 아래 완료 로그 참고 |
 | P2-11 | [x] | **불확실 해소**: 백엔드만 없는 게 아니라 **프론트엔드(템플릿)는 이미 `POST /user/setDefaultLoginPage` 호출 버튼을 갖고 있었음**(`index.html`/`mySeriesMenuTab.html`) — 즉 사용자에게 노출된 버튼을 누르면 404가 나는 실제 버그. 로그인 후 이동할 기본 페이지를 사용자별로 기억하는 기능(`UserSetting.loginDefaultPage`) | `app/controllers/UserApp.java:1372-1380 setDefaultLoginPage()`, `app/models/UserSetting.java`, `app/controllers/Application.java:45-52 index()`(`loginDefaultPage`가 설정돼 있으면 사이트 루트 접속 시 그 경로로 redirect) | `domain/user/{UserSetting,UserSettingRepository}.kt`(신규), `web/UserController.kt`, `web/IndexController.kt` | **완료** — 아래 완료 로그 참고 |
-| P2-12 | [ ] | [불확실] 이슈 담당자(assignee) 기반 권한 오버라이드가 일부 엔드포인트에서만 적용됨 | `app/utils/AccessControl.java isAllowedIfAssignee`(담당자에게도 author와 동급 권한 부여) | `web/IssueController.kt`(`changeState`(285-303행)에서만 `isAssignee` 인라인 체크 존재, `updateIssue`/`moveIssue`/`publishIssue`/`deleteIssue`(180/217/247/269행)는 `isManagerOrAuthor`만 사용) | 2026-08-20 사용자 요청 감사에서 발견. yona의 ASSIGN_ISSUE 규칙상 담당자는 대개 프로젝트 멤버/조직 그룹멤버라 멤버십 체크로 이미 커버될 가능성 있어 실제 영향 범위 불확실 — 추가 확인 필요. 착수 여부는 사용자 결정 대기 |
+| P2-12 | [x] | **불확실 해소**: 코드로 명확히 확인됨 — `isAllowedIfAssignee`는 담당자 지정이 프로젝트 멤버십과 무관하게 성립 가능하므로(담당자≠반드시 멤버) 실제 권한 축소 버그였음. 이슈 담당자(assignee) 기반 권한 오버라이드가 일부 엔드포인트에서만 적용됨 | `app/utils/AccessControl.java:244-248`(`user.isManagerOf(project) \|\| isAllowedIfAuthor \|\| isAllowedIfAssignee` — operation과 무관하게 이슈 담당자에게 author와 동급 권한 부여), `:398-406 isAllowedIfAssignee()`(ISSUE_POST 전용, 프로젝트 멤버십과 무관) | `web/IssueController.kt`(`isManagerOrAuthor` → `isManagerOrAuthorOrAssignee`로 확장, 5개 엔드포인트 전부 배선) | **완료** — 아래 완료 로그 참고 |
 
 ---
 
 ## 완료 로그
+
+- **2026-08-20 — P2-12**: 이슈 담당자(assignee) 기반 권한 오버라이드를 쓰기 엔드포인트 전체에 일관 적용.
+  - 착수 전 [불확실] 재확인 중 판정 확정: yona `AccessControl.java:244-248`을 다시 읽어보니 `isManagerOf || isAllowedIfAuthor || isAllowedIfAssignee`는 **operation(READ/UPDATE/DELETE 등)과 무관하게** 이 지점에서 조기 허용되고, `isAllowedIfAssignee()`(:398-406)는 프로젝트 멤버십과 완전히 무관하게 "이 이슈의 담당자인가"만 본다 — 즉 담당자 지정이 항상 프로젝트 멤버십을 함의하지 않는 이상(대부분 그렇지만 보장되지 않음) 실제 권한 축소 버그였음을 코드로 확정, "불확실"에서 해소.
+  - `IssueController.kt`: `isManagerOrAuthor(project, authorId, user)`를 `isManagerOrAuthorOrAssignee(project, issue, user)`로 확장(파라미터를 `authorId` 단독에서 `issue` 전체로 변경, 내부에서 `issue.assignee?.user?.id == user.id` 추가 체크) — `updateIssue`/`moveIssue`/`publishIssue`/`deleteIssue` 4곳에 배선. 기존에 이미 `isAssignee`를 별도 인라인 체크하던 `changeState`는 이 공용 헬퍼를 쓰도록 정리해 중복 제거.
+  - 테스트: `IssueControllerSpec.kt` +4(각 엔드포인트별로 "작성자도 관리자도 아니지만 담당자면 허용" 케이스: 수정/이동/발행/삭제).
+  - 검증: `./gradlew test --tests "...IssueControllerSpec"` 28 tests 전체 통과.
 
 - **2026-08-20 — P2-11**: 로그인 후 이동할 "기본 페이지"를 사용자별로 기억하는 기능 신규 이식.
   - 착수 전 [불확실] 재확인 중 발견: 등록 당시엔 "yuna 코드 전혀 없음"으로만 파악했으나, 실제로는 **프론트엔드 템플릿(`index.html`, `common/mySeriesMenuTab.html`)이 이미 `POST /user/setDefaultLoginPage?path=...`를 호출하는 "기본 페이지로 지정" 버튼을 갖고 있었음** — 백엔드 라우트만 누락돼, 배포된 상태로는 사용자가 그 버튼을 누르면 404가 나는 실제 동작하는 버그였다(순수 미착수 기능이 아니었음).

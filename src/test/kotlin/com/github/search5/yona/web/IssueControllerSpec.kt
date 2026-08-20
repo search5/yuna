@@ -288,6 +288,39 @@ class IssueControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
             }
+
+            // yona AccessControl.java:244-248 isAllowedIfAssignee() 대응 (P2-12). 담당자는
+            // isManagerOrAuthor 여부와 무관하게 author와 동급 쓰기 권한을 가진다.
+            it("작성자도 관리자도 아니지만 담당자면 이슈를 수정할 수 있어야 한다") {
+                val assigneeIssue = Issue(
+                    id = 6L, number = 6L, title = "담당 이슈", body = "본문", project = project,
+                    authorId = user.id, state = State.OPEN, assignee = Assignee(user = otherUser, project = project)
+                )
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 6L) } returns assigneeIssue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+                every { issueService.updateIssue(6L, "담당자가 수정", "수정 내용", otherUser, null, null, null) } returns assigneeIssue
+
+                val jsonContent = """
+                    {
+                        "title": "담당자가 수정",
+                        "body": "수정 내용",
+                        "milestoneId": null,
+                        "assigneeId": null,
+                        "labelIds": null
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/6")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isOk)
+            }
         }
 
         // yona IssueApp.editIssue()의 hasTargetProject() 대응 (P1-48).
@@ -375,6 +408,35 @@ class IssueControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isBadRequest)
             }
+
+            // yona AccessControl.java:244-248 isAllowedIfAssignee() 대응 (P2-12)
+            it("작성자도 관리자도 아니지만 담당자면 이슈를 이동시킬 수 있어야 한다") {
+                val targetProject = Project(id = 3L, name = "TargetProject", projectScope = ProjectScope.PUBLIC)
+                val assigneeIssue = Issue(
+                    id = 6L, number = 6L, title = "담당 이슈", body = "본문", project = project,
+                    authorId = user.id, state = State.OPEN, assignee = Assignee(user = otherUser, project = project)
+                )
+                val movedIssue = Issue(id = 6L, number = 1L, title = "담당 이슈", body = "본문", project = targetProject, authorId = user.id, state = State.OPEN)
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 6L) } returns assigneeIssue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+                every { projectRepository.findById(3L) } returns Optional.of(targetProject)
+                every { issueService.moveIssue(6L, 3L, otherUser) } returns movedIssue
+
+                val jsonContent = """{ "targetProjectId": 3 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/6/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { issueService.moveIssue(6L, 3L, otherUser) }
+            }
         }
 
         // yona IssueApp.editIssue()의 "if (issue.isPublish) { ... }" 발행 전환 대응 (P1-65).
@@ -416,6 +478,26 @@ class IssueControllerSpec : DescribeSpec({
                 mockMvc.perform(post("/api/projects/1/issues/999/publish").principal(userAuth))
                     .andExpect(status().isNotFound)
             }
+
+            // yona AccessControl.java:244-248 isAllowedIfAssignee() 대응 (P2-12)
+            it("작성자도 관리자도 아니지만 담당자면 초안을 발행할 수 있어야 한다") {
+                val draftIssue = Issue(
+                    id = 6L, number = 6L, title = "담당 초안", body = "본문", project = project,
+                    authorId = user.id, state = State.DRAFT, assignee = Assignee(user = otherUser, project = project)
+                )
+                val publishedIssue = Issue(id = 6L, number = 9L, title = "담당 초안", body = "본문", project = project, authorId = user.id, state = State.OPEN)
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 6L) } returns draftIssue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+                every { issueService.publishIssue(6L, otherUser) } returns publishedIssue
+
+                mockMvc.perform(post("/api/projects/1/issues/6/publish").principal(otherAuth))
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { issueService.publishIssue(6L, otherUser) }
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/issues/{issueId}") {
@@ -429,6 +511,26 @@ class IssueControllerSpec : DescribeSpec({
                 every { attachmentService.deleteAll(com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "5") } returns Unit
 
                 mockMvc.perform(delete("/api/projects/1/issues/5").principal(managerAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.status").value("success"))
+            }
+
+            // yona AccessControl.java:244-248 isAllowedIfAssignee() 대응 (P2-12)
+            it("작성자도 관리자도 아니지만 담당자면 이슈를 삭제할 수 있어야 한다") {
+                val assigneeIssue = Issue(
+                    id = 6L, number = 6L, title = "담당 이슈", body = "본문", project = project,
+                    authorId = user.id, state = State.OPEN, assignee = Assignee(user = otherUser, project = project)
+                )
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 6L) } returns assigneeIssue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+                every { issueRepository.delete(assigneeIssue) } returns Unit
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(6L) } returns emptyList()
+                every { attachmentService.deleteAll(com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "6") } returns Unit
+
+                mockMvc.perform(delete("/api/projects/1/issues/6").principal(otherAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
             }
