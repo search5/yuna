@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.milestone.MilestoneService
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -92,7 +93,7 @@ class MilestoneViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }
@@ -128,7 +129,7 @@ class MilestoneViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }
@@ -172,7 +173,7 @@ class MilestoneViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
             return "error/403"
         }
 
@@ -194,7 +195,7 @@ class MilestoneViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
             return "error/403"
         }
 
@@ -240,7 +241,7 @@ class MilestoneViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
 
-        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser)) {
             return "error/403"
         }
 
@@ -311,7 +312,7 @@ class MilestoneViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
 
-        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser)) {
             return "error/403"
         }
 
@@ -390,7 +391,7 @@ class MilestoneViewController(
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
-        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser)) {
             return "error/403"
         }
         val milestone = milestoneService.getMilestone(id) ?: return "error/404"
@@ -419,7 +420,7 @@ class MilestoneViewController(
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
-        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser)) {
             return "error/403"
         }
         val milestone = milestoneService.getMilestone(id) ?: return "error/404"

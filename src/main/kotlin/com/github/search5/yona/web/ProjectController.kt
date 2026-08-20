@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -42,7 +43,8 @@ class ProjectController(
     private fun checkReadPermission(project: Project, user: User?): Boolean {
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
-        return isProjectMember(project.id!!, user.id!!)
+        return isProjectMember(project.id!!, user.id!!) ||
+            AccessControl.isAllowedIfGroupMember(project, user)
     }
 
     @GetMapping("/api/projects/search")

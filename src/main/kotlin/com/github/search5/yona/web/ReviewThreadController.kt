@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -167,11 +168,13 @@ class ReviewThreadController(
     private fun checkCodeAccessibility(project: Project, user: User?): Boolean {
         if (project.projectScope != ProjectScope.PUBLIC) {
             if (user == null) return false
-            return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+            return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
+                AccessControl.isAllowedIfGroupMember(project, user)
         }
         if (project.isCodeAccessibleMemberOnly == true) {
             if (user == null) return false
-            return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+            return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
+                AccessControl.isAllowedIfGroupMember(project, user)
         }
         return true
     }

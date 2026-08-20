@@ -60,6 +60,31 @@ class BranchApiControllerSpec : DescribeSpec({
 
                 verify { playRepository.setDefaultBranch("feature-a") }
             }
+
+            // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
+            it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 성공해야 한다") {
+                val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val groupProject = Project(id = 1L, name = "TestProject", owner = "owner", vcs = "git", projectScope = ProjectScope.PROTECTED, organization = org)
+                org.organizationUsers.add(
+                    com.github.search5.yona.domain.organization.OrganizationUser(
+                        id = 1L, user = user, organization = org,
+                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                    )
+                )
+
+                every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(groupProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
+                every { repositoryService.getRepository(groupProject) } returns playRepository
+                every { playRepository.setDefaultBranch("feature-a") } returns Unit
+
+                mockMvc.perform(
+                    post("/owner/TestProject/code/feature-a/setAsDefault").principal(userAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify { playRepository.setDefaultBranch("feature-a") }
+            }
         }
 
         describe("DELETE /{owner}/{projectName}/code/{branch}") {

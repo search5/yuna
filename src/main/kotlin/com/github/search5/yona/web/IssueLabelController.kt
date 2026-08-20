@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.issue.DuplicateLabelCategoryNameException
 import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.IssueLabelCategory
@@ -33,7 +34,8 @@ class IssueLabelController(
     private fun checkReadPermission(project: Project, user: User?): Boolean {
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
-        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
+            AccessControl.isAllowedIfGroupMember(project, user)
     }
 
     private fun isProjectManager(projectId: Long, userId: Long): Boolean {

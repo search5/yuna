@@ -129,6 +129,29 @@ class ProjectViewControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/owner/TestProj").principal(userAuth))
                     .andExpect(view().name("error/403"))
             }
+
+            // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
+            it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
+                val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                groupOrg.organizationUsers.add(
+                    com.github.search5.yona.domain.organization.OrganizationUser(
+                        id = 1L, user = user, organization = groupOrg,
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
+                    )
+                )
+                val groupProject = Project(id = 11L, name = "group-project", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
+
+                every { projectRepository.findByOwnerAndName("owner", "group-project") } returns Optional.of(groupProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(11L, 10L) } returns false
+                every { projectUserRepository.findByProjectId(11L) } returns emptyList()
+                every { watchService.isWatching(any(), any(), any()) } returns false
+                every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+                mockMvc.perform(get("/owner/group-project").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("project/home"))
+            }
         }
 
         describe("GET /{owner}/{projectName}/members") {

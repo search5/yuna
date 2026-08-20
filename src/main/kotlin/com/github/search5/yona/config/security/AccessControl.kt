@@ -121,7 +121,10 @@ object AccessControl {
         }
     }
 
-    private fun isAllowedIfGroupMember(project: Project, user: User): Boolean {
+    // yona AccessControl.java:90-94 isAllowedIfGroupMember() 대응 (P1-57). 프로젝트 직접 멤버가
+    // 아니어도 조직(그룹) 소속이면 PUBLIC/PROTECTED 프로젝트에 한해 권한을 준다 — web 컨트롤러들의
+    // checkReadPermission/checkWritePermission이 이 규칙을 호출할 수 있도록 공개.
+    fun isAllowedIfGroupMember(project: Project, user: User): Boolean {
         val organization = project.organization ?: return false
         val hasGroup = project.organization != null
         val isPublicOrProtected = project.isPublic || project.isProtected

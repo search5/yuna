@@ -701,7 +701,10 @@ class IssueViewController(
         val issue = issueRepository.findByProjectAndNumber(project, number)
             ?: return "error/404"
 
-        if (issue.authorLoginId != loginUser.loginId && !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        if (issue.authorLoginId != loginUser.loginId &&
+            !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) &&
+            !AccessControl.isAllowedIfGroupMember(project, loginUser)
+        ) {
             return "error/403"
         }
 

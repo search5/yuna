@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -35,7 +36,8 @@ class VoteController(
     private fun checkReadPermission(project: Project, user: User?): Boolean {
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
-        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
+            AccessControl.isAllowedIfGroupMember(project, user)
     }
 
     @PostMapping(value = ["/{owner}/{projectName}/issue/{issueNumber}/vote", "/{owner}/{projectName}/issues/{issueNumber}/vote"])

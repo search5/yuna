@@ -72,6 +72,31 @@ class BranchViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("error/403"))
             }
+
+            // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
+            it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
+                val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val groupUser = com.github.search5.yona.domain.user.User(id = 10L, loginId = "groupuser", name = "그룹멤버")
+                groupOrg.organizationUsers.add(
+                    com.github.search5.yona.domain.organization.OrganizationUser(
+                        id = 1L, user = groupUser, organization = groupOrg,
+                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                    )
+                )
+                val groupProject = Project(id = 5L, owner = "owner", name = "group-project", vcs = "git", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
+                val groupAuth = org.springframework.security.authentication.UsernamePasswordAuthenticationToken("groupuser", "password")
+
+                every { projectRepository.findByOwnerAndName("owner", "group-project") } returns Optional.of(groupProject)
+                every { userRepository.findByLoginId("groupuser") } returns Optional.of(groupUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(5L, 10L) } returns false
+                every { repositoryService.getRepository(groupProject) } returns playRepository
+                every { playRepository.getBranches() } returns listOf(headBranch, otherBranch)
+                every { playRepository.getHeadBranch() } returns headBranch
+
+                mockMvc.perform(get("/owner/group-project/branches").principal(groupAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/branches"))
+            }
         }
     }
 })

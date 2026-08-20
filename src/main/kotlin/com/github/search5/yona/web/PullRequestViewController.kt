@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -117,7 +118,10 @@ class PullRequestViewController(
         if (project.projectScope == ProjectScope.PUBLIC) {
             return true
         }
-        return loginUser != null && projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)
+        return loginUser != null && (
+            projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) ||
+                AccessControl.isAllowedIfGroupMember(project, loginUser)
+        )
     }
 
     private fun renderList(
@@ -148,7 +152,7 @@ class PullRequestViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }
@@ -236,7 +240,7 @@ class PullRequestViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
             return "error/403"
         }
 
@@ -343,7 +347,7 @@ class PullRequestViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }
