@@ -135,6 +135,35 @@ class MentionControllerSpec : DescribeSpec({
                 .andExpect(jsonPath("$.result[4].name").value("@group all: "))
         }
 
+        // yona ProjectApp.collectedUsersToMentionList() 대응 (P1-58). name/searchText가 user.name이
+        // 아니라 요청자(currentUser)의 언어 설정에 따른 getDisplayName()을 써야 한다.
+        it("mentionType=user: name/searchText는 user.name이 아니라 요청자 언어에 맞는 getDisplayName()을 써야 한다") {
+            val meEnglishSpeaker = User(id = 1L, loginId = "me", name = "나", lang = "en")
+            val meEnglishSpeakerAuth = UsernamePasswordAuthenticationToken("me", "password")
+            val project = Project(id = 12L, name = "p2", owner = "owner", projectScope = ProjectScope.PRIVATE)
+            val bilingual = User(
+                id = 4L, loginId = "bilingual", name = "홍길동[개발팀]",
+                englishName = "Gildong Hong", lang = "ko"
+            )
+
+            every { projectRepository.findByOwnerAndName("owner", "p2") } returns Optional.of(project)
+            every { userRepository.findByLoginId("me") } returns Optional.of(meEnglishSpeaker)
+            every { projectUserRepository.existsByProjectIdAndUserId(12L, 1L) } returns true
+            every { projectUserRepository.findByProjectId(12L) } returns listOf(
+                ProjectUser(id = 902L, user = bilingual, project = project, role = memberRole)
+            )
+
+            mockMvc.perform(
+                get("/api/owner/p2/mentionList")
+                    .param("mentionType", "user")
+                    .principal(meEnglishSpeakerAuth)
+            )
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.result[0].loginid").value("bilingual"))
+                .andExpect(jsonPath("$.result[0].name").value("Gildong Hong [개발팀]"))
+                .andExpect(jsonPath("$.result[0].searchText").value("홍길동[개발팀]Gildong Hong [개발팀]bilingual"))
+        }
+
         it("mentionType=user: 공개 프로젝트에서 query가 있으면 전역 사용자 검색 결과를 써야 한다") {
             val project = Project(id = 12L, name = "pub", owner = "owner", projectScope = ProjectScope.PUBLIC)
             val searched = User(id = 4L, loginId = "found", name = "검색됨")
