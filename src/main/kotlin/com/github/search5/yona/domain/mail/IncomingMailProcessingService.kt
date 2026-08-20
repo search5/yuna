@@ -32,13 +32,12 @@ import org.springframework.transaction.annotation.Transactional
  * 의도적으로 다루지 않는 범위(follow-up, docs/PARITY_BACKLOG.md 참고):
  *  - MIME multipart/HTML 본문 파싱, cid 이미지 치환 (텍스트 본문만 처리 — 첨부파일 저장은 P1-29에서 구현됨)
  *  - 코드리뷰(COMMENT_THREAD)/커밋(COMMIT_COMMENT) 댓글 스레드로의 답장 라우팅은 P1-30에서 구현됨.
- *    NotificationMailDigestScheduler(P1-27)가 발신 메일에 결정론적 Message-ID(Resource.getMessageId()
- *    포맷 대응)를 붙이지만, In-Reply-To/References 기반 라우팅(resolveThreads())은 그 Message-ID가
- *    OriginalEmail 테이블에 기록돼 있어야 매칭되는데 발신 메일은 OriginalEmail을 남기지 않는다.
- *    다만 Reply-To 헤더 자체가 이미 리소스 상세 주소(owner/project/<resourceType>/<resourceId>,
- *    resolveDirectResource() 대응)로 설정되므로, 답장은 In-Reply-To 매칭 없이도 수신 주소만으로
- *    올바른 스레드를 찾는다 — 다만 REVIEW_COMMENT/COMMIT_COMMENT는 아직 알림을 생성하는 곳이 없어
- *    (docs/PARITY_BACKLOG.md 참고) 이 경로 자체가 아직 발신 쪽에서 쓰이지 않는다.
+ *    Reply-To 헤더 자체가 이미 리소스 상세 주소(owner/project/<resourceType>/<resourceId>,
+ *    resolveDirectResource() 대응)로 설정되므로 수신 주소만으로도 스레드를 찾을 수 있고, 여기에 더해
+ *    In-Reply-To/References 기반 라우팅(resolveThreads())도 OriginalEmail 미스 시 발신 Message-ID의
+ *    결정론적 포맷(computeMessageId() 대응)을 직접 역파싱하는 폴백을 갖춰(P1-60, yona
+ *    EmailHandler.findResourcesByMessageId()의 IMAPMessageUtil.getIdLeftFromMessageId()+
+ *    Resource.findByPath() 대응) UI에서 만든 리소스(OriginalEmail이 없는)에 대한 답장도 매칭한다.
  *  - "help" 자동응답, 수신 거부 사유 회신 메일은 P1-31에서 구현됨
  *  - 수신 주소 detail에 리소스 경로를 직접 명시하는 방식(owner/project/issue_post/5)은 P1-32에서 구현됨
  *  - 한 이메일이 여러 프로젝트로 발송된 경우, OriginalEmail은 최초 성공 리소스 1건만 기록
@@ -285,10 +284,53 @@ class IncomingMailProcessingService(
         val messageIds = (MessageIdParser.parse(message.inReplyTo) + MessageIdParser.parse(message.references)).toSet()
 
         return messageIds.mapNotNull { id ->
-            val originalEmail = originalEmailRepository.findByMessageId(id).orElse(null) ?: return@mapNotNull null
-            resolveResourceProject(originalEmail.resourceType, originalEmail.resourceId)?.let { projectId ->
-                ResolvedThread(originalEmail.resourceType, originalEmail.resourceId, projectId)
+            val originalEmail = originalEmailRepository.findByMessageId(id).orElse(null)
+            val (resourceType, resourceId) = if (originalEmail != null) {
+                originalEmail.resourceType to originalEmail.resourceId
+            } else {
+                resolveByDeterministicMessageId(id) ?: return@mapNotNull null
             }
+            resolveResourceProject(resourceType, resourceId)?.let { projectId ->
+                ResolvedThread(resourceType, resourceId, projectId)
+            }
+        }
+    }
+
+    // yona EmailHandler.findResourcesByMessageId()의 OriginalEmail 미스 시 폴백(IMAPMessageUtil.
+    // getIdLeftFromMessageId() + Resource.findByPath()), 그리고 getThreads()의
+    // "case REVIEW_COMMENT: threads.add(resource.getContainer())" 리다이렉트 대응 (P1-60).
+    // yona도 발신(outbound) 시점에는 OriginalEmail을 쓰지 않는다(CreationViaEmail.java 3곳에서만,
+    // 전부 수신 메일 처리 시점에 기록) — 대신 발신 Message-ID 자체가 Resource.getMessageId()의
+    // 결정론적 "<type/id@host>" 포맷(yuna computeMessageId()와 동일 포맷)이라 역파싱만으로 UI에서
+    // 만든 리소스(OriginalEmail이 없는)에 대한 첫 답장도 매칭할 수 있다.
+    private fun resolveByDeterministicMessageId(messageId: String): Pair<ResourceType, String>? {
+        val start = messageId.indexOf('<')
+        val at = messageId.indexOf('@')
+        if (start < 0 || at < 0 || at <= start) return null
+        val path = messageId.substring(start + 1, at).trim().removePrefix("/")
+        val segments = path.split("/")
+        if (segments.size < 2) return null
+        val resourceType = try {
+            ResourceType.getValue(segments[0])
+        } catch (e: IllegalArgumentException) {
+            return null
+        }
+        val resourceId = segments[1]
+
+        if (resourceType == ResourceType.REVIEW_COMMENT) {
+            val threadId = resourceId.toLongOrNull()
+                ?.let { reviewCommentRepository.findById(it).orElse(null) }
+                ?.thread?.id
+                ?: return null
+            return ResourceType.COMMENT_THREAD to threadId.toString()
+        }
+
+        return when (resourceType) {
+            ResourceType.COMMENT_THREAD, ResourceType.ISSUE_POST, ResourceType.BOARD_POST,
+            // yona에는 없는 커밋 댓글 전용 모델(P0-16의 yuna 고유 구조)이지만 첨부/원본메일 저장(P1-59)에서
+            // 이미 REVIEW_COMMENT/COMMIT_COMMENT를 동급으로 다루고 있어 폴백 대상에도 동일하게 포함한다.
+            ResourceType.COMMIT_COMMENT -> resourceType to resourceId
+            else -> null
         }
     }
 
