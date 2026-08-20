@@ -59,16 +59,16 @@ yona(레거시)는 `app/utils/AccessControl.java` 단일 클래스가 `isAllowed
 - **이 단계에서 어떤 컨트롤러도 새 함수를 호출하지 않는다** — 순수 추가라 실제 API 응답은 전혀 안 바뀐다.
 - **검증**: `AccessControlSpec.kt` 그린 + 전체 `./gradlew test` 그린(기존 스펙 전부 무영향 확인).
 
-## 후속 단계 (미착수, 백로그 별도 항목으로 등록 완료 — 2026-08-20)
+## 후속 단계 (미착수, 백로그 별도 항목으로 등록 완료 — 2026-08-20, 그룹 C/D/E 확정 조사까지 반영)
 
-등록 당시 P2-13~17로 임시 번호를 매겼으나, "경미/확인 필요"인 P2가 아니라 대부분 "확정된 권한 로직 오류"임이 밝혀져 P1로 재분류했다(P1-85와 마찬가지 사유). `docs/PARITY_BACKLOG.md`의 최신 번호가 정본이며, 아래는 매핑 기록이다.
+등록 당시 P2-13~17로 임시 번호를 매겼으나, "경미/확인 필요"인 P2가 아니라 대부분 "확정된 권한 로직 오류"임이 밝혀져 P1로 재분류했다(P1-85와 마찬가지 사유). 이어서 "확인 필요"로 남겨뒀던 P2-15/16도 yona와 실제로 한 줄씩 대조하는 확정 조사를 진행해 종결했다(더 이상 "확인 필요" 상태가 아님). `docs/PARITY_BACKLOG.md`의 최신 번호가 정본이며, 아래는 매핑 기록이다.
 
-- **P1-87(구 P2-13, 최우선)**: `WebhookController`의 인증 자체 부재 — `webhooks()`/`newWebhook()`/`deleteWebhook()` 세 엔드포인트에 `authentication` 파라미터가 아예 없어 미인증 사용자가 임의 프로젝트 웹훅(payload URL, secret 포함)을 조회/생성/삭제 가능한 상태. "산발적 인라인 체크"가 아니라 "체크 자체 없음"이라 다른 항목보다 우선.
+- **P1-87(구 P2-13, 최우선)**: `WebhookController`의 인증 자체 부재. 확정 조사로 수정 범위 구체화 — 단순 로그인 체크가 아니라 조회(`webhooks()`)를 포함한 3개 엔드포인트 전부 "프로젝트 멤버(또는 그룹멤버)" 권한이 필요함(yona `ProjectApp.java:1268,1282,1314` 전부 `@IsAllowed(UPDATE)`).
 - **P1-88(구 P2-14)**: 그룹 A/A'(`checkReadPermission` 계열, 17곳) 실제 교체 — PUBLIC+게스트, sharer 두 결함이 실제로 고쳐지는 단계.
-- **P2-15(구 P2-15, 유지)**: 그룹 B/C/D(`checkWritePermission`, 매니저/작성자/담당자, `isProjectManager`, 9~13곳) — yona 대비 더 엄격한지 아직 미확정이라 "확인 필요" 상태로 P2에 유지.
 - **P1-89(P2-16에서 분리)**: `WatchController.checkWatchPermission`이 WATCH 연산에 READ 규칙을 잘못 재사용 중(게스트 워치 부당 차단) — 이미 확정된 회귀 버그라 P1로 분리.
-- **P2-16(축소, 유지)**: 그룹 E 잔여(`checkCodeAccessibility`, `isOrgAdmin`) 및 나머지 리소스 타입(ATTACHMENT, ORGANIZATION, PROJECT_TRANSFER 이관 여부) — 아직 미확정이라 P2에 유지. `ProjectServiceImpl.isAuthorizedToAcceptTransfer()`(yona와 이미 일치, 이관 여부만 검토 대상)도 여기 포함.
 - **P1-90(구 P2-17)**: `CommentServiceImpl.hasPermission()`이 yona보다 엄격(현재 작성자/MANAGER만 허용, yona는 일반 멤버 전원 허용) — 확정된 권한 축소 버그.
+- **P2-15 확정 조사 결과 (종결, 5건이 P1-91~95로 이동)**: 그룹 C/D(`isManagerOrAuthor`/`isManagerOrContributor`/`isAuthorOrManager`/`isProjectManager`)를 yona와 전수 대조. **P1-91** `BoardController.isManagerOrAuthor`(게시글 UPDATE/DELETE), **P1-92** `PullRequestController.updatePullRequest`(PR 수정), **P1-93** `CodeHistoryController.isAuthorOrManager`(커밋댓글 삭제), **P1-94** `IssueLabelController.isProjectManager`(라벨/카테고리 7곳), **P1-95** `MilestoneController.isProjectManager`(마일스톤 3곳, 이미 정확한 `AccessControl.isAllowedToUpdateMilestone()` 존재하나 미사용) — 5건 전부 "yona는 일반 멤버 전원 허용인데 yuna는 author/manager로 좁혀놓은" 동일 패턴의 확정된 권한 축소 버그. `ProjectController`/`ProjectMemberController`의 `isProjectManager`(PROJECT 자체 UPDATE/DELETE)와 PR의 `checkWritePermission` 기반 액션들은 yona와 일치해 문제없음. 부수 발견(P1-98, 오너 제거 방지 가드 누락)도 이 조사에서 나옴.
+- **P2-16 확정 조사 결과 (종결)**: 그룹 E 잔여(`checkCodeAccessibility`, `isOrgAdmin`) + CODE/ORGANIZATION/WEBHOOK/ATTACHMENT/PROJECT_TRANSFER를 yona와 전수 대조. CODE(코드 브라우저), ORGANIZATION, PROJECT_TRANSFER는 일치해 문제없음(`ProjectServiceImpl.isAuthorizedToAcceptTransfer()` 포함, 중앙 서비스 이관 실익 낮음). WEBHOOK은 P1-87에 흡수. 범위 밖에서 신규 발견한 **P1-96**(첨부파일 다운로드/목록 무인가, 보안 이슈 — `AttachmentController.getFile/getFileList`에 권한 체크 자체 없음)과 **P1-97**(브랜치 삭제 매니저 제한 누락, 과잉 허용 — `BranchApiController.deleteBranch`)을 P1로 등록.
 
 ## 검증 (착수 시)
 
