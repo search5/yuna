@@ -4,15 +4,22 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.WebhookType
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Service
 @Transactional
 class WebhookServiceImpl(
     private val webhookRepository: WebhookRepository,
-    private val webhookThreadRepository: WebhookThreadRepository
+    private val webhookThreadRepository: WebhookThreadRepository,
+    // yona Webhook.java:178 getBaseUrl()(스킴+호스트) 대응 (P2-08). NotificationUrlResolver가
+    // 이미 동일 목적으로 쓰는 설정값을 그대로 재사용한다.
+    @Value("\${yuna.base-url:}")
+    private val baseUrl: String
 ) : WebhookService {
 
     @Transactional(readOnly = true)
@@ -168,9 +175,19 @@ class WebhookServiceImpl(
     // yona Webhook.java의 push용 buildRequestBody(commits, refNames, sender) 대응 (P2-04).
     // 커밋 목록이 빠진 채 event/sender/project만 담겨있던 단순 JSON 대신, GitHub 웹훅과 유사한
     // ref/commits/head_commit/sender/pusher/repository 구조로 구성한다.
+    // yona Webhook.java:178 getBaseUrl() 대응 (P2-08) — RouteUtil.getUrl(project)(상대경로)에 붙는
+    // 스킴+호스트. NotificationUrlResolver가 쓰는 것과 동일한 yuna.base-url 설정을 재사용한다.
+    private fun projectUrl(project: Project?): String =
+        project?.let { "$baseUrl/${it.owner}/${it.name}" } ?: baseUrl
+
+    // yona Webhook.java:713-714 buildJSONFromCommit()의
+    // new SimpleDateFormat("yyyy-MM-dd'T'hh:mm:ssZ") 대응 (P2-08) — 문자열 포맷까지 그대로 재현한다.
+    private val commitTimestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'hh:mm:ssZ")
+
     private fun buildPushPayload(webhook: Webhook, sender: User, pushed: PushedCommits): String {
         val objectMapper = tools.jackson.databind.ObjectMapper()
         val root = objectMapper.createObjectNode()
+        val project = webhook.project
 
         val refNodes = objectMapper.createArrayNode()
         pushed.refNames.forEach { refNodes.add(it) }
@@ -181,8 +198,12 @@ class WebhookServiceImpl(
             val commitNode = objectMapper.createObjectNode()
             commitNode.put("id", commit.name)
             commitNode.put("message", commit.fullMessage)
-            commitNode.put("timestamp", commit.authorIdent?.`when`?.toInstant()?.toString() ?: "")
-            commitNode.put("url", "${webhook.project?.let { "/${it.owner}/${it.name}" } ?: ""}/commit/${commit.name}")
+            val authorInstant = commit.authorIdent?.`when`?.toInstant()
+            commitNode.put(
+                "timestamp",
+                authorInstant?.atZone(ZoneId.systemDefault())?.format(commitTimestampFormatter) ?: ""
+            )
+            commitNode.put("url", "${projectUrl(project)}/commit/${commit.name}")
 
             val authorNode = objectMapper.createObjectNode()
             authorNode.put("name", commit.authorIdent?.name ?: "")
@@ -206,6 +227,8 @@ class WebhookServiceImpl(
         senderNode.put("id", sender.id ?: 0L)
         senderNode.put("avatar_url", sender.avatarUrl)
         senderNode.put("type", "User")
+        // yona Webhook.java:560 buildSenderJSON()의 site_admin 대응 (P2-08).
+        senderNode.put("site_admin", sender.isSiteManager)
         root.set("sender", senderNode)
 
         val pusherNode = objectMapper.createObjectNode()
@@ -214,11 +237,12 @@ class WebhookServiceImpl(
         root.set("pusher", pusherNode)
 
         val repositoryNode = objectMapper.createObjectNode()
-        val project = webhook.project
         repositoryNode.put("id", project?.id ?: 0L)
         repositoryNode.put("name", project?.name ?: "")
         repositoryNode.put("owner", project?.owner ?: "")
-        repositoryNode.put("html_url", project?.let { "/${it.owner}/${it.name}" } ?: "")
+        repositoryNode.put("html_url", projectUrl(project))
+        // yona Webhook.java:577 buildRepositoryJSON()의 overview(프로젝트 설명) 대응 (P2-08).
+        repositoryNode.put("overview", project?.overview ?: "")
         repositoryNode.put("private", project?.projectScope != com.github.search5.yona.domain.project.ProjectScope.PUBLIC)
         root.set("repository", repositoryNode)
 
