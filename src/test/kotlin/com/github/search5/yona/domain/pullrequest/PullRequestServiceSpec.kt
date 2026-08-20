@@ -828,6 +828,63 @@ class PullRequestServiceSpec @Autowired constructor(
                 events[1].oldValue shouldBe "$firstMergedCommitIdTo,${afterSecond.mergedCommitIdTo}"
             }
 
+            // yona PullRequestActor.processPullRequestMerging()의 conflict 상태 전환 추적 대응 (P1-71).
+            it("병합 재검사 중 conflict 상태가 바뀌면(충돌 발생/해소) PULL_REQUEST_MERGED 알림과 타임라인이 남아야 한다") {
+                watchRepository.save(Watch(user = receiver, resourceType = ResourceType.PROJECT, resourceId = toProject.id.toString()))
+
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(toBareDir, "master", "test.txt", "hello common\ntarget edit", "Target conflict commit")
+                createCommit(fromBareDir, "feature-conflict-check", "test.txt", "hello common\nsource edit", "Source conflict commit")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "conflict 전환 추적 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-conflict-check",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                // 1차 재검사: 충돌 없다가(wasConflict=false) 충돌 발생 -> CONFLICT 전환 기록.
+                pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+
+                val afterConflict = pullRequestRepository.findById(pr.id!!).orElse(null)
+                afterConflict.isConflict shouldBe true
+
+                val notiEventsAfterConflict = notificationEventRepository.findAll()
+                    .filter { it.eventType == com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED }
+                notiEventsAfterConflict.size shouldBe 1
+                notiEventsAfterConflict.first().newValue shouldBe "conflict"
+
+                val prEventsAfterConflict = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
+                    .filter { it.eventType == com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED }
+                prEventsAfterConflict.size shouldBe 1
+                prEventsAfterConflict.first().newValue shouldBe "conflict"
+                prEventsAfterConflict.first().senderLoginId shouldBe contributor.loginId
+
+                // 소스 브랜치를 대상 브랜치와 동일한 내용으로 갱신해 충돌을 해소한 뒤 2차 재검사.
+                createCommit(fromBareDir, "feature-conflict-check", "test.txt", "hello common\ntarget edit", "Resolve conflict")
+                pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+
+                val afterResolved = pullRequestRepository.findById(pr.id!!).orElse(null)
+                afterResolved.isConflict shouldBe false
+
+                val notiEventsAfterResolved = notificationEventRepository.findAll()
+                    .filter { it.eventType == com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED }
+                notiEventsAfterResolved.size shouldBe 2
+                notiEventsAfterResolved.last().newValue shouldBe "resolved"
+
+                val prEventsAfterResolved = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
+                    .filter { it.eventType == com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED }
+                prEventsAfterResolved.size shouldBe 2
+                prEventsAfterResolved.last().newValue shouldBe "resolved"
+            }
+
             // yona PullRequest.updateWith()/hasSameBranchesWith()/findDuplicatedPullRequest() 대응 (P1-68).
             it("PR 수정 시 from/toBranch를 재할당할 수 있어야 한다") {
                 val pr = pullRequestRepository.save(
