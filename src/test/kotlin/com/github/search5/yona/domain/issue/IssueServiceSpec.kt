@@ -661,6 +661,100 @@ class IssueServiceSpec @Autowired constructor(
                     }
                 }
             }
+
+            // yona AbstractPosting.isPublish(transient 폼 플래그)/Issue.isDraft(영속 필드)/
+            // IssueApp.editIssue()의 "if (issue.isPublish) {...}" 발행 전환 대응 (P1-65).
+            describe("createIssue/publishIssue (초안 생성 및 발행 전환)") {
+                it("isDraft=true로 생성하면 State.DRAFT로 저장되고 신규 이슈 알림이 발행되지 않아야 한다") {
+                    val author = userRepository.save(User(loginId = "drafter", name = "초안작성자", email = "drafter@yona.io"))
+                    val project = projectRepository.save(Project(name = "draft-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val issue = Issue(title = "초안 이슈", body = "아직 다듬는 중", project = project)
+
+                    val saved = issueService.createIssue(issue = issue, author = author, isDraft = true)
+
+                    saved.state shouldBe State.DRAFT
+                    saved.isDraft shouldBe true
+                    saved.number shouldNotBe null
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+
+                it("isDraft=false(기본값)로 생성하면 기존과 동일하게 State.OPEN+신규 이슈 알림이 발행되어야 한다") {
+                    val author = userRepository.save(User(loginId = "author2", name = "작성자2", email = "author2@yona.io"))
+                    val project = projectRepository.save(Project(name = "normal-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val watcher = userRepository.save(User(loginId = "watcher2", name = "감시자2", email = "watcher2@yona.io"))
+                    watchRepository.save(Watch(user = watcher, resourceType = ResourceType.PROJECT, resourceId = project.id.toString()))
+                    val issue = Issue(title = "정식 이슈", body = "본문", project = project)
+
+                    val saved = issueService.createIssue(issue = issue, author = author)
+
+                    saved.state shouldBe State.OPEN
+                    saved.isDraft shouldBe false
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().eventType shouldBe EventType.NEW_ISSUE
+                }
+
+                it("초안을 발행하면 createdDate가 갱신되고 state가 DRAFT->OPEN으로 바뀌고 번호가 재채번되며 신규 이슈 알림이 발행되어야 한다") {
+                    val author = userRepository.save(User(loginId = "drafter2", name = "초안작성자2", email = "drafter2@yona.io"))
+                    val project = projectRepository.save(Project(name = "publish-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val watcher = userRepository.save(User(loginId = "watcher3", name = "감시자3", email = "watcher3@yona.io"))
+                    watchRepository.save(Watch(user = watcher, resourceType = ResourceType.PROJECT, resourceId = project.id.toString()))
+
+                    val draft = issueService.createIssue(
+                        issue = Issue(title = "발행할 초안", body = "본문", project = project),
+                        author = author,
+                        isDraft = true
+                    )
+                    val draftNumber = draft.number
+                    val draftCreatedDate = draft.createdDate
+
+                    // 초안이 예약해간 번호 이후로 다른 이슈가 먼저 발행되어 시퀀스가 진행된 상태를 재현 —
+                    // 발행 시 재채번이 "생성 시점 번호"가 아니라 "발행 시점의 최신 lastIssueNumber
+                    // 기준"임을 검증하기 위함.
+                    issueService.createIssue(
+                        issue = Issue(title = "그 사이에 만들어진 이슈", body = "본문", project = project),
+                        author = author
+                    )
+
+                    val published = issueService.publishIssue(draft.id!!, author)
+
+                    published.state shouldBe State.OPEN
+                    published.isDraft shouldBe false
+                    published.number shouldNotBe draftNumber
+                    published.createdDate shouldNotBe draftCreatedDate
+                    published.history shouldBe ""
+
+                    val events = notificationEventRepository.findAll()
+                    // 초안 생성 시에는 알림이 없었고(위 테스트로 이미 확인), 중간에 만든 이슈 1건 +
+                    // 발행 시 신규 이슈 알림 1건 = 총 2건이어야 한다.
+                    events.size shouldBe 2
+                    events.count { it.eventType == EventType.NEW_ISSUE && it.resourceId == published.id.toString() } shouldBe 1
+                }
+
+                it("이미 DRAFT가 아닌 이슈를 발행해도(엣지 케이스) createdDate/번호/이력은 그대로 갱신되어야 한다(legacy와 동일)") {
+                    val author = userRepository.save(User(loginId = "author3", name = "작성자3", email = "author3@yona.io"))
+                    val project = projectRepository.save(Project(name = "already-open-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+
+                    val issue = issueService.createIssue(
+                        issue = Issue(title = "이미 열린 이슈", body = "본문", project = project),
+                        author = author
+                    )
+                    val originalNumber = issue.number
+
+                    val republished = issueService.publishIssue(issue.id!!, author)
+
+                    republished.state shouldBe State.OPEN
+                    republished.number shouldNotBe originalNumber
+                }
+
+                it("존재하지 않는 이슈를 발행하려 하면 IllegalArgumentException을 던져야 한다") {
+                    val author = userRepository.save(User(loginId = "author4", name = "작성자4", email = "author4@yona.io"))
+
+                    shouldThrow<IllegalArgumentException> {
+                        issueService.publishIssue(999999L, author)
+                    }
+                }
+            }
         }
     }
 }

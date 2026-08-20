@@ -156,7 +156,8 @@ class IssueController(
             author = user,
             assigneeUser = assigneeUser,
             milestoneId = request.milestoneId,
-            labelIds = request.labelIds
+            labelIds = request.labelIds,
+            isDraft = request.isDraft
         )
 
         return ResponseEntity.status(HttpStatus.CREATED).body(saved)
@@ -229,6 +230,29 @@ class IssueController(
         return ResponseEntity.ok(moved)
     }
 
+    // yona IssueApp.editIssue()의 "if (issue.isPublish) { ... }" 발행 전환 대응 (P1-65).
+    @PostMapping("/{number}/publish")
+    fun publishIssue(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Issue> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isManagerOrAuthor(project, issue.authorId, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val published = issueService.publishIssue(issue.id!!, user)
+
+        return ResponseEntity.ok(published)
+    }
+
     @DeleteMapping("/{number}")
     fun deleteIssue(
         @PathVariable projectId: Long,
@@ -286,7 +310,9 @@ class IssueController(
         val body: String?,
         val milestoneId: Long?,
         val assigneeId: Long?,
-        val labelIds: List<Long>?
+        val labelIds: List<Long>?,
+        // yona AbstractPosting.isPublish 대응 (P1-65). true면 초안(DRAFT)으로 생성한다.
+        val isDraft: Boolean = false
     )
 
     data class UpdateIssueRequest(

@@ -38,7 +38,8 @@ class IssueServiceImpl(
         author: User,
         assigneeUser: User?,
         milestoneId: Long?,
-        labelIds: List<Long>?
+        labelIds: List<Long>?,
+        isDraft: Boolean
     ): Issue {
         val project = issue.project
         project.lastIssueNumber = project.lastIssueNumber + 1
@@ -50,7 +51,11 @@ class IssueServiceImpl(
         issue.authorId = author.id
         issue.authorLoginId = author.loginId
         issue.authorName = author.name
-        
+
+        // yona IssueApp.newIssue()의 "if (newIssue.isDraft) { state = DRAFT } else { state = OPEN }" 대응 (P1-65).
+        issue.isDraft = isDraft
+        issue.state = if (isDraft) State.DRAFT else State.OPEN
+
         if (assigneeUser != null) {
             issue.assignee = Assignee(user = assigneeUser, project = project)
         }
@@ -67,7 +72,39 @@ class IssueServiceImpl(
 
         val savedIssue = issueRepository.save(issue)
 
-        publishNewIssueNotification(savedIssue, author)
+        // yona IssueApp.newIssue()의 "if (!newIssue.isDraft) { NotificationEvent.afterNewIssue(newIssue); }"
+        // 대응 — 초안은 발행(publishIssue) 시점에야 처음 알림이 발행된다.
+        if (!isDraft) {
+            publishNewIssueNotification(savedIssue, author)
+        }
+
+        return savedIssue
+    }
+
+    // yona IssueApp.editIssue()의 "if (issue.isPublish) { originalIssue.createdDate = now();
+    // if (state == DRAFT) state = OPEN; originalIssue.setNumber(Project.increaseLastIssueNumber(...)); }"
+    // + AbstractPostingApp.editPosting()의 "if (posting.isPublish) { posting.history = ""; }" 대응 (P1-65).
+    // yona는 생성 시에도(AbstractPosting.save()) 이미 번호를 매기므로, 발행 시의 재채번은 초안이 예약해간
+    // 번호를 "발행 시점의 최신 번호"로 대체하는 것이다(그 사이 다른 이슈가 먼저 발행됐다면 그만큼 밀림).
+    override fun publishIssue(issueId: Long, publisher: User): Issue {
+        val issue = issueRepository.findById(issueId).orElseThrow { IllegalArgumentException("Issue not found: $issueId") }
+        val project = issue.project
+
+        issue.createdDate = Instant.now()
+        if (issue.state == State.DRAFT) {
+            issue.state = State.OPEN
+        }
+        issue.isDraft = false
+
+        project.lastIssueNumber = project.lastIssueNumber + 1
+        projectRepository.save(project)
+        issue.number = project.lastIssueNumber
+
+        issue.history = ""
+
+        val savedIssue = issueRepository.save(issue)
+
+        publishNewIssueNotification(savedIssue, publisher)
 
         return savedIssue
     }
