@@ -11,7 +11,12 @@ class YonaUpdateService(
     @Value("\${yuna.update.repository-url:https://github.com/yona-projects/yona.git}")
     private val repositoryUrl: String,
     @Value("\${yuna.update.current-version:1.15.0}")
-    private val currentVersion: String
+    private val currentVersion: String,
+    // yona application.update.notification.interval 대응 (P2-10). 코드 레벨 fallback 기본값은
+    // 1시간이지만, 실제 배포용 conf 템플릿(application.conf.default:253)은 6시간(21600000ms)으로
+    // 오버라이드돼 있어 그 값을 기본값으로 채택한다.
+    @Value("\${yuna.update.interval-ms:21600000}")
+    private val intervalMillis: Long = 21600000L
 ) {
     private val log = Logger.getLogger(YonaUpdateService::class.java.name)
 
@@ -23,8 +28,22 @@ class YonaUpdateService(
     fun isUpdateRequired(): Boolean = isUpdateRequired
     fun getReleaseUrl(): String = "https://github.com/yona-projects/yona/releases/tag/v${latestVersion ?: ""}"
 
-    @Scheduled(fixedDelay = 24 * 60 * 60 * 1000, initialDelay = 10000)
+    // yona YobiUpdate.java:40-41(interval 기본값 및 설정 가능), initdelay 기본 5초 대응.
+    @Scheduled(
+        fixedDelayString = "\${yuna.update.interval-ms:21600000}",
+        initialDelayString = "\${yuna.update.initial-delay-ms:5000}"
+    )
     fun refreshVersionToUpdate() {
+        // yona YobiUpdate.onStart()의 "interval이 0보다 클 때만 폴링을 등록한다"와 동일한 관찰 가능
+        // 동작(업데이트 확인이 전혀 실행되지 않음)을 재현한다.
+        if (intervalMillis <= 0) {
+            log.info("Yona update check disabled (interval <= 0)")
+            return
+        }
+        checkForUpdate()
+    }
+
+    fun checkForUpdate() {
         try {
             log.info("Fetching the latest Yona version from remote: $repositoryUrl")
             val tags = Git.lsRemoteRepository()
