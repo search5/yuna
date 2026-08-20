@@ -121,6 +121,38 @@ class IssueControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.title").value("이슈 제목"))
             }
+
+            // yona AccessControl.java:274-279,368-383 isAllowedIfSharer() 대응 (P1-82)
+            it("프로젝트 멤버가 아니어도 이슈 공유자(IssueSharer)면 상세 조회를 허용해야 한다") {
+                val sharedIssue = Issue(
+                    id = 6L, number = 6L, title = "공유된 이슈", body = "본문", project = project,
+                    authorId = user.id, state = State.OPEN
+                )
+                sharedIssue.sharers.add(
+                    com.github.search5.yona.domain.issue.IssueSharer(
+                        loginId = otherUser.loginId, user = otherUser, issue = sharedIssue
+                    )
+                )
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 6L) } returns sharedIssue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 30L) } returns false
+
+                mockMvc.perform(get("/api/projects/1/issues/6").principal(otherAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.title").value("공유된 이슈"))
+            }
+
+            it("이슈 공유자가 아니고 프로젝트 멤버도 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 30L) } returns false
+
+                mockMvc.perform(get("/api/projects/1/issues/5").principal(otherAuth))
+                    .andExpect(status().isForbidden)
+            }
         }
 
         describe("GET /api/projects/{projectId}/issues/{issueId}/timeline") {
@@ -146,6 +178,28 @@ class IssueControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/api/projects/1/issues/999/timeline").principal(userAuth))
                     .andExpect(status().isNotFound)
+            }
+
+            // yona IssueApp.java:299 timeline()의 @IsAllowed(resourceType = ISSUE_POST, READ) 대응 (P1-82)
+            it("프로젝트 멤버가 아니어도 이슈 공유자면 변경 이력 조회를 허용해야 한다") {
+                val sharedIssue = Issue(
+                    id = 7L, number = 7L, title = "공유된 이슈2", body = "본문", project = project,
+                    authorId = user.id, state = State.OPEN
+                )
+                sharedIssue.sharers.add(
+                    com.github.search5.yona.domain.issue.IssueSharer(
+                        loginId = otherUser.loginId, user = otherUser, issue = sharedIssue
+                    )
+                )
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 7L) } returns sharedIssue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 30L) } returns false
+                every { issueEventRepository.findByIssueOrderByCreatedAsc(sharedIssue) } returns emptyList()
+
+                mockMvc.perform(get("/api/projects/1/issues/7/timeline").principal(otherAuth))
+                    .andExpect(status().isOk)
             }
         }
 

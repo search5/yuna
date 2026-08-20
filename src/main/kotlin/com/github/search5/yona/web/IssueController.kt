@@ -51,6 +51,15 @@ class IssueController(
             AccessControl.isAllowedIfGroupMember(project, user)
     }
 
+    // yona AccessControl.java:250-259,274-279 대응 (P1-82). 이슈 단건 READ는 프로젝트 수준
+    // 권한(checkReadPermission)에 더해, 프로젝트 멤버가 아니어도 IssueSharer로 공유받은
+    // 사용자에게 READ를 허용한다.
+    private fun checkReadPermission(project: Project, issue: Issue, user: User?): Boolean {
+        if (checkReadPermission(project, user)) return true
+        if (user == null) return false
+        return AccessControl.isAllowedIfSharer(issue, user)
+    }
+
     private fun checkWritePermission(project: Project, user: User?): Boolean {
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
@@ -101,7 +110,7 @@ class IssueController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication)
-        if (!checkReadPermission(project, user)) {
+        if (!checkReadPermission(project, issue, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -122,7 +131,7 @@ class IssueController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication)
-        if (!checkReadPermission(project, user)) {
+        if (!checkReadPermission(project, issue, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
