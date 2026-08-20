@@ -1,5 +1,7 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.AttachLabelResult
 import com.github.search5.yona.domain.project.Label
 import com.github.search5.yona.domain.project.Project
@@ -36,13 +38,17 @@ class ProjectControllerSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
     val pushedBranchRepository = mockk<PushedBranchRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val projectController = ProjectController(
         projectService,
         projectRepository,
         projectUserRepository,
         userRepository,
-        pushedBranchRepository
+        pushedBranchRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(projectController).build()
 

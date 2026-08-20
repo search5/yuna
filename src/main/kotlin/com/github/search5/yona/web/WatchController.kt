@@ -29,7 +29,8 @@ class WatchController(
     private val userProjectNotificationRepository: UserProjectNotificationRepository,
     private val issueRepository: IssueRepository,
     private val postingRepository: PostingRepository,
-    private val pullRequestRepository: PullRequestRepository
+    private val pullRequestRepository: PullRequestRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User {
@@ -67,7 +68,7 @@ class WatchController(
             }
         }
 
-        if (!AccessControl.isAllowedToReadProject(user, project)) {
+        if (!accessControl.isAllowedToReadProject(user, project)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
     }
@@ -112,7 +113,7 @@ class WatchController(
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
-        if (!AccessControl.isAllowedToReadProject(user, project)) {
+        if (!accessControl.isAllowedToReadProject(user, project)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
         watchService.watch(user, ResourceType.PROJECT, project.id.toString())
@@ -131,7 +132,7 @@ class WatchController(
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
-        if (!AccessControl.isAllowedToReadProject(user, project)) {
+        if (!accessControl.isAllowedToReadProject(user, project)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
         watchService.unwatch(user, ResourceType.PROJECT, project.id.toString())
@@ -151,7 +152,7 @@ class WatchController(
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
 
-        if (!AccessControl.isAllowedToReadProject(user, project)) {
+        if (!accessControl.isAllowedToReadProject(user, project)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
 

@@ -1,7 +1,9 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.project.Project
@@ -27,6 +29,9 @@ class VoteControllerSpec : DescribeSpec({
     val issueService = mockk<IssueService>()
     val issueRepository = mockk<com.github.search5.yona.domain.issue.IssueRepository>()
     val issueCommentRepository = mockk<com.github.search5.yona.domain.issue.IssueCommentRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val voteController = VoteController(
         projectRepository,
@@ -34,7 +39,8 @@ class VoteControllerSpec : DescribeSpec({
         projectUserRepository,
         issueService,
         issueRepository,
-        issueCommentRepository
+        issueCommentRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(voteController).build()
 

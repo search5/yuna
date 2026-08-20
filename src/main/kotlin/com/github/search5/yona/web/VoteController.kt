@@ -25,7 +25,8 @@ class VoteController(
     private val projectUserRepository: ProjectUserRepository,
     private val issueService: IssueService,
     private val issueRepository: IssueRepository,
-    private val issueCommentRepository: IssueCommentRepository
+    private val issueCommentRepository: IssueCommentRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -37,7 +38,7 @@ class VoteController(
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     @PostMapping(value = ["/{owner}/{projectName}/issue/{issueNumber}/vote", "/{owner}/{projectName}/issues/{issueNumber}/vote"])

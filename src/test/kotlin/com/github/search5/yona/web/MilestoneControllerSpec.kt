@@ -1,7 +1,9 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.milestone.MilestoneService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -30,12 +32,16 @@ class MilestoneControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val milestoneController = MilestoneController(
         milestoneService,
         projectRepository,
         projectUserRepository,
-        userRepository
+        userRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(milestoneController).build()
 

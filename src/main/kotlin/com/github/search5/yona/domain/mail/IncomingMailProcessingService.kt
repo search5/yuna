@@ -60,6 +60,7 @@ class IncomingMailProcessingService(
     private val issueCommentRepository: IssueCommentRepository,
     private val postingCommentRepository: PostingCommentRepository,
     private val reviewCommentRepository: ReviewCommentRepository,
+    private val accessControl: AccessControl,
     @Value("\${yuna.mailbox.imap.address:}")
     private val inboundBaseAddress: String
 ) {
@@ -166,7 +167,7 @@ class IncomingMailProcessingService(
         val projectName = segments[1]
 
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
-        if (project == null || !AccessControl.isAllowedToReadProject(sender, project)) {
+        if (project == null || !accessControl.isAllowedToReadProject(sender, project)) {
             return IncomingMailOutcome.Rejected("프로젝트를 찾을 수 없거나 권한이 없습니다: $owner/$projectName")
         }
 
@@ -428,7 +429,7 @@ class IncomingMailProcessingService(
         sender: User,
         message: InboundEmailMessage
     ): IncomingMailOutcome {
-        if (!AccessControl.isProjectResourceCreatable(sender, project, ResourceType.ISSUE_POST)) {
+        if (!accessControl.isProjectResourceCreatable(sender, project, ResourceType.ISSUE_POST)) {
             return IncomingMailOutcome.Rejected("이슈 생성 권한이 없습니다: $owner/$projectName")
         }
 

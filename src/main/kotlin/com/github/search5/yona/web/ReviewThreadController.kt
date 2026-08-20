@@ -27,7 +27,8 @@ class ReviewThreadController(
     private val projectRepository: ProjectRepository,
     private val reviewThreadService: ReviewThreadService,
     private val userRepository: UserRepository,
-    private val projectUserRepository: ProjectUserRepository
+    private val projectUserRepository: ProjectUserRepository,
+    private val accessControl: AccessControl
 ) {
 
     @GetMapping("/{owner}/{projectName}/reviews")
@@ -169,12 +170,12 @@ class ReviewThreadController(
         if (project.projectScope != ProjectScope.PUBLIC) {
             if (user == null) return false
             return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-                AccessControl.isAllowedIfGroupMember(project, user)
+                accessControl.isAllowedIfGroupMember(project, user)
         }
         if (project.isCodeAccessibleMemberOnly == true) {
             if (user == null) return false
             return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-                AccessControl.isAllowedIfGroupMember(project, user)
+                accessControl.isAllowedIfGroupMember(project, user)
         }
         return true
     }

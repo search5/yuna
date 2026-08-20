@@ -26,7 +26,8 @@ class CodeHistoryController(
     private val repositoryService: RepositoryService,
     private val commitCommentRepository: CommitCommentRepository,
     private val userRepository: UserRepository,
-    private val projectUserRepository: ProjectUserRepository
+    private val projectUserRepository: ProjectUserRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -116,7 +117,7 @@ class CodeHistoryController(
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!AccessControl.isProjectResourceCreatable(user, project, ResourceType.COMMIT_COMMENT)) {
+        if (!accessControl.isProjectResourceCreatable(user, project, ResourceType.COMMIT_COMMENT)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 

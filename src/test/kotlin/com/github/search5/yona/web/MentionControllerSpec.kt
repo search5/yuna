@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
@@ -53,6 +54,7 @@ class MentionControllerSpec : DescribeSpec({
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val reviewCommentRepository = mockk<ReviewCommentRepository>()
     val commitCommentRepository = mockk<CommitCommentRepository>()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val mentionController = MentionController(
         projectRepository,
@@ -68,7 +70,8 @@ class MentionControllerSpec : DescribeSpec({
         repositoryService,
         commentThreadRepository,
         reviewCommentRepository,
-        commitCommentRepository
+        commitCommentRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(mentionController).build()
 
@@ -83,6 +86,7 @@ class MentionControllerSpec : DescribeSpec({
         every { postingRepository.findByProject(any()) } returns emptyList()
         every { pullRequestRepository.findByToProject(any<Project>()) } returns emptyList()
         every { watchRepository.findByResourceTypeAndResourceId(any(), any()) } returns emptyList()
+        every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     }
 
     describe("GET /api/{owner}/{projectName}/mentionList (P1-14)") {

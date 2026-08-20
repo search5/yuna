@@ -48,7 +48,8 @@ class MentionController(
     private val repositoryService: RepositoryService,
     private val commentThreadRepository: CommentThreadRepository,
     private val reviewCommentRepository: ReviewCommentRepository,
-    private val commitCommentRepository: CommitCommentRepository
+    private val commitCommentRepository: CommitCommentRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -60,7 +61,7 @@ class MentionController(
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     @GetMapping("/api/{owner}/{projectName}/mentionList")

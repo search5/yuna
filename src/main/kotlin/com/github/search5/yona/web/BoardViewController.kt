@@ -39,7 +39,8 @@ class BoardViewController(
     private val repositoryService: com.github.search5.yona.domain.vcs.RepositoryService,
     @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
     private val gitBaseDir: String,
-    private val recentIssueService: RecentIssueService
+    private val recentIssueService: RecentIssueService,
+    private val accessControl: AccessControl
 ) {
 
     @GetMapping("/{owner}/{projectName}/posts")
@@ -60,7 +61,7 @@ class BoardViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }
@@ -115,7 +116,7 @@ class BoardViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }
@@ -135,7 +136,7 @@ class BoardViewController(
             watchService.isWatching(it, ResourceType.BOARD_POST, posting.id.toString())
         } ?: false
 
-        val isAllowedUpdate = loginUser != null && (posting.authorLoginId == loginUser.loginId || projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || AccessControl.isAllowedIfGroupMember(project, loginUser))
+        val isAllowedUpdate = loginUser != null && (posting.authorLoginId == loginUser.loginId || projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || accessControl.isAllowedIfGroupMember(project, loginUser))
 
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.BOARD_POST, posting.id.toString())
         val attachmentsList = attachments.map { attach ->
@@ -175,11 +176,11 @@ class BoardViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
             return "error/403"
         }
 
-        val isAllowedToNotice = loginUser != null && (projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || AccessControl.isAllowedIfGroupMember(project, loginUser))
+        val isAllowedToNotice = loginUser != null && (projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || accessControl.isAllowedIfGroupMember(project, loginUser))
 
         var preparedPostBody = ""
         if (readme == true) {
@@ -221,13 +222,13 @@ class BoardViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
             return "error/403"
         }
 
         val posting = postingService.getPosting(project.id!!, number) ?: return "error/404"
 
-        val isAllowedToNotice = loginUser != null && (projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || AccessControl.isAllowedIfGroupMember(project, loginUser))
+        val isAllowedToNotice = loginUser != null && (projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || accessControl.isAllowedIfGroupMember(project, loginUser))
 
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.BOARD_POST, posting.id.toString())
         val attachmentsList = attachments.map { attach ->
@@ -268,7 +269,7 @@ class BoardViewController(
 
         if (posting.authorLoginId != loginUser.loginId &&
             !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) &&
-            !AccessControl.isAllowedIfGroupMember(project, loginUser)
+            !accessControl.isAllowedIfGroupMember(project, loginUser)
         ) {
             return "error/403"
         }
@@ -323,7 +324,7 @@ class BoardViewController(
             ?: return "error/403"
 
         if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) &&
-            !AccessControl.isAllowedIfGroupMember(project, loginUser)
+            !accessControl.isAllowedIfGroupMember(project, loginUser)
         ) {
             return "error/403"
         }

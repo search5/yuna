@@ -4,6 +4,8 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.PlayRepository
@@ -26,12 +28,16 @@ class BranchApiControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val repositoryService = mockk<RepositoryService>()
     val playRepository = mockk<PlayRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val branchApiController = BranchApiController(
         projectRepository,
         projectUserRepository,
         userRepository,
-        repositoryService
+        repositoryService,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(branchApiController).build()
 

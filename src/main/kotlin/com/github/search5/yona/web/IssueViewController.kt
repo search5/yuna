@@ -59,7 +59,8 @@ class IssueViewController(
     private val templateHelper: TemplateHelper,
     private val issueExcelService: IssueExcelService,
     private val repositoryService: RepositoryService,
-    private val recentIssueService: RecentIssueService
+    private val recentIssueService: RecentIssueService,
+    private val accessControl: AccessControl
 ) {
 
     @GetMapping("/{owner}/{projectName}/issues")
@@ -90,7 +91,7 @@ class IssueViewController(
 
         // 권한 체크
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (!AccessControl.isAllowedToReadProject(loginUser, project)) {
+        if (!accessControl.isAllowedToReadProject(loginUser, project)) {
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
             return "error/403"
         }
@@ -234,7 +235,7 @@ class IssueViewController(
             }
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (!AccessControl.isAllowedToReadProject(loginUser, project)) {
+        if (!accessControl.isAllowedToReadProject(loginUser, project)) {
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
             return "error/403"
         }
@@ -262,7 +263,7 @@ class IssueViewController(
             favoriteIssueRepository.findByUserIdAndIssueId(it.id!!, issue.id!!).isPresent
         } ?: false
 
-        val isAllowedUpdate = AccessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)
+        val isAllowedUpdate = accessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)
 
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, issue.id.toString())
         val attachmentsJson = attachments.joinToString(prefix = "{\"attachments\":[", postfix = "]}", separator = ",") { attach ->
@@ -305,7 +306,7 @@ class IssueViewController(
 
         val currentAuth = authentication ?: org.springframework.security.core.context.SecurityContextHolder.getContext().authentication
         val loginUser = currentAuth?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (!AccessControl.isProjectResourceCreatable(loginUser, project, ResourceType.ISSUE_POST)) {
+        if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.ISSUE_POST)) {
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
             return "error/403"
         }
@@ -366,7 +367,7 @@ class IssueViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         val issue = issueRepository.findByProjectAndNumber(project, number) ?: return "error/404"
-        if (!AccessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)) {
+        if (!accessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)) {
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
             return "error/403"
         }
@@ -436,7 +437,7 @@ class IssueViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "redirect:/users/loginform"
 
-        if (!AccessControl.isProjectResourceCreatable(loginUser, project, ResourceType.ISSUE_POST)) {
+        if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.ISSUE_POST)) {
             return "error/403"
         }
 
@@ -600,7 +601,7 @@ class IssueViewController(
 
                 // 1. 삭제
                 if (delete) {
-                    if (AccessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)) {
+                    if (accessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)) {
                         issueRepository.delete(issue)
                     }
                     continue
@@ -703,7 +704,7 @@ class IssueViewController(
 
         if (issue.authorLoginId != loginUser.loginId &&
             !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) &&
-            !AccessControl.isAllowedIfGroupMember(project, loginUser)
+            !accessControl.isAllowedIfGroupMember(project, loginUser)
         ) {
             return "error/403"
         }

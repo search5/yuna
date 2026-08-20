@@ -1,7 +1,9 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Assignee
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
@@ -40,6 +42,9 @@ class IssueControllerSpec : DescribeSpec({
     val attachmentService = mockk<com.github.search5.yona.domain.attachment.AttachmentService>()
     val issueCommentRepository = mockk<IssueCommentRepository>()
     val issueEventRepository = mockk<com.github.search5.yona.domain.issue.IssueEventRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val issueController = IssueController(
         issueService,
@@ -49,7 +54,8 @@ class IssueControllerSpec : DescribeSpec({
         userRepository,
         attachmentService,
         issueCommentRepository,
-        issueEventRepository
+        issueEventRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())

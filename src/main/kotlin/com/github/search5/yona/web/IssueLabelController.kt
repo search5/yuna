@@ -23,7 +23,8 @@ class IssueLabelController(
     private val issueLabelService: IssueLabelService,
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -35,7 +36,7 @@ class IssueLabelController(
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     private fun isProjectManager(projectId: Long, userId: Long): Boolean {

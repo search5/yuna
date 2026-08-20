@@ -1,10 +1,13 @@
 package com.github.search5.yona.config.svn
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectService
+import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
@@ -29,7 +32,11 @@ import java.util.Optional
 class SvnAuthorizationFilterSpec : DescribeSpec({
     val projectService = mockk<ProjectService>()
     val userRepository = mockk<UserRepository>()
-    val filter = SvnAuthorizationFilter(projectService, userRepository)
+    val projectUserRepository = mockk<ProjectUserRepository>(relaxed = true)
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
+    val filter = SvnAuthorizationFilter(projectService, userRepository, accessControl)
     val filterChain = mockk<FilterChain>(relaxed = true)
 
     beforeTest {

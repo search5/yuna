@@ -39,6 +39,7 @@ import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.project.RecentProjectRepository
 import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.config.security.AccessControl
 
 class ProjectViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -62,6 +63,7 @@ class ProjectViewControllerSpec : DescribeSpec({
     val milestoneRepository = mockk<MilestoneRepository>()
     val watchService = mockk<WatchService>()
     val recentProjectRepository = mockk<RecentProjectRepository>()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val projectViewController = ProjectViewController(
         projectRepository,
@@ -84,7 +86,8 @@ class ProjectViewControllerSpec : DescribeSpec({
         pullRequestRepository,
         milestoneRepository,
         watchService,
-        recentProjectRepository
+        recentProjectRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(projectViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -99,6 +102,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             watchService, recentProjectRepository
         )
         every { recentProjectRepository.recordVisit(any(), any()) } just Runs
+        every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     }
 
     describe("ProjectViewController 템플릿 연동 테스트") {

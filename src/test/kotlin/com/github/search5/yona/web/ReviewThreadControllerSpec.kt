@@ -14,6 +14,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -23,12 +25,16 @@ class ReviewThreadControllerSpec : DescribeSpec({
     val reviewThreadService = mockk<ReviewThreadService>()
     val userRepository = mockk<UserRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val reviewThreadController = ReviewThreadController(
         projectRepository,
         reviewThreadService,
         userRepository,
-        projectUserRepository
+        projectUserRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(reviewThreadController).build()
 

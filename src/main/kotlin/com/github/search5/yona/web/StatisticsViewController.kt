@@ -15,7 +15,8 @@ import org.springframework.web.bind.annotation.PathVariable
 class StatisticsViewController(
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
-    private val projectUserRepository: ProjectUserRepository
+    private val projectUserRepository: ProjectUserRepository,
+    private val accessControl: AccessControl
 ) {
 
     @GetMapping("/{owner}/{projectName}/statistics")
@@ -37,7 +38,7 @@ class StatisticsViewController(
 
         // Project Permission Check
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser)) {
+            if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser)) {
                 return "error/403"
             }
         }

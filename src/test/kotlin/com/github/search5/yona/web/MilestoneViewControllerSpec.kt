@@ -1,7 +1,9 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.milestone.MilestoneRepository
@@ -33,6 +35,9 @@ class MilestoneViewControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val attachmentRepository = mockk<AttachmentRepository>()
     val markdownService = mockk<MarkdownService>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val milestoneViewController = MilestoneViewController(
         projectRepository,
@@ -42,7 +47,8 @@ class MilestoneViewControllerSpec : DescribeSpec({
         projectUserRepository,
         userRepository,
         attachmentRepository,
-        markdownService
+        markdownService,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(milestoneViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
