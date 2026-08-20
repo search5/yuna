@@ -154,7 +154,7 @@ class IssueControllerSpec : DescribeSpec({
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
-                every { issueService.createIssue(any(), user, null, null, null) } returns issue
+                every { issueService.createIssue(any(), user, null, null, null, false) } returns issue
 
                 val jsonContent = """
                     {
@@ -173,6 +173,38 @@ class IssueControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isCreated)
+            }
+
+            // yona AbstractPosting.isPublish 대응 (P1-65).
+            it("isDraft=true로 요청하면 초안 생성 요청이 서비스에 그대로 전달되어야 한다") {
+                val draftIssue = Issue(id = 6L, number = null, title = "초안 제목", body = "초안 내용", project = project, authorId = user.id, state = State.DRAFT)
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { issueService.createIssue(any(), user, null, null, null, true) } returns draftIssue
+
+                val jsonContent = """
+                    {
+                        "title": "초안 제목",
+                        "body": "초안 내용",
+                        "milestoneId": null,
+                        "assigneeId": null,
+                        "labelIds": null,
+                        "isDraft": true
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+                    .andExpect(jsonPath("$.state").value("DRAFT"))
+
+                verify(exactly = 1) { issueService.createIssue(any(), user, null, null, null, true) }
             }
         }
 
@@ -288,6 +320,47 @@ class IssueControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isBadRequest)
+            }
+        }
+
+        // yona IssueApp.editIssue()의 "if (issue.isPublish) { ... }" 발행 전환 대응 (P1-65).
+        describe("POST /api/projects/{projectId}/issues/{issueId}/publish") {
+            it("작성자가 초안을 발행하면 200 OK와 함께 발행된 이슈를 반환해야 한다") {
+                val draftIssue = Issue(id = 5L, number = 5L, title = "이슈 제목", body = "이슈 내용", project = project, authorId = user.id, state = State.DRAFT)
+                val publishedIssue = Issue(id = 5L, number = 9L, title = "이슈 제목", body = "이슈 내용", project = project, authorId = user.id, state = State.OPEN)
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns draftIssue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { issueService.publishIssue(5L, user) } returns publishedIssue
+
+                mockMvc.perform(post("/api/projects/1/issues/5/publish").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.state").value("OPEN"))
+                    .andExpect(jsonPath("$.number").value(9))
+
+                verify(exactly = 1) { issueService.publishIssue(5L, user) }
+            }
+
+            it("관리자/작성자가 아니면 403 Forbidden을 반환하고 발행을 호출하지 않아야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/1/issues/5/publish").principal(otherAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.publishIssue(any(), any()) }
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(post("/api/projects/1/issues/999/publish").principal(userAuth))
+                    .andExpect(status().isNotFound)
             }
         }
 
