@@ -7,7 +7,9 @@ import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.user.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
@@ -21,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional
  * 구독해 해당 프로젝트에 등록된 웹훅으로 실제 전송한다(이전에는 아무도 구독하지 않아 미발송이었음).
  *
  * PULL_REQUEST는 P1-26에서 지원 추가됨(WebhookServiceImpl.buildPayload/getResourceType 포함).
+ * REVIEW_COMMENT/COMMIT_COMMENT는 P1-69에서 지원 추가됨(yona
+ * NotificationEvent.java:756 webhookRequest(NEW_REVIEW_COMMENT, ...)/:780 webhookRequest(NEW_COMMENT, ...) 대응).
  * 그 외 아직 payload를 만들 수 없는 리소스 타입(예: COMMIT — P1-25에서 별도 직접 경로로 처리됨)은
  * 조용히 스킵한다.
  */
@@ -32,7 +36,9 @@ class WebhookNotificationEventListener(
     private val postingRepository: PostingRepository,
     private val issueCommentRepository: IssueCommentRepository,
     private val postingCommentRepository: PostingCommentRepository,
-    private val pullRequestRepository: PullRequestRepository
+    private val pullRequestRepository: PullRequestRepository,
+    private val reviewCommentRepository: ReviewCommentRepository,
+    private val commitCommentRepository: CommitCommentRepository
 ) {
     private val logger = LoggerFactory.getLogger(WebhookNotificationEventListener::class.java)
 
@@ -66,6 +72,16 @@ class WebhookNotificationEventListener(
 
             ResourceType.PULL_REQUEST ->
                 pullRequestRepository.findById(id).orElse(null)?.let { it.toProject to it }
+
+            ResourceType.REVIEW_COMMENT ->
+                reviewCommentRepository.findById(id).orElse(null)?.let { comment ->
+                    comment.thread?.project?.let { project -> project to comment }
+                }
+
+            ResourceType.COMMIT_COMMENT ->
+                commitCommentRepository.findById(id).orElse(null)?.let { comment ->
+                    comment.project?.let { project -> project to comment }
+                }
 
             else -> null
         }

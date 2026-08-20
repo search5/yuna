@@ -12,8 +12,13 @@ import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.pullrequest.CommitComment
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.pullrequest.ReviewComment
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.SimpleCommentThread
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
@@ -31,17 +36,20 @@ class WebhookNotificationEventListenerSpec : DescribeSpec({
     val issueCommentRepository = mockk<IssueCommentRepository>()
     val postingCommentRepository = mockk<PostingCommentRepository>()
     val pullRequestRepository = mockk<PullRequestRepository>()
+    val reviewCommentRepository = mockk<ReviewCommentRepository>()
+    val commitCommentRepository = mockk<CommitCommentRepository>()
 
     val listener = WebhookNotificationEventListener(
         webhookService, userRepository, issueRepository, postingRepository,
-        issueCommentRepository, postingCommentRepository, pullRequestRepository
+        issueCommentRepository, postingCommentRepository, pullRequestRepository,
+        reviewCommentRepository, commitCommentRepository
     )
 
     val project = Project(id = 1L, name = "yona-project", owner = "gildong")
     val sender = User(id = 9L, loginId = "gildong", name = "길동")
 
     beforeTest {
-        io.mockk.clearMocks(webhookService, userRepository, issueRepository, postingRepository, issueCommentRepository, postingCommentRepository, pullRequestRepository, answers = false)
+        io.mockk.clearMocks(webhookService, userRepository, issueRepository, postingRepository, issueCommentRepository, postingCommentRepository, pullRequestRepository, reviewCommentRepository, commitCommentRepository, answers = false)
         every { userRepository.findById(9L) } returns Optional.of(sender)
     }
 
@@ -154,6 +162,63 @@ class WebhookNotificationEventListenerSpec : DescribeSpec({
                 title = "PR 리뷰", senderId = 9L, created = Instant.now(),
                 resourceType = ResourceType.PULL_REQUEST, resourceId = "999",
                 eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+            )
+
+            listener.handleNotificationEvent(event)
+
+            verify(exactly = 0) { webhookService.sendWebhook(any(), any(), any(), any()) }
+        }
+
+        // yona NotificationEvent.java:756 webhookRequest(NEW_REVIEW_COMMENT, pullRequest, newComment) 대응 (P1-69)
+        it("REVIEW_COMMENT 타입은 댓글이 속한 스레드의 project로 웹훅을 발송해야 한다") {
+            val thread = SimpleCommentThread(id = 700L, project = project)
+            val comment = ReviewComment(id = 600L, contents = "리뷰 의견", thread = thread)
+            every { reviewCommentRepository.findById(600L) } returns Optional.of(comment)
+
+            val event = NotificationEvent(
+                title = "새 리뷰 댓글", senderId = 9L, created = Instant.now(),
+                resourceType = ResourceType.REVIEW_COMMENT, resourceId = "600", eventType = EventType.NEW_REVIEW_COMMENT
+            )
+
+            listener.handleNotificationEvent(event)
+
+            verify(exactly = 1) { webhookService.sendWebhook(project, EventType.NEW_REVIEW_COMMENT, sender, comment) }
+        }
+
+        it("REVIEW_COMMENT 타입인데 대상 댓글을 찾을 수 없으면 웹훅을 발송하지 않아야 한다") {
+            every { reviewCommentRepository.findById(999L) } returns Optional.empty()
+
+            val event = NotificationEvent(
+                title = "새 리뷰 댓글", senderId = 9L, created = Instant.now(),
+                resourceType = ResourceType.REVIEW_COMMENT, resourceId = "999", eventType = EventType.NEW_REVIEW_COMMENT
+            )
+
+            listener.handleNotificationEvent(event)
+
+            verify(exactly = 0) { webhookService.sendWebhook(any(), any(), any(), any()) }
+        }
+
+        // yona NotificationEvent.java:780 webhookRequest(NEW_COMMENT, comment) 대응 (P1-69)
+        it("COMMIT_COMMENT 타입은 댓글의 project로 웹훅을 발송해야 한다") {
+            val comment = CommitComment(id = 800L, contents = "커밋 의견", project = project, commitId = "abc123")
+            every { commitCommentRepository.findById(800L) } returns Optional.of(comment)
+
+            val event = NotificationEvent(
+                title = "새 커밋 댓글", senderId = 9L, created = Instant.now(),
+                resourceType = ResourceType.COMMIT_COMMENT, resourceId = "800", eventType = EventType.NEW_COMMENT
+            )
+
+            listener.handleNotificationEvent(event)
+
+            verify(exactly = 1) { webhookService.sendWebhook(project, EventType.NEW_COMMENT, sender, comment) }
+        }
+
+        it("COMMIT_COMMENT 타입인데 대상 댓글을 찾을 수 없으면 웹훅을 발송하지 않아야 한다") {
+            every { commitCommentRepository.findById(999L) } returns Optional.empty()
+
+            val event = NotificationEvent(
+                title = "새 커밋 댓글", senderId = 9L, created = Instant.now(),
+                resourceType = ResourceType.COMMIT_COMMENT, resourceId = "999", eventType = EventType.NEW_COMMENT
             )
 
             listener.handleNotificationEvent(event)
