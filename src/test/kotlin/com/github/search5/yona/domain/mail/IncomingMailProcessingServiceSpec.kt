@@ -37,6 +37,8 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import java.util.Optional
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.milestone.MilestoneRepository
 
 class IncomingMailProcessingServiceSpec : DescribeSpec({
     val originalEmailRepository = mockk<OriginalEmailRepository>()
@@ -57,7 +59,20 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>(relaxed = true)
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
-    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
+    val userRepositoryForAccessControl = mockk<UserRepository>()
+    val organizationRepositoryForAccessControl = mockk<OrganizationRepository>()
+    val issueRepositoryForAccessControl = mockk<IssueRepository>()
+    val postingRepositoryForAccessControl = mockk<PostingRepository>()
+    val reviewCommentRepositoryForAccessControl = mockk<ReviewCommentRepository>()
+    val commitCommentRepositoryForAccessControl = mockk<CommitCommentRepository>()
+    val milestoneRepositoryForAccessControl = mockk<MilestoneRepository>()
+    val accessControl = AccessControl(
+        projectUserRepository, organizationUserRepository,
+        userRepositoryForAccessControl, organizationRepositoryForAccessControl,
+        issueRepositoryForAccessControl, postingRepositoryForAccessControl,
+        reviewCommentRepositoryForAccessControl, commitCommentRepositoryForAccessControl,
+        milestoneRepositoryForAccessControl
+    )
 
     val service = IncomingMailProcessingService(
         originalEmailRepository, userRepository, projectRepository,
