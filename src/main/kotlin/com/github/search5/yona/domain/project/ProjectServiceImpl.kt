@@ -30,8 +30,11 @@ class ProjectServiceImpl(
     private val labelRepository: LabelRepository
 ) : ProjectService {
 
+    // yona Project.findByOwnerAndProjectName()의 예전 위치(previousOwnerLoginId/previousName) 폴백
+    // 대응 (P1-76) — 프로젝트가 이전/개명된 뒤에도 이 서비스 메서드를 쓰는 모든 호출부(SVN/Git
+    // 인가 필터 등)가 자동으로 예전 owner/name도 계속 찾을 수 있다.
     override fun findByOwnerAndName(owner: String, name: String): Project? {
-        return projectRepository.findByOwnerAndName(owner, name).orElse(null)
+        return projectRepository.findByOwnerAndNameOrPreviousPlace(owner, name).orElse(null)
     }
 
     override fun findProjectsByOwner(owner: String): List<Project> {
@@ -146,6 +149,22 @@ class ProjectServiceImpl(
         }
     }
 
+    // yona Project.recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom() 대응 (P1-76).
+    private fun recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom(
+        project: Project,
+        currentOwner: String,
+        currentName: String
+    ) {
+        val lastChanged = project.previousNameChangedTime
+        val isFirstOrPassed24Hours = lastChanged == null ||
+            lastChanged.isBefore(Instant.now().minusSeconds(24 * 3600))
+        if (isFirstOrPassed24Hours) {
+            project.previousNameChangedTime = Instant.now()
+            project.previousName = currentName
+            project.previousOwnerLoginId = currentOwner
+        }
+    }
+
     // yona Project.newProjectName(loginId, projectName) 대응 (P1-72).
     private fun resolveNewProjectName(destination: String, name: String): String {
         if (!projectRepository.findByOwnerAndName(destination, name).isPresent) {
@@ -183,6 +202,12 @@ class ProjectServiceImpl(
         val newOwner = pt.destination
         val newName = pt.newProjectName
         val senderId = pt.sender.id!!
+
+        // yona Project.recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom() 대응 (P1-76) —
+        // 마지막 이전/개명 기록으로부터 24시간이 지났을 때만(또는 최초일 때만) 예전 위치를 갱신한다.
+        // 짧은 시간 내 연속 이전이 일어나도 "예전 위치" 포인터가 계속 최신으로만 덮어써지지 않도록
+        // 방지하는 legacy의 의도를 그대로 재현.
+        recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom(project, originalOwner, originalName)
 
         // 물리 저장소 폴더명 이동
         val baseDir = if (project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN") {

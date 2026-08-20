@@ -136,7 +136,9 @@ class GitServletConfig(
         }
         val owner = matcher.group(2)
         val projectName = matcher.group(3)
-        return projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        // yona GitApp.java:95-104의 findByPreviousPlaceOf() 폴백 대응 (P1-76) — 프로젝트가
+        // 이전/개명된 뒤에도 기존 git remote URL이 계속 동작해야 한다.
+        return projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
     }
 
     private fun resolveCurrentUser(): User? {
