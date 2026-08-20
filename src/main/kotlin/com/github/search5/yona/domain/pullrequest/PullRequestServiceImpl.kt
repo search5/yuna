@@ -106,7 +106,11 @@ class PullRequestServiceImpl(
     // 없음)를 분리해뒀으므로 그 경계를 그대로 따라 별도 메서드로 둔다.
     @Transactional
     override fun processMergeCheck(pullRequestId: Long, sender: User, isNewPullRequest: Boolean): PullRequestMergeResult {
-        val beforeMergedCommitIdTo = pullRequestRepository.findById(pullRequestId).orElse(null)?.mergedCommitIdTo
+        val before = pullRequestRepository.findById(pullRequestId).orElse(null)
+        val beforeMergedCommitIdTo = before?.mergedCommitIdTo
+        // yona PullRequestActor.processPullRequestMerging()의 "boolean wasConflict = pullRequest.isConflict"
+        // 대응 (P1-71) — updateMerge() 호출 전(재검사 이전) 상태를 미리 캡처해둔다.
+        val wasConflict = before?.isConflict ?: false
 
         val result = updateMerge(pullRequestId)
         val pullRequest = pullRequestRepository.findById(pullRequestId)
@@ -136,7 +140,44 @@ class PullRequestServiceImpl(
             changeState(pullRequestId, State.MERGED, sender.loginId)
         }
 
+        // yona PullRequestActor.processPullRequestMerging()의 conflict 상태 전환 추적 대응 (P1-71).
+        // diff/커밋 처리와 완전히 별개로, 재검사 결과 conflict 여부 자체가 바뀌면(충돌 없다가 발생/
+        // 충돌이 해소됨) 알림+타임라인을 남긴다. eventType은 이름과 달리 "머지 완료"가 아니라 이
+        // conflict 전환 전용이다(실제 머지 완료는 위 changeState(..., MERGED, ...)의
+        // PULL_REQUEST_STATE_CHANGED가 담당).
+        if (!wasConflict && result.conflicts()) {
+            notifyMergeConflictChanged(pullRequest, sender, State.CONFLICT)
+        }
+        if (wasConflict && !result.conflicts()) {
+            notifyMergeConflictChanged(pullRequest, sender, State.RESOLVED)
+        }
+
         return result
+    }
+
+    // yona NotificationEvent.afterMerge(sender, pullRequest, state)/PullRequestEvent.addMergeEvent() 대응 (P1-71).
+    private fun notifyMergeConflictChanged(pullRequest: PullRequest, sender: User, state: State) {
+        val notificationEvent = NotificationEvent(
+            title = formatReplyTitle(pullRequest),
+            senderId = sender.id,
+            created = Instant.now(),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = pullRequest.id.toString(),
+            eventType = EventType.PULL_REQUEST_MERGED,
+            newValue = state.state()
+        )
+        val receivers = watchService.findActualWatchers(
+            baseWatchers = setOf(pullRequest.contributor),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = pullRequest.id.toString(),
+            projectId = pullRequest.toProject.id,
+            eventType = notificationEvent.eventType
+        ).toMutableSet()
+        receivers.removeIf { it.id == sender.id }
+        notificationEvent.receivers = receivers
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
+
+        recordPullRequestEvent(pullRequest, EventType.PULL_REQUEST_MERGED, sender.loginId, null, state.state())
     }
 
     // yona NotificationEvent.afterPullRequestCommitChanged() 대응.
