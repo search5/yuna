@@ -14,6 +14,16 @@ interface PullRequestService {
     fun attemptMerge(pullRequestId: Long): PullRequestMergeResult
 
     /**
+     * yona actors/PullRequestActor.processPullRequestMerging() 대응 (P1-52). attemptMerge()의
+     * 부수효과 없는 미리보기와 달리, 새 커밋이 발견되면 PullRequestCommit 영속화·PullRequestEvent
+     * 기록·리뷰어 초기화를 수행하고([isNewPullRequest]가 false일 때만 알림도 발행), diff가 완전히
+     * 사라지면 자동으로 MERGED 상태로 전환한다. createPullRequest()(PR 생성)와 관련 PR 재검사
+     * (RelatedPullRequestMergeEvent) 양쪽에서 공유한다 — legacy도 PullRequestMergingActor/
+     * RelatedPullRequestMergingActor 둘 다 이 메서드 하나로 수렴한다.
+     */
+    fun processMergeCheck(pullRequestId: Long, sender: User, isNewPullRequest: Boolean): PullRequestMergeResult
+
+    /**
      * 풀 리퀘스트를 실제로 머지하고 커밋을 기록하며, 상태를 업데이트합니다.
      * @param pullRequestId 풀 리퀘스트 ID
      * @param updater 머지 처리를 수행하는 유저

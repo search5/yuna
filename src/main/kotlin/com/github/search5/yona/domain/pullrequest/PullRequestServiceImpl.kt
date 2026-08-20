@@ -91,6 +91,109 @@ class PullRequestServiceImpl(
         }
     }
 
+    // yona actors/PullRequestActor.processPullRequestMerging() 대응 (P1-52). attemptMerge()는
+    // PullRequestViewController가 페이지 렌더링마다 호출하는 부수효과 없는 미리보기(legacy
+    // PullRequest.attemptMerge())라 여기서 부수효과를 추가하면 조회할 때마다 알림/이벤트가 잘못
+    // 발생한다 — legacy도 updateMerge()(액터 전용, 부수효과 있음)와 attemptMerge()(뷰 전용, 부수효과
+    // 없음)를 분리해뒀으므로 그 경계를 그대로 따라 별도 메서드로 둔다.
+    @Transactional
+    override fun processMergeCheck(pullRequestId: Long, sender: User, isNewPullRequest: Boolean): PullRequestMergeResult {
+        val beforeLastCommitId = pullRequestRepository.findById(pullRequestId).orElse(null)?.lastCommitId
+
+        val result = attemptMerge(pullRequestId)
+        val pullRequest = pullRequestRepository.findById(pullRequestId)
+            .orElseThrow { IllegalArgumentException("PullRequest with ID $pullRequestId not found") }
+
+        if (result.hasDiffCommits()) {
+            val newCommits = updatePullRequestCommits(pullRequest, result.gitCommits)
+            result.newCommits = newCommits
+
+            if (newCommits.isNotEmpty()) {
+                if (!isNewPullRequest) {
+                    notifyCommitChanged(pullRequest, sender)
+                }
+                recordCommitChangedEvent(pullRequest, sender, newCommits, beforeLastCommitId)
+
+                // yona PullRequest.clearReviewers() 대응 — 새 커밋이 들어왔으니 기존 리뷰를 무효화하고
+                // 재검토를 강제한다.
+                pullRequest.reviewers.clear()
+                pullRequestRepository.save(pullRequest)
+            }
+        } else if (pullRequest.state != State.MERGED) {
+            // yona의 hasDiffCommits()==false 분기(diff가 사라짐 = 이미 다른 경로로 모든 변경이 대상
+            // 브랜치에 반영됨) 대응 — 실제 병합 동작 없이 상태만 MERGED로 자동 전환한다.
+            pullRequest.isConflict = false
+            pullRequest.receiver = sender
+            pullRequestRepository.save(pullRequest)
+            changeState(pullRequestId, State.MERGED, sender.loginId)
+        }
+
+        return result
+    }
+
+    // yona NotificationEvent.afterPullRequestCommitChanged() 대응.
+    private fun notifyCommitChanged(pullRequest: PullRequest, sender: User) {
+        val title = "[${pullRequest.toProject.name}] PR #${pullRequest.number} 새 커밋이 추가되었습니다"
+        val notificationEvent = NotificationEvent(
+            title = title,
+            senderId = sender.id,
+            created = Instant.now(),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = pullRequest.id.toString(),
+            eventType = EventType.PULL_REQUEST_COMMIT_CHANGED,
+            newValue = buildCommitChangedMessage(pullRequest)
+        )
+        val receivers = watchService.findActualWatchers(
+            baseWatchers = emptySet(),
+            resourceType = ResourceType.PULL_REQUEST,
+            resourceId = pullRequest.id.toString(),
+            projectId = pullRequest.toProject.id,
+            eventType = notificationEvent.eventType
+        ).toMutableSet()
+        receivers.removeIf { it.id == sender.id }
+        notificationEvent.receivers = receivers
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
+    }
+
+    // yona NotificationEvent.newPullRequestCommitChangedMessage() 대응 — 현재 CURRENT 상태인 커밋을
+    // 최신순으로 나열한다.
+    private fun buildCommitChangedMessage(pullRequest: PullRequest): String {
+        val commits = pullRequestCommitRepository.findByPullRequestAndState(pullRequest, PullRequestCommit.State.CURRENT)
+            .sortedByDescending { it.authorDate }
+        val builder = StringBuilder("### 현재 커밋\n")
+        for (commit in commits) {
+            builder.append(commit.commitShortId).append(" ").append(commit.getCommitShortMessage()).append("\n")
+        }
+        return builder.toString()
+    }
+
+    // yona PullRequestEvent.addCommitEvents() 대응. legacy가 add()(draft-time 병합/취소, P1-40)를
+    // 거치지 않고 항상 그대로 저장하는 유일한 PullRequestEvent 생성 지점이라 recordPullRequestEvent()
+    // (recordWithDraftMerge 경유)를 쓰지 않고 직접 저장한다.
+    private fun recordCommitChangedEvent(
+        pullRequest: PullRequest,
+        sender: User,
+        newCommits: List<PullRequestCommit>,
+        beforeLastCommitId: String?
+    ) {
+        // legacy oldValue는 mergedCommitIdTo(가상 병합 커밋 ref)의 변경 전/후 쌍이지만, yuna는 그
+        // 메커니즘을 이식하지 않았으므로(P0-10/11/12 범위 조정과 동일한 기조) attemptMerge()가 매번
+        // 추적하는 lastCommitId(소스 브랜치 tip)의 변경 전/후 쌍으로 대체한다 — 메시지 리졸버는
+        // 이 이벤트 타입의 oldValue를 사용하지 않으므로(newValue.orEmpty()) 표시에 영향 없음.
+        val oldValue = beforeLastCommitId?.let { "$it,${pullRequest.lastCommitId}" }
+        val newValue = newCommits.joinToString(",") { it.id.toString() }
+        pullRequestEventRepository.save(
+            PullRequestEvent(
+                pullRequest = pullRequest,
+                senderLoginId = sender.loginId,
+                eventType = EventType.PULL_REQUEST_COMMIT_CHANGED,
+                oldValue = oldValue,
+                newValue = newValue,
+                created = Instant.now()
+            )
+        )
+    }
+
     @Transactional
     override fun merge(pullRequestId: Long, updater: User): PullRequestMergeResult {
         val pullRequest = pullRequestRepository.findById(pullRequestId)
@@ -230,7 +333,9 @@ class PullRequestServiceImpl(
         return null
     }
 
-    private fun updatePullRequestCommits(pullRequest: PullRequest, gitCommits: List<GitCommit>) {
+    // yona PullRequestMergeResult.saveCommits()/findNewCommits()/updatePriorCommits() 대응.
+    // 반환값(새로 저장된 커밋)은 P1-52의 processMergeCheck()가 PullRequestEvent/알림 생성에 사용한다.
+    private fun updatePullRequestCommits(pullRequest: PullRequest, gitCommits: List<GitCommit>): List<PullRequestCommit> {
         val priorCommits = pullRequestCommitRepository.findByPullRequestAndState(
             pullRequest, PullRequestCommit.State.CURRENT
         )
@@ -243,7 +348,7 @@ class PullRequestServiceImpl(
                 newCommits.add(PullRequestCommit.bindPullRequestCommit(commit, pullRequest))
             }
         }
-        pullRequestCommitRepository.saveAll(newCommits)
+        val savedNewCommits = pullRequestCommitRepository.saveAll(newCommits)
 
         val gitCommitIds = gitCommits.map { it.getId() }.toSet()
         val updatedCommits = mutableListOf<PullRequestCommit>()
@@ -254,6 +359,8 @@ class PullRequestServiceImpl(
             }
         }
         pullRequestCommitRepository.saveAll(updatedCommits)
+
+        return savedNewCommits
     }
 
     private fun makeMergeCommitMessage(pullRequest: PullRequest, commits: List<GitCommit>): String {
@@ -339,7 +446,10 @@ class PullRequestServiceImpl(
         val saved = pullRequestRepository.save(pullRequest)
 
         try {
-            attemptMerge(saved.id!!)
+            // yona PullRequestMergingActor(PR 생성 시 트리거)도 processPullRequestMerging()을 거치므로
+            // 최초 커밋 목록의 PullRequestCommit 영속화/PullRequestEvent 기록까지 여기서 함께 이뤄진다
+            // (알림만 isNewPullRequest=true라 생략됨, P1-52).
+            processMergeCheck(saved.id!!, contributor, isNewPullRequest = true)
         } catch (e: Exception) {
             // JGit merge 예외가 발생하더라도 PR 생성 자체는 허용
         }

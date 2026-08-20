@@ -667,6 +667,114 @@ class PullRequestServiceSpec @Autowired constructor(
                 notificationEventRepository.findAll().size shouldBe 0
                 pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr).size shouldBe 0
             }
+
+            // yona actors/PullRequestActor.processPullRequestMerging() 대응 (P1-52).
+            it("관련 PR 재검사(processMergeCheck) 중 새 커밋이 발견되면 PullRequestCommit 저장·PullRequestEvent 기록·리뷰어 초기화·알림 발행이 모두 이뤄져야 한다") {
+                watchRepository.save(Watch(user = receiver, resourceType = ResourceType.PROJECT, resourceId = toProject.id.toString()))
+
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature", "test2.txt", "new feature", "Add feature")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "커밋 변경 재검사 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.OPEN,
+                        reviewers = mutableSetOf(receiver)
+                    )
+                )
+
+                val result = pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+
+                result.hasDiffCommits() shouldBe true
+                result.newCommits.size shouldBe 1
+
+                val savedCommits = pullRequestCommitRepository.findByPullRequestAndState(pr, PullRequestCommit.State.CURRENT)
+                savedCommits.size shouldBe 1
+                savedCommits.first().commitMessage.trim() shouldBe "Add feature"
+
+                val updated = pullRequestRepository.findById(pr.id!!).orElse(null)
+                updated.reviewers.size shouldBe 0
+
+                val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
+                prEvents.size shouldBe 1
+                prEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_COMMIT_CHANGED
+                prEvents.first().senderLoginId shouldBe contributor.loginId
+
+                val notiEvents = notificationEventRepository.findAll()
+                notiEvents.size shouldBe 1
+                notiEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_COMMIT_CHANGED
+            }
+
+            it("PR 생성 시(isNewPullRequest=true)에는 커밋 변경 알림은 생략되지만 PullRequestEvent는 기록되어야 한다") {
+                watchRepository.save(Watch(user = receiver, resourceType = ResourceType.PROJECT, resourceId = toProject.id.toString()))
+
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature-new", "test2.txt", "new feature", "Add feature")
+
+                val created = pullRequestService.createPullRequest(
+                    title = "생성 시점 커밋 이벤트 테스트",
+                    body = "본문",
+                    fromProjectId = fromProject.id!!,
+                    toProjectId = toProject.id!!,
+                    fromBranch = "refs/heads/feature-new",
+                    toBranch = "refs/heads/master",
+                    contributor = contributor
+                )
+
+                // NotificationEvent는 NEW_PULL_REQUEST 하나뿐이어야 한다(커밋 변경 알림은 생성 시점엔 생략).
+                val notiEvents = notificationEventRepository.findAll()
+                notiEvents.size shouldBe 1
+                notiEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST
+
+                // PullRequestEvent는 PULL_REQUEST_COMMIT_CHANGED + NEW_PULL_REQUEST 둘 다 남아야 한다.
+                val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(created)
+                prEvents.size shouldBe 2
+                prEvents.map { it.eventType } shouldBe listOf(
+                    com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_COMMIT_CHANGED,
+                    com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST
+                )
+
+                val savedCommits = pullRequestCommitRepository.findByPullRequestAndState(created, PullRequestCommit.State.CURRENT)
+                savedCommits.size shouldBe 1
+            }
+
+            it("재검사 시 diff가 완전히 사라지면 PR이 자동으로 MERGED 상태로 전환되어야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "자동 병합 전환 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/master",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                val result = pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+
+                result.hasDiffCommits() shouldBe false
+
+                val updated = pullRequestRepository.findById(pr.id!!).orElse(null)
+                updated.state shouldBe State.MERGED
+                updated.isConflict shouldBe false
+                updated.receiver?.id shouldBe contributor.id
+            }
         }
     }
 }

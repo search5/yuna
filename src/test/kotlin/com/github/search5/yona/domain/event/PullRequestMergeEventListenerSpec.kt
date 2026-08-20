@@ -80,20 +80,20 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
             val relatedPr = pr(100L, conflict = false)
             every { pullRequestRepository.findRelatedPullRequests(project, "feature") } returns listOf(relatedPr)
             every { pullRequestRepository.save(any()) } answers { firstArg() }
-            every { pullRequestService.attemptMerge(100L) } returns PullRequestMergeResult(pullRequest = relatedPr)
+            every { pullRequestService.processMergeCheck(100L, sender, false) } returns PullRequestMergeResult(pullRequest = relatedPr)
             every { pullRequestRepository.findById(100L) } returns Optional.of(relatedPr)
 
             listener.handleRelatedPullRequestMergeEvent(RelatedPullRequestMergeEvent(project, "feature", sender))
 
             relatedPr.isMerging shouldBe false
-            verify(exactly = 1) { pullRequestService.attemptMerge(100L) }
+            verify(exactly = 1) { pullRequestService.processMergeCheck(100L, sender, false) }
         }
 
         it("충돌이 새로 발생하면(false to true) 알림 이벤트를 발행해야 한다") {
             val relatedPr = pr(101L, conflict = false)
             every { pullRequestRepository.findRelatedPullRequests(project, "feature") } returns listOf(relatedPr)
             every { pullRequestRepository.save(any()) } answers { firstArg() }
-            every { pullRequestService.attemptMerge(101L) } answers {
+            every { pullRequestService.processMergeCheck(101L, sender, false) } answers {
                 relatedPr.isConflict = true
                 PullRequestMergeResult(pullRequest = relatedPr)
             }
@@ -112,7 +112,7 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
             val relatedPr = pr(102L, conflict = true)
             every { pullRequestRepository.findRelatedPullRequests(project, "feature") } returns listOf(relatedPr)
             every { pullRequestRepository.save(any()) } answers { firstArg() }
-            every { pullRequestService.attemptMerge(102L) } answers {
+            every { pullRequestService.processMergeCheck(102L, sender, false) } answers {
                 relatedPr.isConflict = false
                 PullRequestMergeResult(pullRequest = relatedPr)
             }
@@ -127,7 +127,7 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
             val relatedPr = pr(103L, conflict = false)
             every { pullRequestRepository.findRelatedPullRequests(project, "feature") } returns listOf(relatedPr)
             every { pullRequestRepository.save(any()) } answers { firstArg() }
-            every { pullRequestService.attemptMerge(103L) } returns PullRequestMergeResult(pullRequest = relatedPr)
+            every { pullRequestService.processMergeCheck(103L, sender, false) } returns PullRequestMergeResult(pullRequest = relatedPr)
             every { pullRequestRepository.findById(103L) } returns Optional.of(relatedPr)
 
             listener.handleRelatedPullRequestMergeEvent(RelatedPullRequestMergeEvent(project, "feature", sender))
@@ -135,11 +135,11 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
             verify(exactly = 0) { eventPublisher.publishEvent(any<NotificationEvent>()) }
         }
 
-        it("attemptMerge가 예외를 던져도 isMerging은 false로 복구되어야 한다") {
+        it("processMergeCheck가 예외를 던져도 isMerging은 false로 복구되어야 한다") {
             val relatedPr = pr(104L, conflict = false)
             every { pullRequestRepository.findRelatedPullRequests(project, "feature") } returns listOf(relatedPr)
             every { pullRequestRepository.save(any()) } answers { firstArg() }
-            every { pullRequestService.attemptMerge(104L) } throws RuntimeException("git error")
+            every { pullRequestService.processMergeCheck(104L, sender, false) } throws RuntimeException("git error")
             every { pullRequestRepository.findById(104L) } returns Optional.of(relatedPr)
 
             listener.handleRelatedPullRequestMergeEvent(RelatedPullRequestMergeEvent(project, "feature", sender))
