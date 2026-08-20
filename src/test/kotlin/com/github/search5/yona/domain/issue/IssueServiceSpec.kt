@@ -624,6 +624,30 @@ class IssueServiceSpec @Autowired constructor(
                     newIssueEvent.receivers.map { it.id } shouldBe listOf(toWatcherUser.id)
                 }
 
+                // yona IssueApp.addIssueMovedNotification()의 IssueEvent.addFromNotificationEvent(notiEvent,
+                // originalIssue, loginId) 대응 (P1-70).
+                it("이동하면 이슈 타임라인(IssueEvent)에도 ISSUE_MOVED 이력이 남아야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover8", name = "이동실행자8", email = "mover8@yona.io"))
+                    val fromProject = projectRepository.save(Project(name = "from-proj8", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val toProject = projectRepository.save(Project(name = "to-proj8", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
+
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "타임라인 검증용 이슈", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now()
+                        )
+                    )
+
+                    val moved = issueService.moveIssue(issue.id!!, toProject.id!!, mover)
+
+                    val issueEvents = issueEventRepository.findByIssueOrderByCreatedAsc(moved)
+                    val movedEvent = issueEvents.first { it.eventType == EventType.ISSUE_MOVED }
+                    movedEvent.oldValue shouldBe "owner-a/from-proj8"
+                    movedEvent.newValue shouldBe "owner-b/to-proj8"
+                    movedEvent.senderLoginId shouldBe mover.loginId
+                }
+
                 it("자신의 비공개 프로젝트에서 이동하면 history가 비워지고 알림이 발행되지 않아야 한다") {
                     val mover = userRepository.save(User(loginId = "mover8", name = "이동실행자8", email = "mover8@yona.io"))
                     val fromProject = projectRepository.save(
