@@ -38,6 +38,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.milestone.MilestoneRepository
 
 class MentionControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -54,7 +56,20 @@ class MentionControllerSpec : DescribeSpec({
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val reviewCommentRepository = mockk<ReviewCommentRepository>()
     val commitCommentRepository = mockk<CommitCommentRepository>()
-    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
+    val userRepositoryForAccessControl = mockk<UserRepository>()
+    val organizationRepositoryForAccessControl = mockk<OrganizationRepository>()
+    val issueRepositoryForAccessControl = mockk<IssueRepository>()
+    val postingRepositoryForAccessControl = mockk<PostingRepository>()
+    val reviewCommentRepositoryForAccessControl = mockk<ReviewCommentRepository>()
+    val commitCommentRepositoryForAccessControl = mockk<CommitCommentRepository>()
+    val milestoneRepositoryForAccessControl = mockk<MilestoneRepository>()
+    val accessControl = AccessControl(
+        projectUserRepository, organizationUserRepository,
+        userRepositoryForAccessControl, organizationRepositoryForAccessControl,
+        issueRepositoryForAccessControl, postingRepositoryForAccessControl,
+        reviewCommentRepositoryForAccessControl, commitCommentRepositoryForAccessControl,
+        milestoneRepositoryForAccessControl
+    )
 
     val mentionController = MentionController(
         projectRepository,

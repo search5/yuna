@@ -25,6 +25,10 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.data.web.PageableHandlerMethodArgumentResolver
 import java.util.Optional
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 
 class MilestoneViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -37,7 +41,20 @@ class MilestoneViewControllerSpec : DescribeSpec({
     val markdownService = mockk<MarkdownService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
-    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
+    val userRepositoryForAccessControl = mockk<UserRepository>()
+    val organizationRepositoryForAccessControl = mockk<OrganizationRepository>()
+    val issueRepositoryForAccessControl = mockk<IssueRepository>()
+    val postingRepositoryForAccessControl = mockk<PostingRepository>()
+    val reviewCommentRepositoryForAccessControl = mockk<ReviewCommentRepository>()
+    val commitCommentRepositoryForAccessControl = mockk<CommitCommentRepository>()
+    val milestoneRepositoryForAccessControl = mockk<MilestoneRepository>()
+    val accessControl = AccessControl(
+        projectUserRepository, organizationUserRepository,
+        userRepositoryForAccessControl, organizationRepositoryForAccessControl,
+        issueRepositoryForAccessControl, postingRepositoryForAccessControl,
+        reviewCommentRepositoryForAccessControl, commitCommentRepositoryForAccessControl,
+        milestoneRepositoryForAccessControl
+    )
 
     val milestoneViewController = MilestoneViewController(
         projectRepository,

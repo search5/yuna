@@ -19,6 +19,12 @@ import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.milestone.MilestoneRepository
 
 class ReviewThreadControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -27,7 +33,20 @@ class ReviewThreadControllerSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
-    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
+    val userRepositoryForAccessControl = mockk<UserRepository>()
+    val organizationRepositoryForAccessControl = mockk<OrganizationRepository>()
+    val issueRepositoryForAccessControl = mockk<IssueRepository>()
+    val postingRepositoryForAccessControl = mockk<PostingRepository>()
+    val reviewCommentRepositoryForAccessControl = mockk<ReviewCommentRepository>()
+    val commitCommentRepositoryForAccessControl = mockk<CommitCommentRepository>()
+    val milestoneRepositoryForAccessControl = mockk<MilestoneRepository>()
+    val accessControl = AccessControl(
+        projectUserRepository, organizationUserRepository,
+        userRepositoryForAccessControl, organizationRepositoryForAccessControl,
+        issueRepositoryForAccessControl, postingRepositoryForAccessControl,
+        reviewCommentRepositoryForAccessControl, commitCommentRepositoryForAccessControl,
+        milestoneRepositoryForAccessControl
+    )
 
     val reviewThreadController = ReviewThreadController(
         projectRepository,

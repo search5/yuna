@@ -40,6 +40,8 @@ import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.project.RecentProjectRepository
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 
 class ProjectViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -63,7 +65,20 @@ class ProjectViewControllerSpec : DescribeSpec({
     val milestoneRepository = mockk<MilestoneRepository>()
     val watchService = mockk<WatchService>()
     val recentProjectRepository = mockk<RecentProjectRepository>()
-    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
+    val userRepositoryForAccessControl = mockk<UserRepository>()
+    val organizationRepositoryForAccessControl = mockk<OrganizationRepository>()
+    val issueRepositoryForAccessControl = mockk<IssueRepository>()
+    val postingRepositoryForAccessControl = mockk<PostingRepository>()
+    val reviewCommentRepositoryForAccessControl = mockk<ReviewCommentRepository>()
+    val commitCommentRepositoryForAccessControl = mockk<CommitCommentRepository>()
+    val milestoneRepositoryForAccessControl = mockk<MilestoneRepository>()
+    val accessControl = AccessControl(
+        projectUserRepository, organizationUserRepository,
+        userRepositoryForAccessControl, organizationRepositoryForAccessControl,
+        issueRepositoryForAccessControl, postingRepositoryForAccessControl,
+        reviewCommentRepositoryForAccessControl, commitCommentRepositoryForAccessControl,
+        milestoneRepositoryForAccessControl
+    )
 
     val projectViewController = ProjectViewController(
         projectRepository,

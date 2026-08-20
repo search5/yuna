@@ -25,6 +25,12 @@ import org.springframework.security.core.authority.AuthorityUtils
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.core.context.SecurityContextImpl
 import java.util.Optional
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.milestone.MilestoneRepository
 
 // yona SvnApp.java(119-131, AccessControl.isAllowed 위임)의 두 가지 축소 지점 대응 (P1-23):
 // 1) PROTECTED 프로젝트가 PUBLIC과 동일하게 인증 없이 열람 가능했던 문제
@@ -35,7 +41,20 @@ class SvnAuthorizationFilterSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>(relaxed = true)
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
-    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
+    val userRepositoryForAccessControl = mockk<UserRepository>()
+    val organizationRepositoryForAccessControl = mockk<OrganizationRepository>()
+    val issueRepositoryForAccessControl = mockk<IssueRepository>()
+    val postingRepositoryForAccessControl = mockk<PostingRepository>()
+    val reviewCommentRepositoryForAccessControl = mockk<ReviewCommentRepository>()
+    val commitCommentRepositoryForAccessControl = mockk<CommitCommentRepository>()
+    val milestoneRepositoryForAccessControl = mockk<MilestoneRepository>()
+    val accessControl = AccessControl(
+        projectUserRepository, organizationUserRepository,
+        userRepositoryForAccessControl, organizationRepositoryForAccessControl,
+        issueRepositoryForAccessControl, postingRepositoryForAccessControl,
+        reviewCommentRepositoryForAccessControl, commitCommentRepositoryForAccessControl,
+        milestoneRepositoryForAccessControl
+    )
     val filter = SvnAuthorizationFilter(projectService, userRepository, accessControl)
     val filterChain = mockk<FilterChain>(relaxed = true)
 

@@ -26,6 +26,12 @@ import org.springframework.security.core.authority.AuthorityUtils
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.core.context.SecurityContextImpl
 import java.util.Optional
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.milestone.MilestoneRepository
 
 // yona git 스마트 HTTP 경로도 SvnApp.java와 동일한 AccessControl.isAllowed 규칙을 쓴다는 전제로,
 // SvnAuthorizationFilter(P1-23)와 동일한 두 가지 축소를 여기서도 수정한다 (P1-45):
@@ -37,7 +43,20 @@ class GitAuthorizationFilterSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>(relaxed = true)
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
-    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
+    val userRepositoryForAccessControl = mockk<UserRepository>()
+    val organizationRepositoryForAccessControl = mockk<OrganizationRepository>()
+    val issueRepositoryForAccessControl = mockk<IssueRepository>()
+    val postingRepositoryForAccessControl = mockk<PostingRepository>()
+    val reviewCommentRepositoryForAccessControl = mockk<ReviewCommentRepository>()
+    val commitCommentRepositoryForAccessControl = mockk<CommitCommentRepository>()
+    val milestoneRepositoryForAccessControl = mockk<MilestoneRepository>()
+    val accessControl = AccessControl(
+        projectUserRepository, organizationUserRepository,
+        userRepositoryForAccessControl, organizationRepositoryForAccessControl,
+        issueRepositoryForAccessControl, postingRepositoryForAccessControl,
+        reviewCommentRepositoryForAccessControl, commitCommentRepositoryForAccessControl,
+        milestoneRepositoryForAccessControl
+    )
     val filter = GitAuthorizationFilter(projectService, userRepository, accessControl)
     val filterChain = mockk<FilterChain>(relaxed = true)
 
