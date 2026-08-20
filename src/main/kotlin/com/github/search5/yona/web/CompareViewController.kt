@@ -19,7 +19,8 @@ class CompareViewController(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val repositoryService: RepositoryService,
-    private val commentThreadRepository: CommentThreadRepository
+    private val commentThreadRepository: CommentThreadRepository,
+    private val accessControl: AccessControl
 ) {
 
     @GetMapping("/{owner}/{projectName}/compare/{revA:.+}..{revB:.+}")
@@ -38,7 +39,7 @@ class CompareViewController(
         
         // 권한 검증
         if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }

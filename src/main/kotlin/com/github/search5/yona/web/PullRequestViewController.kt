@@ -29,7 +29,8 @@ class PullRequestViewController(
     private val userRepository: UserRepository,
     private val commentThreadRepository: CommentThreadRepository,
     private val pullRequestCommitRepository: com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository,
-    private val issueRepository: com.github.search5.yona.domain.issue.IssueRepository
+    private val issueRepository: com.github.search5.yona.domain.issue.IssueRepository,
+    private val accessControl: AccessControl
 ) {
     // 이슈 자동 닫기 정규식 패턴 (대소문자 구분 없이 close(s/d), fix(es/ed), resolve(s/d) #숫자)
     private val closePattern = "(?i)(?:close[s|d]?|fix[e[s|d]]?|resolve[s|d]?)\\s+#(\\d+)".toRegex()
@@ -120,7 +121,7 @@ class PullRequestViewController(
         }
         return loginUser != null && (
             projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) ||
-                AccessControl.isAllowedIfGroupMember(project, loginUser)
+                accessControl.isAllowedIfGroupMember(project, loginUser)
         )
     }
 
@@ -152,7 +153,7 @@ class PullRequestViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }
@@ -240,7 +241,7 @@ class PullRequestViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
             return "error/403"
         }
 
@@ -347,7 +348,7 @@ class PullRequestViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }

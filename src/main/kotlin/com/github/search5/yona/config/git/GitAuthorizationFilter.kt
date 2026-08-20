@@ -15,7 +15,8 @@ import java.util.regex.Pattern
 @Component
 class GitAuthorizationFilter(
     private val projectService: ProjectService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val accessControl: AccessControl
 ) : OncePerRequestFilter() {
 
     private val gitUriPattern = Pattern.compile("^/(git|git-lfs)/([^/]+)/([^/]+?)(?:\\.git)?(?:/.*)?$")
@@ -99,7 +100,7 @@ class GitAuthorizationFilter(
             return true
         }
         val user = userRepository.findByLoginId(loginId).orElse(null) ?: return false
-        return AccessControl.isAllowedIfGroupMember(project, user)
+        return accessControl.isAllowedIfGroupMember(project, user)
     }
 
     private fun isGuestUser(loginId: String): Boolean {

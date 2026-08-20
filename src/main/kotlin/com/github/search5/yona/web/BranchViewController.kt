@@ -17,7 +17,8 @@ class BranchViewController(
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
-    private val repositoryService: RepositoryService
+    private val repositoryService: RepositoryService,
+    private val accessControl: AccessControl
 ) {
 
     @GetMapping("/{owner}/{projectName}/branches")
@@ -32,7 +33,7 @@ class BranchViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.projectScope != ProjectScope.PUBLIC || project.isCodeAccessibleMemberOnly == true) {
-            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser))) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }

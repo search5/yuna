@@ -1,6 +1,8 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -42,6 +44,9 @@ class PullRequestViewControllerSpec : DescribeSpec({
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val pullRequestCommitRepository = mockk<PullRequestCommitRepository>()
     val issueRepository = mockk<IssueRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val pullRequestViewController = PullRequestViewController(
         projectRepository,
@@ -52,7 +57,8 @@ class PullRequestViewControllerSpec : DescribeSpec({
         userRepository,
         commentThreadRepository,
         pullRequestCommitRepository,
-        issueRepository
+        issueRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(pullRequestViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())

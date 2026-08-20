@@ -36,7 +36,8 @@ class IssueController(
     private val userRepository: UserRepository,
     private val attachmentService: AttachmentService,
     private val issueCommentRepository: IssueCommentRepository,
-    private val issueEventRepository: IssueEventRepository
+    private val issueEventRepository: IssueEventRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -48,7 +49,7 @@ class IssueController(
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     // yona AccessControl.java:250-259,274-279 대응 (P1-82). 이슈 단건 READ는 프로젝트 수준
@@ -57,13 +58,13 @@ class IssueController(
     private fun checkReadPermission(project: Project, issue: Issue, user: User?): Boolean {
         if (checkReadPermission(project, user)) return true
         if (user == null) return false
-        return AccessControl.isAllowedIfSharer(issue, user)
+        return accessControl.isAllowedIfSharer(issue, user)
     }
 
     private fun checkWritePermission(project: Project, user: User?): Boolean {
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     // yona AccessControl.java:244-248의 "user.isManagerOf(project) || isAllowedIfAuthor(user, resource)
@@ -234,7 +235,7 @@ class IssueController(
         val targetProject = projectRepository.findById(request.targetProjectId).orElse(null)
             ?: return ResponseEntity.badRequest().build()
 
-        if (!AccessControl.isProjectResourceCreatable(user, targetProject, ResourceType.ISSUE_POST)) {
+        if (!accessControl.isProjectResourceCreatable(user, targetProject, ResourceType.ISSUE_POST)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 

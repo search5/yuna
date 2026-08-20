@@ -31,6 +31,7 @@ class WatchControllerSpec : DescribeSpec({
     val issueRepository = mockk<IssueRepository>()
     val postingRepository = mockk<PostingRepository>()
     val pullRequestRepository = mockk<PullRequestRepository>()
+    val accessControl = mockk<AccessControl>()
 
     val watchController = WatchController(
         watchService = watchService,
@@ -39,18 +40,11 @@ class WatchControllerSpec : DescribeSpec({
         userProjectNotificationRepository = userProjectNotificationRepository,
         issueRepository = issueRepository,
         postingRepository = postingRepository,
-        pullRequestRepository = pullRequestRepository
+        pullRequestRepository = pullRequestRepository,
+        accessControl = accessControl
     )
 
     val mockMvc = MockMvcBuilders.standaloneSetup(watchController).build()
-
-    beforeSpec {
-        mockkObject(AccessControl)
-    }
-
-    afterSpec {
-        unmockkObject(AccessControl)
-    }
 
     beforeTest {
         clearMocks(
@@ -60,7 +54,8 @@ class WatchControllerSpec : DescribeSpec({
             userProjectNotificationRepository,
             issueRepository,
             postingRepository,
-            pullRequestRepository
+            pullRequestRepository,
+            accessControl
         )
     }
 
@@ -84,7 +79,7 @@ class WatchControllerSpec : DescribeSpec({
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
                 every { projectRepository.findById(1L) } returns Optional.of(project)
-                every { AccessControl.isAllowedToReadProject(user1, project) } returns false
+                every { accessControl.isAllowedToReadProject(user1, project) } returns false
 
                 mockMvc.perform(post("/watch")
                     .principal(auth)
@@ -99,7 +94,7 @@ class WatchControllerSpec : DescribeSpec({
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
                 every { projectRepository.findById(1L) } returns Optional.of(project)
-                every { AccessControl.isAllowedToReadProject(user1, project) } returns true
+                every { accessControl.isAllowedToReadProject(user1, project) } returns true
                 every { watchService.watch(user1, ResourceType.PROJECT, "1") } just Runs
 
                 mockMvc.perform(post("/watch")
@@ -117,7 +112,7 @@ class WatchControllerSpec : DescribeSpec({
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
                 every { issueRepository.findById(100L) } returns Optional.of(issue)
-                every { AccessControl.isAllowedToReadProject(user1, project) } returns true
+                every { accessControl.isAllowedToReadProject(user1, project) } returns true
                 every { watchService.unwatch(user1, ResourceType.ISSUE_POST, "100") } just Runs
 
                 mockMvc.perform(post("/unwatch")
@@ -135,7 +130,7 @@ class WatchControllerSpec : DescribeSpec({
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { AccessControl.isAllowedToReadProject(user1, project) } returns true
+                every { accessControl.isAllowedToReadProject(user1, project) } returns true
                 every { watchService.watch(user1, ResourceType.PROJECT, "1") } just Runs
 
                 mockMvc.perform(post("/owner/TestProj/watch")
@@ -149,7 +144,7 @@ class WatchControllerSpec : DescribeSpec({
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
-                every { AccessControl.isAllowedToReadProject(user1, project) } returns true
+                every { accessControl.isAllowedToReadProject(user1, project) } returns true
                 every { watchService.unwatch(user1, ResourceType.PROJECT, "1") } just Runs
                 every { userProjectNotificationRepository.deleteByUserAndProject(user1, project) } just Runs
 
@@ -165,7 +160,7 @@ class WatchControllerSpec : DescribeSpec({
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
                 every { projectRepository.findById(1L) } returns Optional.of(project)
-                every { AccessControl.isAllowedToReadProject(user1, project) } returns true
+                every { accessControl.isAllowedToReadProject(user1, project) } returns true
                 every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns true
                 every { userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, any()) } returns null
                 every { userProjectNotificationRepository.save(any()) } returns mockk()

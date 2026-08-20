@@ -1,5 +1,7 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -34,13 +36,17 @@ class CodeHistoryControllerSpec : DescribeSpec({
     val commitCommentRepository = mockk<CommitCommentRepository>()
     val userRepository = mockk<UserRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val codeHistoryController = CodeHistoryController(
         projectRepository,
         repositoryService,
         commitCommentRepository,
         userRepository,
-        projectUserRepository
+        projectUserRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(codeHistoryController).build()
 

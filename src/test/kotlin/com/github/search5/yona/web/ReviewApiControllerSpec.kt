@@ -1,5 +1,7 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -28,13 +30,17 @@ class ReviewApiControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val codeReviewService = mockk<CodeReviewService>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val reviewApiController = ReviewApiController(
         projectRepository,
         pullRequestRepository,
         userRepository,
         projectUserRepository,
-        codeReviewService
+        codeReviewService,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(reviewApiController).build()
     val auth = UsernamePasswordAuthenticationToken("gildong", "pass")

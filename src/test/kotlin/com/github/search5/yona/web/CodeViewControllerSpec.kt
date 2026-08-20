@@ -2,6 +2,8 @@ package com.github.search5.yona.web
 
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.databind.node.ObjectNode
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -27,6 +29,9 @@ class CodeViewControllerSpec : DescribeSpec({
     val repositoryService = mockk<RepositoryService>()
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val commitCommentRepository = mockk<CommitCommentRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val controller = CodeViewController(
         projectRepository,
@@ -34,7 +39,8 @@ class CodeViewControllerSpec : DescribeSpec({
         userRepository,
         repositoryService,
         commentThreadRepository,
-        commitCommentRepository
+        commitCommentRepository,
+        accessControl
     )
 
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()

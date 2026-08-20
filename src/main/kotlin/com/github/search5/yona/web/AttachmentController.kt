@@ -29,7 +29,8 @@ class AttachmentController(
     private val issueRepository: IssueRepository,
     private val postingRepository: PostingRepository,
     private val milestoneRepository: MilestoneRepository,
-    private val projectUserRepository: ProjectUserRepository
+    private val projectUserRepository: ProjectUserRepository,
+    private val accessControl: com.github.search5.yona.config.security.AccessControl
 ) {
 
     private fun findUploader(authorEmail: String?, authorLoginId: String?, principal: java.security.Principal?): User {
@@ -166,7 +167,7 @@ class AttachmentController(
                 attachment.containerId.toLongOrNull()?.let { issueId ->
                     val issue = issueRepository.findById(issueId).orElse(null)
                     issue?.let {
-                        com.github.search5.yona.config.security.AccessControl.isAllowedToUpdateIssue(loginUser, it.project, it.authorLoginId)
+                        accessControl.isAllowedToUpdateIssue(loginUser, it.project, it.authorLoginId)
                     }
                 } ?: false
             }
@@ -174,7 +175,7 @@ class AttachmentController(
                 attachment.containerId.toLongOrNull()?.let { postingId ->
                     val posting = postingRepository.findById(postingId).orElse(null)
                     posting?.let {
-                        com.github.search5.yona.config.security.AccessControl.isAllowedToUpdatePosting(loginUser, it.project, it.authorLoginId)
+                        accessControl.isAllowedToUpdatePosting(loginUser, it.project, it.authorLoginId)
                     }
                 } ?: false
             }
@@ -182,7 +183,7 @@ class AttachmentController(
                 attachment.containerId.toLongOrNull()?.let { milestoneId ->
                     val milestone = milestoneRepository.findById(milestoneId).orElse(null)
                     milestone?.let {
-                        com.github.search5.yona.config.security.AccessControl.isAllowedToUpdateMilestone(loginUser, it.project)
+                        accessControl.isAllowedToUpdateMilestone(loginUser, it.project)
                     }
                 } ?: false
             }

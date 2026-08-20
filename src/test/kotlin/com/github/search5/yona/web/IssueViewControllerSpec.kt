@@ -1,7 +1,9 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.project.Project
@@ -54,6 +56,9 @@ class IssueViewControllerSpec : DescribeSpec({
     val issueExcelService = mockk<com.github.search5.yona.domain.issue.IssueExcelService>()
     val repositoryService = mockk<RepositoryService>()
     val recentIssueService = mockk<com.github.search5.yona.domain.issue.RecentIssueService>(relaxed = true)
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val issueViewController = IssueViewController(
         projectRepository,
@@ -73,7 +78,8 @@ class IssueViewControllerSpec : DescribeSpec({
         templateHelper,
         issueExcelService,
         repositoryService,
-        recentIssueService
+        recentIssueService,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())

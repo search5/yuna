@@ -19,7 +19,8 @@ class ReviewApiController(
     private val pullRequestRepository: PullRequestRepository,
     private val userRepository: UserRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val codeReviewService: CodeReviewService
+    private val codeReviewService: CodeReviewService,
+    private val accessControl: AccessControl
 ) {
     // yona AccessControl.isProjectResourceAllowed()의 PULL_REQUEST Operation.ACCEPT 분기
     // (user.isMemberOf(project) || isAllowedIfGroupMember(project, user)) 대응 (P1-78).
@@ -27,7 +28,7 @@ class ReviewApiController(
     private fun checkWritePermission(project: Project, user: User?): Boolean {
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     @DeleteMapping("/comments/{type}/{id}")

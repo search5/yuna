@@ -22,7 +22,8 @@ class ProjectController(
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
-    private val pushedBranchRepository: PushedBranchRepository
+    private val pushedBranchRepository: PushedBranchRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -44,7 +45,7 @@ class ProjectController(
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
         return isProjectMember(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     @GetMapping("/api/projects/search")

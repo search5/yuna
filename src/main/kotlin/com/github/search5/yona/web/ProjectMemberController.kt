@@ -20,7 +20,8 @@ class ProjectMemberController(
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
-    private val messageSource: MessageSource
+    private val messageSource: MessageSource,
+    private val accessControl: AccessControl
 ) {
 
     private fun isProjectManager(projectId: Long, userId: Long): Boolean {
@@ -174,7 +175,7 @@ class ProjectMemberController(
 
         // 권한 확인 (프로젝트 멤버인지 확인)
         if (!projectUserRepository.existsByProjectIdAndUserId(projectId, currentUserId) &&
-            (currentUser == null || !AccessControl.isAllowedIfGroupMember(project, currentUser))
+            (currentUser == null || !accessControl.isAllowedIfGroupMember(project, currentUser))
         ) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }

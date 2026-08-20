@@ -1,7 +1,9 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.board.PostingService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -43,6 +45,9 @@ class BoardViewControllerSpec : DescribeSpec({
     val repositoryService = mockk<com.github.search5.yona.domain.vcs.RepositoryService>()
     val objectMapper = ObjectMapper()
     val recentIssueService = mockk<com.github.search5.yona.domain.issue.RecentIssueService>(relaxed = true)
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val boardViewController = BoardViewController(
         projectRepository,
@@ -56,7 +61,8 @@ class BoardViewControllerSpec : DescribeSpec({
         objectMapper,
         repositoryService,
         "/tmp/yuna/git",
-        recentIssueService
+        recentIssueService,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(boardViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())

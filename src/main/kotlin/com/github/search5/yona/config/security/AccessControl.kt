@@ -1,11 +1,21 @@
 package com.github.search5.yona.config.security
 
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.Issue
+import org.springframework.stereotype.Component
 
-object AccessControl {
+// yona utils/AccessControl.java 대응 (P1-85). isOrganizationAdmin()이 organizationUsers 엔티티 컬렉션
+// 순회와 리포지토리 조회를 뒤섞어 쓰던 것을 통일하기 위해 리포지토리 주입이 가능한 @Component class로
+// 전환한다(P1-85 1a 단계, 공개 함수의 시그니처/로직은 동작 변경 없이 그대로 유지).
+@Component
+class AccessControl(
+    private val projectUserRepository: ProjectUserRepository,
+    private val organizationUserRepository: OrganizationUserRepository
+) {
 
     /**
      * Checks if a user has a permission to read a project.
@@ -117,9 +127,11 @@ object AccessControl {
 
     private fun isOrganizationAdmin(project: Project, user: User): Boolean {
         val organization = project.organization ?: return false
-        return organization.organizationUsers.any {
-            it.user.id == user.id && it.role.id == com.github.search5.yona.domain.role.RoleType.ORG_ADMIN.roleType
-        }
+        val orgId = organization.id ?: return false
+        val userId = user.id ?: return false
+        return organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId)
+            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.ORG_ADMIN.roleType }
+            .orElse(false)
     }
 
     // yona AccessControl.java:90-94 isAllowedIfGroupMember() 대응 (P1-57). 프로젝트 직접 멤버가

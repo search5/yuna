@@ -1,6 +1,8 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.comment.CommentService
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingComment
 import com.github.search5.yona.domain.board.PostingCommentRepository
@@ -38,6 +40,9 @@ class CommentControllerSpec : DescribeSpec({
     val postingRepository = mockk<PostingRepository>()
     val issueCommentRepository = mockk<IssueCommentRepository>()
     val postingCommentRepository = mockk<PostingCommentRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val commentController = CommentController(
         commentService,
@@ -47,7 +52,8 @@ class CommentControllerSpec : DescribeSpec({
         issueRepository,
         postingRepository,
         issueCommentRepository,
-        postingCommentRepository
+        postingCommentRepository,
+        accessControl
     )
 
     val mockMvc = MockMvcBuilders.standaloneSetup(commentController).build()

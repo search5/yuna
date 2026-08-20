@@ -30,7 +30,8 @@ class CommentController(
     private val issueRepository: IssueRepository,
     private val postingRepository: PostingRepository,
     private val issueCommentRepository: IssueCommentRepository,
-    private val postingCommentRepository: PostingCommentRepository
+    private val postingCommentRepository: PostingCommentRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -42,7 +43,7 @@ class CommentController(
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     // 이슈 댓글 생성

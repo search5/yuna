@@ -1,7 +1,10 @@
 package com.github.search5.yona.domain.mail
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.comment.CommentService
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueComment
@@ -51,12 +54,17 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     val issueCommentRepository = mockk<IssueCommentRepository>()
     val postingCommentRepository = mockk<PostingCommentRepository>()
     val reviewCommentRepository = mockk<ReviewCommentRepository>()
+    val projectUserRepository = mockk<ProjectUserRepository>(relaxed = true)
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
+    every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+    val accessControl = AccessControl(projectUserRepository, organizationUserRepository)
 
     val service = IncomingMailProcessingService(
         originalEmailRepository, userRepository, projectRepository,
         issueRepository, postingRepository, issueService, commentService, attachmentService,
         commentThreadRepository, commitCommentRepository, codeReviewService, mailService,
         issueCommentRepository, postingCommentRepository, reviewCommentRepository,
+        accessControl = accessControl,
         inboundBaseAddress = "yona@example.com"
     )
 

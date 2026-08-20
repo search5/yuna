@@ -14,8 +14,7 @@ import com.github.search5.yona.config.security.AccessControl
 import io.kotest.core.spec.style.DescribeSpec
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
+
 import org.hamcrest.Matchers.containsString
 import org.springframework.http.MediaType
 import org.springframework.mock.web.MockMultipartFile
@@ -35,6 +34,7 @@ class AttachmentControllerSpec : DescribeSpec({
     val postingRepository = mockk<PostingRepository>()
     val milestoneRepository = mockk<MilestoneRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
+    val accessControl = mockk<AccessControl>()
 
     val attachmentController = AttachmentController(
         attachmentService,
@@ -43,7 +43,8 @@ class AttachmentControllerSpec : DescribeSpec({
         issueRepository,
         postingRepository,
         milestoneRepository,
-        projectUserRepository
+        projectUserRepository,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(attachmentController).build()
 
@@ -55,13 +56,9 @@ class AttachmentControllerSpec : DescribeSpec({
             issueRepository,
             postingRepository,
             milestoneRepository,
-            projectUserRepository
+            projectUserRepository,
+            accessControl
         )
-        mockkObject(AccessControl)
-    }
-
-    afterTest {
-        unmockkObject(AccessControl)
     }
 
     describe("AttachmentController API 단위 테스트") {
@@ -154,7 +151,7 @@ class AttachmentControllerSpec : DescribeSpec({
                 every { issue.project } returns project
                 every { issue.authorLoginId } returns "tester"
                 every { issueRepository.findById(10L) } returns Optional.of(issue)
-                every { AccessControl.isAllowedToUpdateIssue(loginUser, project, "tester") } returns true
+                every { accessControl.isAllowedToUpdateIssue(loginUser, project, "tester") } returns true
 
                 every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
                 every { attachmentRepository.findById(100L) } returns Optional.of(attachment)

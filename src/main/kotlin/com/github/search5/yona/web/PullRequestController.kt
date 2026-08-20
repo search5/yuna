@@ -26,7 +26,8 @@ class PullRequestController(
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
-    private val pullRequestEventRepository: PullRequestEventRepository
+    private val pullRequestEventRepository: PullRequestEventRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -38,13 +39,13 @@ class PullRequestController(
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     private fun checkWritePermission(project: Project, user: User?): Boolean {
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     private fun isManagerOrContributor(project: Project, contributorId: Long?, user: User?): Boolean {

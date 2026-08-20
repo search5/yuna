@@ -28,7 +28,8 @@ class BoardController(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val postingRepository: PostingRepository,
-    private val issueLabelRepository: IssueLabelRepository
+    private val issueLabelRepository: IssueLabelRepository,
+    private val accessControl: AccessControl
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -40,13 +41,13 @@ class BoardController(
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     private fun checkWritePermission(project: Project, user: User?): Boolean {
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            AccessControl.isAllowedIfGroupMember(project, user)
+            accessControl.isAllowedIfGroupMember(project, user)
     }
 
     private fun isManagerOrAuthor(project: Project, authorId: Long?, user: User?): Boolean {
