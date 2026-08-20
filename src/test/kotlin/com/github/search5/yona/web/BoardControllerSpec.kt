@@ -214,6 +214,21 @@ class BoardControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
             }
+
+            it("작성자도 매니저도 아닌 일반 멤버가 삭제해도 200 OK를 반환해야 한다 (P1-91, legacy는 프로젝트 멤버 전원 허용)") {
+                val plainMember = User(id = 30L, loginId = "plainmember", name = "일반멤버")
+                plainMember.projectUsers.add(ProjectUser(id = 102L, user = plainMember, project = project, role = memberRole))
+                val plainMemberAuth = UsernamePasswordAuthenticationToken("plainmember", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("plainmember") } returns Optional.of(plainMember)
+                every { postingService.deletePosting(1L, 1L, 30L) } returns Unit
+
+                mockMvc.perform(delete("/api/projects/1/posts/1").principal(plainMemberAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.status").value("success"))
+            }
         }
 
         describe("PUT /api/projects/{projectId}/posts/{postId}/labels") {

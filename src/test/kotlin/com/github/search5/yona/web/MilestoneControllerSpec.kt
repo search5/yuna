@@ -137,10 +137,10 @@ class MilestoneControllerSpec : DescribeSpec({
                     .andExpect(status().isCreated)
             }
 
-            it("일반 멤버가 마일스톤을 생성하려 하면 403 Forbidden을 반환해야 한다") {
+            it("일반 멤버가 마일스톤을 생성해도 201 Created를 반환해야 한다 (P1-95, legacy는 프로젝트 멤버 전원에게 생성 권한이 있음, 매니저 전용 아님)") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { milestoneService.createMilestone(1L, any()) } returns milestone
 
                 val jsonContent = """
                     {
@@ -153,6 +153,28 @@ class MilestoneControllerSpec : DescribeSpec({
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonContent)
                         .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+
+                val jsonContent = """
+                    {
+                        "title": "마일스톤 1"
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    post("/api/projects/1/milestones")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(strangerAuth)
                 )
                     .andExpect(status().isForbidden)
             }

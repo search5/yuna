@@ -153,6 +153,30 @@ class CodeHistoryControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isForbidden)
             }
+
+            it("작성자도 매니저도 아닌 일반 프로젝트 멤버가 삭제해도 200 OK를 반환해야 한다 (P1-93, legacy는 프로젝트 멤버 전원 허용)") {
+                val otherAuthor = User(id = 99L, loginId = "someoneelse", name = "다른사람")
+                val comment = CommitComment(
+                    id = 502L, project = project, commitId = commitId,
+                    contents = "타인의 댓글", author = UserIdent(otherAuthor)
+                )
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스터")
+                memberUser.projectUsers.add(
+                    ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType))
+                )
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { commitCommentRepository.findById(502L) } returns Optional.of(comment)
+                every { commitCommentRepository.delete(comment) } returns Unit
+
+                mockMvc.perform(
+                    delete("/api/vcs/owner/TestProj/commit/$commitId/comments/502")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { commitCommentRepository.delete(comment) }
+            }
         }
 
         describe("GET /api/vcs/{owner}/{projectName}/commit/{commitId}/comments") {

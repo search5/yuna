@@ -10,7 +10,6 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
-import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.Page
@@ -46,14 +45,6 @@ class BoardController(
         if (user == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
             accessControl.isAllowedIfGroupMember(project, user)
-    }
-
-    private fun isManagerOrAuthor(project: Project, authorId: Long?, user: User?): Boolean {
-        if (user == null) return false
-        if (authorId == user.id) return true
-        return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
-            .map { it.role.id == RoleType.MANAGER.roleType }
-            .orElse(false)
     }
 
     @GetMapping
@@ -134,7 +125,7 @@ class BoardController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isManagerOrAuthor(project, posting.authorId, user)) {
+        if (!accessControl.isAllowed(user, project, posting, Operation.UPDATE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -167,7 +158,7 @@ class BoardController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isManagerOrAuthor(project, posting.authorId, user)) {
+        if (!accessControl.isAllowed(user, project, posting, Operation.UPDATE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -190,7 +181,7 @@ class BoardController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isManagerOrAuthor(project, posting.authorId, user)) {
+        if (!accessControl.isAllowed(user, project, posting, Operation.DELETE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
