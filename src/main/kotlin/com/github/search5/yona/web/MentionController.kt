@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
@@ -58,7 +59,8 @@ class MentionController(
     private fun checkReadPermission(project: Project, user: User?): Boolean {
         if (project.projectScope == ProjectScope.PUBLIC) return true
         if (user == null) return false
-        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
+            AccessControl.isAllowedIfGroupMember(project, user)
     }
 
     @GetMapping("/api/{owner}/{projectName}/mentionList")
@@ -127,7 +129,7 @@ class MentionController(
             candidates[loginUserId] = loginUser
         }
 
-        val userMentions = toMentionMaps(candidates.values).toMutableList()
+        val userMentions = toMentionMaps(candidates.values, loginUser).toMutableList()
 
         addProjectNameToMentionList(userMentions, project)
         addOrganizationNameToMentionList(userMentions, project)
@@ -136,14 +138,18 @@ class MentionController(
     }
 
     // yona collectedUsersToMentionList 대응
-    private fun toMentionMaps(users: Collection<User>): List<Map<String, String>> {
+    // yona ProjectApp.collectedUsersToMentionList() 대응 (P1-58). "name"은 user.name이 아니라
+    // user.getDisplayName()(요청한 사용자의 언어 설정에 따라 englishName+부서로 바뀔 수 있음), "searchText"는
+    // name+getDisplayName()+loginId 3필드를 그대로 이어붙인다.
+    private fun toMentionMaps(users: Collection<User>, currentUser: User?): List<Map<String, String>> {
         return users
             .filter { it.loginId.isNotBlank() && it.loginId != MENTION_ADMIN_LOGIN_ID }
             .map { user ->
+                val displayName = currentUser?.let { user.getDisplayName(it) } ?: user.getDisplayName()
                 mapOf(
                     "loginid" to user.loginId,
-                    "searchText" to "${user.name}${user.loginId}",
-                    "name" to user.name,
+                    "searchText" to "${user.name}${displayName}${user.loginId}",
+                    "name" to displayName,
                     "image" to user.avatarUrl
                 )
             }
@@ -202,7 +208,7 @@ class MentionController(
                 candidates[loginUserId] = loginUser
             }
 
-            result["result"] = toMentionMaps(candidates.values)
+            result["result"] = toMentionMaps(candidates.values, loginUser)
         }
 
         if (mentionType.equals("issue", ignoreCase = true)) {
@@ -264,7 +270,7 @@ class MentionController(
                 candidates[loginUserId] = loginUser
             }
 
-            result["result"] = toMentionMaps(candidates.values)
+            result["result"] = toMentionMaps(candidates.values, loginUser)
         }
 
         if (mentionType.equals("issue", ignoreCase = true)) {
