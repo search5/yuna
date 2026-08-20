@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.watch.WatchService
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -38,6 +39,8 @@ class CodeReviewServiceImpl(
     private val watchService: WatchService,
     private val pullRequestService: PullRequestService
 ) : CodeReviewService {
+
+    private val logger = LoggerFactory.getLogger(CodeReviewServiceImpl::class.java)
 
     override fun createReviewComment(
         project: Project,
@@ -311,7 +314,14 @@ class CodeReviewServiceImpl(
         thread.state = state
         val saved = commentThreadRepository.save(thread)
 
-        publishThreadStateChangedNotification(saved, oldState, currentUser)
+        // yona CommentThreadApp.java:66-70의 try/catch(알림 발행 실패해도 상태변경은 항상 커밋)
+        // 대응 (P1-79). 클래스 레벨 @Transactional 하에서 이 호출이 예외를 던지면 메서드 밖으로
+        // 전파돼 트랜잭션 전체(방금 저장한 상태변경까지)가 롤백되므로, 반드시 여기서 잡아야 한다.
+        try {
+            publishThreadStateChangedNotification(saved, oldState, currentUser)
+        } catch (e: Exception) {
+            logger.warn("Failed to send a notification for thread state change: ${e.message}", e)
+        }
 
         return saved
     }
