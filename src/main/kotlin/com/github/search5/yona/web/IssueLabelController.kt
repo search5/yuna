@@ -2,6 +2,7 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.DuplicateLabelCategoryNameException
 import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.IssueLabelCategory
@@ -10,7 +11,6 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
-import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.http.HttpStatus
@@ -35,12 +35,6 @@ class IssueLabelController(
 
     private fun checkReadPermission(project: Project, user: User?): Boolean {
         return accessControl.isAllowed(user, project, Operation.READ)
-    }
-
-    private fun isProjectManager(projectId: Long, userId: Long): Boolean {
-        return projectUserRepository.findByProjectIdAndUserId(projectId, userId)
-            .map { it.role.id == RoleType.MANAGER.roleType }
-            .orElse(false)
     }
 
     @GetMapping
@@ -75,7 +69,7 @@ class IssueLabelController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isProjectManager(projectId, user.id!!)) {
+        if (!accessControl.isProjectResourceCreatable(user, project, ResourceType.ISSUE_LABEL)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -98,7 +92,7 @@ class IssueLabelController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isProjectManager(projectId, user.id!!)) {
+        if (!accessControl.isProjectResourceCreatable(user, project, ResourceType.ISSUE_LABEL_CATEGORY)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -122,7 +116,7 @@ class IssueLabelController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isProjectManager(projectId, user.id!!)) {
+        if (!accessControl.isAllowed(user, project, ResourceType.ISSUE_LABEL, Operation.UPDATE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -147,7 +141,7 @@ class IssueLabelController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isProjectManager(projectId, user.id!!)) {
+        if (!accessControl.isAllowed(user, project, ResourceType.ISSUE_LABEL_CATEGORY, Operation.UPDATE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -175,7 +169,7 @@ class IssueLabelController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isProjectManager(projectId, user.id!!)) {
+        if (!accessControl.isProjectResourceCreatable(user, toProject, ResourceType.ISSUE_LABEL)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -199,7 +193,7 @@ class IssueLabelController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isProjectManager(projectId, user.id!!)) {
+        if (!accessControl.isAllowed(user, project, ResourceType.ISSUE_LABEL, Operation.DELETE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -217,7 +211,7 @@ class IssueLabelController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isProjectManager(projectId, user.id!!)) {
+        if (!accessControl.isAllowed(user, project, ResourceType.ISSUE_LABEL_CATEGORY, Operation.DELETE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 

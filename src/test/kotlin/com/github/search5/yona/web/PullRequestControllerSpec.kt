@@ -202,6 +202,57 @@ class PullRequestControllerSpec : DescribeSpec({
                 verify(exactly = 1) { pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문", "feature", "master") }
             }
 
+            it("컨트리뷰터가 아닌 일반 프로젝트 멤버가 수정해도 200 OK를 반환해야 한다 (P1-92, legacy는 프로젝트 멤버 전원 허용)") {
+                val otherMember = User(id = 40L, loginId = "othermember3", name = "다른멤버3")
+                otherMember.projectUsers.add(ProjectUser(id = 103L, user = User(id = 999_912L, loginId = "_membership_placeholder"), project = project, role = memberRole))
+                val otherMemberAuth = UsernamePasswordAuthenticationToken("othermember3", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("othermember3") } returns Optional.of(otherMember)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문", "feature", "master") } returns pullRequest
+
+                val jsonContent = """
+                    {
+                        "title": "수정된 PR 제목",
+                        "body": "수정된 PR 본문"
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherMemberAuth)
+                )
+                    .andExpect(status().isOk)
+            }
+
+            it("컨트리뷰터라도 프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다 (legacy는 컨트리뷰터 자체를 author 우회 대상으로 두지 않음)") {
+                val nonMemberContributor = User(id = 41L, loginId = "nonmembercontributor", name = "비멤버컨트리뷰터")
+                val nonMemberPr = PullRequest(
+                    id = 51L, title = "PR", body = "본문",
+                    toProject = project, fromProject = fromProject,
+                    toBranch = "master", fromBranch = "feature",
+                    contributor = nonMemberContributor, state = State.OPEN, number = 2L
+                )
+                val nonMemberAuth = UsernamePasswordAuthenticationToken("nonmembercontributor", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("nonmembercontributor") } returns Optional.of(nonMemberContributor)
+                every { pullRequestService.getPullRequest(1L, 2L) } returns nonMemberPr
+
+                val jsonContent = """{"title": "수정 시도", "body": "본문"}"""
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(nonMemberAuth)
+                )
+                    .andExpect(status().isForbidden)
+            }
+
             // yona PullRequest.updateWith()의 from/toBranch 재할당 대응 (P1-68).
             it("요청에 fromBranch/toBranch가 포함되면 브랜치 재할당까지 서비스에 전달해야 한다") {
                 val rebranched = PullRequest(

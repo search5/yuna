@@ -154,7 +154,7 @@ class PullRequestController(
         val pullRequest = pullRequestService.getPullRequest(projectId, number)
             ?: return ResponseEntity.notFound().build()
 
-        if (!isManagerOrContributor(project, pullRequest.contributor.id, user)) {
+        if (!accessControl.isAllowed(user, project, pullRequest, Operation.UPDATE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 

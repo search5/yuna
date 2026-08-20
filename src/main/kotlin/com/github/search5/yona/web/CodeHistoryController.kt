@@ -1,13 +1,13 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CommitComment
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
-import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserIdent
@@ -33,13 +33,6 @@ class CodeHistoryController(
     private fun getLoginUser(authentication: Authentication?): User? {
         if (authentication == null) return null
         return userRepository.findByLoginId(authentication.name).orElse(null)
-    }
-
-    private fun isAuthorOrManager(project: Project, comment: CommitComment, user: User): Boolean {
-        if (comment.author?.id == user.id) return true
-        return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
-            .map { it.role.id == RoleType.MANAGER.roleType }
-            .orElse(false)
     }
 
     @GetMapping("/history")
@@ -156,7 +149,7 @@ class CodeHistoryController(
         val comment = commitCommentRepository.findById(id).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
-        if (!isAuthorOrManager(project, comment, user)) {
+        if (!accessControl.isAllowed(user, project, comment, Operation.DELETE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 

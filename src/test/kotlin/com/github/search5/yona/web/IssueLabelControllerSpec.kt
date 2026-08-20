@@ -177,10 +177,10 @@ class IssueLabelControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.name").value("수정된 라벨"))
             }
 
-            it("관리자가 아니면 403 Forbidden을 반환해야 한다") {
+            it("일반 프로젝트 멤버가 수정해도 200 OK를 반환해야 한다 (P1-94, legacy는 프로젝트 멤버 전원 허용, 매니저 전용 아님)") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { issueLabelService.updateLabel(300L, "수정된 라벨", "#123456", 200L) } returns label
 
                 val jsonContent = """
                     {
@@ -195,6 +195,32 @@ class IssueLabelControllerSpec : DescribeSpec({
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonContent)
                         .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { issueLabelService.updateLabel(300L, "수정된 라벨", "#123456", 200L) }
+            }
+
+            it("프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+
+                val jsonContent = """
+                    {
+                        "name": "수정된 라벨",
+                        "color": "#123456",
+                        "categoryId": 200
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/labels/300")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(strangerAuth)
                 )
                     .andExpect(status().isForbidden)
 
@@ -263,10 +289,10 @@ class IssueLabelControllerSpec : DescribeSpec({
                     .andExpect(status().isBadRequest)
             }
 
-            it("관리자가 아니면 403 Forbidden을 반환해야 한다") {
+            it("일반 프로젝트 멤버가 수정해도 200 OK를 반환해야 한다 (P1-94, legacy는 프로젝트 멤버 전원 허용, 매니저 전용 아님)") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { issueLabelService.updateCategory(200L, "수정된 카테고리", true) } returns category
 
                 val jsonContent = """
                     {
@@ -280,6 +306,31 @@ class IssueLabelControllerSpec : DescribeSpec({
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonContent)
                         .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { issueLabelService.updateCategory(200L, "수정된 카테고리", true) }
+            }
+
+            it("프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+
+                val jsonContent = """
+                    {
+                        "name": "수정된 카테고리",
+                        "isExclusive": true
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/labels/categories/200")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(strangerAuth)
                 )
                     .andExpect(status().isForbidden)
 
@@ -308,16 +359,34 @@ class IssueLabelControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$[0].name").value("critical"))
             }
 
-            it("대상 프로젝트의 관리자가 아니면 403 Forbidden을 반환해야 한다") {
+            it("대상 프로젝트의 일반 멤버가 요청해도 원본을 읽을 수 있으면 200 OK를 반환해야 한다 (P1-94, legacy는 생성 권한이 프로젝트 멤버 전원에게 있음, 매니저 전용 아님)") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { projectRepository.findById(2L) } returns Optional.of(fromProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { issueLabelService.copyLabels(2L, 1L) } returns listOf(copiedLabel)
 
                 mockMvc.perform(
                     post("/api/projects/1/labels/copy")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"fromProjectId": 2}""")
                         .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0].name").value("critical"))
+            }
+
+            it("대상 프로젝트의 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+
+                mockMvc.perform(
+                    post("/api/projects/1/labels/copy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"fromProjectId": 2}""")
+                        .principal(strangerAuth)
                 )
                     .andExpect(status().isForbidden)
 
