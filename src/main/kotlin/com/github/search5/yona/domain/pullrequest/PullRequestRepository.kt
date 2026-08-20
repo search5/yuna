@@ -39,6 +39,16 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long> {
     // 브랜치는 별도 PushedBranch 레코드를 만들지 않기 위한 존재 확인.
     fun existsByFromProjectAndFromBranch(fromProject: Project, fromBranch: String): Boolean
 
+    // yona PullRequest.findDuplicatedPullRequest() 대응 (P1-68) — 동일한 from/to 프로젝트·브랜치
+    // 조합으로 이미 열려있는 PR이 있는지 확인한다(PR 수정 시 브랜치를 재할당할 때 사용).
+    fun findByFromBranchAndToBranchAndFromProjectAndToProjectAndState(
+        fromBranch: String,
+        toBranch: String,
+        fromProject: Project,
+        toProject: Project,
+        state: State
+    ): PullRequest?
+
 
     @Query("""
         SELECT pr FROM PullRequest pr 

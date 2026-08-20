@@ -151,7 +151,7 @@ class PullRequestControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
-                every { pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문") } returns pullRequest
+                every { pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문", "feature", "master") } returns pullRequest
 
                 val jsonContent = """
                     {
@@ -167,6 +167,70 @@ class PullRequestControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+
+                verify(exactly = 1) { pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문", "feature", "master") }
+            }
+
+            // yona PullRequest.updateWith()의 from/toBranch 재할당 대응 (P1-68).
+            it("요청에 fromBranch/toBranch가 포함되면 브랜치 재할당까지 서비스에 전달해야 한다") {
+                val rebranched = PullRequest(
+                    id = 50L, title = "수정된 PR 제목", body = "수정된 PR 본문",
+                    toProject = project, fromProject = fromProject,
+                    toBranch = "release", fromBranch = "hotfix",
+                    contributor = user, state = State.OPEN, number = 1L
+                )
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문", "hotfix", "release") } returns rebranched
+
+                val jsonContent = """
+                    {
+                        "title": "수정된 PR 제목",
+                        "body": "수정된 PR 본문",
+                        "fromBranch": "hotfix",
+                        "toBranch": "release"
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.fromBranch").value("hotfix"))
+                    .andExpect(jsonPath("$.toBranch").value("release"))
+            }
+
+            it("브랜치를 재할당했을 때 동일 조합의 PR이 이미 열려있으면 409 Conflict를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every {
+                    pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문", "hotfix", "release")
+                } throws com.github.search5.yona.domain.pullrequest.DuplicatedPullRequestException("중복된 PR")
+
+                val jsonContent = """
+                    {
+                        "title": "수정된 PR 제목",
+                        "body": "수정된 PR 본문",
+                        "fromBranch": "hotfix",
+                        "toBranch": "release"
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isConflict)
             }
         }
 

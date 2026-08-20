@@ -13,6 +13,10 @@ import com.github.search5.yona.domain.event.PullRequestMergeEvent
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.issue.IssueEvent
+import com.github.search5.yona.domain.issue.IssueEventRepository
+import com.github.search5.yona.domain.issue.IssueReferenceParser
+import com.github.search5.yona.domain.issue.IssueRepository
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.*
 import org.eclipse.jgit.merge.MergeStrategy
@@ -38,6 +42,8 @@ class PullRequestServiceImpl(
     private val notificationEventRecorder: NotificationEventRecorder,
     private val pullRequestEventRepository: PullRequestEventRepository,
     private val watchService: WatchService,
+    private val issueRepository: IssueRepository,
+    private val issueEventRepository: IssueEventRepository,
     @org.springframework.beans.factory.annotation.Value("\${yuna.site-name:Yona}")
     private val siteName: String
 ) : PullRequestService {
@@ -559,14 +565,69 @@ class PullRequestServiceImpl(
     override fun updatePullRequest(
         pullRequestId: Long,
         title: String,
-        body: String?
+        body: String?,
+        fromBranch: String,
+        toBranch: String
     ): PullRequest {
         val pr = pullRequestRepository.findById(pullRequestId)
             .orElseThrow { IllegalArgumentException("PullRequest not found: $pullRequestId") }
+
+        // yona hasSameBranchesWith()/findDuplicatedPullRequest() 대응 — 브랜치가 바뀌는 경우에만
+        // 동일한 from/to 프로젝트·브랜치 조합의 OPEN PR이 이미 있는지 검사한다.
+        if (pr.fromBranch != fromBranch || pr.toBranch != toBranch) {
+            val duplicated = pullRequestRepository.findByFromBranchAndToBranchAndFromProjectAndToProjectAndState(
+                fromBranch, toBranch, pr.fromProject, pr.toProject, State.OPEN
+            )
+            if (duplicated != null) {
+                throw DuplicatedPullRequestException(
+                    "동일한 브랜치 조합(from=$fromBranch, to=$toBranch)의 풀 리퀘스트가 이미 열려 있습니다: ${duplicated.id}"
+                )
+            }
+        }
+
+        // yona PullRequest.updateWith() 대응 — deleteIssueEvents() -> 필드 갱신 -> addNewIssueEvents()
+        deleteIssueReferenceEvents(pr)
+
+        pr.toBranch = toBranch
+        pr.fromBranch = fromBranch
         pr.title = title
         pr.body = body
         pr.updated = Instant.now()
-        return pullRequestRepository.save(pr)
+        val updated = pullRequestRepository.save(pr)
+
+        addIssueReferenceEvents(updated)
+
+        return updated
+    }
+
+    // yona PullRequest.deleteIssueEvents() 대응 (P1-68).
+    private fun deleteIssueReferenceEvents(pullRequest: PullRequest) {
+        val newValue = pullRequest.id.toString()
+        val oldEvents = issueEventRepository.findByNewValueAndSenderLoginIdAndEventType(
+            newValue, pullRequest.contributor.loginId, EventType.ISSUE_REFERRED_FROM_PULL_REQUEST
+        )
+        if (oldEvents.isNotEmpty()) {
+            issueEventRepository.deleteAll(oldEvents)
+        }
+    }
+
+    // yona PullRequest.addNewIssueEvents() 대응 (P1-68). title+body에서 "#숫자" 형태로 참조된
+    // 이슈들을 toProject에서 찾아 ISSUE_REFERRED_FROM_PULL_REQUEST 이벤트를 새로 만든다.
+    private fun addIssueReferenceEvents(pullRequest: PullRequest) {
+        val issueNumbers = IssueReferenceParser.findReferredIssueNumbers(pullRequest.title + (pullRequest.body ?: ""))
+        val newValue = pullRequest.id.toString()
+        for (number in issueNumbers) {
+            val issue = issueRepository.findByProjectAndNumber(pullRequest.toProject, number) ?: continue
+            issueEventRepository.save(
+                IssueEvent(
+                    issue = issue,
+                    senderLoginId = pullRequest.contributor.loginId,
+                    newValue = newValue,
+                    created = Instant.now(),
+                    eventType = EventType.ISSUE_REFERRED_FROM_PULL_REQUEST
+                )
+            )
+        }
     }
 
     @Transactional

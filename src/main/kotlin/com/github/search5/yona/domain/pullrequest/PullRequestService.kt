@@ -44,10 +44,18 @@ interface PullRequestService {
         contributor: User
     ): PullRequest
 
+    // yona PullRequest.updateWith()/hasSameBranchesWith()/findDuplicatedPullRequest() +
+    // PullRequestApp.editPullRequest() 대응 (P1-68). title/body뿐 아니라 from/toBranch까지
+    // 재할당할 수 있으며, 브랜치가 바뀌면 동일한 from/to 프로젝트·브랜치 조합의 OPEN PR이
+    // 이미 있는지 검사해 있으면 [DuplicatedPullRequestException]을 던진다. 브랜치 변경 여부와
+    // 무관하게 항상 기존 ISSUE_REFERRED_FROM_PULL_REQUEST 이벤트를 지우고 새 title/body를
+    // 다시 스캔해 재생성한다(deleteIssueEvents()/addNewIssueEvents()).
     fun updatePullRequest(
         pullRequestId: Long,
         title: String,
-        body: String?
+        body: String?,
+        fromBranch: String,
+        toBranch: String
     ): PullRequest
 
     fun changeState(
@@ -79,3 +87,7 @@ class LackingReviewerException(message: String) : RuntimeException(message)
 
 @ResponseStatus(value = HttpStatus.BAD_REQUEST, reason = "병합되지 않은 PR은 브랜치를 삭제/복원할 수 없습니다.")
 class InvalidBranchOperationException(message: String) : RuntimeException(message)
+
+// yona PullRequestApp.editPullRequest()의 findDuplicatedPullRequest() != null 분기 대응 (P1-68).
+@ResponseStatus(value = HttpStatus.CONFLICT, reason = "동일한 브랜치 조합의 풀 리퀘스트가 이미 열려 있습니다.")
+class DuplicatedPullRequestException(message: String) : RuntimeException(message)
