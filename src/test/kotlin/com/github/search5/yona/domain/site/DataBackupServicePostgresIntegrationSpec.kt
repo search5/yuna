@@ -64,17 +64,22 @@ class DataBackupServicePostgresIntegrationSpec @Autowired constructor(
                 // Given: 백업 데이터 자체가 PK=1을 이미 점유하고 있는 상태(디저스터 리커버리 시나리오,
                 // 신규 빈 DB에 과거 백업을 그대로 복원하는 경우와 동일)를 구성한다.
                 val dump = mapOf(
-                    "n4user" to listOf(
-                        mapOf(
-                            "id" to 1,
-                            "name" to "복원된유저",
-                            "login_id" to "restored-user-1",
-                            "email" to "restored1@example.com",
-                            "remember_me" to false,
-                            "is_guest" to false,
-                            "state" to "ACTIVE"
+                    "tables" to mapOf(
+                        "n4user" to listOf(
+                            mapOf(
+                                "id" to 1,
+                                "name" to "복원된유저",
+                                "login_id" to "restored-user-1",
+                                "email" to "restored1@example.com",
+                                "remember_me" to false,
+                                "is_guest" to false,
+                                "state" to "ACTIVE"
+                            )
                         )
-                    )
+                    ),
+                    // yona export 시점의 "다음 값" 캡처(P2-07) 대응 — id=1을 이미 점유하고 있으므로
+                    // 다음으로 배정될 값은 2여야 한다.
+                    "sequences" to mapOf("n4user" to 2)
                 )
                 val backupBytes = objectMapper.writeValueAsBytes(dump)
 
