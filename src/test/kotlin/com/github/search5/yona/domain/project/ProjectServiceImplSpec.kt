@@ -15,6 +15,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import java.time.Instant
 import java.util.Optional
 
@@ -85,15 +86,21 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { projectRepository.save(any()) } returns project
             every { projectUserRepository.findByProjectIdAndUserId(10L, 1L) } returns Optional.empty()
             every { userRepository.findByLoginId("intended-owner") } returns Optional.of(destUser)
+            every { organizationRepository.findByName("intended-owner") } returns Optional.empty()
             every { projectUserRepository.findByProjectIdAndUserId(10L, 2L) } returns Optional.empty()
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
             every { projectUserRepository.save(any()) } returns mockk()
-            every { projectTransferRepository.save(any()) } returns pt
+            every { projectTransferRepository.delete(any()) } returns Unit
 
             // When & Then (예외가 발생하지 않아야 함)
             projectService.acceptTransfer(50L, "correct-key", 2L)
 
             pt.accepted shouldBe true
+            // yona acceptTransfer()의 "project.organization = null"(개인에게 이관) 대응 (P1-73).
+            project.organization shouldBe null
+            // yona disableProjectTransferLink()가 실제로는 ProjectTransfer 행을 삭제하는 것 대응
+            // (P1-74) — accepted=true로 남겨두지 않는다.
+            verify(exactly = 1) { projectTransferRepository.delete(pt) }
         }
 
         it("이관 목적지가 조직(Organization) 이름이면 해당 조직의 ORG_ADMIN만 수락할 수 있어야 한다") {
@@ -136,12 +143,45 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { projectUserRepository.findByProjectIdAndUserId(10L, 1L) } returns Optional.empty()
             every { userRepository.findByLoginId("some-org") } returns Optional.empty()
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
-            every { projectTransferRepository.save(any()) } returns pt
+            every { projectTransferRepository.delete(any()) } returns Unit
 
             // When & Then (예외가 발생하지 않아야 함)
             projectService.acceptTransfer(50L, "correct-key", 4L)
 
             pt.accepted shouldBe true
+            // yona acceptTransfer()의 "project.organization = newOwnerOrg"(조직에게 이관) 대응 (P1-73).
+            project.organization shouldBe org
+        }
+
+        // yona ProjectApp.acceptTransfer()의 "project.organization = newOwnerOrg 또는 null" 대응 (P1-73).
+        it("조직 소속 프로젝트를 개인에게 이관하면 organization이 명시적으로 null로 지워져야 한다") {
+            val orgOwnedProject = Project(
+                id = 11L, name = "org-owned-project", owner = "some-org", vcs = "GIT",
+                organization = Organization(id = 5L, name = "some-org")
+            )
+            val pt = ProjectTransfer(
+                id = 51L, project = orgOwnedProject, sender = sender, destination = "intended-owner",
+                confirmKey = "correct-key", newProjectName = "org-owned-project", requested = Instant.now()
+            )
+            val destUser = User(id = 2L, loginId = "intended-owner", name = "받는사람")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            every {
+                projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(51L, false, any())
+            } returns Optional.of(pt)
+            every { userRepository.findById(2L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("intended-owner") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns orgOwnedProject
+            every { projectUserRepository.findByProjectIdAndUserId(11L, 1L) } returns Optional.empty()
+            every { userRepository.findByLoginId("intended-owner") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(11L, 2L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(51L, "correct-key", 2L)
+
+            orgOwnedProject.organization shouldBe null
         }
 
         it("confirmKey가 일치하지 않으면 인가 검사 전에 예외가 발생해야 한다") {
@@ -156,6 +196,48 @@ class ProjectServiceImplSpec : DescribeSpec({
             shouldThrow<IllegalArgumentException> {
                 projectService.acceptTransfer(50L, "wrong-key", 2L)
             }
+        }
+    }
+
+    // yona Project.newProjectName(loginId, projectName) 대응 (P1-72).
+    describe("ProjectServiceImpl.requestNewTransfer") {
+        val sender = User(id = 1L, loginId = "sender", name = "보내는사람")
+        val project = Project(id = 10L, name = "yona-project", owner = "sender", vcs = "GIT")
+
+        it("목적지에 동명 프로젝트가 없으면 이름 변경 없이 그대로 이관 요청되어야 한다") {
+            every { projectRepository.findById(10L) } returns Optional.of(project)
+            every { userRepository.findById(1L) } returns Optional.of(sender)
+            every { userRepository.findByLoginId("new-owner") } returns Optional.empty()
+            every { projectRepository.findByOwner("new-owner") } returns emptyList()
+            every { projectRepository.findByOwnerAndName("new-owner", "yona-project") } returns Optional.empty()
+            every {
+                projectTransferRepository.findByProjectAndSenderAndDestination(project, sender, "new-owner")
+            } returns Optional.empty()
+            every { projectTransferRepository.save(any()) } answers { firstArg() }
+
+            val pt = projectService.requestNewTransfer(10L, 1L, "new-owner")
+
+            pt.newProjectName shouldBe "yona-project"
+        }
+
+        it("목적지에 동명 프로젝트가 있으면 충돌이 없을 때까지 뒤에 -1, -2...를 붙여야 한다") {
+            every { projectRepository.findById(10L) } returns Optional.of(project)
+            every { userRepository.findById(1L) } returns Optional.of(sender)
+            every { userRepository.findByLoginId("new-owner") } returns Optional.empty()
+            every { projectRepository.findByOwner("new-owner") } returns emptyList()
+            every { projectRepository.findByOwnerAndName("new-owner", "yona-project") } returns
+                Optional.of(Project(id = 99L, name = "yona-project", owner = "new-owner"))
+            every { projectRepository.findByOwnerAndName("new-owner", "yona-project-1") } returns
+                Optional.of(Project(id = 98L, name = "yona-project-1", owner = "new-owner"))
+            every { projectRepository.findByOwnerAndName("new-owner", "yona-project-2") } returns Optional.empty()
+            every {
+                projectTransferRepository.findByProjectAndSenderAndDestination(project, sender, "new-owner")
+            } returns Optional.empty()
+            every { projectTransferRepository.save(any()) } answers { firstArg() }
+
+            val pt = projectService.requestNewTransfer(10L, 1L, "new-owner")
+
+            pt.newProjectName shouldBe "yona-project-2"
         }
     }
 
