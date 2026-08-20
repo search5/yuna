@@ -256,6 +256,74 @@ class IssueServiceSpec @Autowired constructor(
                 issueEvents.first().newValue shouldBe "버그"
             }
 
+            // yona Issue.checkLabels() 대응 (P1-80).
+            it("updateIssue로 같은 배타(exclusive) 카테고리의 라벨을 두 개 이상 붙이면 거부되어야 한다") {
+                val author = userRepository.save(User(loginId = "tester6b", name = "테스터6b", email = "tester6b@yona.io"))
+                val project = projectRepository.save(Project(name = "exclusive-label-test-project", owner = "tester6b"))
+                val exclusiveCategory = issueLabelCategoryRepository.save(
+                    IssueLabelCategory(name = "우선순위", isExclusive = true, project = project)
+                )
+                val highLabel = issueLabelRepository.save(
+                    IssueLabel(category = exclusiveCategory, color = "red", name = "높음", project = project)
+                )
+                val lowLabel = issueLabelRepository.save(
+                    IssueLabel(category = exclusiveCategory, color = "blue", name = "낮음", project = project)
+                )
+                val issue = Issue(
+                    title = "배타 라벨 검증 테스트", body = "본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                io.kotest.assertions.throwables.shouldThrow<IssueLabelExclusiveCategoryException> {
+                    issueService.updateIssue(
+                        issueId = savedIssue.id!!,
+                        title = savedIssue.title,
+                        body = savedIssue.body ?: "",
+                        updater = author,
+                        assigneeUser = null,
+                        milestoneId = null,
+                        labelIds = listOf(highLabel.id!!, lowLabel.id!!)
+                    )
+                }
+            }
+
+            it("updateIssue로 서로 다른 배타 카테고리의 라벨은 각각 하나씩 함께 붙일 수 있어야 한다") {
+                val author = userRepository.save(User(loginId = "tester6c", name = "테스터6c", email = "tester6c@yona.io"))
+                val project = projectRepository.save(Project(name = "exclusive-label-ok-project", owner = "tester6c"))
+                val priorityCategory = issueLabelCategoryRepository.save(
+                    IssueLabelCategory(name = "우선순위", isExclusive = true, project = project)
+                )
+                val typeCategory = issueLabelCategoryRepository.save(
+                    IssueLabelCategory(name = "종류", isExclusive = true, project = project)
+                )
+                val highLabel = issueLabelRepository.save(
+                    IssueLabel(category = priorityCategory, color = "red", name = "높음", project = project)
+                )
+                val bugLabel = issueLabelRepository.save(
+                    IssueLabel(category = typeCategory, color = "orange", name = "버그", project = project)
+                )
+                val issue = Issue(
+                    title = "배타 라벨 정상 케이스", body = "본문", project = project,
+                    authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                    createdDate = Instant.now(), state = State.OPEN
+                )
+                val savedIssue = issueRepository.save(issue)
+
+                val updated = issueService.updateIssue(
+                    issueId = savedIssue.id!!,
+                    title = savedIssue.title,
+                    body = savedIssue.body ?: "",
+                    updater = author,
+                    assigneeUser = null,
+                    milestoneId = null,
+                    labelIds = listOf(highLabel.id!!, bugLabel.id!!)
+                )
+
+                updated.labels.map { it.name }.toSet() shouldBe setOf("높음", "버그")
+            }
+
             it("같은 사용자가 30초 내에 상태를 연속 변경(A->B->C)하면 IssueEvent가 A->C 하나로 병합돼야 한다(P1-38)") {
                 val author = userRepository.save(User(loginId = "tester7", name = "테스터7", email = "tester7@yona.io"))
                 val project = projectRepository.save(Project(name = "merge-test-project", owner = "tester7"))

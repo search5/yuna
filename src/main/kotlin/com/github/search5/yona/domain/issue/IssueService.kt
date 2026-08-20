@@ -46,3 +46,10 @@ interface IssueService {
     fun voteComment(commentId: Long, user: User)
     fun unvoteComment(commentId: Long, user: User)
 }
+
+// yona Issue.checkLabels()/IssueLabel.IssueLabelException 대응 (P1-80).
+@org.springframework.web.bind.annotation.ResponseStatus(
+    value = org.springframework.http.HttpStatus.BAD_REQUEST,
+    reason = "같은 배타(exclusive) 카테고리의 라벨을 두 개 이상 붙일 수 없습니다."
+)
+class IssueLabelExclusiveCategoryException(message: String) : RuntimeException(message)
