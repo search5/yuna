@@ -42,7 +42,6 @@ import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.watch.WatchService
 import java.time.Instant
-import com.github.search5.yona.domain.project.RecentProject
 import com.github.search5.yona.domain.project.RecentProjectRepository
 import com.github.search5.yona.domain.user.User
 
@@ -132,33 +131,9 @@ class ProjectViewController(
         return "project/home"
     }
 
+    // P2-09에서 GitServletConfig와 공용으로 쓰도록 RecentProjectRepository.recordVisit()으로 승격
     private fun addVisitHistory(user: User, project: Project) {
-        try {
-            val userId = user.id ?: return
-            val projectId = project.id ?: return
-
-            val existed = recentProjectRepository.findByUserIdAndProjectId(userId, projectId).orElse(null)
-            if (existed != null) {
-                recentProjectRepository.delete(existed)
-            }
-
-            val recentProject = RecentProject(
-                userId = userId,
-                owner = project.owner ?: "",
-                projectId = projectId,
-                projectName = project.name ?: "",
-                visitedDate = Instant.now()
-            )
-            recentProjectRepository.save(recentProject)
-
-            val recentList = recentProjectRepository.findByUserIdOrderByVisitedDateDesc(userId)
-            if (recentList.size > 30) {
-                val toDelete = recentList.subList(30, recentList.size)
-                recentProjectRepository.deleteAll(toDelete)
-            }
-        } catch (e: Exception) {
-            // NOOP
-        }
+        recentProjectRepository.recordVisit(user, project)
     }
 
     private fun getProjectHistory(ownerId: String, project: Project): List<HistoryDto> {
