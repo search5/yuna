@@ -83,6 +83,40 @@ class DataBackupServiceIntegrationSpec @Autowired constructor(
                 (json.contains("\"role\"") || json.contains("\"n4user\"")) shouldBe true
                 (json.contains("\"organization\"")) shouldBe true
             }
+
+            // yona DefaultExchanger.exportData()/importSequence() 대응 (P2-07) — export 시점에 실제
+            // DB가 갖고 있던 auto-increment "다음 값"을 그대로 캡처했다가 복원 시 그 값으로 되돌려야
+            // 한다(백업된 행들의 max(id)+1을 복원 시점에 재계산하는 게 아니라). 복원 사이에 카운터가
+            // 임의로 바뀌어도(다른 프로세스가 손댔거나, 이전 구현처럼 잘못 재계산됐거나) export 시점
+            // 값으로 정확히 되돌아오는지를 직접 확인해 "캡처된 값을 그대로 복원한다"는 메커니즘 자체를
+            // 증명한다(우연히 max(id)와 일치해서 통과하는 약한 검증이 되지 않도록).
+            it("복원 시 auto-increment가 export 시점에 캡처해둔 값으로 정확히 되돌아가야 한다(재계산이 아님)") {
+                userRepository.save(
+                    User(loginId = "seq-capture-user", name = "시퀀스캡처유저", email = "seq-capture@example.com")
+                )
+
+                val nextValueAtExport = jdbc.queryForObject(
+                    "SELECT AUTO_INCREMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'n4user'",
+                    Long::class.java
+                )
+
+                val backup = dataBackupService.exportAll()
+
+                // 복원 사이에 카운터를 의도적으로 훨씬 낮은 값으로 흐트러뜨려둔다 — 만약 복원 로직이
+                // (이전 구현처럼) 백업된 행의 max(id)+1을 다시 계산하는 방식이라면 이 훼손과 무관하게
+                // 우연히 비슷한 값이 나올 수 있지만, "캡처된 값을 그대로 복원"하는 올바른 메커니즘이라면
+                // 이 훼손 여부와 무관하게 항상 export 시점 값으로 정확히 돌아와야 한다.
+                jdbc.execute("ALTER TABLE n4user AUTO_INCREMENT = 1")
+
+                dataBackupService.importAll(backup)
+
+                val nextValueAfterRestore = jdbc.queryForObject(
+                    "SELECT AUTO_INCREMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'n4user'",
+                    Long::class.java
+                )
+
+                nextValueAfterRestore shouldBe nextValueAtExport
+            }
         }
     }
 }
