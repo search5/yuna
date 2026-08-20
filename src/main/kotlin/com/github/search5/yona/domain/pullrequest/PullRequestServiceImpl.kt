@@ -37,7 +37,9 @@ class PullRequestServiceImpl(
     private val eventPublisher: ApplicationEventPublisher,
     private val notificationEventRecorder: NotificationEventRecorder,
     private val pullRequestEventRepository: PullRequestEventRepository,
-    private val watchService: WatchService
+    private val watchService: WatchService,
+    @org.springframework.beans.factory.annotation.Value("\${yuna.site-name:Yona}")
+    private val siteName: String
 ) : PullRequestService {
 
     @Transactional
@@ -98,9 +100,9 @@ class PullRequestServiceImpl(
     // 없음)를 분리해뒀으므로 그 경계를 그대로 따라 별도 메서드로 둔다.
     @Transactional
     override fun processMergeCheck(pullRequestId: Long, sender: User, isNewPullRequest: Boolean): PullRequestMergeResult {
-        val beforeLastCommitId = pullRequestRepository.findById(pullRequestId).orElse(null)?.lastCommitId
+        val beforeMergedCommitIdTo = pullRequestRepository.findById(pullRequestId).orElse(null)?.mergedCommitIdTo
 
-        val result = attemptMerge(pullRequestId)
+        val result = updateMerge(pullRequestId)
         val pullRequest = pullRequestRepository.findById(pullRequestId)
             .orElseThrow { IllegalArgumentException("PullRequest with ID $pullRequestId not found") }
 
@@ -112,7 +114,7 @@ class PullRequestServiceImpl(
                 if (!isNewPullRequest) {
                     notifyCommitChanged(pullRequest, sender)
                 }
-                recordCommitChangedEvent(pullRequest, sender, newCommits, beforeLastCommitId)
+                recordCommitChangedEvent(pullRequest, sender, newCommits, beforeMergedCommitIdTo)
 
                 // yona PullRequest.clearReviewers() 대응 — 새 커밋이 들어왔으니 기존 리뷰를 무효화하고
                 // 재검토를 강제한다.
@@ -174,13 +176,11 @@ class PullRequestServiceImpl(
         pullRequest: PullRequest,
         sender: User,
         newCommits: List<PullRequestCommit>,
-        beforeLastCommitId: String?
+        beforeMergedCommitIdTo: String?
     ) {
-        // legacy oldValue는 mergedCommitIdTo(가상 병합 커밋 ref)의 변경 전/후 쌍이지만, yuna는 그
-        // 메커니즘을 이식하지 않았으므로(P0-10/11/12 범위 조정과 동일한 기조) attemptMerge()가 매번
-        // 추적하는 lastCommitId(소스 브랜치 tip)의 변경 전/후 쌍으로 대체한다 — 메시지 리졸버는
-        // 이 이벤트 타입의 oldValue를 사용하지 않으므로(newValue.orEmpty()) 표시에 영향 없음.
-        val oldValue = beforeLastCommitId?.let { "$it,${pullRequest.lastCommitId}" }
+        // yona PullRequestActor.getCommitEventOldValue(oldMergeCommitId, pullRequest.mergedCommitIdTo)
+        // 대응 — 이전 mergedCommitIdTo가 없으면(최초 재검사) oldValue도 null, 있으면 "이전,새" 쌍.
+        val oldValue = beforeMergedCommitIdTo?.let { "$it,${pullRequest.mergedCommitIdTo}" }
         val newValue = newCommits.joinToString(",") { it.id.toString() }
         pullRequestEventRepository.save(
             PullRequestEvent(
@@ -248,31 +248,7 @@ class PullRequestServiceImpl(
             // 머지 성공: 머지 커밋 생성
             val whoMerges = PersonIdent(updater.name, updater.email ?: "yuna@yuna.io")
             val diff = diffCommits(repo, leftParent, rightParent)
-            val mergeCommit = CommitBuilder().apply {
-                val reusableTreeId = getMergedTreeIfReusable(repo, leftParent, rightParent, pullRequest)
-                setTreeId(reusableTreeId ?: merger.resultTreeId)
-                setParentIds(leftParent, rightParent)
-                setAuthor(whoMerges)
-                setCommitter(whoMerges)
-                setMessage(makeMergeCommitMessage(pullRequest, diff))
-            }
-
-            val inserter = repo.newObjectInserter()
-            val mergeCommitId = inserter.insert(mergeCommit)
-            inserter.flush()
-            inserter.close()
-
-            // refs/yobi/pull/{id}/merged 레프 업데이트
-            val mergedRef = "refs/yobi/pull/${pullRequest.id}/merged"
-            val refUpdate = repo.updateRef(mergedRef)
-            refUpdate.setNewObjectId(mergeCommitId)
-            refUpdate.isForceUpdate = true
-            refUpdate.refLogIdent = whoMerges
-            refUpdate.setRefLogMessage("merged", true)
-            val rc = refUpdate.update()
-            if (rc != RefUpdate.Result.NEW && rc != RefUpdate.Result.FAST_FORWARD && rc != RefUpdate.Result.FORCED) {
-                throw IOException("Ref update failed for $mergedRef: $rc")
-            }
+            val mergeCommitId = createMergeCommitAndUpdateRef(repo, pullRequest, leftParent, rightParent, merger, whoMerges, diff)
 
             // DB 업데이트
             result.gitCommits = diff
@@ -294,6 +270,103 @@ class PullRequestServiceImpl(
                     isNewPullRequest = false
                 )
             )
+
+            result
+        }
+    }
+
+    // yona PullRequest.Merger.Success.createCommit(PersonIdent)/MergeRefUpdate.updateRef() 대응.
+    // merge()(실제 병합)와 updateMerge()(재검사 미리보기, P1-53) 둘 다 "머지 커밋을 만들어
+    // refs/yobi/pull/{id}/merged를 갱신"하는 동일한 절차를 쓰므로 공용 헬퍼로 추출했다.
+    private fun createMergeCommitAndUpdateRef(
+        repo: Repository,
+        pullRequest: PullRequest,
+        leftParent: ObjectId,
+        rightParent: ObjectId,
+        merger: ThreeWayMerger,
+        whoMerges: PersonIdent,
+        diff: List<GitCommit>
+    ): ObjectId {
+        val reusableTreeId = getMergedTreeIfReusable(repo, leftParent, rightParent, pullRequest)
+        val mergeCommit = CommitBuilder().apply {
+            setTreeId(reusableTreeId ?: merger.resultTreeId)
+            setParentIds(leftParent, rightParent)
+            setAuthor(whoMerges)
+            setCommitter(whoMerges)
+            setMessage(makeMergeCommitMessage(pullRequest, diff))
+        }
+
+        val inserter = repo.newObjectInserter()
+        val mergeCommitId = inserter.insert(mergeCommit)
+        inserter.flush()
+        inserter.close()
+
+        val mergedRef = "refs/yobi/pull/${pullRequest.id}/merged"
+        val refUpdate = repo.updateRef(mergedRef)
+        refUpdate.setNewObjectId(mergeCommitId)
+        refUpdate.isForceUpdate = true
+        refUpdate.refLogIdent = whoMerges
+        refUpdate.setRefLogMessage("merged", true)
+        val rc = refUpdate.update()
+        if (rc != RefUpdate.Result.NEW && rc != RefUpdate.Result.FAST_FORWARD && rc != RefUpdate.Result.FORCED) {
+            throw IOException("Ref update failed for $mergedRef: $rc")
+        }
+
+        return mergeCommitId
+    }
+
+    // yona PullRequest.updateMerge() 대응 (P1-53). attemptMerge()(뷰 전용, 임시 브랜치로 fetch 후
+    // 삭제, 부수효과 없음)와 달리 소스를 영구 ref(refs/yobi/pull/{id}/head)로 fetch하고, 충돌이 없으면
+    // 실제 "미리보기 병합 커밋"을 만들어 refs/yobi/pull/{id}/merged를 갱신한 뒤 그 커밋의 부모/자신
+    // 해시를 mergedCommitIdFrom/mergedCommitIdTo에 기록한다. processMergeCheck() 전용이며,
+    // PullRequestViewController가 페이지 렌더링마다 호출하는 attemptMerge()는 이 메서드를 거치지 않는다
+    // (부수효과 경계는 P1-52에서 이미 확립). yona가 이 미리보기 커밋의 작성자로 사이트 시스템 계정
+    // (Config.getSiteName()/getSystemEmailAddress())을 쓰는 것과 동일하게, 실제 push한 sender가 아니라
+    // 사이트 이름으로 커밋한다.
+    private fun updateMerge(pullRequestId: Long): PullRequestMergeResult {
+        val pullRequest = pullRequestRepository.findById(pullRequestId)
+            .orElseThrow { IllegalArgumentException("PullRequest with ID $pullRequestId not found") }
+
+        val playRepo = repositoryService.getRepository(pullRequest.toProject)
+        val gitDir = playRepo.getDirectory()
+
+        return FileRepositoryBuilder().setGitDir(gitDir).build().use { repo ->
+            val fromGitDir = repositoryService.getRepository(pullRequest.fromProject).getDirectory().absolutePath
+            val fetchedSourceRef = "refs/yobi/pull/${pullRequest.id}/head"
+
+            Git(repo).fetch()
+                .setRemote(fromGitDir)
+                .setRefSpecs(
+                    RefSpec()
+                        .setSource(pullRequest.fromBranch)
+                        .setDestination(fetchedSourceRef)
+                        .setForceUpdate(true)
+                )
+                .call()
+
+            val merger = MergeStrategy.RECURSIVE.newMerger(repo, true) as ThreeWayMerger
+            val leftParent = repo.resolve(pullRequest.toBranch)
+                ?: throw IllegalArgumentException("Target branch '${pullRequest.toBranch}' not found")
+            val rightParent = repo.resolve(fetchedSourceRef)
+                ?: throw IllegalArgumentException("Fetched source branch not found")
+
+            val success = merger.merge(leftParent, rightParent)
+            val result = PullRequestMergeResult(pullRequest = pullRequest)
+            val diff = diffCommits(repo, leftParent, rightParent)
+
+            if (success) {
+                val whoMerges = PersonIdent(siteName, "yuna@yuna.io")
+                val mergeCommitId = createMergeCommitAndUpdateRef(repo, pullRequest, leftParent, rightParent, merger, whoMerges, diff)
+                result.setResolvedStateOfPullRequest()
+                pullRequest.mergedCommitIdFrom = leftParent.name
+                pullRequest.mergedCommitIdTo = mergeCommitId.name
+            } else {
+                result.setConflictStateOfPullRequest()
+            }
+
+            result.gitCommits = diff
+            pullRequest.lastCommitId = rightParent.name
+            pullRequestRepository.save(pullRequest)
 
             result
         }

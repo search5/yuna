@@ -775,6 +775,51 @@ class PullRequestServiceSpec @Autowired constructor(
                 updated.isConflict shouldBe false
                 updated.receiver?.id shouldBe contributor.id
             }
+
+            // yona PullRequest.updateMerge()/updateMergedCommitId() 대응 (P1-53). P1-52에서 이 부분을
+            // lastCommitId 전/후 쌍으로 축약했었는데, 사용자가 legacy 메커니즘을 그대로 이식하라고
+            // 재지시해 실제 "미리보기 병합 커밋" 생성+ref 갱신으로 교체했다.
+            it("processMergeCheck를 반복 호출하면 mergedCommitIdFrom/mergedCommitIdTo가 실제 병합 미리보기 커밋을 반영하고, PullRequestEvent.oldValue는 그 값의 변경 전/후 쌍이어야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature-mc", "test2.txt", "first change", "First change")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "mergedCommitId 추적 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-mc",
+                        contributor = contributor, receiver = receiver,
+                        created = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                // 1차 재검사: 이전 mergedCommitIdTo가 없으므로 oldValue는 null이어야 한다.
+                pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+
+                val afterFirst = pullRequestRepository.findById(pr.id!!).orElse(null)
+                afterFirst.mergedCommitIdFrom shouldNotBe null
+                afterFirst.mergedCommitIdTo shouldNotBe null
+                val firstMergedCommitIdTo = afterFirst.mergedCommitIdTo
+
+                val firstEvent = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr).first()
+                firstEvent.oldValue shouldBe null
+
+                // 소스 브랜치에 새 커밋을 추가한 뒤 2차 재검사: mergedCommitIdTo가 갱신되고,
+                // 새 PullRequestEvent.oldValue는 "이전 mergedCommitIdTo,새 mergedCommitIdTo" 쌍이어야 한다.
+                createCommit(fromBareDir, "feature-mc", "test3.txt", "second change", "Second change")
+                pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+
+                val afterSecond = pullRequestRepository.findById(pr.id!!).orElse(null)
+                afterSecond.mergedCommitIdTo shouldNotBe firstMergedCommitIdTo
+
+                val events = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
+                events.size shouldBe 2
+                events[1].oldValue shouldBe "$firstMergedCommitIdTo,${afterSecond.mergedCommitIdTo}"
+            }
         }
     }
 }
