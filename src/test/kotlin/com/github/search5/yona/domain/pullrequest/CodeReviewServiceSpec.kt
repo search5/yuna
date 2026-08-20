@@ -79,7 +79,13 @@ class CodeReviewServiceSpec @Autowired constructor(
     private val notificationEventRepository: com.github.search5.yona.domain.notification.NotificationEventRepository,
     private val notificationMailRepository: com.github.search5.yona.domain.notification.NotificationMailRepository,
     private val commitCommentRepository: CommitCommentRepository,
-    private val watchRepository: WatchRepository
+    private val watchRepository: WatchRepository,
+    private val eventPublisher: org.springframework.context.ApplicationEventPublisher,
+    private val projectUserRepository: com.github.search5.yona.domain.project.ProjectUserRepository,
+    private val attachmentService: com.github.search5.yona.domain.attachment.AttachmentService,
+    private val commentService: com.github.search5.yona.domain.comment.CommentService,
+    private val watchService: com.github.search5.yona.domain.watch.WatchService,
+    private val pullRequestService: PullRequestService
 ) : AbstractIntegrationTest() {
 
     init {
@@ -496,6 +502,58 @@ class CodeReviewServiceSpec @Autowired constructor(
                 )
 
                 updatedThread.state shouldBe CommentThread.ThreadState.CLOSED
+            }
+
+            // yona CommentThreadApp.java:66-70의 try/catch(알림 발행 실패해도 상태변경은 항상 커밋)
+            // 대응 (P1-79).
+            it("3-1. 상태변경 알림 발행이 실패해도 스레드 상태변경 자체는 커밋되어야 한다") {
+                val codeRange = CodeRange(
+                    path = "src/main/kotlin/App.kt",
+                    startSide = CodeRange.Side.B,
+                    startLine = 20,
+                    startColumn = 0,
+                    endSide = CodeRange.Side.B,
+                    endLine = 20,
+                    endColumn = 0
+                )
+
+                val comment = codeReviewService.createReviewComment(
+                    project = project,
+                    pullRequest = pullRequest,
+                    commitId = "1234567890abcdef",
+                    contents = "알림 실패 격리 테스트",
+                    codeRange = codeRange,
+                    threadId = null,
+                    currentUser = user
+                )
+                val threadId = comment.thread?.id!!
+
+                // 수신자가 없으면 notificationEventRecorder.record() 자체가 호출되지 않으므로
+                // (receivers.isEmpty()면 조기 반환), 실제로 예외 경로를 타도록 감시자를 하나 둔다.
+                watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
+
+                val throwingRecorder = io.mockk.mockk<com.github.search5.yona.domain.notification.NotificationEventRecorder>()
+                io.mockk.every { throwingRecorder.record(any(), any()) } throws RuntimeException("메일 발송 인프라 장애 시뮬레이션")
+
+                val isolatedService = CodeReviewServiceImpl(
+                    commentThreadRepository, reviewCommentRepository, pullRequestRepository, repositoryService,
+                    userRepository, throwingRecorder, commitCommentRepository, eventPublisher,
+                    projectUserRepository, attachmentService, pullRequestCommitRepository, commentService,
+                    watchService, pullRequestService
+                )
+
+                // 예외가 이 메서드 밖으로 전파되지 않아야 한다(전파되면 @Transactional에 의해
+                // 방금 커밋하려던 상태변경까지 롤백된다).
+                val updatedThread = isolatedService.updateThreadState(
+                    threadId = threadId,
+                    state = CommentThread.ThreadState.CLOSED,
+                    currentUser = user
+                )
+
+                updatedThread.state shouldBe CommentThread.ThreadState.CLOSED
+
+                val persisted = commentThreadRepository.findById(threadId).orElseThrow()
+                persisted.state shouldBe CommentThread.ThreadState.CLOSED
             }
 
              it("4. 마지막 댓글이 삭제되면 스레드도 함께 삭제되어야 한다") {
