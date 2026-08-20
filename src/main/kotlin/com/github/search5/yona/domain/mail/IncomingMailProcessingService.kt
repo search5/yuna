@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.pullrequest.CodeReviewService
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.jsoup.Jsoup
@@ -58,6 +59,7 @@ class IncomingMailProcessingService(
     private val mailService: MailService,
     private val issueCommentRepository: IssueCommentRepository,
     private val postingCommentRepository: PostingCommentRepository,
+    private val reviewCommentRepository: ReviewCommentRepository,
     @Value("\${yuna.mailbox.imap.address:}")
     private val inboundBaseAddress: String
 ) {
@@ -191,6 +193,10 @@ class IncomingMailProcessingService(
             is IncomingMailOutcome.IssueCreated -> ResourceType.ISSUE_POST to outcome.issueId.toString()
             is IncomingMailOutcome.IssueCommentCreated -> ResourceType.ISSUE_POST to outcome.issueId.toString()
             is IncomingMailOutcome.PostingCommentCreated -> ResourceType.BOARD_POST to outcome.postingId.toString()
+            // yona saveReviewComment()의 saveAttachments(content.attachments, comment.asResource()) 대응 (P1-59).
+            // 첨부는 스레드가 아니라 댓글 자신에 붙는다(comment.asResource() == REVIEW_COMMENT+comment.id).
+            is IncomingMailOutcome.ReviewCommentCreated -> ResourceType.REVIEW_COMMENT to outcome.commentId.toString()
+            is IncomingMailOutcome.CommitCommentCreated -> ResourceType.COMMIT_COMMENT to outcome.commentId.toString()
             else -> return emptyMap()
         }
         val cidMap = mutableMapOf<String, Attachment>()
@@ -236,6 +242,18 @@ class IncomingMailProcessingService(
                 val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
                 comment.contents = replaced
                 postingCommentRepository.save(comment)
+            }
+            is IncomingMailOutcome.ReviewCommentCreated -> {
+                val comment = reviewCommentRepository.findById(outcome.commentId).orElse(null) ?: return
+                val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
+                comment.contents = replaced
+                reviewCommentRepository.save(comment)
+            }
+            is IncomingMailOutcome.CommitCommentCreated -> {
+                val comment = commitCommentRepository.findById(outcome.commentId).orElse(null) ?: return
+                val replaced = replaceCidWithAttachments(comment.contents, cidAttachments) ?: return
+                comment.contents = replaced
+                commitCommentRepository.save(comment)
             }
             else -> return
         }
