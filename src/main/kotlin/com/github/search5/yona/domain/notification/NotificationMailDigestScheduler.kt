@@ -98,7 +98,7 @@ class NotificationMailDigestScheduler(
 
         for (event in merged) {
             try {
-                if (resourceExists(event.main)) {
+                if (resourceExists(event)) {
                     sendNotification(event)
                 }
             } catch (e: Exception) {
@@ -121,7 +121,9 @@ class NotificationMailDigestScheduler(
         return events
     }
 
-    private fun resourceExists(event: NotificationEvent): Boolean {
+    // yona INotificationEvent.resourceExists() 대응 — NotificationEvent/MergedNotificationEvent
+    // 둘 다 받을 수 있도록 인터페이스 타입으로 받는다(병합 이벤트는 main의 resourceType/Id로 위임).
+    private fun resourceExists(event: INotificationEvent): Boolean {
         val id = event.resourceId.toLongOrNull() ?: return true
         return when (event.resourceType) {
             ResourceType.ISSUE_POST -> issueRepository.existsById(id)

@@ -14,9 +14,9 @@ class NotificationEvent(
     var id: Long? = null,
 
     @Column(nullable = false)
-    var title: String = "",
+    override var title: String = "",
 
-    var senderId: Long? = null,
+    override var senderId: Long? = null,
 
     @ManyToMany(cascade = [CascadeType.PERSIST, CascadeType.MERGE])
     @JoinTable(
@@ -24,20 +24,20 @@ class NotificationEvent(
         joinColumns = [JoinColumn(name = "notification_event_id")],
         inverseJoinColumns = [JoinColumn(name = "n4user_id")]
     )
-    var receivers: MutableSet<User> = mutableSetOf(),
+    override var receivers: MutableSet<User> = mutableSetOf(),
 
-    var created: Instant? = null,
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    var resourceType: ResourceType = ResourceType.NOT_A_RESOURCE,
-
-    @Column(nullable = false)
-    var resourceId: String = "",
+    override var created: Instant? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    var eventType: EventType = EventType.NEW_ISSUE,
+    override var resourceType: ResourceType = ResourceType.NOT_A_RESOURCE,
+
+    @Column(nullable = false)
+    override var resourceId: String = "",
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    override var eventType: EventType = EventType.NEW_ISSUE,
 
     @Lob
     @Column(columnDefinition = "TEXT")
@@ -49,4 +49,4 @@ class NotificationEvent(
 
     @OneToOne(mappedBy = "notificationEvent", cascade = [CascadeType.ALL])
     var notificationMail: NotificationMail? = null
-)
+) : INotificationEvent
