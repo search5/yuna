@@ -236,6 +236,7 @@ class WebhookServiceImpl(
             com.github.search5.yona.domain.enumeration.EventType.ISSUE_STATE_CHANGED -> "이슈 상태를 변경했습니다"
             com.github.search5.yona.domain.enumeration.EventType.NEW_POSTING -> "새 게시글을 작성했습니다"
             com.github.search5.yona.domain.enumeration.EventType.NEW_COMMENT -> "새 댓글을 등록했습니다"
+            com.github.search5.yona.domain.enumeration.EventType.NEW_REVIEW_COMMENT -> "새 리뷰 댓글을 등록했습니다"
             com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST -> "새 풀 리퀘스트를 생성했습니다"
             com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED -> "풀 리퀘스트를 병합했습니다"
             com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED -> "풀 리퀘스트 상태를 변경했습니다"
@@ -250,6 +251,8 @@ class WebhookServiceImpl(
             is com.github.search5.yona.domain.board.Posting -> "#${resource.number}: ${resource.title}"
             is com.github.search5.yona.domain.issue.IssueComment -> "의견: ${resource.contents?.take(30)}"
             is com.github.search5.yona.domain.board.PostingComment -> "의견: ${resource.contents?.take(30)}"
+            is com.github.search5.yona.domain.pullrequest.ReviewComment -> "의견: ${resource.contents.take(30)}"
+            is com.github.search5.yona.domain.pullrequest.CommitComment -> "의견: ${resource.contents.take(30)}"
             is PushedCommits ->
                 "${resource.commits.size}개의 커밋을 ${resource.refNames.firstOrNull() ?: ""} 브랜치로 푸시했습니다"
             is com.github.search5.yona.domain.pullrequest.PullRequest -> "#${resource.number}: ${resource.title}"
@@ -265,6 +268,8 @@ class WebhookServiceImpl(
             is com.github.search5.yona.domain.board.Posting -> ResourceType.BOARD_POST
             is com.github.search5.yona.domain.issue.IssueComment -> ResourceType.ISSUE_COMMENT
             is com.github.search5.yona.domain.board.PostingComment -> ResourceType.NONISSUE_COMMENT
+            is com.github.search5.yona.domain.pullrequest.ReviewComment -> ResourceType.REVIEW_COMMENT
+            is com.github.search5.yona.domain.pullrequest.CommitComment -> ResourceType.COMMIT_COMMENT
             is PushedCommits -> ResourceType.COMMIT
             is com.github.search5.yona.domain.pullrequest.PullRequest -> ResourceType.PULL_REQUEST
             else -> ResourceType.NOT_A_RESOURCE
@@ -277,6 +282,8 @@ class WebhookServiceImpl(
             is com.github.search5.yona.domain.board.Posting -> resource.id?.toString() ?: ""
             is com.github.search5.yona.domain.issue.IssueComment -> resource.id?.toString() ?: ""
             is com.github.search5.yona.domain.board.PostingComment -> resource.id?.toString() ?: ""
+            is com.github.search5.yona.domain.pullrequest.ReviewComment -> resource.id?.toString() ?: ""
+            is com.github.search5.yona.domain.pullrequest.CommitComment -> resource.id?.toString() ?: ""
             is PushedCommits -> resource.commits.firstOrNull()?.name ?: ""
             is com.github.search5.yona.domain.pullrequest.PullRequest -> resource.id?.toString() ?: ""
             else -> ""
