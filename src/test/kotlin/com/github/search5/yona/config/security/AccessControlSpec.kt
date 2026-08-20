@@ -333,10 +333,12 @@ class AccessControlSpec : DescribeSpec({
             accessControl.isAllowedAttachment(member, attachment, Operation.READ) shouldBe true
             accessControl.isAllowedAttachment(stranger, attachment, Operation.READ) shouldBe false
         }
-        it("USER_AVATAR 컨테이너는 본인 아바타만 허용") {
+        it("USER_AVATAR 컨테이너는 UPDATE/DELETE는 본인만, READ는 익명 포함 항상 허용(legacy 'PROJECT가 아닌 리소스는 누구나 읽는다' 규칙)") {
             val attachment = Attachment(id = 111L, containerType = ResourceType.USER_AVATAR, containerId = member.id.toString(), ownerLoginId = member.loginId)
             accessControl.isAllowedAttachment(member, attachment, Operation.UPDATE) shouldBe true
             accessControl.isAllowedAttachment(stranger, attachment, Operation.UPDATE) shouldBe false
+            accessControl.isAllowedAttachment(stranger, attachment, Operation.READ) shouldBe true
+            accessControl.isAllowedAttachment(null, attachment, Operation.READ) shouldBe true
         }
         it("ISSUE_POST 컨테이너는 이슈 자체의 권한 규칙을 그대로 따른다") {
             val issue = Issue(id = 112L, project = publicProject, authorId = stranger.id)

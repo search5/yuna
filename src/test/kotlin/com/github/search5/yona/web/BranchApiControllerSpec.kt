@@ -113,10 +113,17 @@ class BranchApiControllerSpec : DescribeSpec({
         }
 
         describe("DELETE /{owner}/{projectName}/code/{branch}") {
-            it("성공 시 302 리다이렉트와 deleteBranch 메소드가 정상 호출되어야 한다") {
+            it("매니저가 삭제를 요청하면 302 리다이렉트와 deleteBranch 메소드가 정상 호출되어야 한다 (P1-97, legacy PROJECT DELETE는 매니저/조직관리자 전용)") {
+                val managerUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                managerUser.projectUsers.add(
+                    com.github.search5.yona.domain.project.ProjectUser(
+                        id = 200L, user = managerUser, project = project,
+                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MANAGER.roleType)
+                    )
+                )
+
                 every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(managerUser)
                 every { repositoryService.getRepository(project) } returns playRepository
                 every { playRepository.deleteBranch("feature-a") } returns Unit
 
@@ -127,6 +134,26 @@ class BranchApiControllerSpec : DescribeSpec({
                     .andExpect(redirectedUrl("/owner/TestProject/branches"))
 
                 verify { playRepository.deleteBranch("feature-a") }
+            }
+
+            it("매니저가 아닌 일반 멤버가 삭제를 요청하면 403 Forbidden 화면을 반환해야 한다 (P1-97)") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(
+                    com.github.search5.yona.domain.project.ProjectUser(
+                        id = 201L, user = memberUser, project = project,
+                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)
+                    )
+                )
+
+                every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+
+                mockMvc.perform(
+                    delete("/owner/TestProject/code/feature-a").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { playRepository.deleteBranch(any()) }
             }
         }
     }
