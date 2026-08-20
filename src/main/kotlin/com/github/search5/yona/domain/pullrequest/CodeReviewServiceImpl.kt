@@ -34,9 +34,9 @@ class CodeReviewServiceImpl(
     private val projectUserRepository: ProjectUserRepository,
     private val attachmentService: AttachmentService,
     private val pullRequestCommitRepository: PullRequestCommitRepository,
-    private val pullRequestEventRepository: PullRequestEventRepository,
     private val commentService: CommentService,
-    private val watchService: WatchService
+    private val watchService: WatchService,
+    private val pullRequestService: PullRequestService
 ) : CodeReviewService {
 
     override fun createReviewComment(
@@ -354,85 +354,21 @@ class CodeReviewServiceImpl(
         notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
     }
 
+    // yona ReviewApp.java(유일한 진입점) → PullRequest.addReviewer()/removeReviewer()(유일한 모델
+    // 메서드)와 달리 yuna는 REST 표면이 두 벌(PullRequestController/ReviewApiController)이라 서비스도
+    // 각각 독립 구현돼 있었다(P1-49 완료 로그에 이미 기록된 기술부채). PullRequestServiceSpec의 "최소
+    // 리뷰어 수 미달 시 머지 실패" 테스트가 PullRequestService.addReviewer에 의존하고 있어 그쪽을
+    // 유일한 구현으로 남기고 이쪽은 위임만 한다(P1-62).
     override fun addReviewer(pullRequestId: Long, reviewerId: Long) {
-        val pullRequest = pullRequestRepository.findById(pullRequestId)
-            .orElseThrow { IllegalArgumentException("PullRequest not found") }
         val reviewer = userRepository.findById(reviewerId)
             .orElseThrow { IllegalArgumentException("User not found") }
-
-        if (pullRequest.reviewers.add(reviewer)) {
-            pullRequestRepository.save(pullRequest)
-
-            val title = "[${pullRequest.toProject.name}] 풀 리퀘스트 #${pullRequest.number}에 리뷰어로 참여했습니다."
-            val notificationEvent = NotificationEvent(
-                title = title,
-                senderId = reviewerId,
-                created = Instant.now(),
-                resourceType = ResourceType.PULL_REQUEST,
-                resourceId = pullRequestId.toString(),
-                eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
-                // yona NotificationEvent.afterReviewed()의 oldValue = reviewAction.getOppositAction().name() 대응.
-                oldValue = "CANCEL",
-                newValue = "DONE"
-            )
-
-            val receivers = mutableSetOf<User>()
-            receivers.add(pullRequest.contributor)
-            receivers.addAll(pullRequest.reviewers)
-            receivers.removeIf { it.id == reviewerId }
-            notificationEvent.receivers = receivers
-
-            notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
-
-            recordPullRequestEvent(pullRequest, reviewer.loginId, "DONE")
-        }
+        pullRequestService.addReviewer(pullRequestId, reviewer)
     }
 
     override fun removeReviewer(pullRequestId: Long, reviewerId: Long) {
-        val pullRequest = pullRequestRepository.findById(pullRequestId)
-            .orElseThrow { IllegalArgumentException("PullRequest not found") }
         val reviewer = userRepository.findById(reviewerId)
             .orElseThrow { IllegalArgumentException("User not found") }
-
-        if (pullRequest.reviewers.remove(reviewer)) {
-            pullRequestRepository.save(pullRequest)
-
-            val title = "[${pullRequest.toProject.name}] 풀 리퀘스트 #${pullRequest.number}의 리뷰어 참여를 취소했습니다."
-            val notificationEvent = NotificationEvent(
-                title = title,
-                senderId = reviewerId,
-                created = Instant.now(),
-                resourceType = ResourceType.PULL_REQUEST,
-                resourceId = pullRequestId.toString(),
-                eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
-                oldValue = "DONE",
-                newValue = "CANCEL"
-            )
-
-            val receivers = mutableSetOf<User>()
-            receivers.add(pullRequest.contributor)
-            receivers.addAll(pullRequest.reviewers)
-            receivers.removeIf { it.id == reviewerId }
-            notificationEvent.receivers = receivers
-
-            notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
-
-            recordPullRequestEvent(pullRequest, reviewer.loginId, "CANCEL")
-        }
-    }
-
-    // yona models/PullRequestEvent.java 대응 (P1-39) — 리뷰어 참여/해제 시점을 PR 타임라인에 기록.
-    // draft-time 병합/취소(P1-40): 같은 리뷰어가 30초 내 연속으로 참여/해제를 반복하면 직전 이벤트를
-    // 삭제하고 새 이벤트도 저장하지 않는다(legacy PullRequestEvent.needToDeleteEvent와 동일한 동작).
-    private fun recordPullRequestEvent(pullRequest: PullRequest, senderLoginId: String?, newValue: String) {
-        val event = PullRequestEvent(
-            pullRequest = pullRequest,
-            senderLoginId = senderLoginId,
-            eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
-            newValue = newValue,
-            created = Instant.now()
-        )
-        pullRequestEventRepository.recordWithDraftMerge(event)
+        pullRequestService.removeReviewer(pullRequestId, reviewer)
     }
 
     // yona CodeCommentThread.isOutdated() 대응 (P1-20)
