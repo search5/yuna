@@ -252,6 +252,7 @@ class PullRequestControllerSpec : DescribeSpec({
             }
         }
 
+        // yona AccessControl.isProjectResourceAllowed()의 PULL_REQUEST Operation.ACCEPT 분기 대응 (P1-78).
         describe("POST /api/projects/{projectId}/pullrequests/{number}/reviewers") {
             it("로그인한 프로젝트 멤버가 리뷰어로 참여하면 200 OK를 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
@@ -265,6 +266,24 @@ class PullRequestControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            it("PUBLIC 프로젝트여도 멤버가 아니면 리뷰어로 등록할 수 없어야 한다(인가 우회 방지)") {
+                val publicProject = Project(id = 2L, name = "PublicProject", projectScope = ProjectScope.PUBLIC)
+                val otherUser = User(id = 30L, loginId = "otheruser", name = "외부유저")
+                val otherAuth = UsernamePasswordAuthenticationToken("otheruser", "password")
+
+                every { projectRepository.findById(2L) } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 30L) } returns false
+
+                mockMvc.perform(
+                    post("/api/projects/2/pullrequests/1/reviewers")
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { pullRequestService.addReviewer(any(), any()) }
             }
         }
 
@@ -281,6 +300,24 @@ class PullRequestControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            it("PUBLIC 프로젝트여도 멤버가 아니면 리뷰어를 해제할 수 없어야 한다(인가 우회 방지)") {
+                val publicProject = Project(id = 2L, name = "PublicProject", projectScope = ProjectScope.PUBLIC)
+                val otherUser = User(id = 30L, loginId = "otheruser", name = "외부유저")
+                val otherAuth = UsernamePasswordAuthenticationToken("otheruser", "password")
+
+                every { projectRepository.findById(2L) } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 30L) } returns false
+
+                mockMvc.perform(
+                    delete("/api/projects/2/pullrequests/1/reviewers")
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { pullRequestService.removeReviewer(any(), any()) }
             }
         }
 

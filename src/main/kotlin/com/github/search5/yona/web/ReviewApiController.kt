@@ -1,8 +1,12 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CodeReviewService
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -14,8 +18,17 @@ class ReviewApiController(
     private val projectRepository: ProjectRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val userRepository: UserRepository,
+    private val projectUserRepository: ProjectUserRepository,
     private val codeReviewService: CodeReviewService
 ) {
+    // yona AccessControl.isProjectResourceAllowed()의 PULL_REQUEST Operation.ACCEPT 분기
+    // (user.isMemberOf(project) || isAllowedIfGroupMember(project, user)) 대응 (P1-78).
+    // 리뷰어 등록/해제(review/unreview)는 이 ACCEPT 권한을 요구한다.
+    private fun checkWritePermission(project: Project, user: User?): Boolean {
+        if (user == null) return false
+        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
+            AccessControl.isAllowedIfGroupMember(project, user)
+    }
 
     @DeleteMapping("/comments/{type}/{id}")
     fun deleteComment(
@@ -54,6 +67,10 @@ class ReviewApiController(
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
             ?: return "error/404"
 
+        if (!checkWritePermission(project, user)) {
+            return "error/403"
+        }
+
         val pullRequest = pullRequestRepository.findById(pullRequestId).orElse(null)
             ?: return "error/404"
 
@@ -74,6 +91,10 @@ class ReviewApiController(
 
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
             ?: return "error/404"
+
+        if (!checkWritePermission(project, user)) {
+            return "error/403"
+        }
 
         val pullRequest = pullRequestRepository.findById(pullRequestId).orElse(null)
             ?: return "error/404"
