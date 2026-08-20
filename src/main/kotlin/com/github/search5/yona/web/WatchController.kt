@@ -20,6 +20,7 @@ import org.springframework.ui.Model
 
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 
 @Controller
 class WatchController(
@@ -68,7 +69,7 @@ class WatchController(
             }
         }
 
-        if (!accessControl.isAllowedToReadProject(user, project)) {
+        if (!accessControl.isAllowed(user, project, Operation.WATCH)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
     }
@@ -113,7 +114,7 @@ class WatchController(
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
-        if (!accessControl.isAllowedToReadProject(user, project)) {
+        if (!accessControl.isAllowed(user, project, Operation.WATCH)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
         watchService.watch(user, ResourceType.PROJECT, project.id.toString())
@@ -132,7 +133,7 @@ class WatchController(
         val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
-        if (!accessControl.isAllowedToReadProject(user, project)) {
+        if (!accessControl.isAllowed(user, project, Operation.WATCH)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
         watchService.unwatch(user, ResourceType.PROJECT, project.id.toString())
@@ -152,7 +153,7 @@ class WatchController(
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
 
-        if (!accessControl.isAllowedToReadProject(user, project)) {
+        if (!accessControl.isAllowed(user, project, Operation.WATCH)) {
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.")
         }
 
