@@ -667,10 +667,15 @@ class PullRequestServiceImpl(
     // yona CodeReviewServiceImpl.addReviewer/removeReviewer와 동일한 알림/타임라인 기록 (P1-49).
     // PullRequestController(REST)가 이 서비스를, ReviewApiController가 CodeReviewService를 각각 사용하는
     // 중복 구현 구조는 그대로 남아있지만(별도 정리 과제), 최소한 두 경로 모두 알림이 발송되도록 맞춘다.
+    // yona NotificationEvent.afterReviewed()의 title = formatReplyTitle(pullRequest) 대응 (P1-63).
+    // 리뷰어 참여/취소를 구분하는 임의의 문장 대신, 다른 PR 알림들과 동일한 "Re: [project] title (#number)"
+    // 범용 포맷을 그대로 재현한다.
+    private fun formatReplyTitle(pullRequest: PullRequest): String =
+        "Re: [${pullRequest.toProject.name}] ${pullRequest.title} (#${pullRequest.number})"
+
     private fun notifyReviewerChanged(pullRequest: PullRequest, reviewer: User, newValue: String) {
-        val actionLabel = if (newValue == "DONE") "참여했습니다" else "취소했습니다"
         val notificationEvent = NotificationEvent(
-            title = "[${pullRequest.toProject.name}] 풀 리퀘스트 #${pullRequest.number}에 리뷰어로 $actionLabel.",
+            title = formatReplyTitle(pullRequest),
             senderId = reviewer.id,
             created = Instant.now(),
             resourceType = ResourceType.PULL_REQUEST,

@@ -402,6 +402,9 @@ class PullRequestServiceSpec @Autowired constructor(
                 notiEventsAfterAdd.size shouldBe 1
                 notiEventsAfterAdd.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
                 notiEventsAfterAdd.first().newValue shouldBe "DONE"
+                // yona NotificationEvent.afterReviewed()의 title = formatReplyTitle(pullRequest) 대응 (P1-63).
+                // 리뷰어 참여/취소 여부와 무관하게 다른 PR 알림들과 동일한 "Re: [project] title (#number)" 포맷.
+                notiEventsAfterAdd.first().title shouldBe "Re: [${toProject.name}] ${pr.title} (#${pr.number})"
 
                 val prEventsAfterAdd = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
                 prEventsAfterAdd.size shouldBe 1
