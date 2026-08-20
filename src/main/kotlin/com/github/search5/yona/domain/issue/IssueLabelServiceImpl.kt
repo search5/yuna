@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.issue
 
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -108,20 +109,46 @@ class IssueLabelServiceImpl(
         val copiedLabels = mutableListOf<IssueLabel>()
 
         for (fromLabel in issueLabelRepository.findByProject(fromProject)) {
-            val category = issueLabelCategoryRepository.findByProjectAndName(toProject, fromLabel.category.name)
-                ?: issueLabelCategoryRepository.save(
-                    IssueLabelCategory(
-                        name = fromLabel.category.name,
-                        isExclusive = fromLabel.category.isExclusive,
-                        project = toProject
-                    )
-                )
+            val category = findOrCreateLabelCategory(toProject, fromLabel.category)
 
             if (issueLabelRepository.findByProjectAndCategoryAndName(toProject, category, fromLabel.name) != null) {
                 continue
             }
 
-            val copiedLabel = issueLabelRepository.save(
+            copiedLabels.add(findOrCreateLabel(toProject, category, fromLabel))
+        }
+
+        return copiedLabels
+    }
+
+    // yona IssueLabel.copyIssueLabel()/findExistLabel() 대응 (P1-48). copyLabels()와 달리 이미
+    // 존재하는 라벨도 결과에 포함한다 — 옮겨지는 이슈의 최종 라벨 집합을 그대로 돌려줘야 하기 때문.
+    override fun transferLabelsForIssue(labels: Set<IssueLabel>, toProject: Project): Set<IssueLabel> {
+        val transferred = mutableSetOf<IssueLabel>()
+        for (fromLabel in labels) {
+            val category = findOrCreateLabelCategory(toProject, fromLabel.category)
+            transferred.add(findOrCreateLabel(toProject, category, fromLabel))
+        }
+        return transferred
+    }
+
+    // yona IssueLabel.copyIssueLabelCategory() 대응 — 대상 프로젝트에 같은 이름의 카테고리가 있으면
+    // 재사용하고, 없으면 새로 만든다.
+    private fun findOrCreateLabelCategory(toProject: Project, fromCategory: IssueLabelCategory): IssueLabelCategory {
+        return issueLabelCategoryRepository.findByProjectAndName(toProject, fromCategory.name)
+            ?: issueLabelCategoryRepository.save(
+                IssueLabelCategory(
+                    name = fromCategory.name,
+                    isExclusive = fromCategory.isExclusive,
+                    project = toProject
+                )
+            )
+    }
+
+    // yona IssueLabel.copyIssueLabel()의 project+category+name 유일성 재사용 부분(P1-54) 대응.
+    private fun findOrCreateLabel(toProject: Project, category: IssueLabelCategory, fromLabel: IssueLabel): IssueLabel {
+        return issueLabelRepository.findByProjectAndCategoryAndName(toProject, category, fromLabel.name)
+            ?: issueLabelRepository.save(
                 IssueLabel(
                     category = category,
                     color = fromLabel.color,
@@ -129,10 +156,6 @@ class IssueLabelServiceImpl(
                     project = toProject
                 )
             )
-            copiedLabels.add(copiedLabel)
-        }
-
-        return copiedLabels
     }
 
     override fun deleteLabel(labelId: Long) {

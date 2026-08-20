@@ -195,6 +195,40 @@ class IssueController(
         return ResponseEntity.ok(updated)
     }
 
+    // yona IssueApp.editIssue()의 hasTargetProject() 분기 대응 (P1-48). yona는 이 권한 확인을
+    // editPosting() 안에서(즉 실제 이동이 이미 일어난 뒤에) 하지만, yuna는 이동을 호출하기 전에
+    // 원본 이슈 수정권한 + 대상 프로젝트 생성권한을 모두 먼저 확인한다(관찰 가능한 정상 동작은
+    // legacy와 동일하되, legacy의 "권한 없어도 이동은 일부 반영되는" 인가 우회 허점은 들여오지 않는다).
+    @PostMapping("/{number}/move")
+    fun moveIssue(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        @RequestBody request: MoveIssueRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Issue> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!isManagerOrAuthor(project, issue.authorId, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val targetProject = projectRepository.findById(request.targetProjectId).orElse(null)
+            ?: return ResponseEntity.badRequest().build()
+
+        if (!AccessControl.isProjectResourceCreatable(user, targetProject, ResourceType.ISSUE_POST)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val moved = issueService.moveIssue(issue.id!!, request.targetProjectId, user)
+
+        return ResponseEntity.ok(moved)
+    }
+
     @DeleteMapping("/{number}")
     fun deleteIssue(
         @PathVariable projectId: Long,
@@ -261,5 +295,9 @@ class IssueController(
         val milestoneId: Long?,
         val assigneeId: Long?,
         val labelIds: List<Long>?
+    )
+
+    data class MoveIssueRequest(
+        val targetProjectId: Long
     )
 }

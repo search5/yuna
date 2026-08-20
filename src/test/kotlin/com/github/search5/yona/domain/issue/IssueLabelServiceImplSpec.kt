@@ -224,4 +224,69 @@ class IssueLabelServiceImplSpec : DescribeSpec({
             }
         }
     }
+
+    // yona IssueApp.transferLabels()(IssueLabel.copyIssueLabel()/findExistLabel()) 대응 (P1-48).
+    describe("IssueLabelServiceImpl.transferLabelsForIssue") {
+        val toProject = Project(id = 3L, name = "ToProject", owner = "gildong")
+
+        it("대상 프로젝트에 같은 카테고리/이름의 라벨이 없으면 새로 만들어 반환해야 한다") {
+            val fromCategory = IssueLabelCategory(id = 20L, name = "버그", isExclusive = true, project = project)
+            val fromLabel = IssueLabel(id = 30L, category = fromCategory, color = "#ff0000", name = "critical", project = project)
+
+            every { issueLabelCategoryRepository.findByProjectAndName(toProject, "버그") } returns null
+            val savedCategory = slot<IssueLabelCategory>()
+            every { issueLabelCategoryRepository.save(capture(savedCategory)) } answers {
+                firstArg<IssueLabelCategory>().apply { id = 21L }
+            }
+            every { issueLabelRepository.findByProjectAndCategoryAndName(toProject, any(), "critical") } returns null
+            val savedLabel = slot<IssueLabel>()
+            every { issueLabelRepository.save(capture(savedLabel)) } answers { firstArg() }
+
+            val result = service.transferLabelsForIssue(setOf(fromLabel), toProject)
+
+            result.size shouldBe 1
+            savedLabel.captured.name shouldBe "critical"
+            savedLabel.captured.color shouldBe "#ff0000"
+            savedLabel.captured.project shouldBe toProject
+        }
+
+        it("대상 프로젝트에 같은 카테고리/이름의 라벨이 이미 있으면 재사용해 결과에 포함해야 한다(copyLabels와 달리 건너뛰지 않음)") {
+            val fromCategory = IssueLabelCategory(id = 20L, name = "버그", isExclusive = true, project = project)
+            val fromLabel = IssueLabel(id = 30L, category = fromCategory, color = "#ff0000", name = "critical", project = project)
+            val existingCategory = IssueLabelCategory(id = 99L, name = "버그", isExclusive = true, project = toProject)
+            val existingLabel = IssueLabel(id = 88L, category = existingCategory, color = "#000000", name = "critical", project = toProject)
+
+            every { issueLabelCategoryRepository.findByProjectAndName(toProject, "버그") } returns existingCategory
+            every { issueLabelRepository.findByProjectAndCategoryAndName(toProject, existingCategory, "critical") } returns existingLabel
+
+            val result = service.transferLabelsForIssue(setOf(fromLabel), toProject)
+
+            result shouldBe setOf(existingLabel)
+            verify(exactly = 0) { issueLabelCategoryRepository.save(any()) }
+            verify(exactly = 0) { issueLabelRepository.save(any()) }
+        }
+
+        it("라벨이 여러 개면 전부 이전한 결과를 반환해야 한다") {
+            val fromCategory = IssueLabelCategory(id = 20L, name = "버그", isExclusive = true, project = project)
+            val fromLabel1 = IssueLabel(id = 30L, category = fromCategory, color = "#ff0000", name = "critical", project = project)
+            val fromLabel2 = IssueLabel(id = 31L, category = fromCategory, color = "#00ff00", name = "minor", project = project)
+            val existingCategory = IssueLabelCategory(id = 99L, name = "버그", isExclusive = true, project = toProject)
+
+            every { issueLabelCategoryRepository.findByProjectAndName(toProject, "버그") } returns existingCategory
+            every { issueLabelRepository.findByProjectAndCategoryAndName(toProject, existingCategory, "critical") } returns null
+            every { issueLabelRepository.findByProjectAndCategoryAndName(toProject, existingCategory, "minor") } returns null
+            every { issueLabelRepository.save(any()) } answers { firstArg() }
+
+            val result = service.transferLabelsForIssue(setOf(fromLabel1, fromLabel2), toProject)
+
+            result.map { it.name }.toSet() shouldBe setOf("critical", "minor")
+        }
+
+        it("라벨이 없으면 빈 집합을 반환해야 한다") {
+            val result = service.transferLabelsForIssue(emptySet(), toProject)
+
+            result shouldBe emptySet()
+            verify(exactly = 0) { issueLabelCategoryRepository.save(any()) }
+        }
+    }
 })

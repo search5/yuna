@@ -28,6 +28,11 @@ interface IssueService {
 
     fun changeMilestone(issueId: Long, newMilestoneId: Long?, updaterLoginId: String): Issue
 
+    // yona IssueApp.editIssue()의 hasTargetProject()/moveIssueToOtherProject()/addIssueMovedNotification()
+    // 대응 (P1-48). 이슈(및 서브태스크)를 다른 프로젝트로 옮기고, 번호를 새로 매기고, 라벨을 이전하며,
+    // ISSUE_MOVED + NEW_ISSUE 알림을 발행한다.
+    fun moveIssue(issueId: Long, targetProjectId: Long, mover: User): Issue
+
     fun voteIssue(issueId: Long, user: User)
     fun unvoteIssue(issueId: Long, user: User)
     fun voteComment(commentId: Long, user: User)
