@@ -265,6 +265,9 @@ class PullRequestController(
         val toBranch: String
     )
 
+    // yona AccessControl.isProjectResourceAllowed()의 PULL_REQUEST Operation.ACCEPT 분기
+    // (user.isMemberOf(project) || isAllowedIfGroupMember(project, user)) 대응 (P1-78). 리뷰어
+    // 등록/해제는 이 ACCEPT 권한을 요구한다 - 프로젝트 멤버가 아니면 PUBLIC 프로젝트라도 불가.
     @PostMapping("/{number}/reviewers")
     fun addReviewer(
         @PathVariable projectId: Long,
@@ -275,7 +278,7 @@ class PullRequestController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!checkReadPermission(project, user)) {
+        if (!checkWritePermission(project, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -296,7 +299,7 @@ class PullRequestController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!checkReadPermission(project, user)) {
+        if (!checkWritePermission(project, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
