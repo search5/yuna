@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserService
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -169,9 +170,12 @@ class ProjectMemberController(
         val currentUserId = getLoginUserId(authentication)
         val project = projectRepository.findById(projectId).orElse(null)
             ?: return ResponseEntity.notFound().build()
+        val currentUser = userRepository.findById(currentUserId).orElse(null)
 
         // 권한 확인 (프로젝트 멤버인지 확인)
-        if (!projectUserRepository.existsByProjectIdAndUserId(projectId, currentUserId)) {
+        if (!projectUserRepository.existsByProjectIdAndUserId(projectId, currentUserId) &&
+            (currentUser == null || !AccessControl.isAllowedIfGroupMember(project, currentUser))
+        ) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -180,7 +184,6 @@ class ProjectMemberController(
 
         val result = mutableListOf<Map<String, Any>>()
 
-        val currentUser = userRepository.findById(currentUserId).orElse(null)
         if (query.isBlank() && currentUser != null) {
             val locale = LocaleContextHolder.getLocale()
             val assignToMeText: String = messageSource.getMessage("issue.assignToMe", null, "나에게 할당하기", locale) ?: "나에게 할당하기"

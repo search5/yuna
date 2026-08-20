@@ -77,6 +77,31 @@ class CompareViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("error/403"))
             }
 
+            // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
+            it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
+                val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                org.organizationUsers.add(
+                    com.github.search5.yona.domain.organization.OrganizationUser(
+                        id = 1L, user = user, organization = org,
+                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                    )
+                )
+                val groupProject = Project(id = 6L, owner = "testowner", name = "group-project", projectScope = ProjectScope.PROTECTED, vcs = "GIT", organization = org)
+
+                every { projectRepository.findByOwnerAndName("testowner", "group-project") } returns Optional.of(groupProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(6L, 10L) } returns false
+                every { repositoryService.getRepository(groupProject) } returns playRepository
+                every { playRepository.getCommit("aaaaaaa") } returns commitA
+                every { playRepository.getCommit("bbbbbbb") } returns commitB
+                every { playRepository.getDiff("aaaaaaa", "bbbbbbb") } returns emptyList()
+                every { commentThreadRepository.findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(groupProject, "bbbbbbb") } returns emptyList()
+
+                mockMvc.perform(get("/testowner/group-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/compare"))
+            }
+
             it("[Test-12-1-1] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비로그인 익명 유저가 접근 시 403 Forbidden을 반환해야 한다") {
                 val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
                 every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)

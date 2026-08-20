@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -36,7 +37,7 @@ class StatisticsViewController(
 
         // Project Permission Check
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !AccessControl.isAllowedIfGroupMember(project, loginUser)) {
                 return "error/403"
             }
         }

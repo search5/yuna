@@ -255,5 +255,41 @@ class IssueViewControllerSpec : DescribeSpec({
                 result shouldBe "redirect:/owner/TestProj/issue/5"
             }
         }
+
+        describe("POST /{owner}/{projectName}/issue/{number}/edit") {
+            // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57) — 작성자 본인도 아니고
+            // 직접 프로젝트 멤버도 아니지만, 프로젝트가 속한 조직의 멤버라면 이슈를 수정할 수 있어야 한다.
+            it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 수정에 성공해야 한다") {
+                val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val groupUser = User(id = 20L, loginId = "groupuser", name = "그룹멤버")
+                org.organizationUsers.add(
+                    com.github.search5.yona.domain.organization.OrganizationUser(
+                        id = 1L, user = groupUser, organization = org,
+                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                    )
+                )
+                val groupProject = Project(id = 7L, name = "GroupProj", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = org)
+                val groupIssue = Issue(id = 50L, number = 3L, title = "원제목", authorLoginId = "otherauthor", project = groupProject)
+                val auth = UsernamePasswordAuthenticationToken("groupuser", "pass")
+
+                every { projectRepository.findByOwnerAndName("owner", "GroupProj") } returns Optional.of(groupProject)
+                every { userRepository.findByLoginId("groupuser") } returns Optional.of(groupUser)
+                every { issueRepository.findByProjectAndNumber(groupProject, 3L) } returns groupIssue
+                every { projectUserRepository.existsByProjectIdAndUserId(7L, 20L) } returns false
+                every {
+                    issueService.updateIssue(any(), any(), any(), any(), any(), any(), any())
+                } returns groupIssue
+
+                val result = issueViewController.editIssue(
+                    owner = "owner",
+                    projectName = "GroupProj",
+                    number = 3L,
+                    request = IssueForm(title = "새 제목", body = "새 본문"),
+                    authentication = auth
+                )
+
+                result shouldBe "redirect:/owner/GroupProj/issue/3"
+            }
+        }
     }
 })

@@ -98,6 +98,29 @@ class BoardViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("error/403"))
             }
 
+            // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57) — 직접 멤버가 아니어도
+            // PROTECTED 프로젝트가 속한 조직의 멤버라면 읽을 수 있어야 한다.
+            it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
+                val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val groupProject = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = org)
+                org.organizationUsers.add(
+                    com.github.search5.yona.domain.organization.OrganizationUser(
+                        id = 1L, user = user, organization = org,
+                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                    )
+                )
+
+                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(groupProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
+                every { postingRepository.findByProject(groupProject, any<Pageable>()) } returns PageImpl(listOf(posting), pageRequest, 1)
+                every { postingService.getNotices(1L) } returns emptyList()
+
+                mockMvc.perform(get("/owner/TestProj/posts").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("board/list"))
+            }
+
             it("labelIds 파라미터가 있으면 라벨 필터 쿼리를 사용해야 한다 (P1-19)") {
                 every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
