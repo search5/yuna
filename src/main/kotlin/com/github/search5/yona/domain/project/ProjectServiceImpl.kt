@@ -123,7 +123,9 @@ class ProjectServiceImpl(
         val destOrg = projectRepository.findByOwner(destination) // 기존에 조직 등으로 존재하거나 owner로 식별 가능한지
         
         val key = (1..50).map { (('a'..'z') + ('A'..'Z') + ('0'..'9')).random() }.joinToString("")
-        val newProjName = project.name // 단순 1:1 이관 이름 매핑
+        // yona Project.newProjectName(destination, name) 대응 (P1-72) — 목적지에 이미 동명
+        // 프로젝트가 있으면 name-1, name-2...로 충돌이 없을 때까지 자동으로 뒤에 숫자를 붙인다.
+        val newProjName = resolveNewProjectName(destination, project.name)
 
         val existing = projectTransferRepository.findByProjectAndSenderAndDestination(project, sender, destination)
         return if (existing.isPresent) {
@@ -141,6 +143,21 @@ class ProjectServiceImpl(
                 requested = Instant.now()
             )
             projectTransferRepository.save(pt)
+        }
+    }
+
+    // yona Project.newProjectName(loginId, projectName) 대응 (P1-72).
+    private fun resolveNewProjectName(destination: String, name: String): String {
+        if (!projectRepository.findByOwnerAndName(destination, name).isPresent) {
+            return name
+        }
+        var i = 1
+        while (true) {
+            val candidate = "$name-$i"
+            if (!projectRepository.findByOwnerAndName(destination, candidate).isPresent) {
+                return candidate
+            }
+            i++
         }
     }
 
@@ -183,6 +200,9 @@ class ProjectServiceImpl(
         // DB 메타데이터 변경 반영
         project.owner = newOwner
         project.name = newName
+        // yona ProjectApp.acceptTransfer()의 "project.organization = newOwnerOrg 또는 null" 대응
+        // (P1-73) — 목적지가 조직이면 그 조직으로, 개인이면 null로 명시적으로 갱신한다.
+        project.organization = organizationRepository.findByName(newOwner).orElse(null)
         projectRepository.save(project)
 
         // 권한(Role) 변경 처리
@@ -214,8 +234,13 @@ class ProjectServiceImpl(
             }
         }
 
+        // yona ProjectApp.disableProjectTransferLink()의 ProjectTransfer.deleteExisting(project,
+        // pt.sender, pt.destination) 대응 (P1-74) — 실제 쿼리 조건이 pt 자신과 동일한
+        // (project, sender, destination) 3중 키라, "완료된 이관 요청을 DB에서 삭제"하는 게 실제
+        // 동작이다(accepted=true로 남겨두지 않음). in-memory 상의 pt.accepted=true 대입은 yona에서도
+        // 삭제 직전에만 존재하는 값이라(영속 안 됨) 그대로 재현하되, 영속화는 save가 아니라 delete로 한다.
         pt.accepted = true
-        projectTransferRepository.save(pt)
+        projectTransferRepository.delete(pt)
     }
 
     private fun isAuthorizedToAcceptTransfer(destination: String, acceptor: User): Boolean {
