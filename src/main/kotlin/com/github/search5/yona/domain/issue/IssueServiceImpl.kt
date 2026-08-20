@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.support.HistoryUtil
 import com.github.search5.yona.domain.user.User
@@ -28,7 +29,8 @@ class IssueServiceImpl(
     private val eventPublisher: ApplicationEventPublisher,
     private val issueCommentRepository: IssueCommentRepository,
     private val watchService: WatchService,
-    private val issueEventRepository: IssueEventRepository
+    private val issueEventRepository: IssueEventRepository,
+    private val issueLabelService: IssueLabelService
 ) : IssueService {
 
     override fun createIssue(
@@ -65,31 +67,37 @@ class IssueServiceImpl(
 
         val savedIssue = issueRepository.save(issue)
 
-        val title = "[${project.name}] 신규 이슈 등록: #${issue.number} ${issue.title}"
+        publishNewIssueNotification(savedIssue, author)
+
+        return savedIssue
+    }
+
+    // yona NotificationEvent.afterNewIssue(issue)(forNewIssue(issue, sender)) 대응. 이슈를 새로 만들 때뿐
+    // 아니라, 다른 프로젝트로 이동했을 때도 "그 프로젝트에 새로 생긴 이슈"로서 동일한 형식의 알림을
+    // 다시 발행한다(moveIssue(), P1-48) — sender만 다르다(생성 시=작성자, 이동 시=이동을 실행한 사용자).
+    private fun publishNewIssueNotification(issue: Issue, sender: User) {
+        val title = "[${issue.project.name}] 신규 이슈 등록: #${issue.number} ${issue.title}"
         val notificationEvent = NotificationEvent(
             title = title,
-            senderId = author.id,
+            senderId = sender.id,
             created = Instant.now(),
             resourceType = ResourceType.ISSUE_POST,
-            resourceId = savedIssue.id.toString(),
+            resourceId = issue.id.toString(),
             eventType = EventType.NEW_ISSUE,
             newValue = title
         )
 
-        // 감시자(Watch) 추가
         val receivers = watchService.findActualWatchers(
-            baseWatchers = setOf(author),
+            baseWatchers = setOf(sender),
             resourceType = ResourceType.ISSUE_POST,
-            resourceId = savedIssue.id.toString(),
-            projectId = project.id,
+            resourceId = issue.id.toString(),
+            projectId = issue.project.id,
             eventType = notificationEvent.eventType
         ).toMutableSet()
-        receivers.removeIf { it.id == author.id }
+        receivers.removeIf { it.id == sender.id }
         notificationEvent.receivers = receivers
 
         notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
-
-        return savedIssue
     }
 
     override fun updateIssue(
@@ -336,6 +344,116 @@ class IssueServiceImpl(
         recordIssueEvent(savedIssue, EventType.ISSUE_MILESTONE_CHANGED, updaterLoginId, oldMilestone?.title, issue.milestone?.title)
 
         return savedIssue
+    }
+
+    // yona IssueApp.editIssue()의 hasTargetProject()/moveIssueToOtherProject()/addIssueMovedNotification()
+    // 대응 (P1-48). 권한 확인(대상 프로젝트 생성권한/원본 이슈 수정권한)은 이 저장소의 다른 서비스
+    // 메서드들과 동일하게 컨트롤러 쪽 책임이라 여기서는 하지 않는다 — 다만 yona의 editIssue()는
+    // 그 순서가 반대(이동을 먼저 수행한 뒤 마지막에 editPosting()에서 UPDATE 권한을 확인)라 권한이
+    // 없어도 이동 자체는 일부 반영되는 허점이 있었다. 그대로 재현하면 인가 우회 취약점을 그대로
+    // 들여오는 셈이라, yuna 컨트롤러는 이동을 호출하기 전에 두 권한을 모두 먼저 확인하도록
+    // 순서를 바로잡았다(관찰 가능한 정상 동작 자체는 legacy와 동일).
+    override fun moveIssue(issueId: Long, targetProjectId: Long, mover: User): Issue {
+        val issue = issueRepository.findById(issueId).orElseThrow { IllegalArgumentException("Issue not found: $issueId") }
+        val previous = issue.project
+
+        // yona isRequestedToOtherProject() 대응 — 같은 프로젝트면 아무 것도 하지 않는다.
+        if (previous.id == targetProjectId) {
+            return issue
+        }
+
+        val targetProject = projectRepository.findById(targetProjectId)
+            .orElseThrow { IllegalArgumentException("Project not found: $targetProjectId") }
+
+        // yona editIssue()의 "Set<User> fromWatchers = originalIssue.getWatchers()" 대응 — 이동
+        // 시점(=기존 프로젝트 기준)의 감시자를 미리 캡처해둔다. 이동 후에 계산하면 새 프로젝트의
+        // 뮤트/권한 설정을 기준으로 잘못 계산되므로 반드시 이동 직전에 캡처해야 한다.
+        val baseWatchers = mutableSetOf<User>()
+        issue.authorId?.let { authorId -> userRepository.findById(authorId).ifPresent { baseWatchers.add(it) } }
+        issue.assignee?.user?.let { baseWatchers.add(it) }
+        baseWatchers.addAll(issue.voters)
+        val fromWatchers = watchService.findActualWatchers(
+            baseWatchers = baseWatchers,
+            resourceType = ResourceType.ISSUE_POST,
+            resourceId = issue.id.toString(),
+            projectId = previous.id,
+            eventType = EventType.ISSUE_MOVED
+        )
+
+        // yona isFromMyOwnPrivateProject() 대응.
+        val fromOwnPrivateProject = previous.isPrivate && previous.owner.equals(mover.loginId, ignoreCase = true)
+
+        moveIssueAndSubtasksToProject(issue, targetProject, mover)
+
+        if (fromOwnPrivateProject) {
+            // yona editIssue() preUpdateHook의 isFromMyOwnPrivateProject() 분기 대응 — 알림 없이
+            // 이력만 비운다(자신의 비공개 프로젝트에서 옮겨질 때 그 안의 편집 이력이 노출되지 않도록).
+            issue.history = ""
+        } else if (!issue.isDraft) {
+            // yona addIssueMovedNotification()의 "!issue.isDraft"면 ISSUE_MOVED+NEW_ISSUE를 모두
+            // 발행하는 것과 동일 — 초안(draft)이면 어느 쪽도 발행하지 않는다.
+            publishIssueMovedNotification(previous, issue, fromWatchers, mover)
+            publishNewIssueNotification(issue, mover)
+        }
+
+        return issueRepository.save(issue)
+    }
+
+    // yona moveIssueToOtherProject()/moveSubtaskToOtherProject() 대응 — 이슈 자신과 직계 서브태스크를
+    // 모두 대상 프로젝트로 옮긴다. 서브태스크는(legacy와 동일하게) 별도 알림을 받지 않는다.
+    private fun moveIssueAndSubtasksToProject(issue: Issue, targetProject: Project, mover: User) {
+        updateIssueToOtherProject(issue, targetProject, mover)
+        for (subtask in issueRepository.findByParentId(issue.id!!)) {
+            updateIssueToOtherProject(subtask, targetProject, mover)
+            issueRepository.save(subtask)
+        }
+    }
+
+    // yona updateIssueToOtherProject() 대응.
+    private fun updateIssueToOtherProject(issue: Issue, targetProject: Project, mover: User) {
+        issue.project = targetProject
+        targetProject.lastIssueNumber = targetProject.lastIssueNumber + 1
+        projectRepository.save(targetProject)
+        issue.number = targetProject.lastIssueNumber
+        issue.createdDate = Instant.now()
+        issue.updatedDate = Instant.now()
+        issue.milestone = null
+
+        for (comment in issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!)) {
+            comment.projectId = targetProject.id
+            issueCommentRepository.save(comment)
+        }
+
+        // yona "UserApp.currentUser().isMemberOf(toOtherProject) && issue.labels.size() > 0"의
+        // transferLabels()/그 외에는 라벨을 비우는 분기 대응.
+        val originalLabels = issue.labels.toSet()
+        issue.labels = if (mover.isMemberOf(targetProject) && originalLabels.isNotEmpty()) {
+            issueLabelService.transferLabelsForIssue(originalLabels, targetProject).toMutableSet()
+        } else {
+            mutableSetOf()
+        }
+
+        issueRepository.save(issue)
+    }
+
+    // yona NotificationEvent.afterIssueMoved(previous, issue, fromWatchers) 대응. title은
+    // formatReplyTitle(issue)와 동일하게 이동 "이후"(새 프로젝트로 옮겨진 뒤) 시점의 값을 쓴다.
+    // legacy와 마찬가지로 mover 자신을 수신자에서 제외하지 않는다 — 본인이 watcher/author/assignee/
+    // voter였다면 자신이 실행한 이동에 대한 알림도 함께 받는다(다른 알림들과 달리 self-제외가 없음).
+    private fun publishIssueMovedNotification(previous: Project, issue: Issue, receivers: Set<User>, mover: User) {
+        val notificationEvent = NotificationEvent(
+            title = "Re: [${issue.project.name}] ${issue.title} (#${issue.number})",
+            senderId = mover.id,
+            created = Instant.now(),
+            resourceType = ResourceType.ISSUE_POST,
+            resourceId = issue.id.toString(),
+            eventType = EventType.ISSUE_MOVED,
+            oldValue = "${previous.owner}/${previous.name}",
+            newValue = "${issue.project.owner}/${issue.project.name}"
+        )
+        notificationEvent.receivers = receivers.toMutableSet()
+
+        notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
     }
 
     // yona models/IssueEvent.java의 add()/addWithoutSkipEvent() 대응(draft-time 병합/취소, P1-38).

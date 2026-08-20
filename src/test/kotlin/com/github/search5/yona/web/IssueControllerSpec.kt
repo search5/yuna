@@ -204,6 +204,93 @@ class IssueControllerSpec : DescribeSpec({
             }
         }
 
+        // yona IssueApp.editIssue()의 hasTargetProject() 대응 (P1-48).
+        describe("POST /api/projects/{projectId}/issues/{issueId}/move") {
+            it("작성자가 대상 프로젝트로 이슈를 이동시키면 200 OK를 반환해야 한다") {
+                val targetProject = Project(id = 3L, name = "TargetProject", projectScope = ProjectScope.PUBLIC)
+                val movedIssue = Issue(id = 5L, number = 1L, title = "이슈 제목", body = "이슈 내용", project = targetProject, authorId = user.id, state = State.OPEN)
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { projectRepository.findById(3L) } returns Optional.of(targetProject)
+                every { issueService.moveIssue(5L, 3L, user) } returns movedIssue
+
+                val jsonContent = """{ "targetProjectId": 3 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.project.id").value(3))
+
+                verify(exactly = 1) { issueService.moveIssue(5L, 3L, user) }
+            }
+
+            it("원본 이슈의 관리자/작성자가 아니면 403 Forbidden을 반환하고 이동을 호출하지 않아야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+
+                val jsonContent = """{ "targetProjectId": 3 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.moveIssue(any(), any(), any()) }
+            }
+
+            it("대상 프로젝트에 이슈 생성 권한이 없으면(비공개+비멤버) 403 Forbidden을 반환하고 이동을 호출하지 않아야 한다") {
+                val privateTargetProject = Project(id = 4L, name = "PrivateTarget", owner = "someoneelse", projectScope = ProjectScope.PRIVATE)
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { projectRepository.findById(4L) } returns Optional.of(privateTargetProject)
+
+                val jsonContent = """{ "targetProjectId": 4 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.moveIssue(any(), any(), any()) }
+            }
+
+            it("대상 프로젝트가 존재하지 않으면 400 Bad Request를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                val jsonContent = """{ "targetProjectId": 999 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isBadRequest)
+            }
+        }
+
         describe("DELETE /api/projects/{projectId}/issues/{issueId}") {
             it("관리자가 이슈를 삭제하면 200 OK를 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)

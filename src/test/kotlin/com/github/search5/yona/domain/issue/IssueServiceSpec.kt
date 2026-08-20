@@ -9,11 +9,17 @@ import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectUser
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.watch.Watch
 import com.github.search5.yona.domain.watch.WatchRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.assertions.throwables.shouldThrow
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
@@ -31,7 +37,8 @@ class IssueServiceSpec @Autowired constructor(
     private val milestoneRepository: com.github.search5.yona.domain.milestone.MilestoneRepository,
     private val issueLabelRepository: IssueLabelRepository,
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
-    private val watchRepository: WatchRepository
+    private val watchRepository: WatchRepository,
+    private val projectUserRepository: ProjectUserRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -41,6 +48,7 @@ class IssueServiceSpec @Autowired constructor(
                 issueEventRepository.deleteAll()
                 notificationEventRepository.deleteAll()
                 issueCommentRepository.deleteAll()
+                projectUserRepository.deleteAll()
                 issueRepository.deleteAll()
                 issueLabelRepository.deleteAll()
                 issueLabelCategoryRepository.deleteAll()
@@ -424,6 +432,233 @@ class IssueServiceSpec @Autowired constructor(
                 // 4) 투표하지 않은 사용자가 취소 시도 시 예외 발생 검증
                 shouldThrow<IllegalStateException> {
                     issueService.unvoteComment(comment.id!!, author)
+                }
+            }
+
+            // yona IssueApp.editIssue()의 hasTargetProject()/moveIssueToOtherProject()/
+            // addIssueMovedNotification() 대응 (P1-48).
+            describe("moveIssue (P1-48, 이슈를 다른 프로젝트로 이동)") {
+                it("다른 프로젝트로 이동하면 project/번호/생성일이 갱신되고 마일스톤이 초기화되어야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover", name = "이동실행자", email = "mover@yona.io"))
+                    val fromProject = projectRepository.save(Project(name = "from-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val toProject = projectRepository.save(Project(name = "to-proj", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
+                    val milestone = milestoneRepository.save(Milestone(title = "v1.0", project = fromProject))
+
+                    val originalCreatedDate = Instant.now().minusSeconds(3600)
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "이동할 이슈", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = originalCreatedDate, milestone = milestone
+                        )
+                    )
+
+                    val moved = issueService.moveIssue(issue.id!!, toProject.id!!, mover)
+
+                    moved.project.id shouldBe toProject.id
+                    moved.number shouldBe 1L
+                    moved.milestone shouldBe null
+                    moved.createdDate shouldNotBe originalCreatedDate
+
+                    val reloadedToProject = projectRepository.findById(toProject.id!!).get()
+                    reloadedToProject.lastIssueNumber shouldBe 1L
+                }
+
+                it("같은 프로젝트로 이동을 시도하면 아무 변화 없이 그대로 반환하고 알림도 발행하지 않아야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover2", name = "이동실행자2", email = "mover2@yona.io"))
+                    val project = projectRepository.save(Project(name = "same-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "제자리 이슈", body = "본문", project = project,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now(), number = 1L
+                        )
+                    )
+                    project.lastIssueNumber = 1L
+                    projectRepository.save(project)
+
+                    val result = issueService.moveIssue(issue.id!!, project.id!!, mover)
+
+                    result.number shouldBe 1L
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+
+                it("이슈의 댓글들도 대상 프로젝트로 projectId가 갱신되어야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover3", name = "이동실행자3", email = "mover3@yona.io"))
+                    val fromProject = projectRepository.save(Project(name = "from-proj3", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val toProject = projectRepository.save(Project(name = "to-proj3", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "댓글 있는 이슈", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now()
+                        )
+                    )
+                    val comment = issueCommentRepository.save(
+                        IssueComment(
+                            contents = "댓글", issue = issue, createdDate = Instant.now(),
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            projectId = fromProject.id
+                        )
+                    )
+
+                    issueService.moveIssue(issue.id!!, toProject.id!!, mover)
+
+                    val reloadedComment = issueCommentRepository.findById(comment.id!!).get()
+                    reloadedComment.projectId shouldBe toProject.id
+                }
+
+                it("이동하는 사용자가 대상 프로젝트 멤버이고 라벨이 있으면 라벨이 대상 프로젝트로 이전되어야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover4", name = "이동실행자4", email = "mover4@yona.io"))
+                    val fromProject = projectRepository.save(Project(name = "from-proj4", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val toProject = projectRepository.save(Project(name = "to-proj4", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
+                    // ProjectUser를 리포지토리로만 저장하면 mover 객체의 in-memory projectUsers
+                    // 컬렉션이 갱신되지 않는다(같은 영속성 컨텍스트의 식별자 맵 캐시 때문에 findById로
+                    // 다시 조회해도 동일 인스턴스가 반환되고, User(...) 생성자로 직접 만든 엔티티는
+                    // Hibernate가 지연로딩 프록시로 바꿔치기하지 않는다) — isMemberOf()가 읽는 바로 그
+                    // 컬렉션에 직접 추가해 실제 멤버십 상태를 반영한다.
+                    val projectUser = ProjectUser(user = mover, project = toProject, role = Role(id = RoleType.MEMBER.roleType))
+                    mover.projectUsers.add(projectUser)
+                    projectUserRepository.save(projectUser)
+
+                    val category = issueLabelCategoryRepository.save(IssueLabelCategory(name = "버그", isExclusive = false, project = fromProject))
+                    val label = issueLabelRepository.save(IssueLabel(category = category, color = "#ff0000", name = "critical", project = fromProject))
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "라벨 있는 이슈", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now(), labels = mutableSetOf(label)
+                        )
+                    )
+
+                    val moved = issueService.moveIssue(issue.id!!, toProject.id!!, mover)
+
+                    moved.labels.size shouldBe 1
+                    val transferredLabel = moved.labels.first()
+                    transferredLabel.name shouldBe "critical"
+                    transferredLabel.project.id shouldBe toProject.id
+                    transferredLabel.category.name shouldBe "버그"
+                }
+
+                it("이동하는 사용자가 대상 프로젝트 멤버가 아니면 라벨이 비워져야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover5", name = "이동실행자5", email = "mover5@yona.io"))
+                    val fromProject = projectRepository.save(Project(name = "from-proj5", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val toProject = projectRepository.save(Project(name = "to-proj5", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
+
+                    val category = issueLabelCategoryRepository.save(IssueLabelCategory(name = "버그", isExclusive = false, project = fromProject))
+                    val label = issueLabelRepository.save(IssueLabel(category = category, color = "#ff0000", name = "critical", project = fromProject))
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "라벨 있는 이슈2", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now(), labels = mutableSetOf(label)
+                        )
+                    )
+
+                    val moved = issueService.moveIssue(issue.id!!, toProject.id!!, mover)
+
+                    moved.labels.shouldBeEmpty()
+                }
+
+                it("서브태스크(하위 이슈)도 함께 대상 프로젝트로 이동하되 별도 알림은 발행하지 않아야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover6", name = "이동실행자6", email = "mover6@yona.io"))
+                    val fromProject = projectRepository.save(Project(name = "from-proj6", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val toProject = projectRepository.save(Project(name = "to-proj6", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
+
+                    val parent = issueRepository.save(
+                        Issue(
+                            title = "부모 이슈", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now()
+                        )
+                    )
+                    val child = issueRepository.save(
+                        Issue(
+                            title = "자식 이슈", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now(), parent = parent
+                        )
+                    )
+
+                    issueService.moveIssue(parent.id!!, toProject.id!!, mover)
+
+                    val reloadedChild = issueRepository.findById(child.id!!).get()
+                    reloadedChild.project.id shouldBe toProject.id
+                    reloadedChild.number shouldNotBe null
+
+                    // NEW_ISSUE(부모 자신에 대한 재알림)만 있을 뿐, 자식 이슈에 대한 별도 알림은 없어야 한다
+                    // (수신자가 없어 저장되지 않을 수 있으므로 이벤트 수 자체가 이 케이스의 핵심 단언은 아니지만,
+                    // resourceId가 child를 가리키는 이벤트가 없어야 한다).
+                    notificationEventRepository.findAll().none { it.resourceId == child.id.toString() } shouldBe true
+                }
+
+                it("이동하면 ISSUE_MOVED(이전 프로젝트 감시자 수신)와 NEW_ISSUE(새 프로젝트 감시자 수신) 알림이 모두 발행되어야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover7", name = "이동실행자7", email = "mover7@yona.io"))
+                    val fromProject = projectRepository.save(Project(name = "from-proj7", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val toProject = projectRepository.save(Project(name = "to-proj7", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
+
+                    val fromWatcherUser = userRepository.save(User(loginId = "fromwatcher7", name = "이전감시자", email = "fw7@yona.io"))
+                    watchRepository.save(Watch(user = fromWatcherUser, resourceType = ResourceType.PROJECT, resourceId = fromProject.id.toString()))
+                    val toWatcherUser = userRepository.save(User(loginId = "towatcher7", name = "새감시자", email = "tw7@yona.io"))
+                    watchRepository.save(Watch(user = toWatcherUser, resourceType = ResourceType.PROJECT, resourceId = toProject.id.toString()))
+
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "알림 검증용 이슈", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now()
+                        )
+                    )
+
+                    issueService.moveIssue(issue.id!!, toProject.id!!, mover)
+
+                    val events = notificationEventRepository.findAll()
+                    val movedEvent = events.first { it.eventType == EventType.ISSUE_MOVED }
+                    movedEvent.oldValue shouldBe "owner-a/from-proj7"
+                    movedEvent.newValue shouldBe "owner-b/to-proj7"
+                    // yona afterIssueMoved()는 다른 알림들과 달리 mover 자신을 수신자에서 빼지 않는다 —
+                    // mover가 이슈 작성자(author)이기도 하므로 baseWatchers에 포함돼 함께 수신해야 한다.
+                    movedEvent.receivers.map { it.id }.toSet() shouldBe setOf(mover.id, fromWatcherUser.id)
+
+                    val newIssueEvent = events.first { it.eventType == EventType.NEW_ISSUE }
+                    newIssueEvent.receivers.map { it.id } shouldBe listOf(toWatcherUser.id)
+                }
+
+                it("자신의 비공개 프로젝트에서 이동하면 history가 비워지고 알림이 발행되지 않아야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover8", name = "이동실행자8", email = "mover8@yona.io"))
+                    val fromProject = projectRepository.save(
+                        Project(name = "private-proj8", owner = "mover8", projectScope = ProjectScope.PRIVATE)
+                    )
+                    val toProject = projectRepository.save(Project(name = "to-proj8", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
+
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "비공개 프로젝트 이슈", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now(), history = "이전 편집 이력"
+                        )
+                    )
+
+                    val moved = issueService.moveIssue(issue.id!!, toProject.id!!, mover)
+
+                    moved.history shouldBe ""
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+
+                it("대상 프로젝트가 존재하지 않으면 IllegalArgumentException을 던져야 한다") {
+                    val mover = userRepository.save(User(loginId = "mover9", name = "이동실행자9", email = "mover9@yona.io"))
+                    val fromProject = projectRepository.save(Project(name = "from-proj9", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val issue = issueRepository.save(
+                        Issue(
+                            title = "이슈9", body = "본문", project = fromProject,
+                            authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
+                            createdDate = Instant.now()
+                        )
+                    )
+
+                    shouldThrow<IllegalArgumentException> {
+                        issueService.moveIssue(issue.id!!, 999999L, mover)
+                    }
                 }
             }
         }
