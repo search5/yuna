@@ -279,18 +279,42 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 bodySlot.captured.body shouldBe "<p>사진: <img src=\"/files/999\"></p>"
             }
 
-            it("cid에 매칭되는 첨부파일이 없으면 이슈 본문을 갱신하지 않아야 한다") {
+            it("cid 치환도 HtmlCompressor 압축도 실질적인 변화가 없으면 이슈 본문을 갱신하지 않아야 한다") {
                 every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
                 val htmlBody = "<p>서식 있는 본문</p>"
                 val savedIssue = Issue(id = 101L, title = "메일로 만든 이슈", body = htmlBody, project = project, number = 2L)
                 every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
                 every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { issueRepository.findById(101L) } returns Optional.of(savedIssue)
 
                 val message = baseMessage().copy(textBody = htmlBody, isHtml = true)
 
                 service.process(message)
 
                 verify(exactly = 0) { issueRepository.save(any()) }
+            }
+        }
+
+        // yona CreationViaEmail.postprocessForHTML()의 HtmlCompressor 사용부 대응 (P1-61).
+        describe("HtmlCompressor를 통한 HTML 본문 압축 (P1-61, yona postprocessForHTML()의 new HtmlCompressor().compress() 대응)") {
+            it("cid 첨부가 전혀 없어도 태그 사이 개행을 압축해 이슈 본문을 갱신해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val htmlBody = "<p>제목</p>\n<p>본문</p>"
+                val savedIssue = Issue(id = 103L, title = "메일로 만든 이슈", body = htmlBody, project = project, number = 7L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { issueRepository.findById(103L) } returns Optional.of(savedIssue)
+                every { issueRepository.save(any()) } returnsArgument 0
+
+                val message = baseMessage().copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                val bodySlot = slot<Issue>()
+                verify(exactly = 1) { issueRepository.save(capture(bodySlot)) }
+                bodySlot.captured.body shouldBe "<p>제목</p> <p>본문</p>"
+                // 첨부가 없어 attachAttachments()는 빈 맵을 반환하므로 AttachmentService는 호출되지 않아야 한다.
+                verify(exactly = 0) { attachmentService.store(any(), any(), any(), any(), any()) }
             }
         }
 
