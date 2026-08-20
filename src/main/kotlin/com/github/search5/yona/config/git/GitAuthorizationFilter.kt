@@ -1,5 +1,6 @@
 package com.github.search5.yona.config.git
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectService
 import com.github.search5.yona.domain.user.UserRepository
@@ -45,6 +46,7 @@ class GitAuthorizationFilter(
 
         // yona AccessControl READ 규칙(SvnAuthorizationFilter, P1-23와 동일하게) 대응 (P1-45):
         // PROTECTED도 PUBLIC과 동일하게 인증 없이 clone 가능했던 것을 PRIVATE와 같이 인증을 요구하도록 수정.
+        // 조직 그룹멤버 우회는 P1-64에서 isMember()에 추가.
         val requiresAuth = project.projectScope != com.github.search5.yona.domain.project.ProjectScope.PUBLIC
                 || project.isCodeAccessibleMemberOnly
                 || isWriteRequest
@@ -89,9 +91,15 @@ class GitAuthorizationFilter(
         return authentication is org.springframework.security.authentication.AnonymousAuthenticationToken
     }
 
+    // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-64). 직접 멤버가 아니어도 프로젝트가 속한
+    // 조직의 구성원이면(PUBLIC/PROTECTED에 한해) 접근을 허용한다.
     private fun isMember(project: Project, loginId: String): Boolean {
         val projectId = project.id ?: return false
-        return projectService.isMember(projectId, loginId)
+        if (projectService.isMember(projectId, loginId)) {
+            return true
+        }
+        val user = userRepository.findByLoginId(loginId).orElse(null) ?: return false
+        return AccessControl.isAllowedIfGroupMember(project, user)
     }
 
     private fun isGuestUser(loginId: String): Boolean {
