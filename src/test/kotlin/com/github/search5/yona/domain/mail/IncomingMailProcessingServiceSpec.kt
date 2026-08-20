@@ -445,6 +445,59 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
             }
         }
 
+        // yona EmailHandler.findResourcesByMessageId()의 OriginalEmail 미스 시 폴백 대응 (P1-60).
+        // UI에서 만든 리소스는 OriginalEmail이 없지만, 발신 Message-ID 자체가 결정론적 포맷이라
+        // In-Reply-To/References만으로도 답장이 올바른 스레드로 라우팅돼야 한다.
+        describe("UI에서 만든 리소스에 대한 답장 라우팅 (P1-60, OriginalEmail 미스 시 결정론적 Message-ID 역파싱 폴백)") {
+            it("UI에서 만든 이슈의 알림 메일(OriginalEmail 없음)에 답장하면 그 이슈에 댓글을 추가해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                // In-Reply-To가 가리키는 Message-ID에 대해 OriginalEmail 레코드가 전혀 없다 — UI 작성.
+                every { originalEmailRepository.findByMessageId("<issue_post/70@yona.example.com>") } returns Optional.empty()
+                val existingIssue = Issue(id = 70L, title = "UI로 만든 이슈", body = "...", project = project, number = 5L)
+                every { issueRepository.findById(70L) } returns Optional.of(existingIssue)
+                val savedComment = IssueComment(id = 700L, contents = "메일 본문 내용", issue = existingIssue)
+                every { commentService.createIssueComment(70L, "메일 본문 내용", sender) } returns savedComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<issue_post/70@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCommentCreated(700L, 70L))
+                verify(exactly = 0) { issueService.createIssue(any(), any(), any(), any(), any()) }
+            }
+
+            it("UI에서 만든 리뷰 댓글의 알림 메일에 답장하면 댓글 자신이 아니라 그 댓글이 속한 스레드에 답글을 추가해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<review_comment/900@yona.example.com>") } returns Optional.empty()
+
+                val thread = CodeCommentThread(id = 60L, project = project, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                val uiCreatedComment = ReviewComment(id = 900L, contents = "UI로 작성한 댓글", author = UserIdent(sender), thread = thread)
+                every { reviewCommentRepository.findById(900L) } returns Optional.of(uiCreatedComment)
+                every { commentThreadRepository.findById(60L) } returns Optional.of(thread)
+
+                val savedReviewComment = ReviewComment(id = 901L, contents = "메일 본문 내용", author = UserIdent(sender))
+                every {
+                    codeReviewService.createReviewComment(project, null, null, "메일 본문 내용", null, 60L, sender)
+                } returns savedReviewComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<review_comment/900@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.ReviewCommentCreated(901L, 60L))
+            }
+
+            it("Message-ID를 역파싱해도 알 수 없는 리소스 타입이면 폴백하지 않고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<user@yona.example.com>") } returns Optional.empty()
+                val savedIssue = Issue(id = 102L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 6L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<user@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(102L, "dlab", "hive"))
+            }
+        }
+
         describe("help 자동응답 및 실패 사유 회신 (P1-31, yona EmailHandler.getHelpMessage/reply 대응)") {
             it("수신 주소 detail이 'help'면 도움말 회신을 보내고 다른 처리는 하지 않아야 한다") {
                 val result = service.process(baseMessage(recipients = listOf("yona+help@example.com")))
