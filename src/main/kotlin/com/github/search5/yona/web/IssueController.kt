@@ -66,9 +66,13 @@ class IssueController(
             AccessControl.isAllowedIfGroupMember(project, user)
     }
 
-    private fun isManagerOrAuthor(project: Project, authorId: Long?, user: User?): Boolean {
+    // yona AccessControl.java:244-248의 "user.isManagerOf(project) || isAllowedIfAuthor(user, resource)
+    // || isAllowedIfAssignee(user, resource)" 대응 (P2-12). 담당자(assignee)는 operation과 무관하게
+    // author와 동급 쓰기 권한을 갖는다 — 프로젝트 멤버 여부와도 무관하다(:398-406 isAllowedIfAssignee()).
+    private fun isManagerOrAuthorOrAssignee(project: Project, issue: Issue, user: User?): Boolean {
         if (user == null) return false
-        if (authorId == user.id) return true
+        if (issue.authorId == user.id) return true
+        if (issue.assignee?.user?.id == user.id) return true
         return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
             .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
@@ -186,7 +190,7 @@ class IssueController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isManagerOrAuthor(project, issue.authorId, user)) {
+        if (!isManagerOrAuthorOrAssignee(project, issue, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -223,7 +227,7 @@ class IssueController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isManagerOrAuthor(project, issue.authorId, user)) {
+        if (!isManagerOrAuthorOrAssignee(project, issue, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -253,7 +257,7 @@ class IssueController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isManagerOrAuthor(project, issue.authorId, user)) {
+        if (!isManagerOrAuthorOrAssignee(project, issue, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -275,7 +279,7 @@ class IssueController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!isManagerOrAuthor(project, issue.authorId, user)) {
+        if (!isManagerOrAuthorOrAssignee(project, issue, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
@@ -304,9 +308,8 @@ class IssueController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        
-        val isAssignee = issue.assignee?.user?.id == user.id
-        if (!isManagerOrAuthor(project, issue.authorId, user) && !isAssignee) {
+
+        if (!isManagerOrAuthorOrAssignee(project, issue, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
