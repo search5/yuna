@@ -162,7 +162,9 @@ class PullRequestController(
         val updated = pullRequestService.updatePullRequest(
             pullRequestId = pullRequest.id!!,
             title = request.title,
-            body = request.body
+            body = request.body,
+            fromBranch = request.fromBranch ?: pullRequest.fromBranch,
+            toBranch = request.toBranch ?: pullRequest.toBranch
         )
 
         return ResponseEntity.ok(updated)
@@ -307,6 +309,9 @@ class PullRequestController(
 
     data class UpdatePullRequestRequest(
         val title: String,
-        val body: String?
+        val body: String?,
+        // yona PullRequest.updateWith() 대응 (P1-68). null이면 기존 브랜치를 유지한다.
+        val fromBranch: String? = null,
+        val toBranch: String? = null
     )
 }

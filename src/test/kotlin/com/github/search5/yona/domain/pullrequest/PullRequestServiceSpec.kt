@@ -15,6 +15,8 @@ import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.watch.Watch
 import com.github.search5.yona.domain.watch.WatchRepository
+import com.github.search5.yona.domain.issue.IssueEventRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.eclipse.jgit.api.Git
@@ -37,7 +39,8 @@ class PullRequestServiceSpec @Autowired constructor(
     private val pullRequestMergeEventListener: PullRequestMergeEventListener,
     private val pullRequestEventRepository: PullRequestEventRepository,
     private val notificationEventRepository: NotificationEventRepository,
-    private val watchRepository: WatchRepository
+    private val watchRepository: WatchRepository,
+    private val issueEventRepository: IssueEventRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -53,6 +56,7 @@ class PullRequestServiceSpec @Autowired constructor(
                 notificationEventRepository.deleteAll()
                 pullRequestCommitRepository.deleteAll()
                 pullRequestRepository.deleteAll()
+                issueEventRepository.deleteAll()
                 issueRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
@@ -822,6 +826,106 @@ class PullRequestServiceSpec @Autowired constructor(
                 val events = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
                 events.size shouldBe 2
                 events[1].oldValue shouldBe "$firstMergedCommitIdTo,${afterSecond.mergedCommitIdTo}"
+            }
+
+            // yona PullRequest.updateWith()/hasSameBranchesWith()/findDuplicatedPullRequest() 대응 (P1-68).
+            it("PR 수정 시 from/toBranch를 재할당할 수 있어야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "브랜치 재할당 테스트 PR", body = "본문",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-a",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                val updated = pullRequestService.updatePullRequest(
+                    pullRequestId = pr.id!!,
+                    title = "브랜치 재할당 테스트 PR",
+                    body = "본문",
+                    fromBranch = "refs/heads/feature-b",
+                    toBranch = "refs/heads/develop"
+                )
+
+                updated.fromBranch shouldBe "refs/heads/feature-b"
+                updated.toBranch shouldBe "refs/heads/develop"
+            }
+
+            it("재할당하려는 브랜치 조합으로 이미 열려있는 PR이 있으면 DuplicatedPullRequestException을 던지고 변경하지 않아야 한다") {
+                pullRequestRepository.save(
+                    PullRequest(
+                        title = "기존에 열려있는 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/develop", fromBranch = "refs/heads/feature-b",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "수정하려는 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-a",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                shouldThrow<com.github.search5.yona.domain.pullrequest.DuplicatedPullRequestException> {
+                    pullRequestService.updatePullRequest(
+                        pullRequestId = pr.id!!,
+                        title = "수정하려는 PR",
+                        body = "...",
+                        fromBranch = "refs/heads/feature-b",
+                        toBranch = "refs/heads/develop"
+                    )
+                }
+
+                val unchanged = pullRequestRepository.findById(pr.id!!).orElse(null)
+                unchanged.fromBranch shouldBe "refs/heads/feature-a"
+                unchanged.toBranch shouldBe "refs/heads/master"
+            }
+
+            it("PR 제목/본문에서 참조하는 이슈가 바뀌면 ISSUE_REFERRED_FROM_PULL_REQUEST 이벤트가 재동기화되어야 한다") {
+                val issue1 = issueService.createIssue(
+                    Issue(title = "이슈 1", body = "...", project = toProject), receiver, null, null, null
+                )
+                val issue2 = issueService.createIssue(
+                    Issue(title = "이슈 2", body = "...", project = toProject), receiver, null, null, null
+                )
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "이슈 참조 테스트 PR", body = "관련 이슈 #${issue1.number}",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-c",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+                // 최초 생성 시점의 참조 이벤트를 직접 만들어둔다(생성 경로는 createPullRequest에서
+                // 별도로 처리하므로, 이 테스트는 updateWith()의 재동기화만 검증한다).
+                issueEventRepository.save(
+                    com.github.search5.yona.domain.issue.IssueEvent(
+                        issue = issue1, senderLoginId = contributor.loginId,
+                        newValue = pr.id.toString(),
+                        eventType = com.github.search5.yona.domain.enumeration.EventType.ISSUE_REFERRED_FROM_PULL_REQUEST
+                    )
+                )
+
+                pullRequestService.updatePullRequest(
+                    pullRequestId = pr.id!!,
+                    title = "이슈 참조 테스트 PR",
+                    body = "관련 이슈 #${issue2.number}",
+                    fromBranch = pr.fromBranch,
+                    toBranch = pr.toBranch
+                )
+
+                val issue1Events = issueEventRepository.findByIssueOrderByCreatedAsc(issue1)
+                issue1Events.size shouldBe 0
+
+                val issue2Events = issueEventRepository.findByIssueOrderByCreatedAsc(issue2)
+                issue2Events.size shouldBe 1
+                issue2Events.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.ISSUE_REFERRED_FROM_PULL_REQUEST
+                issue2Events.first().newValue shouldBe pr.id.toString()
+                issue2Events.first().senderLoginId shouldBe contributor.loginId
             }
         }
     }
