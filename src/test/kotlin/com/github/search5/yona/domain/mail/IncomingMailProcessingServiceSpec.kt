@@ -21,6 +21,7 @@ import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.CommitComment
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.pullrequest.ReviewComment
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserIdent
@@ -49,12 +50,13 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     val mailService = mockk<MailService>(relaxed = true)
     val issueCommentRepository = mockk<IssueCommentRepository>()
     val postingCommentRepository = mockk<PostingCommentRepository>()
+    val reviewCommentRepository = mockk<ReviewCommentRepository>()
 
     val service = IncomingMailProcessingService(
         originalEmailRepository, userRepository, projectRepository,
         issueRepository, postingRepository, issueService, commentService, attachmentService,
         commentThreadRepository, commitCommentRepository, codeReviewService, mailService,
-        issueCommentRepository, postingCommentRepository,
+        issueCommentRepository, postingCommentRepository, reviewCommentRepository,
         inboundBaseAddress = "yona@example.com"
     )
 
@@ -65,7 +67,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
         io.mockk.clearMocks(
             originalEmailRepository, userRepository, projectRepository, issueRepository, postingRepository,
             issueService, commentService, attachmentService, commentThreadRepository, commitCommentRepository,
-            codeReviewService, mailService, issueCommentRepository, postingCommentRepository
+            codeReviewService, mailService, issueCommentRepository, postingCommentRepository, reviewCommentRepository
         )
         every { originalEmailRepository.existsByMessageId(any()) } returns false
         every { userRepository.findByEmail("gildong@example.com") } returns Optional.of(sender)
@@ -340,6 +342,106 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 val result = service.process(baseMessage(inReplyTo = "<commit@mail.example.com>"))
 
                 result shouldBe listOf(IncomingMailOutcome.CommitCommentCreated(500L))
+            }
+        }
+
+        describe("리뷰 댓글/커밋 댓글 답장의 첨부파일/cid 치환 (P1-59, yona saveReviewComment()의 saveAttachments/replaceCidWithAttachments 대응)") {
+            it("코드리뷰 스레드 답장의 첨부파일은 스레드가 아니라 새로 생성된 리뷰 댓글(REVIEW_COMMENT)에 연결돼야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+
+                val originalReviewEmail = OriginalEmail(
+                    id = 3L, messageId = "<review@mail.example.com>",
+                    resourceType = ResourceType.COMMENT_THREAD, resourceId = "60"
+                )
+                every { originalEmailRepository.findByMessageId("<review@mail.example.com>") } returns Optional.of(originalReviewEmail)
+
+                val thread = CodeCommentThread(id = 60L, project = project, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                every { commentThreadRepository.findById(60L) } returns Optional.of(thread)
+
+                val savedReviewComment = ReviewComment(id = 400L, contents = "메일 본문 내용", author = UserIdent(sender))
+                every {
+                    codeReviewService.createReviewComment(project, null, null, "메일 본문 내용", null, 60L, sender)
+                } returns savedReviewComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val attachment = InboundAttachment(fileName = "diagram.png", contentType = "image/png", bytes = byteArrayOf(1, 2, 3))
+
+                service.process(baseMessage(inReplyTo = "<review@mail.example.com>", attachments = listOf(attachment)))
+
+                verify(exactly = 1) {
+                    attachmentService.store(any(), "diagram.png", ResourceType.REVIEW_COMMENT, "400", "gildong")
+                }
+            }
+
+            it("커밋 댓글 답장의 첨부파일은 새로 생성된 커밋 댓글(COMMIT_COMMENT)에 연결돼야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+
+                val originalCommitEmail = OriginalEmail(
+                    id = 4L, messageId = "<commit@mail.example.com>",
+                    resourceType = ResourceType.COMMIT_COMMENT, resourceId = "80"
+                )
+                every { originalEmailRepository.findByMessageId("<commit@mail.example.com>") } returns Optional.of(originalCommitEmail)
+
+                val originalCommitComment = CommitComment(
+                    id = 80L, project = project, commitId = "abc123", path = "b.kt", line = 5,
+                    contents = "원본 댓글", author = UserIdent(sender)
+                )
+                every { commitCommentRepository.findById(80L) } returns Optional.of(originalCommitComment)
+
+                val savedCommitComment = CommitComment(id = 500L, project = project, commitId = "abc123", contents = "메일 본문 내용", author = UserIdent(sender))
+                every {
+                    codeReviewService.createCommitComment(project, "abc123", "메일 본문 내용", "b.kt", 5, null, sender)
+                } returns savedCommitComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val attachment = InboundAttachment(fileName = "trace.log", contentType = "text/plain", bytes = byteArrayOf(9))
+
+                service.process(baseMessage(inReplyTo = "<commit@mail.example.com>", attachments = listOf(attachment)))
+
+                verify(exactly = 1) {
+                    attachmentService.store(any(), "trace.log", ResourceType.COMMIT_COMMENT, "500", "gildong")
+                }
+            }
+
+            it("코드리뷰 스레드 답장의 HTML 본문에 있는 cid: 참조를 저장된 첨부파일 URL로 치환해 리뷰 댓글을 갱신해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+
+                val originalReviewEmail = OriginalEmail(
+                    id = 3L, messageId = "<review@mail.example.com>",
+                    resourceType = ResourceType.COMMENT_THREAD, resourceId = "60"
+                )
+                every { originalEmailRepository.findByMessageId("<review@mail.example.com>") } returns Optional.of(originalReviewEmail)
+
+                val thread = CodeCommentThread(id = 60L, project = project, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                every { commentThreadRepository.findById(60L) } returns Optional.of(thread)
+
+                val htmlBody = "<p>스크린샷: <img src=\"cid:shot1\"></p>"
+                val savedReviewComment = ReviewComment(id = 401L, contents = htmlBody, author = UserIdent(sender))
+                every {
+                    codeReviewService.createReviewComment(project, null, null, any(), null, 60L, sender)
+                } returns savedReviewComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { reviewCommentRepository.findById(401L) } returns Optional.of(savedReviewComment)
+                every { reviewCommentRepository.save(any()) } returnsArgument 0
+
+                val savedAttachment = com.github.search5.yona.domain.attachment.Attachment(
+                    id = 998L, name = "shot.png", containerType = ResourceType.REVIEW_COMMENT, containerId = "401"
+                )
+                every {
+                    attachmentService.store(any(), "shot.png", ResourceType.REVIEW_COMMENT, "401", "gildong")
+                } returns savedAttachment
+
+                val attachment = InboundAttachment(
+                    fileName = "shot.png", contentType = "image/png", bytes = byteArrayOf(1, 2, 3), contentId = "shot1"
+                )
+                val message = baseMessage(inReplyTo = "<review@mail.example.com>", attachments = listOf(attachment))
+                    .copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                val bodySlot = slot<ReviewComment>()
+                verify(exactly = 1) { reviewCommentRepository.save(capture(bodySlot)) }
+                bodySlot.captured.contents shouldBe "<p>스크린샷: <img src=\"/files/998\"></p>"
             }
         }
 
