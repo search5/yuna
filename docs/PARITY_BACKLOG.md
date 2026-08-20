@@ -37,8 +37,8 @@
 
 ## P1 — 주요 (기능 결손 / 권한 로직 오류)
 
-| # | 상태 | 제목 | yona 근거 | yuna 대상 |
-|---|---|---|---|---|
+| # | 상태 | 제목 | yona 근거 | yuna 대상 | 비고 |
+|---|---|---|---|---|---|
 | P1-01 | [x] | LDAP 인증 부재 | `utils/LdapService.java` | `domain/user/{LdapService,LdapQueryBuilder,LdapUserProvisioningService,LdapUser}.kt`(신규) | **완료** |
 | P1-02 | [x] | API 토큰 인증 미작동 | `UserApp.java` (`Yona-Token`) | `config/ApiTokenAuthenticationFilter.kt`(신규) | **완료** |
 | P1-03 | [x] | OAuth 다중 계정 연동/병합 소실 | `models/LinkedAccount.java` | `domain/user/LinkedAccount.kt`(신규), `config/oauth2/CustomOAuth2UserService.kt` | **완료(범위 조정, 아래 참고)** |
