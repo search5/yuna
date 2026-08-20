@@ -3,6 +3,7 @@ package com.github.search5.yona.config.security
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.issue.Issue
 
 object AccessControl {
 
@@ -138,5 +139,15 @@ object AccessControl {
             }
         }
         return false
+    }
+
+    // yona AccessControl.java:250-259,274-279,368-383 isAllowedIfSharer() 대응 (P1-82). ISSUE_POST의
+    // READ 권한 판단에서 프로젝트 멤버 여부와 무관하게, 해당 이슈의 IssueSharer로 등록된 사용자
+    // (또는 대상이 하위 이슈일 경우 그 부모 이슈의 IssueSharer)에게는 READ를 허용한다.
+    fun isAllowedIfSharer(issue: Issue, user: User): Boolean {
+        issue.parent?.let { parent ->
+            if (parent.sharers.any { it.user.id == user.id }) return true
+        }
+        return issue.sharers.any { it.user.id == user.id }
     }
 }
