@@ -150,8 +150,9 @@
                 <!-- 1. Conversation Tab -->
                 <div th:if="${tab == 'conversation'}">
                     <!-- Timeline of comments -->
-                    <div th:if="${commentThreads != null && !commentThreads.isEmpty()}" style="margin-bottom: 30px;">
-                        <div th:each="thread : ${commentThreads}" class="timeline-comment" style="border: 1px solid #d1d5da; border-radius: 3px; margin-bottom: 15px; background: #fff;">
+                    <div th:if="${timeline != null && !timeline.isEmpty()}" style="margin-bottom: 30px;">
+                        <th:block th:each="item : ${timeline}">
+                        <div th:if="${item.kind == 'THREAD'}" th:with="thread=${item.thread}" class="timeline-comment" style="border: 1px solid #d1d5da; border-radius: 3px; margin-bottom: 15px; background: #fff;">
                             <div class="timeline-comment-header" style="background-color: #f6f8fa; border-bottom: 1px solid #d1d5da; padding: 8px 12px; font-size: 12px; color: #586069;">
                                 <strong style="color: #24292e;" th:text="${thread.author?.loginId}">작성자</strong>
                                 <span th:title="${@templateHelper.getDateString(thread.createdDate)}" th:text="${@templateHelper.agoOrDateString(thread.createdDate)}">작성일</span>
@@ -207,6 +208,37 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- 이벤트 영역: yona partial_pull_request_event.scala.html 대응 (P1-106) -->
+                        <div th:if="${item.kind == 'EVENT'}" th:with="event=${item.event}, eventTypeName=${event.eventType.name()}" class="timeline-comment" style="border: 1px solid #d1d5da; border-radius: 3px; margin-bottom: 15px; background: #fff;">
+                            <div class="timeline-comment-header" style="background-color: #f6f8fa; border-bottom: 1px solid #d1d5da; padding: 8px 12px; font-size: 12px; color: #586069;">
+                                <strong style="color: #24292e;" th:text="${event.senderLoginId}">발신자</strong>
+                                <span th:text="${@templateHelper.agoOrDateString(event.created)}">작성일</span>
+                            </div>
+                            <div class="timeline-comment-body" style="padding: 15px; font-size: 14px;">
+                                <div>
+                                    <th:block th:if="${eventTypeName == 'PULL_REQUEST_STATE_CHANGED'}">
+                                        <span th:class="'state ' + ${#strings.toLowerCase(event.newValue)}" th:text="#{'pullRequest.event.' + ${#strings.toLowerCase(event.newValue)}}">상태</span>
+                                        <span th:text="#{'pullRequest.event.message.' + ${#strings.toLowerCase(event.newValue)}(${event.senderLoginId})}">상태가 변경되었습니다</span>
+                                    </th:block>
+                                    <th:block th:if="${eventTypeName == 'PULL_REQUEST_MERGED'}">
+                                        <span class="state merged" th:text="#{pullRequest.event.merged}">병합</span>
+                                        <span th:text="#{pullRequest.event.message.merged(${event.senderLoginId}, ${event.pullRequest.mergedCommitIdTo != null ? #strings.substring(event.pullRequest.mergedCommitIdTo, 0, 7) : ''})}">병합했습니다</span>
+                                    </th:block>
+                                    <th:block th:if="${eventTypeName == 'PULL_REQUEST_REVIEW_STATE_CHANGED'}">
+                                        <th:block th:if="${event.newValue == 'DONE'}">
+                                            <span class="state changed" th:text="#{pullRequest.review}">리뷰 승인</span>
+                                            <span th:text="#{notification.pullrequest.reviewed(${event.senderLoginId})}">리뷰를 완료했습니다</span>
+                                        </th:block>
+                                        <th:block th:unless="${event.newValue == 'DONE'}">
+                                            <span class="state changed" th:text="#{pullRequest.unreview}">리뷰 취소</span>
+                                            <span th:text="#{notification.pullrequest.unreviewed(${event.senderLoginId})}">리뷰를 취소했습니다</span>
+                                        </th:block>
+                                    </th:block>
+                                </div>
+                            </div>
+                        </div>
+                        </th:block>
                     </div>
 
                     <!-- Global Conversation Comment Form -->
@@ -273,7 +305,7 @@
                                                         th:data-path="${diff.pathB}"
                                                         th:data-line-num-b="${i}"
                                                         data-kind="ADD">
-                                                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" class="add-comment-btn-cell">+</td>
+                                                        <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;">+</td>
                                                         <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
                                                         <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'+' + ${diff.b.getString(i)}"></pre></td>
                                                     </tr>
@@ -296,7 +328,7 @@
                                                         th:data-line-num-a="${i}"
                                                         data-kind="REMOVE">
                                                         <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" th:text="${i+1}">1</td>
-                                                        <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" class="add-comment-btn-cell">+</td>
+                                                        <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;">+</td>
                                                         <td class="code" style="padding-left: 10px;"><pre class="diff-partial-codeline" style="margin: 0; white-space: pre-wrap;" th:text="'-' + ${diff.a.getString(i)}"></pre></td>
                                                     </tr>
 
@@ -327,8 +359,8 @@
                                                             th:data-line-num-a="${line.numA}"
                                                             th:data-line-num-b="${line.numB}"
                                                             th:data-kind="${line.kind}">
-                                                            <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;" 
-                                                                th:text="${line.numA != null ? line.numA + 1 : '+'}" class="add-comment-btn-cell"></td>
+                                                            <td class="linenum add-comment-btn-cell" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none; cursor: pointer; position: relative;"
+                                                                th:text="${line.numA != null ? line.numA + 1 : '+'}"></td>
                                                             <td class="linenum" style="width: 50px; text-align: right; color: rgba(27,31,35,0.3); padding-right: 10px; border-right: 1px solid #d1d5da; user-select: none;" 
                                                                 th:text="${line.numB != null ? line.numB + 1 : '+'}"></td>
                                                             <td class="code" style="padding-left: 10px;">
