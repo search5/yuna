@@ -13,6 +13,10 @@ interface ProjectRepository : JpaRepository<Project, Long> {
     fun findByOwner(owner: String): List<Project>
     fun countByLabelsId(labelId: Long): Long
 
+    // yona Project.projectNameChangeable(id, userName, projectName) 대응 (P1-144) — 대소문자 무시
+    // 비교(`.ieq(...)`) + 본인(id) 제외(`.ne("id", id)`)로 같은 소유자 내 이름 중복 여부를 검사한다.
+    fun existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot(owner: String, name: String, id: Long): Boolean
+
     // yona Project.findByPreviousPlaceOf(previousOwnerLoginId, previousName) 대응 (P1-76) —
     // 대소문자 무시 비교(yona `.ieq(...)`) + 가장 최근 변경 건 우선(`previousNameChangedTime desc`).
     fun findFirstByPreviousOwnerLoginIdIgnoreCaseAndPreviousNameIgnoreCaseOrderByPreviousNameChangedTimeDesc(

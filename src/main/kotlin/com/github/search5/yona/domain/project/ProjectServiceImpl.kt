@@ -108,6 +108,39 @@ class ProjectServiceImpl(
     override fun updateProject(projectId: Long, param: UpdateProjectParam): Project {
         val project = projectRepository.findById(projectId)
             .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
+
+        // yona ProjectApp.settingProject()의 "!project.name.equals(updatedProject.name)" 개명 분기 대응
+        // (P1-144). validateWhenUpdate()의 projectNameChangeable() 중복 검사를 가장 먼저 수행해, 다른
+        // 필드가 바뀌기 전에 실패하면 아무 것도 반영되지 않게 한다(legacy도 컨트롤러 최상단에서 폼
+        // 검증에 실패하면 즉시 badRequest로 돌아가고 어떤 필드도 적용하지 않는다).
+        if (param.name != null && param.name != project.name) {
+            val owner = project.owner ?: ""
+            if (projectRepository.existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot(owner, param.name, projectId)) {
+                throw IllegalArgumentException("이미 사용 중인 프로젝트 이름입니다.")
+            }
+
+            val originalName = project.name
+            recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom(project, owner, originalName)
+
+            // yona `repository.renameTo(updatedProject.name)`가 실패하면 FileOperationException을
+            // 던져 저장을 막는다 — yuna는 대응하는 체크 예외가 없어 IllegalStateException으로 이식.
+            val repository = repositoryService.getRepository(project)
+            if (!repository.renameTo(param.name)) {
+                throw IllegalStateException("저장소 이름 변경에 실패했습니다: $owner/${param.name}")
+            }
+
+            project.name = param.name
+
+            // yona FavoriteProject.updateFavoriteProject(updatedProject) 대응 — 이 프로젝트를
+            // 즐겨찾기한 모든 사용자의 비정규화된 owner/projectName도 함께 최신화한다(acceptTransfer의
+            // P2-27 이식과 동일한 메커니즘, 개명 경로 본연의 호출 지점).
+            favoriteProjectRepository.findByProjectId(project.id!!).forEach {
+                it.owner = project.owner ?: ""
+                it.projectName = project.name ?: ""
+                favoriteProjectRepository.save(it)
+            }
+        }
+
         project.overview = param.overview
         project.projectScope = param.projectScope
         project.isCodeAccessibleMemberOnly = param.isCodeAccessibleMemberOnly

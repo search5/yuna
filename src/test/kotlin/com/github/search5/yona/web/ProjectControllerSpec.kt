@@ -123,6 +123,75 @@ class ProjectControllerSpec : DescribeSpec({
                 verify { projectService.updateProject(1L, any()) }
             }
 
+            it("name 필드를 포함해 요청하면 UpdateProjectParam.name으로 그대로 전달해야 한다 (P1-144, UI는 나중에 붙일 예정이라 API만 우선 이식)") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every {
+                    projectService.updateProject(1L, match { it.name == "new-project-name" })
+                } returns project
+
+                val jsonContent = """
+                    {
+                        "name": "new-project-name",
+                        "overview": "새로운 설명",
+                        "projectScope": "PUBLIC",
+                        "isCodeAccessibleMemberOnly": false,
+                        "isUsingReviewerCount": false,
+                        "defaultReviewerCount": 2,
+                        "defaultBranch": "refs/heads/master",
+                        "isCodeEnabled": true,
+                        "isIssueEnabled": true,
+                        "isPullRequestEnabled": true,
+                        "isReviewEnabled": true,
+                        "isMilestoneEnabled": true,
+                        "isBoardEnabled": true
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify { projectService.updateProject(1L, match { it.name == "new-project-name" }) }
+            }
+
+            it("서비스가 이름 중복 예외를 던지면 400 Bad Request로 응답해야 한다 (P1-144)") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every {
+                    projectService.updateProject(1L, match { it.name == "taken-name" })
+                } throws IllegalArgumentException("이미 사용 중인 프로젝트 이름입니다.")
+
+                val jsonContent = """
+                    {
+                        "name": "taken-name",
+                        "overview": "설명",
+                        "projectScope": "PUBLIC",
+                        "isCodeAccessibleMemberOnly": false,
+                        "isUsingReviewerCount": false,
+                        "defaultReviewerCount": 1,
+                        "isCodeEnabled": true,
+                        "isIssueEnabled": true,
+                        "isPullRequestEnabled": true,
+                        "isReviewEnabled": true,
+                        "isMilestoneEnabled": true,
+                        "isBoardEnabled": true
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    put("/api/projects/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isBadRequest)
+            }
+
             it("MANAGER 권한이 없다면 403 Forbidden을 반환해야 한다") {
                 val memberRole = Role(id = RoleType.MEMBER.roleType)
                 val memberProjectUser = ProjectUser(id = 100L, user = user, project = project, role = memberRole)

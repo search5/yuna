@@ -28,6 +28,9 @@ data class AttachLabelResult(
 )
 
 data class UpdateProjectParam(
+    // yona ProjectApp.settingProject()의 이름 변경(개명) 분기 대응 (P1-144). null/현재 이름과 동일하면
+    // 변경하지 않는다 — 지정되면 소유자는 그대로 두고 이름만 바꾼다(소유권 이전과는 다른 별개 경로).
+    val name: String? = null,
     val overview: String,
     val projectScope: ProjectScope,
     val isCodeAccessibleMemberOnly: Boolean,

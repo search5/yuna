@@ -480,6 +480,125 @@ class ProjectServiceImplSpec : DescribeSpec({
         }
     }
 
+    // yona ProjectApp.settingProject()의 이름 변경(개명) 분기 대응 (P1-144). 소유자는 그대로 두고
+    // 이름만 바꾸는 경로 자체가 yuna에 없었다 — validateWhenUpdate()의 projectNameChangeable() 중복
+    // 검사, recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom(), repository.renameTo(),
+    // FavoriteProject.updateFavoriteProject() 네 가지를 전부 그대로 재현한다.
+    describe("ProjectServiceImpl.updateProject - 개명 (P1-144)") {
+        val playRepository = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+
+        beforeTest {
+            io.mockk.clearMocks(playRepository, answers = false)
+        }
+
+        fun baseParam(name: String? = null) = UpdateProjectParam(
+            name = name,
+            overview = "설명",
+            projectScope = ProjectScope.PRIVATE,
+            isCodeAccessibleMemberOnly = false,
+            isUsingReviewerCount = false,
+            defaultReviewerCount = 1,
+            defaultBranch = null,
+            isCodeEnabled = true,
+            isIssueEnabled = true,
+            isPullRequestEnabled = true,
+            isReviewEnabled = true,
+            isMilestoneEnabled = true,
+            isBoardEnabled = true
+        )
+
+        it("이름이 바뀌지 않으면 저장소 rename을 호출하지 않아야 한다") {
+            val project = Project(id = 20L, name = "old-name", owner = "owner1", vcs = "GIT")
+            every { projectRepository.findById(20L) } returns Optional.of(project)
+            every { projectRepository.save(any()) } returns project
+
+            projectService.updateProject(20L, baseParam(name = "old-name"))
+
+            io.mockk.verify(exactly = 0) { repositoryService.getRepository(any()) }
+        }
+
+        it("같은 소유자 내 이미 존재하는 이름으로 바꾸려 하면 예외가 발생하고 아무것도 바뀌지 않아야 한다") {
+            val project = Project(id = 21L, name = "old-name", owner = "owner1", vcs = "GIT")
+            every { projectRepository.findById(21L) } returns Optional.of(project)
+            every {
+                projectRepository.existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot("owner1", "taken-name", 21L)
+            } returns true
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.updateProject(21L, baseParam(name = "taken-name"))
+            }
+
+            project.name shouldBe "old-name"
+            io.mockk.verify(exactly = 0) { repositoryService.getRepository(any()) }
+        }
+
+        it("저장소 rename에 실패하면 예외가 발생하고 이름이 바뀌지 않아야 한다") {
+            val project = Project(id = 22L, name = "old-name", owner = "owner1", vcs = "GIT")
+            every { projectRepository.findById(22L) } returns Optional.of(project)
+            every {
+                projectRepository.existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot("owner1", "new-name", 22L)
+            } returns false
+            every { repositoryService.getRepository(project) } returns playRepository
+            every { playRepository.renameTo("new-name") } returns false
+
+            shouldThrow<IllegalStateException> {
+                projectService.updateProject(22L, baseParam(name = "new-name"))
+            }
+
+            project.name shouldBe "old-name"
+        }
+
+        it("이름을 바꾸면 저장소도 rename되고, 개명 이력과 즐겨찾기 owner/projectName이 함께 갱신돼야 한다") {
+            val project = Project(id = 23L, name = "old-name", owner = "owner1", vcs = "GIT")
+            val favorite = FavoriteProject(id = 900L, user = mockk(relaxed = true), project = project, owner = "owner1", projectName = "old-name")
+
+            every { projectRepository.findById(23L) } returns Optional.of(project)
+            every {
+                projectRepository.existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot("owner1", "new-name", 23L)
+            } returns false
+            every { repositoryService.getRepository(project) } returns playRepository
+            every { playRepository.renameTo("new-name") } returns true
+            every { projectRepository.save(any()) } returns project
+            every { favoriteProjectRepository.findByProjectId(23L) } returns listOf(favorite)
+            every { favoriteProjectRepository.save(any()) } returns favorite
+
+            projectService.updateProject(23L, baseParam(name = "new-name"))
+
+            project.name shouldBe "new-name"
+            project.previousName shouldBe "old-name"
+            project.previousOwnerLoginId shouldBe "owner1"
+            project.previousNameChangedTime shouldNotBe null
+            favorite.owner shouldBe "owner1"
+            favorite.projectName shouldBe "new-name"
+            io.mockk.verify(exactly = 1) { playRepository.renameTo("new-name") }
+        }
+
+        it("최근 24시간 내 이미 개명 이력이 있으면 previousName을 다시 덮어쓰지 않아야 한다") {
+            val recentChange = Instant.now().minusSeconds(3600) // 1시간 전
+            val project = Project(
+                id = 24L, name = "old-name", owner = "owner1", vcs = "GIT",
+                previousName = "very-old-name", previousOwnerLoginId = "owner1",
+                previousNameChangedTime = recentChange
+            )
+
+            every { projectRepository.findById(24L) } returns Optional.of(project)
+            every {
+                projectRepository.existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot("owner1", "new-name", 24L)
+            } returns false
+            every { repositoryService.getRepository(project) } returns playRepository
+            every { playRepository.renameTo("new-name") } returns true
+            every { projectRepository.save(any()) } returns project
+            every { favoriteProjectRepository.findByProjectId(24L) } returns emptyList()
+
+            projectService.updateProject(24L, baseParam(name = "new-name"))
+
+            // yona isRenamedOrTransferredIn24Hours()가 false를 반환하는 경우 — 예전 위치 포인터를
+            // 그대로 보존해 사용자가 "가장 먼저" 있었던 위치로 계속 폴백 조회할 수 있게 한다.
+            project.previousName shouldBe "very-old-name"
+            project.previousNameChangedTime shouldBe recentChange
+        }
+    }
+
     // yona Project.delete() 대응 (P0-19) — 계단식 삭제 전수 이식. 프로젝트 삭제 시 연관된 모든
     // 리소스(이전요청/리뷰스레드/PR/이슈/라벨카테고리/담당자/웹훅/게시글/멤버)가 함께 정리되고,
     // fork 자식 프로젝트는 삭제되지 않고 원본 연결만 끊어져야 한다.

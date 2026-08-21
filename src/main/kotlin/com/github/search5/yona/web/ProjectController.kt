@@ -80,29 +80,36 @@ class ProjectController(
         @PathVariable projectId: Long,
         @RequestBody request: UpdateProjectRequest,
         authentication: Authentication?
-    ): ResponseEntity<Project> {
-        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+    ): ResponseEntity<*> {
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build<Project>()
         if (!isProjectManager(projectId, user.id!!)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build<Project>()
         }
 
-        val updated = projectService.updateProject(
-            projectId = projectId,
-            param = com.github.search5.yona.domain.project.UpdateProjectParam(
-                overview = request.overview,
-                projectScope = request.projectScope,
-                isCodeAccessibleMemberOnly = request.isCodeAccessibleMemberOnly,
-                isUsingReviewerCount = request.isUsingReviewerCount,
-                defaultReviewerCount = request.defaultReviewerCount,
-                defaultBranch = request.defaultBranch,
-                isCodeEnabled = request.isCodeEnabled,
-                isIssueEnabled = request.isIssueEnabled,
-                isPullRequestEnabled = request.isPullRequestEnabled,
-                isReviewEnabled = request.isReviewEnabled,
-                isMilestoneEnabled = request.isMilestoneEnabled,
-                isBoardEnabled = request.isBoardEnabled
+        val updated = try {
+            projectService.updateProject(
+                projectId = projectId,
+                param = com.github.search5.yona.domain.project.UpdateProjectParam(
+                    name = request.name,
+                    overview = request.overview,
+                    projectScope = request.projectScope,
+                    isCodeAccessibleMemberOnly = request.isCodeAccessibleMemberOnly,
+                    isUsingReviewerCount = request.isUsingReviewerCount,
+                    defaultReviewerCount = request.defaultReviewerCount,
+                    defaultBranch = request.defaultBranch,
+                    isCodeEnabled = request.isCodeEnabled,
+                    isIssueEnabled = request.isIssueEnabled,
+                    isPullRequestEnabled = request.isPullRequestEnabled,
+                    isReviewEnabled = request.isReviewEnabled,
+                    isMilestoneEnabled = request.isMilestoneEnabled,
+                    isBoardEnabled = request.isBoardEnabled
+                )
             )
-        )
+        } catch (e: IllegalArgumentException) {
+            return ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        } catch (e: IllegalStateException) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("error" to e.message))
+        }
         return ResponseEntity.ok(updated)
     }
 
@@ -344,6 +351,9 @@ class ProjectController(
     }
 
     data class UpdateProjectRequest(
+        // yona ProjectApp.settingProject()의 개명(rename) 필드 대응 (P1-144). UI는 나중에 붙일
+        // 예정이라 API 필드만 우선 이식 — 값이 없거나 현재 이름과 같으면 서비스 계층에서 무시된다.
+        val name: String? = null,
         val overview: String,
         val projectScope: ProjectScope,
         val isCodeAccessibleMemberOnly: Boolean = false,
