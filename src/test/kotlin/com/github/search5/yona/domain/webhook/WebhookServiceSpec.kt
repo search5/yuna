@@ -47,13 +47,14 @@ class WebhookServiceSpec : DescribeSpec({
     // relaxed=true: 대부분의 테스트는 리소스 링크와 무관하므로 stub하지 않은 호출은 null(링크 없음)로
     // 흘러가게 두고, 링크 자체를 검증하는 테스트에서만 개별적으로 every {}를 재정의한다.
     val notificationUrlResolver = mockk<com.github.search5.yona.domain.notification.NotificationUrlResolver>(relaxed = true)
+    val webhookThreadRecorder = mockk<WebhookThreadRecorder>(relaxed = true)
 
     val webhookService = WebhookServiceImpl(
-        webhookRepository, webhookThreadRepository, "https://yona.example.com", notificationUrlResolver
+        webhookRepository, webhookThreadRepository, "https://yona.example.com", notificationUrlResolver, webhookThreadRecorder
     )
 
     beforeTest {
-        io.mockk.clearMocks(webhookRepository, webhookThreadRepository, projectRepository, notificationUrlResolver)
+        io.mockk.clearMocks(webhookRepository, webhookThreadRepository, projectRepository, notificationUrlResolver, webhookThreadRecorder)
     }
 
     describe("WebhookService 비즈니스 테스트") {
@@ -422,6 +423,55 @@ class WebhookServiceSpec : DescribeSpec({
                 json.get("text").asText() shouldBe "[test-project] 송신자님이 새 댓글을 등록했습니다."
                 json.get("attachments").get(0).get("text").asText() shouldBe ""
                 json.get("attachments").get(0).get("fields").size() shouldBe 0
+            }
+        }
+
+        // yona Webhook.java:643-648 — Hangout Chat 응답의 thread.name을 파싱해 WebhookThread로
+        // 저장하는 쓰기 경로가 yuna에 전혀 없던 것(P1-143)을 추가.
+        describe("recordHangoutThreadIfNeeded (P1-143)") {
+            it("DETAIL_HANGOUT_CHAT 웹훅이고 응답에 thread.name이 있으면 저장을 요청해야 한다") {
+                val hangoutWebhook = Webhook(
+                    id = 60L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+                )
+                val issue = com.github.search5.yona.domain.issue.Issue(
+                    id = 105L, title = "스레드 테스트 이슈", body = "내용", project = project, number = 15
+                )
+                val responseBody = """{"thread":{"name":"spaces/AAA/threads/BBB"}}"""
+
+                webhookService.recordHangoutThreadIfNeeded(hangoutWebhook, issue, responseBody)
+
+                verify(exactly = 1) {
+                    webhookThreadRecorder.recordThreadIfAbsent(60L, ResourceType.ISSUE_POST, "105", "spaces/AAA/threads/BBB")
+                }
+            }
+
+            it("DETAIL_HANGOUT_CHAT이 아닌 웹훅이면 저장을 요청하지 않아야 한다") {
+                val slackWebhook = Webhook(
+                    id = 61L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.DETAIL_SLACK
+                )
+                val issue = com.github.search5.yona.domain.issue.Issue(
+                    id = 106L, title = "이슈", body = "내용", project = project, number = 16
+                )
+                val responseBody = """{"thread":{"name":"spaces/AAA/threads/BBB"}}"""
+
+                webhookService.recordHangoutThreadIfNeeded(slackWebhook, issue, responseBody)
+
+                verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
+            }
+
+            it("응답 본문이 JSON이 아니면 예외 없이 저장을 요청하지 않아야 한다") {
+                val hangoutWebhook = Webhook(
+                    id = 62L, project = project, webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+                )
+                val issue = com.github.search5.yona.domain.issue.Issue(
+                    id = 107L, title = "이슈", body = "내용", project = project, number = 17
+                )
+
+                webhookService.recordHangoutThreadIfNeeded(hangoutWebhook, issue, "not a json")
+
+                verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
             }
         }
     }
