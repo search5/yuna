@@ -20,11 +20,14 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import org.springframework.beans.factory.annotation.Value
 import com.github.search5.yona.domain.vcs.BareCommit
+import com.github.search5.yona.domain.support.LineEnding
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.issue.RecentIssueService
+import org.eclipse.jgit.lib.Constants
 import tools.jackson.databind.ObjectMapper
+import java.net.URLEncoder
 
 @Controller
 class BoardViewController(
@@ -357,6 +360,27 @@ class BoardViewController(
             return "redirect:/$owner/$projectName"
         }
 
+        // yona BoardApp.newPost()의 "if(StringUtils.isNotEmpty(post.path) && ...isMemberOf(project)){
+        // GitUtil.commitTextFile(...); return redirect(...); }" 대응 (P1-111) — 코드브라우저 "편집"에서
+        // 넘어온 요청은 게시글 DB 행을 만들지 않고 지정 브랜치(post.branch)의 지정 경로(post.path,
+        // 하위 경로 가능)에 바로 텍스트 파일을 커밋한다. P1-135에서 확장한 BareCommit의
+        // branch+nested-path 지원 오버로드가 전제 조건이었다.
+        if (!request.path.isNullOrBlank() && projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
+            val branch = request.branch ?: ""
+            val path = request.path!!
+            try {
+                val bare = BareCommit(project, loginUser, gitBaseDir)
+                bare.setRefName(Constants.R_HEADS + branch)
+                bare.commitTextFile(branch, path, LineEnding.changeLineEnding(request.body ?: "", request.lineEnding), request.title)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            val encodedPath = path.split("/").joinToString("/") { segment ->
+                URLEncoder.encode(segment, "UTF-8").replace("+", "%20")
+            }
+            return "redirect:/$owner/$projectName/code/$branch/$encodedPath"
+        }
+
         val posting = Posting(
             title = request.title,
             body = request.body ?: "",
@@ -416,6 +440,11 @@ data class PostingForm(
     var temporaryUploadFiles: String? = null,
     var sendNotificationMail: Boolean? = false,
     // yona Posting.java:37 issueTemplate 대응 (P1-110) — "true"일 때 게시글 대신 ISSUE_TEMPLATE.md로 커밋.
-    var issueTemplate: String? = null
+    var issueTemplate: String? = null,
+    // yona Posting.java:39-49 path/branch/lineEnding(@Transient) 대응 (P1-111) — 코드브라우저 "편집"에서
+    // 넘어오는 온라인 커밋 전용 필드. path가 채워지면 게시글 DB 행 대신 지정 브랜치에 텍스트 파일을 커밋한다.
+    var path: String? = null,
+    var branch: String? = null,
+    var lineEnding: String? = null
 )
 
