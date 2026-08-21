@@ -261,26 +261,37 @@ class MilestoneViewController(
         }
 
         // 1. 중복 제목 검증
-        if (milestoneRepository.findByProjectAndTitle(project, title) != null) {
-            model.addAttribute("project", project)
-            model.addAttribute("currentUser", loginUser)
-            model.addAttribute("titleError", "milestone.title.duplicated")
-            model.addAttribute("title", title)
-            model.addAttribute("contents", contents)
-            model.addAttribute("dueDate", dueDate)
-            return "milestone/create"
-        }
+        val isDuplicateTitle = milestoneRepository.findByProjectAndTitle(project, title) != null
 
-        // 2. DueDate 날짜 끝 시간(23:59:59.999) 보정
+        // 2. DueDate 날짜 끝 시간(23:59:59.999) 보정. yona MilestoneApp.java:100-125 validateDueDate()
+        // 대응 (P2-23) — 파싱에 실패하면 조용히 null로 저장하지 않고, 폼 바인딩 오류(hasErrors())로
+        // 전체 제출 자체를 막던 것과 동일하게 저장을 막고 오류를 알린다.
+        var dueDateError: String? = null
         val parsedDueDate = if (!dueDate.isNullOrBlank()) {
             try {
                 val localDate = LocalDate.parse(dueDate)
                 localDate.atTime(23, 59, 59, 999000000).atZone(ZoneId.systemDefault()).toInstant()
             } catch (e: Exception) {
+                dueDateError = "milestone.error.duedateFormat"
                 null
             }
         } else {
             null
+        }
+
+        if (isDuplicateTitle || dueDateError != null) {
+            model.addAttribute("project", project)
+            model.addAttribute("currentUser", loginUser)
+            if (isDuplicateTitle) {
+                model.addAttribute("titleError", "milestone.title.duplicated")
+            }
+            if (dueDateError != null) {
+                model.addAttribute("dueDateError", dueDateError)
+            }
+            model.addAttribute("title", title)
+            model.addAttribute("contents", contents)
+            model.addAttribute("dueDate", dueDate)
+            return "milestone/create"
         }
 
         val milestone = Milestone(
@@ -334,24 +345,37 @@ class MilestoneViewController(
             return "error/403"
         }
 
-        // 2. DueDate 날짜 끝 시간(23:59:59.999) 보정
+        val original = milestoneService.getMilestone(id) ?: return "error/404"
+
+        // 1. 중복 제목 검증
+        val isDuplicateTitle = original.title != title && milestoneRepository.findByProjectAndTitle(project, title) != null
+
+        // 2. DueDate 날짜 끝 시간(23:59:59.999) 보정. yona MilestoneApp.java:100-125 validateDueDate()
+        // 대응 (P2-23) — 파싱에 실패하면 조용히 null로 저장하지 않고, 폼 바인딩 오류(hasErrors())로
+        // 전체 제출 자체를 막던 것과 동일하게 저장을 막고 오류를 알린다.
+        var dueDateError: String? = null
         val parsedDueDate = if (!dueDate.isNullOrBlank()) {
             try {
                 val localDate = LocalDate.parse(dueDate)
                 localDate.atTime(23, 59, 59, 999000000).atZone(ZoneId.systemDefault()).toInstant()
             } catch (e: Exception) {
+                dueDateError = "milestone.error.duedateFormat"
                 null
             }
         } else {
             null
         }
 
-        // 1. 중복 제목 검증
-        val original = milestoneService.getMilestone(id) ?: return "error/404"
-        if (original.title != title && milestoneRepository.findByProjectAndTitle(project, title) != null) {
+        if (isDuplicateTitle || dueDateError != null) {
             model.addAttribute("project", project)
             model.addAttribute("currentUser", loginUser)
-            model.addAttribute("titleError", "milestone.title.duplicated")
+            if (isDuplicateTitle) {
+                model.addAttribute("titleError", "milestone.title.duplicated")
+            }
+            if (dueDateError != null) {
+                model.addAttribute("dueDateError", dueDateError)
+            }
+            model.addAttribute("dueDate", dueDate)
             val dummyMilestone = Milestone(
                 id = id,
                 title = title,
@@ -361,7 +385,7 @@ class MilestoneViewController(
                 project = project
             )
             model.addAttribute("milestone", dummyMilestone)
-            
+
             // 기존 첨부파일 목록 전달
             val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.MILESTONE, id.toString())
             val attachmentsJson = attachments.joinToString(prefix = "{\"attachments\":[", postfix = "]}", separator = ",") { attach ->

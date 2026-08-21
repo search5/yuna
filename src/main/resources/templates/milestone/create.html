@@ -72,9 +72,12 @@
                                     <dd>
                                         <div>
                                             <label for="dueDate">
-                                                <input type="text" name="dueDate" id="dueDate" class="validate due-date" autocomplete="off" th:value="${dueDate}">
+                                                <input type="text" name="dueDate" id="dueDate" class="validate due-date" autocomplete="off" th:value="${dueDate}" th:classappend="${dueDateError} ? 'error' : ''">
                                             </label>
                                             <div id="datepicker" class="date-picker"></div>
+                                            <div th:if="${dueDateError}" class="message">
+                                                <div th:text="#{__${dueDateError}__}">기한 형식이 잘못되었습니다.</div>
+                                            </div>
                                         </div>
                                     </dd>
                                 </dl>

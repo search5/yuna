@@ -214,7 +214,7 @@
 | P2-20 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 가입요청/취소 알림 수신자 계산이 Watch 여부를 무시 | `NotificationEvent.getReceivers(Project)` | `ProjectUserServiceImpl.getProjectManagers()` | **완료(아래 완료 로그 참고)** |
 | P2-21 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직 가입 신청 oldValue/newValue 페어링이 비대칭이라 드래프트 상쇄 최적화 미작동 | `NotificationEvent.java` | `OrganizationServiceImpl.enroll/cancelEnroll` | **완료(아래 완료 로그 참고)** |
 | P2-22 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 마일스톤 상세의 이슈 목록 정렬(번호 내림차순) 없음, 쿼리에도 ORDER BY 없음 | `Milestone.java` | `MilestoneViewController.toViewDto()` | **완료(아래 완료 로그 참고)** |
-| P2-23 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** dueDate 파싱 실패 시 조용히 null로 저장(에러 알림 없음) | `MilestoneApp.validateDueDate()` | `MilestoneViewController.createMilestone/editMilestone` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P2-23 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** dueDate 파싱 실패 시 조용히 null로 저장(에러 알림 없음) | `MilestoneApp.validateDueDate()` | `MilestoneViewController.createMilestone/editMilestone` | **완료(아래 완료 로그 참고)** |
 | P2-24 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** DB dedup 미이식 + isNew 판정 오류로 201 응답 도달 불가, 재업로드마다 중복 행 생성 | `Attachment.save()` | `AttachmentServiceImpl.store()`/`AttachmentController.uploadFile()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-25 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** MIME 감지가 Tika(콘텐츠기반)→JDK probeContentType(확장자기반)으로 바뀌어 해시 파일명에서 오탐 가능 | `FileUtil.detectMediaType` | `AttachmentServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-26 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** 임시 첨부 정리 스케줄러의 createdDate 비교 방향이 yona와 반대(사실만 기록) | `Attachment.java` | `AttachmentCleanupScheduler.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -250,6 +250,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P2-23**: `MilestoneViewController.createMilestone()`/`editMilestone()`가 `dueDate` 문자열 파싱 실패 시 `catch (e: Exception) { null }`로 조용히 `null` 처리하고 그대로 저장하던 것을, yona `MilestoneApp.java:100-125` `validateDueDate()`(Play 폼 바인딩이 `dueDate` 파싱에 실패하면 `hasErrors()`가 true가 되어 경고 플래시 후 폼을 다시 렌더링, 저장 자체를 막음) 대응으로 정정.
+  - 기존에 제목 중복 검증만 있던 "오류면 폼 재렌더링" 게이트를 dueDate 파싱 실패도 함께 판단하도록 확장 — `isDuplicateTitle`/`dueDateError` 둘 다 계산한 뒤 어느 하나라도 있으면 저장하지 않고 `milestone/create`(또는 `milestone/edit`)를 두 오류를 동시에 보여줄 수 있는 형태로 재렌더링(yona가 두 검증을 한 번의 `hasErrors()` 체크로 함께 반영하는 것과 동일한 구조).
+  - `milestone/create.html`/`milestone/edit.html`에 `dueDateError` 표시 블록(기존 `titleError`와 동일한 `#{__${코드}__}` 메시지 패턴) 추가 — 메시지 키 `milestone.error.duedateFormat`은 이미 `messages*.properties`에 다국어로 존재해 새 키 추가 불필요. `edit.html`은 오류 시 사용자가 입력한 원본 `dueDate` 문자열을(유효한 `milestone.dueDate` 대신) 그대로 보존해 보여주도록 값 표현식 정정.
+  - 테스트: `MilestoneViewControllerSpec.kt` +2(생성/수정 각각 dueDate 파싱 실패 시 저장 호출 없이 오류와 함께 폼을 반환하는지 검증) — 수정 전 실패(레드) 확인 후 수정 후 통과(그린) 확인. 전체 11/11 통과.
 
 - **2026-08-21 — P2-22**: `MilestoneViewController.toViewDto()`가 `issueRepository.findByMilestone()` 조회 결과(정렬 없음, DB 반환 순서 그대로)를 open/closed로만 나누고 별도 정렬 없이 그대로 내려주던 것을, yona `Milestone.java:99-128` `sortedByNumberOfIssue()`/`sortedByNumberOfOpenIssue()`/`sortedByNumberOfClosedIssue()`(이슈 번호 내림차순) 대응으로 정정 — `openIssues`/`closedIssues` 각각에 `.sortedByDescending { it.number }` 추가.
   - `toViewDto()`는 `viewMilestone`(마일스톤 상세)과 `listMilestones`(마일스톤 목록의 completionRate 계산용) 양쪽에서 공유되는 헬퍼라 두 경로 모두 자동으로 정렬이 적용됨.
