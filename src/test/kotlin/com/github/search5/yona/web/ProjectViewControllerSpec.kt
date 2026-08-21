@@ -311,10 +311,33 @@ class ProjectViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns true
                 every { repositoryService.getRepository(memberOnlyProject) } returns playRepo
+                every {
+                    repositoryService.getMetaDataFromAncestorDirectories(playRepo, "main", "")
+                } returns listOf(mockk())
                 every { playRepo.getArchive(any(), "main") } returns Unit
 
                 mockMvc.perform(get("/owner/memberonly-project/code/main/download").principal(userAuth))
                     .andExpect(status().isOk)
+            }
+
+            // yona CodeApp.java:135-164 download()의 getMetaDataFromAncestorDirectories() 존재
+            // 검증 대응 (P2-30) — 존재하지 않는 브랜치를 요청하면 아카이브 스트리밍을 시도하기 전에
+            // 404로 명확히 거부해야 한다(응답 헤더를 이미 써버린 뒤 스트리밍 도중 예외가 나는 것을
+            // 방지).
+            it("존재하지 않는 브랜치면 아카이브를 생성하지 않고 404를 반환해야 한다 (P2-30)") {
+                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns true
+                every { repositoryService.getRepository(memberOnlyProject) } returns playRepo
+                every {
+                    repositoryService.getMetaDataFromAncestorDirectories(playRepo, "no-such-branch", "")
+                } returns null
+
+                mockMvc.perform(get("/owner/memberonly-project/code/no-such-branch/download").principal(userAuth))
+                    .andExpect(status().isNotFound)
+
+                verify(exactly = 0) { playRepo.getArchive(any(), any()) }
             }
         }
     }
