@@ -147,7 +147,7 @@ class OrganizationServiceImpl(
             resourceId = orgId.toString(),
             eventType = EventType.ORGANIZATION_MEMBER_ENROLL_ACCEPT,
             newValue = "ACCEPT",
-            oldValue = "NONE"
+            oldValue = "REQUEST"
         )
         notificationEventRecorder.record(notiEvent)
     }
@@ -244,7 +244,7 @@ class OrganizationServiceImpl(
                 resourceId = organization.id.toString(),
                 eventType = EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST,
                 newValue = "REQUEST",
-                oldValue = "NONE"
+                oldValue = "CANCEL"
             )
             notificationEventRecorder.record(notiEvent)
         }
@@ -288,7 +288,7 @@ class OrganizationServiceImpl(
                 resourceId = organization.id.toString(),
                 eventType = EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST,
                 newValue = "CANCEL",
-                oldValue = "NONE"
+                oldValue = "REQUEST"
             )
             notificationEventRecorder.record(notiEvent)
         }

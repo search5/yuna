@@ -226,7 +226,12 @@ class OrganizationServiceSpec @Autowired constructor(
                 }
             }
 
-            it("10. 대기 중인 가입 신청을 취소하면 목록에서 제거되고 취소 알림이 1건 발행돼야 한다") {
+            // yona NotificationEvent.java:1257-1286 afterOrganizationMemberRequest()의 REQUEST<->CANCEL
+            // oldValue/newValue 페어링 대응 (P2-21). 신청 직후 짧은 시간(30초 draft window) 안에
+            // 취소하면 신청/취소 알림 두 건 모두 상쇄(draft 병합)되어 관리자에게 아무 알림도 발행되지
+            // 않아야 한다 — oldValue/newValue가 REQUEST<->CANCEL로 대칭 페어링되어 있어야만 병합 로직
+            // (NotificationEventRecorder.record())이 두 이벤트를 서로의 반대값으로 인식해 상쇄시킨다.
+            it("10. 대기 중인 가입 신청을 곧바로 취소하면 신청/취소 알림이 모두 상쇄되어 발행되지 않아야 한다 (P2-21)") {
                 val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
                 val applicant = userRepository.save(
                     User(loginId = "applicant-user2", name = "신청자2", email = "applicant2@yona.io")
@@ -242,10 +247,10 @@ class OrganizationServiceSpec @Autowired constructor(
                 val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
                 updatedApplicant.enrolledOrganizations.count { it.id == org.id } shouldBe 0
 
-                val cancelEvents = notificationEventRepository.findAll().filter {
-                    it.resourceId == org.id.toString() && it.eventType == EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST && it.newValue == "CANCEL"
+                val requestOrCancelEvents = notificationEventRepository.findAll().filter {
+                    it.resourceId == org.id.toString() && it.eventType == EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST
                 }
-                cancelEvents.size shouldBe 1
+                requestOrCancelEvents.size shouldBe 0
             }
 
             // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19).
