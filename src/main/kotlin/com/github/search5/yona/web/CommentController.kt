@@ -64,7 +64,7 @@ class CommentController(
         val issue = issueRepository.findByProjectAndNumber(project, number)
             ?: return ResponseEntity.notFound().build()
 
-        val savedComment = commentService.createIssueComment(issue.id!!, request.contents, user)
+        val savedComment = commentService.createIssueComment(issue.id!!, request.contents, user, request.parentCommentId)
         return ResponseEntity.status(HttpStatus.CREATED).body(savedComment)
     }
 
@@ -159,7 +159,7 @@ class CommentController(
         val posting = postingRepository.findByProjectAndNumber(project, number)
             ?: return ResponseEntity.notFound().build()
 
-        val savedComment = commentService.createPostingComment(posting.id!!, request.contents, user)
+        val savedComment = commentService.createPostingComment(posting.id!!, request.contents, user, request.parentCommentId)
         return ResponseEntity.status(HttpStatus.CREATED).body(savedComment)
     }
 
@@ -240,6 +240,10 @@ class CommentController(
         // yona IssueApi.java:594-634 updateIssueComment()의 isModifiedByOthers() 대응 (P1-102).
         // 클라이언트가 저장 직전 화면에 있던 원문을 함께 보내면 동시편집 충돌을 감지한다 — null이면
         // 기존 호출자(원문을 안 보내는 클라이언트)와의 하위호환을 위해 충돌 검사를 건너뛴다.
-        val original: String? = null
+        val original: String? = null,
+        // yona models/Comment.java:45 parentCommentId 대응 (P1-112). CommentService의
+        // createIssueComment/createPostingComment는 이미 parentCommentId 파라미터를 받아 대댓글을
+        // 만들 수 있었지만, 이 DTO에 필드가 없어 API로 노출되지 않고 있었다.
+        val parentCommentId: Long? = null
     )
 }
