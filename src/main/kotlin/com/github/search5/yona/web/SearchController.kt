@@ -42,8 +42,13 @@ class SearchController(
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "검색어를 입력해주세요.")
         }
 
-        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         val searchType = SearchType.getValue(searchTypeVal)
+        // yona SearchApp.java:56-58 searchInAll()의 "SearchType.NA면 badRequest" 가드 대응 (P2-31).
+        if (searchType == SearchType.NA) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST)
+        }
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         val pageable = PageRequest.of(pageNum - 1, 20)
 
         val searchResult = searchService.searchInAll(keyword, searchType, loginUser, pageable)
@@ -91,6 +96,12 @@ class SearchController(
         }
 
         val searchType = SearchType.getValue(searchTypeVal)
+        // yona SearchApp.java:134-136 searchInAGroup()의 "SearchType.NA면 badRequest" 가드 대응
+        // (P2-31). legacy 조건의 나머지 절(organization == null)은 yuna에서는 위에서 이미
+        // orElseThrow{404}로 먼저 처리되므로 여기서 다시 확인할 필요가 없다.
+        if (searchType == SearchType.NA) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST)
+        }
         val pageable = PageRequest.of(pageNum - 1, 20)
 
         val searchResult = searchService.searchInAGroup(keyword, searchType, loginUser, organization, pageable)
@@ -122,8 +133,14 @@ class SearchController(
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
 
-        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         val searchType = SearchType.getValue(searchTypeVal)
+        // yona SearchApp.java:209-211 searchInAProject()의 "SearchType.NA 또는 PROJECT면 badRequest"
+        // 가드 대응 (P2-31) — 프로젝트 범위 검색에서 "프로젝트를 찾는다"는 검색 타입 자체가 무의미하다.
+        if (searchType == SearchType.NA || searchType == SearchType.PROJECT) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST)
+        }
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         val pageable = PageRequest.of(pageNum - 1, 20)
 
         val searchResult = searchService.searchInAProject(keyword, searchType, loginUser, project, pageable)

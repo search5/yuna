@@ -1,22 +1,52 @@
 package com.github.search5.yona.domain.support
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
 import org.commonmark.ext.gfm.tables.TablesExtension
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
 import org.commonmark.ext.autolink.AutolinkExtension
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
 import org.owasp.html.HtmlPolicyBuilder
 import org.owasp.html.PolicyFactory
 import org.owasp.html.Sanitizers
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.context.MessageSource
+import org.springframework.context.i18n.LocaleContextHolder
+import org.springframework.security.authentication.AnonymousAuthenticationToken
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Service
+import java.net.URI
+import java.net.URISyntaxException
 
 @Service
 class MarkdownServiceImpl(
     private val autoLinkRenderer: AutoLinkRenderer,
-    private val repositoryService: RepositoryService
+    private val repositoryService: RepositoryService,
+    // yona utils/Markdown.java:132-211 transformIssueLink()/extractIssueLink() 대응 (P2-33)에
+    // 필요한 의존성.
+    private val projectRepository: ProjectRepository,
+    private val issueRepository: IssueRepository,
+    private val userRepository: UserRepository,
+    private val accessControl: AccessControl,
+    private val messageSource: MessageSource,
+    // yona utils/Markdown.java:104 checkReferrer()의 application.noreferrer 설정 대응 (P2-32).
+    // NotificationMailBodyProcessor(P1-27)와 동일한 설정 키/hostname 프로퍼티를 공유한다.
+    @Value("\${application.noreferrer:false}")
+    private val noreferrerEnabled: Boolean = false,
+    @Value("\${yuna.hostname:localhost}")
+    private val hostname: String = "localhost"
 ) : MarkdownService {
+    private val logger = LoggerFactory.getLogger(MarkdownServiceImpl::class.java)
 
     companion object {
         // yona의 utils/Markdown.java 새니타이저 정책과 동등한 allowlist.
@@ -31,7 +61,9 @@ class MarkdownServiceImpl(
                 HtmlPolicyBuilder()
                     .allowUrlProtocols("http", "https", "mailto")
                     .allowElements("video", "source", "a", "input", "pre", "br", "hr", "iframe", "ol", "span")
-                    .allowAttributes("href", "name", "target").onElements("a")
+                    // "rel"은 P2-32(checkReferrer, noreferrer 부착)가 붙인 값이 새니타이저에서
+                    // 지워지지 않도록 허용 목록에 추가 — XSS 위험이 없는 안전한 속성.
+                    .allowAttributes("href", "name", "target", "rel").onElements("a")
                     .allowAttributes("src", "type", "target").onElements("source")
                     .allowAttributes(
                         "data-setup", "controls", "preload", "type", "autoplay",
@@ -107,7 +139,125 @@ class MarkdownServiceImpl(
             HtmlRenderer.builder().extensions(extensions).build()
         }
         val html = renderer.render(document)
-        return sanitize(html)
+        val referrerChecked = checkReferrer(html)
+        val issueLinkTransformed = transformIssueLink(referrerChecked)
+        return sanitize(issueLinkTransformed)
+    }
+
+    // yona utils/Markdown.java:103-130 checkReferrer() 대응 (P2-32). noreferrer 설정이 켜져 있으면
+    // 이 사이트 호스트명으로 "시작하지 않는"(legacy `!uri.getHost().startsWith(hostname)`, equals가
+    // 아님 — 원본 그대로) 외부 링크의 href에 rel="... noreferrer"를 붙인다. 잘못된 형식의 링크는
+    // legacy와 동일하게 조용히 건너뛴다.
+    private fun checkReferrer(source: String): String {
+        if (!noreferrerEnabled) {
+            return source
+        }
+        val doc = Jsoup.parse(source)
+        for (el in doc.getElementsByAttribute("href")) {
+            val href = el.attr("href")
+            try {
+                val uri = URI(href)
+                if (uri.host != null && !uri.host.startsWith(hostname)) {
+                    el.attr("rel", "${el.attr("rel")} noreferrer")
+                }
+            } catch (e: URISyntaxException) {
+                // 잘못된 링크는 건너뛴다 — legacy와 동일.
+            }
+        }
+        return doc.body().html()
+    }
+
+    // yona utils/Markdown.java:132-159 transformIssueLink() 대응 (P2-33). 이 사이트로 향하는(상대경로
+    // 또는 이 호스트명으로 시작하는) "순수 URL" 링크(commonmark AutolinkExtension이 자동으로 앵커화한,
+    // 즉 링크 텍스트가 href와 동일한 것)만 이슈 링크 변환 대상으로 삼는다 — 사용자가 `[텍스트](url)`로
+    // 직접 텍스트를 지정한 링크는 건드리지 않는다.
+    private fun transformIssueLink(source: String): String {
+        val doc = Jsoup.parse(source)
+        val elements = doc.getElementsByAttribute("href")
+
+        for (el in elements) {
+            val href = el.attr("href")
+            val linkText = el.text()
+
+            try {
+                val uri = URI(href)
+
+                if ((href.startsWith("/") || (uri.host != null && uri.host.startsWith(hostname))) &&
+                    linkText == href
+                ) {
+                    el.attr("rel", "${el.attr("rel")} noreferrer")
+
+                    if (extractIssueLink(el, uri)) break
+                }
+            } catch (e: URISyntaxException) {
+                // 잘못된 링크는 건너뛴다 — legacy와 동일.
+            }
+        }
+
+        return doc.body().html()
+    }
+
+    // yona utils/Markdown.java:161-211 extractIssueLink() 대응 (P2-33). 이슈 READ 권한이 없으면
+    // true를 반환해 호출부의 `break`로 문서 전체 스캔을 중단시킨다 — 이후 이슈 링크는 검사되지 않는
+    // legacy 원본의 동작을 그대로 재현(의도적 최적화가 아니라 원본에 있는 그대로의 동작).
+    private fun extractIssueLink(el: Element, uri: URI): Boolean {
+        val path = uri.path ?: return false
+        val issuePathPattern = Regex("/issue/\\d+")
+        if (!issuePathPattern.containsMatchIn(path)) {
+            return false
+        }
+
+        val segments = path.split("/issue/")
+        if (segments.size <= 1) {
+            return false
+        }
+
+        try {
+            val s = segments[0].split("/")
+            val owner = s[s.size - 2]
+            val projectName = s[s.size - 1]
+            val number = segments[1].split("/", "#", "?")[0].toLong()
+
+            val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+                ?: return false
+            val issue = issueRepository.findByProjectAndNumber(project, number)
+                ?: return false
+
+            if (!accessControl.isAllowed(resolveCurrentUser(), project, issue, Operation.READ)) {
+                return true
+            }
+
+            var linkText = "#${issue.number}.${issue.title}"
+            val fragment = uri.fragment
+            if (fragment != null) {
+                linkText += "#$fragment"
+            }
+
+            el.text("")
+            el.prependText(linkText)
+            el.addClass("issueLink")
+            val stateStr = issue.state.state()
+            el.appendElement("span")
+                .addClass("issue-state")
+                .addClass(stateStr)
+                .text(
+                    messageSource.getMessage(
+                        "issue.state.$stateStr", null, stateStr, LocaleContextHolder.getLocale()
+                    ) ?: stateStr
+                )
+        } catch (e: RuntimeException) {
+            logger.warn("Issue link extraction fail: $path", e)
+        }
+
+        return false
+    }
+
+    private fun resolveCurrentUser(): User? {
+        val authentication = SecurityContextHolder.getContext().authentication ?: return null
+        if (!authentication.isAuthenticated || authentication is AnonymousAuthenticationToken) {
+            return null
+        }
+        return userRepository.findByLoginId(authentication.name).orElse(null)
     }
 
 override fun renderFileInCodeBrowser(source: String, project: Project): String {
