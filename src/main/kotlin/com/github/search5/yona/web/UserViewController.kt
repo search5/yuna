@@ -21,6 +21,7 @@ import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
+import com.github.search5.yona.domain.attachment.Attachment
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.user.FavoriteProjectRepository
@@ -43,6 +44,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.Base64
+import java.util.UUID
 
 @Controller
 class UserViewController(
@@ -541,7 +543,7 @@ class UserViewController(
         return "user/userFiles"
     }
 
-    fun getAttachmentUrl(attachment: com.github.search5.yona.domain.attachment.Attachment): String? {
+    fun getAttachmentUrl(attachment: Attachment): String? {
         val containerIdLong = attachment.containerId.toLongOrNull() ?: return null
         return try {
             when (attachment.containerType) {
@@ -637,7 +639,7 @@ class UserViewController(
             return "redirect:/user/editform/password"
         }
 
-        val newSalt = java.util.UUID.randomUUID().toString().substring(0, 8)
+        val newSalt = UUID.randomUUID().toString().substring(0, 8)
         val newHashed = hashPassword(password, newSalt)
         loginUser.passwordSalt = newSalt
         loginUser.password = newHashed
@@ -648,7 +650,7 @@ class UserViewController(
     }
 
     private fun hashPassword(password: String, salt: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val digest = MessageDigest.getInstance("SHA-256")
         digest.reset()
         digest.update(salt.toByteArray(Charsets.UTF_8))
         var hashed = digest.digest(password.toByteArray(Charsets.UTF_8))
@@ -656,7 +658,7 @@ class UserViewController(
             digest.reset()
             hashed = digest.digest(hashed)
         }
-        return java.util.Base64.getEncoder().encodeToString(hashed)
+        return Base64.getEncoder().encodeToString(hashed)
     }
 
     @PostMapping("/user/resetVisitedList")
@@ -774,8 +776,8 @@ class UserViewController(
         val targetUser = userRepository.findByLoginId(loginId).orElse(null)
             ?: return ResponseEntity.status(404).body(mapOf("isSuccess" to false, "reason" to "USER_NOT_FOUND"))
 
-        val newPassword = java.util.UUID.randomUUID().toString().substring(0, 6)
-        val salt = java.util.UUID.randomUUID().toString().substring(0, 8)
+        val newPassword = UUID.randomUUID().toString().substring(0, 6)
+        val salt = UUID.randomUUID().toString().substring(0, 8)
 
         targetUser.passwordSalt = salt
         targetUser.password = hashPassword(newPassword, salt)

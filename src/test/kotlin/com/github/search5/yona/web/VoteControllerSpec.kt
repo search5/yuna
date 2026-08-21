@@ -30,14 +30,17 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.issue.IssueCommentRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.project.ProjectScope
 
 class VoteControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     val userRepository = mockk<UserRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val issueService = mockk<IssueService>()
-    val issueRepository = mockk<com.github.search5.yona.domain.issue.IssueRepository>()
-    val issueCommentRepository = mockk<com.github.search5.yona.domain.issue.IssueCommentRepository>()
+    val issueRepository = mockk<IssueRepository>()
+    val issueCommentRepository = mockk<IssueCommentRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -67,7 +70,7 @@ class VoteControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(voteController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, userRepository, projectUserRepository, issueService, issueRepository, issueCommentRepository)
+        clearMocks(projectRepository, userRepository, projectUserRepository, issueService, issueRepository, issueCommentRepository)
     }
 
     describe("VoteController 웹 API 및 리다이렉션 테스트") {
@@ -164,7 +167,7 @@ class VoteControllerSpec : DescribeSpec({
         }
 
         it("읽기 권한이 없는 사용자가 이슈 추천 시 403 Forbidden 상태코드를 반환해야 한다") {
-            val privateProject = Project(id = 1L, name = "test-project", owner = "tester", projectScope = com.github.search5.yona.domain.project.ProjectScope.PRIVATE)
+            val privateProject = Project(id = 1L, name = "test-project", owner = "tester", projectScope = ProjectScope.PRIVATE)
             every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(privateProject)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false

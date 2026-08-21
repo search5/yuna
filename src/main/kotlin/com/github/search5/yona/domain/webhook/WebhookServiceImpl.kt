@@ -1,13 +1,28 @@
 package com.github.search5.yona.domain.webhook
 
+import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.board.PostingComment
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.WebhookType
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.notification.NotificationUrlResolver
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.pullrequest.CommitComment
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.user.User
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.databind.node.ObjectNode
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -62,7 +77,7 @@ class WebhookServiceImpl(
 
     override fun sendWebhook(
         project: Project,
-        eventType: com.github.search5.yona.domain.enumeration.EventType,
+        eventType: EventType,
         sender: User,
         resource: Any
     ) {
@@ -86,9 +101,9 @@ class WebhookServiceImpl(
      */
     internal fun shouldDeliverToWebhook(
         webhook: Webhook,
-        eventType: com.github.search5.yona.domain.enumeration.EventType
+        eventType: EventType
     ): Boolean {
-        if (eventType != com.github.search5.yona.domain.enumeration.EventType.NEW_COMMIT) {
+        if (eventType != EventType.NEW_COMMIT) {
             return true
         }
         return webhook.gitPush || webhook.webhookType == WebhookType.JSON
@@ -96,11 +111,11 @@ class WebhookServiceImpl(
 
     internal fun buildPayload(
         webhook: Webhook,
-        eventType: com.github.search5.yona.domain.enumeration.EventType,
+        eventType: EventType,
         sender: User,
         resource: Any
     ): String {
-        val objectMapper = tools.jackson.databind.ObjectMapper()
+        val objectMapper = ObjectMapper()
         val textMessage = buildTextMessage(webhook, eventType, sender, resource)
 
         return when (webhook.webhookType) {
@@ -111,7 +126,7 @@ class WebhookServiceImpl(
                 // yona Webhook.java:299-317 Posting 오버로드 대응 (P2-36) — 다른 리소스 타입과
                 // 달리 Posting(게시글) 오버로드에는 DETAIL_SLACK 전용 분기 자체가 없어, SLACK
                 // 웹훅이어도 attachments 없이 텍스트만 보낸다(buildTextPropertyOnlyJSON로 귀결).
-                if (resource !is com.github.search5.yona.domain.board.Posting) {
+                if (resource !is Posting) {
                     val attachments = objectMapper.createArrayNode()
                     attachments.add(buildAttachmentJSON(objectMapper, resource))
                     root.set("attachments", attachments)
@@ -180,12 +195,12 @@ class WebhookServiceImpl(
     // PullRequest는 보낸사람+보낸브랜치+받는브랜치(yona 원본은 완전히 미지원이었음), 그 외(댓글 등)는
     // yona도 fields 없이 본문만 담는다. yona는 color를 `Play.application().configuration().getString(
     // "slack." + eventType, "")`로 조회하나 yuna에는 이 설정 자체가 없어(기본값도 항상 "") 빈 문자열로 고정.
-    private fun buildAttachmentJSON(objectMapper: tools.jackson.databind.ObjectMapper, resource: Any): tools.jackson.databind.node.ObjectNode {
+    private fun buildAttachmentJSON(objectMapper: ObjectMapper, resource: Any): ObjectNode {
         val fields = objectMapper.createArrayNode()
         val text: String
 
         when (resource) {
-            is com.github.search5.yona.domain.issue.Issue -> {
+            is Issue -> {
                 text = resource.body ?: ""
                 resource.milestone?.let {
                     fields.add(buildTitleValueJSON(objectMapper, "마일 스톤 변경", it.title, true))
@@ -195,18 +210,18 @@ class WebhookServiceImpl(
             }
             // Posting은 위 buildPayload()의 DETAIL_SLACK 분기에서 이 함수 자체를 호출하지 않으므로
             // (P2-36) 이 when에는 도달하지 않는다 — legacy에도 Posting용 buildXxxDetails()가 없다.
-            is com.github.search5.yona.domain.pullrequest.PullRequest -> {
+            is PullRequest -> {
                 text = resource.body ?: ""
                 fields.add(buildTitleValueJSON(objectMapper, "보낸 사람", resource.contributor.name, false))
                 fields.add(buildTitleValueJSON(objectMapper, "코드 보내는 곳", resource.fromBranch, true))
                 fields.add(buildTitleValueJSON(objectMapper, "코드 받을 곳", resource.toBranch, true))
             }
-            is com.github.search5.yona.domain.issue.IssueComment -> text = resource.contents
-            is com.github.search5.yona.domain.board.PostingComment -> text = resource.contents
+            is IssueComment -> text = resource.contents
+            is PostingComment -> text = resource.contents
             // yona Webhook.java:476-478 — 리뷰 댓글(Pull Request Comment) 이벤트의 DETAIL_SLACK
             // attachment는 댓글 자신이 아니라 buildJsonWithPullReqtuestDetails(eventPullRequest, ...)를
             // 그대로 재사용해 부모 풀 리퀘스트의 본문+필드(보낸사람/보낸브랜치/받는브랜치)를 담는다.
-            is com.github.search5.yona.domain.pullrequest.ReviewComment -> {
+            is ReviewComment -> {
                 val pullRequest = resource.thread?.pullRequest
                 text = pullRequest?.body ?: ""
                 if (pullRequest != null) {
@@ -228,11 +243,11 @@ class WebhookServiceImpl(
     }
 
     private fun buildTitleValueJSON(
-        objectMapper: tools.jackson.databind.ObjectMapper,
+        objectMapper: ObjectMapper,
         title: String,
         value: String,
         shorten: Boolean
-    ): tools.jackson.databind.node.ObjectNode {
+    ): ObjectNode {
         val titleJSON = objectMapper.createObjectNode()
         titleJSON.put("title", title)
         titleJSON.put("value", value)
@@ -241,7 +256,7 @@ class WebhookServiceImpl(
     }
 
     private fun buildPushPayload(webhook: Webhook, sender: User, pushed: PushedCommits): String {
-        val objectMapper = tools.jackson.databind.ObjectMapper()
+        val objectMapper = ObjectMapper()
         val root = objectMapper.createObjectNode()
         val project = webhook.project
 
@@ -299,7 +314,7 @@ class WebhookServiceImpl(
         repositoryNode.put("html_url", projectUrl(project))
         // yona Webhook.java:577 buildRepositoryJSON()의 overview(프로젝트 설명) 대응 (P2-08).
         repositoryNode.put("overview", project?.overview ?: "")
-        repositoryNode.put("private", project?.projectScope != com.github.search5.yona.domain.project.ProjectScope.PUBLIC)
+        repositoryNode.put("private", project?.projectScope != ProjectScope.PUBLIC)
         root.set("repository", repositoryNode)
 
         return objectMapper.writeValueAsString(root)
@@ -307,23 +322,23 @@ class WebhookServiceImpl(
 
     private fun buildTextMessage(
         webhook: Webhook,
-        eventType: com.github.search5.yona.domain.enumeration.EventType,
+        eventType: EventType,
         sender: User,
         resource: Any
     ): String {
         val projectName = webhook.project?.name ?: ""
         val actionMessage = when (eventType) {
-            com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE -> "새 이슈를 등록했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.ISSUE_STATE_CHANGED -> "이슈 상태를 변경했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.NEW_POSTING -> "새 게시글을 작성했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.NEW_COMMENT -> "새 댓글을 등록했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.NEW_REVIEW_COMMENT -> "새 리뷰 댓글을 등록했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST -> "새 풀 리퀘스트를 생성했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED -> "풀 리퀘스트를 병합했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED -> "풀 리퀘스트 상태를 변경했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_COMMIT_CHANGED -> "풀 리퀘스트에 커밋을 추가했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED -> "풀 리퀘스트 리뷰 상태를 변경했습니다"
-            com.github.search5.yona.domain.enumeration.EventType.NEW_COMMIT -> "커밋을 푸시했습니다"
+            EventType.NEW_ISSUE -> "새 이슈를 등록했습니다"
+            EventType.ISSUE_STATE_CHANGED -> "이슈 상태를 변경했습니다"
+            EventType.NEW_POSTING -> "새 게시글을 작성했습니다"
+            EventType.NEW_COMMENT -> "새 댓글을 등록했습니다"
+            EventType.NEW_REVIEW_COMMENT -> "새 리뷰 댓글을 등록했습니다"
+            EventType.NEW_PULL_REQUEST -> "새 풀 리퀘스트를 생성했습니다"
+            EventType.PULL_REQUEST_MERGED -> "풀 리퀘스트를 병합했습니다"
+            EventType.PULL_REQUEST_STATE_CHANGED -> "풀 리퀘스트 상태를 변경했습니다"
+            EventType.PULL_REQUEST_COMMIT_CHANGED -> "풀 리퀘스트에 커밋을 추가했습니다"
+            EventType.PULL_REQUEST_REVIEW_STATE_CHANGED -> "풀 리퀘스트 리뷰 상태를 변경했습니다"
+            EventType.NEW_COMMIT -> "커밋을 푸시했습니다"
             else -> "이벤트를 트리거했습니다"
         }
 
@@ -339,20 +354,20 @@ class WebhookServiceImpl(
 
     private fun buildResourceLink(webhook: Webhook, resource: Any): String {
         val linkText = when (resource) {
-            is com.github.search5.yona.domain.issue.Issue -> "#${resource.number}: ${resource.title}"
-            is com.github.search5.yona.domain.board.Posting -> "#${resource.number}: ${resource.title}"
-            is com.github.search5.yona.domain.issue.IssueComment ->
+            is Issue -> "#${resource.number}: ${resource.title}"
+            is Posting -> "#${resource.number}: ${resource.title}"
+            is IssueComment ->
                 "#${resource.issue.number}: ${resource.issue.title}"
-            is com.github.search5.yona.domain.board.PostingComment ->
+            is PostingComment ->
                 "#${resource.posting.number}: ${resource.posting.title}"
             // yona Webhook.java:493-499 buildRequestBody(PullRequest, ReviewComment) — 링크 텍스트는
             // 리뷰 댓글 자신이 아니라 부모 풀 리퀘스트의 "#번호: 제목". 부모를 못 찾으면(비정상 상태)
             // yona에 대응 분기가 없으므로 링크를 만들지 않는다.
-            is com.github.search5.yona.domain.pullrequest.ReviewComment ->
+            is ReviewComment ->
                 resource.thread?.pullRequest?.let { "#${it.number}: ${it.title}" }
             // CommitComment는 yona Webhook.java에 대응하는 오버로드 자체가 없는 yuna 전용 리소스라
             // (P2-18) 링크를 만들지 않는다(레거시에 없는 동작 추가 금지).
-            is com.github.search5.yona.domain.pullrequest.PullRequest -> "#${resource.number}: ${resource.title}"
+            is PullRequest -> "#${resource.number}: ${resource.title}"
             else -> null
         } ?: return ""
 
@@ -368,47 +383,47 @@ class WebhookServiceImpl(
 
     private fun getResourceType(resource: Any): ResourceType {
         return when (resource) {
-            is com.github.search5.yona.domain.issue.Issue -> ResourceType.ISSUE_POST
-            is com.github.search5.yona.domain.board.Posting -> ResourceType.BOARD_POST
-            is com.github.search5.yona.domain.issue.IssueComment -> ResourceType.ISSUE_COMMENT
-            is com.github.search5.yona.domain.board.PostingComment -> ResourceType.NONISSUE_COMMENT
-            is com.github.search5.yona.domain.pullrequest.ReviewComment -> ResourceType.REVIEW_COMMENT
-            is com.github.search5.yona.domain.pullrequest.CommitComment -> ResourceType.COMMIT_COMMENT
+            is Issue -> ResourceType.ISSUE_POST
+            is Posting -> ResourceType.BOARD_POST
+            is IssueComment -> ResourceType.ISSUE_COMMENT
+            is PostingComment -> ResourceType.NONISSUE_COMMENT
+            is ReviewComment -> ResourceType.REVIEW_COMMENT
+            is CommitComment -> ResourceType.COMMIT_COMMENT
             is PushedCommits -> ResourceType.COMMIT
-            is com.github.search5.yona.domain.pullrequest.PullRequest -> ResourceType.PULL_REQUEST
+            is PullRequest -> ResourceType.PULL_REQUEST
             else -> ResourceType.NOT_A_RESOURCE
         }
     }
 
     private fun getResourceId(resource: Any): String {
         return when (resource) {
-            is com.github.search5.yona.domain.issue.Issue -> resource.id?.toString() ?: ""
-            is com.github.search5.yona.domain.board.Posting -> resource.id?.toString() ?: ""
-            is com.github.search5.yona.domain.issue.IssueComment -> resource.id?.toString() ?: ""
-            is com.github.search5.yona.domain.board.PostingComment -> resource.id?.toString() ?: ""
-            is com.github.search5.yona.domain.pullrequest.ReviewComment -> resource.id?.toString() ?: ""
-            is com.github.search5.yona.domain.pullrequest.CommitComment -> resource.id?.toString() ?: ""
+            is Issue -> resource.id?.toString() ?: ""
+            is Posting -> resource.id?.toString() ?: ""
+            is IssueComment -> resource.id?.toString() ?: ""
+            is PostingComment -> resource.id?.toString() ?: ""
+            is ReviewComment -> resource.id?.toString() ?: ""
+            is CommitComment -> resource.id?.toString() ?: ""
             is PushedCommits -> resource.commits.firstOrNull()?.name ?: ""
-            is com.github.search5.yona.domain.pullrequest.PullRequest -> resource.id?.toString() ?: ""
+            is PullRequest -> resource.id?.toString() ?: ""
             else -> ""
         }
     }
 
     private fun sendRequestAsync(webhook: Webhook, resource: Any, payload: String) {
         try {
-            val httpClient = java.net.http.HttpClient.newBuilder().build()
-            val requestBuilder = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(webhook.payloadUrl))
+            val httpClient = HttpClient.newBuilder().build()
+            val requestBuilder = HttpRequest.newBuilder()
+                .uri(URI.create(webhook.payloadUrl))
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "Yobi-Hookshot")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload))
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
 
             if (!webhook.secret.isNullOrBlank()) {
                 requestBuilder.header("Authorization", "token ${webhook.secret}")
             }
 
             val request = requestBuilder.build()
-            httpClient.sendAsync(request, java.net.http.HttpResponse.BodyHandlers.ofString())
+            httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenAccept { response ->
                     val statusCode = response.statusCode()
                     if (statusCode < 200 || statusCode >= 300) {
@@ -434,7 +449,7 @@ class WebhookServiceImpl(
         val webhookId = webhook.id ?: return
 
         val threadId = try {
-            tools.jackson.databind.ObjectMapper().readTree(responseBody).path("thread").path("name").asText()
+            ObjectMapper().readTree(responseBody).path("thread").path("name").asText()
         } catch (e: Exception) {
             return
         }
@@ -450,11 +465,11 @@ class WebhookServiceImpl(
     // (레거시에 없는 동작을 새로 추가하지 않는다).
     private fun threadKeyOf(resource: Any): Pair<ResourceType, String> {
         return when (resource) {
-            is com.github.search5.yona.domain.issue.IssueComment ->
+            is IssueComment ->
                 ResourceType.ISSUE_POST to (resource.issue.id?.toString() ?: "")
-            is com.github.search5.yona.domain.board.PostingComment ->
+            is PostingComment ->
                 ResourceType.BOARD_POST to (resource.posting.id?.toString() ?: "")
-            is com.github.search5.yona.domain.pullrequest.ReviewComment ->
+            is ReviewComment ->
                 resource.thread?.pullRequest?.let { ResourceType.PULL_REQUEST to (it.id?.toString() ?: "") }
                     ?: (getResourceType(resource) to getResourceId(resource))
             else -> getResourceType(resource) to getResourceId(resource)

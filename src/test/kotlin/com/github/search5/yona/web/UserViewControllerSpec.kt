@@ -29,6 +29,18 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.data.web.PageableHandlerMethodArgumentResolver
 import java.util.Optional
+import io.mockk.clearMocks
+import org.springframework.data.domain.PageImpl
+import org.springframework.ui.ExtendedModelMap
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.project.ProjectUser
+import io.mockk.slot
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 class UserViewControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
@@ -71,7 +83,7 @@ class UserViewControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             userRepository,
             projectUserRepository,
             issueRepository,
@@ -119,7 +131,7 @@ class UserViewControllerSpec : DescribeSpec({
                 every { mentionService.getMentioningIssueIds(10L) } returns listOf(100L, 200L)
                 every {
                     issueRepository.findMentionedByState(listOf(100L, 200L), State.OPEN, null, any())
-                } returns org.springframework.data.domain.PageImpl(emptyList())
+                } returns PageImpl(emptyList())
                 every { issueRepository.countMentionedByState(listOf(100L, 200L), State.OPEN) } returns 2L
                 every { issueRepository.countMentionedByState(listOf(100L, 200L), State.CLOSED) } returns 0L
                 every { issueRepository.countSharedByState(10L, State.OPEN) } returns 0L
@@ -189,7 +201,7 @@ class UserViewControllerSpec : DescribeSpec({
             favoriteProjectRepository, favoriteOrganizationRepository, organizationUserRepository,
             organizationRepository, userService, accessControl, mentionService, hideProjectListing = true
         )
-        val model = org.springframework.ui.ExtendedModelMap()
+        val model = ExtendedModelMap()
 
         it("비로그인 방문자에게는 프로젝트/이슈/PR 목록이 비어 있어야 한다") {
             val viewedUser = User(id = 20L, loginId = "viewed", name = "대상유저")
@@ -212,7 +224,7 @@ class UserViewControllerSpec : DescribeSpec({
             every { issueRepository.findRecentlyByUser(20L, any()) } returns emptyList()
             every { pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(viewedUser, any()) } returns emptyList()
 
-            val viewerModel = org.springframework.ui.ExtendedModelMap()
+            val viewerModel = ExtendedModelMap()
             hiddenController.userProfile(loginId = "viewed", daysAgo = 14, selected = "issues", authentication = viewerAuth, model = viewerModel)
 
             viewerModel.getAttribute("currentUser") shouldBe viewer
@@ -225,19 +237,19 @@ class UserViewControllerSpec : DescribeSpec({
     describe("GET /user/{loginId} - 방문자의 프로젝트 READ 권한에 따른 필터링") {
         it("방문자가 READ 권한이 없는 프로젝트의 이슈/PR/소속 프로젝트는 감춰져야 한다") {
             val viewedUser = User(id = 20L, loginId = "viewed", name = "대상유저")
-            val readableProject = com.github.search5.yona.domain.project.Project(id = 1L, name = "readable", owner = "viewed")
-            val hiddenProject = com.github.search5.yona.domain.project.Project(id = 2L, name = "hidden", owner = "viewed")
-            val readableIssue = com.github.search5.yona.domain.issue.Issue(id = 100L, title = "보이는 이슈", project = readableProject)
-            val hiddenIssue = com.github.search5.yona.domain.issue.Issue(id = 101L, title = "숨겨진 이슈", project = hiddenProject)
-            val readablePr = com.github.search5.yona.domain.pullrequest.PullRequest(
+            val readableProject = Project(id = 1L, name = "readable", owner = "viewed")
+            val hiddenProject = Project(id = 2L, name = "hidden", owner = "viewed")
+            val readableIssue = Issue(id = 100L, title = "보이는 이슈", project = readableProject)
+            val hiddenIssue = Issue(id = 101L, title = "숨겨진 이슈", project = hiddenProject)
+            val readablePr = PullRequest(
                 id = 200L, number = 1L, toProject = readableProject, fromProject = readableProject, contributor = viewedUser
             )
-            val hiddenPr = com.github.search5.yona.domain.pullrequest.PullRequest(
+            val hiddenPr = PullRequest(
                 id = 201L, number = 2L, toProject = hiddenProject, fromProject = hiddenProject, contributor = viewedUser
             )
-            val memberRole = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)
-            val readableProjectUser = com.github.search5.yona.domain.project.ProjectUser(id = 900L, user = viewedUser, project = readableProject, role = memberRole)
-            val hiddenProjectUser = com.github.search5.yona.domain.project.ProjectUser(id = 901L, user = viewedUser, project = hiddenProject, role = memberRole)
+            val memberRole = Role(id = RoleType.MEMBER.roleType)
+            val readableProjectUser = ProjectUser(id = 900L, user = viewedUser, project = readableProject, role = memberRole)
+            val hiddenProjectUser = ProjectUser(id = 901L, user = viewedUser, project = hiddenProject, role = memberRole)
 
             every { userRepository.findByLoginId("viewed") } returns Optional.of(viewedUser)
             every { projectUserRepository.findByUserId(20L) } returns listOf(readableProjectUser, hiddenProjectUser)
@@ -261,17 +273,17 @@ class UserViewControllerSpec : DescribeSpec({
             val viewedUser = User(id = 20L, loginId = "viewed", name = "대상유저")
             every { userRepository.findByLoginId("viewed") } returns Optional.of(viewedUser)
             every { projectUserRepository.findByUserId(20L) } returns emptyList()
-            val sinceSlot = io.mockk.slot<java.time.Instant>()
+            val sinceSlot = slot<Instant>()
             every { issueRepository.findRecentlyByUser(20L, capture(sinceSlot)) } returns emptyList()
             every {
                 pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(viewedUser, any())
             } returns emptyList()
 
-            val before = java.time.Instant.now().minus(7, java.time.temporal.ChronoUnit.DAYS)
+            val before = Instant.now().minus(7, ChronoUnit.DAYS)
             mockMvc.perform(get("/user/viewed").param("daysAgo", "7"))
                 .andExpect(status().isOk)
                 .andExpect(model().attribute("daysAgo", 7))
-            val after = java.time.Instant.now().minus(7, java.time.temporal.ChronoUnit.DAYS)
+            val after = Instant.now().minus(7, ChronoUnit.DAYS)
 
             (sinceSlot.captured >= before && sinceSlot.captured <= after) shouldBe true
         }

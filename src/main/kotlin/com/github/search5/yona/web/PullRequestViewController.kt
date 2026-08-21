@@ -1,8 +1,12 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CodeCommentThread
@@ -11,10 +15,16 @@ import com.github.search5.yona.domain.pullrequest.CommentThread
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.NonRangedCodeCommentThread
 import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
+import com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.vcs.RepositoryService
+import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.security.core.Authentication
@@ -33,9 +43,9 @@ class PullRequestViewController(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val commentThreadRepository: CommentThreadRepository,
-    private val pullRequestEventRepository: com.github.search5.yona.domain.pullrequest.PullRequestEventRepository,
-    private val pullRequestCommitRepository: com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository,
-    private val issueRepository: com.github.search5.yona.domain.issue.IssueRepository,
+    private val pullRequestEventRepository: PullRequestEventRepository,
+    private val pullRequestCommitRepository: PullRequestCommitRepository,
+    private val issueRepository: IssueRepository,
     private val accessControl: AccessControl,
     private val codeReviewService: CodeReviewService
 ) {
@@ -120,17 +130,17 @@ class PullRequestViewController(
     }
 
     private fun checkMemberAccess(
-        project: com.github.search5.yona.domain.project.Project,
-        loginUser: com.github.search5.yona.domain.user.User?
+        project: Project,
+        loginUser: User?
     ): Boolean {
         return accessControl.isAllowed(loginUser, project, Operation.READ)
     }
 
     private fun renderList(
         model: Model,
-        project: com.github.search5.yona.domain.project.Project,
-        loginUser: com.github.search5.yona.domain.user.User?,
-        prPage: org.springframework.data.domain.Page<com.github.search5.yona.domain.pullrequest.PullRequest>,
+        project: Project,
+        loginUser: User?,
+        prPage: Page<PullRequest>,
         state: String
     ): String {
         model.addAttribute("project", project)
@@ -188,14 +198,14 @@ class PullRequestViewController(
             // 다루고, 그 외(NEW_PULL_REQUEST/COMMIT_CHANGED)는 legacy의 "case _ => {}"와 동일하게
             // 화면에서 제외한다.
             val renderedEventTypes = setOf(
-                com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED,
-                com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED,
-                com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+                EventType.PULL_REQUEST_STATE_CHANGED,
+                EventType.PULL_REQUEST_MERGED,
+                EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
             )
             val events = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
                 .filter { it.eventType in renderedEventTypes }
             val timeline = events.map {
-                com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem(date = it.created, event = it)
+                PullRequestTimelineItem(date = it.created, event = it)
             }.sortedBy { it.date }
             model.addAttribute("timeline", timeline)
         }
@@ -212,7 +222,7 @@ class PullRequestViewController(
         return "pullrequest/view"
     }
 
-    private fun getReferredIssues(pullRequest: com.github.search5.yona.domain.pullrequest.PullRequest): List<com.github.search5.yona.domain.issue.Issue> {
+    private fun getReferredIssues(pullRequest: PullRequest): List<Issue> {
         val project = pullRequest.toProject
         val textsToSearch = mutableListOf<String>()
 
@@ -238,7 +248,7 @@ class PullRequestViewController(
             return emptyList()
         }
 
-        val result = mutableListOf<com.github.search5.yona.domain.issue.Issue>()
+        val result = mutableListOf<Issue>()
         for (number in issueNumbers) {
             val issue = issueRepository.findByProjectAndNumber(project, number)
             if (issue != null) {
@@ -313,14 +323,14 @@ class PullRequestViewController(
     }
 
     private fun isManagerOrContributor(
-        project: com.github.search5.yona.domain.project.Project,
+        project: Project,
         contributorId: Long?,
-        user: com.github.search5.yona.domain.user.User?
+        user: User?
     ): Boolean {
         if (user == null) return false
         if (contributorId == user.id) return true
         return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
     }
 

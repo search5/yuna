@@ -36,6 +36,10 @@ import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import org.springframework.ui.ExtendedModelMap
 
 class MilestoneViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -81,7 +85,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             projectRepository,
             milestoneService,
             milestoneRepository,
@@ -122,11 +126,11 @@ class MilestoneViewControllerSpec : DescribeSpec({
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-                val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val groupOrg = Organization(id = 1L, name = "org")
                 groupOrg.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = user, organization = groupOrg,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
                 val groupProject = Project(id = 8L, name = "group-project", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
@@ -186,12 +190,12 @@ class MilestoneViewControllerSpec : DescribeSpec({
                 val high = Milestone(id = 21L, title = "높은 완료율", project = project)
                 every { milestoneService.getMilestones(1L, State.OPEN, "completionRate", "desc") } returns listOf(low, high)
                 every { issueRepository.findByMilestone(low) } returns listOf(
-                    Issue(title = "이슈1", project = project, state = com.github.search5.yona.domain.enumeration.State.OPEN),
-                    Issue(title = "이슈2", project = project, state = com.github.search5.yona.domain.enumeration.State.OPEN)
+                    Issue(title = "이슈1", project = project, state = State.OPEN),
+                    Issue(title = "이슈2", project = project, state = State.OPEN)
                 )
                 every { issueRepository.findByMilestone(high) } returns listOf(
-                    Issue(title = "이슈1", project = project, state = com.github.search5.yona.domain.enumeration.State.CLOSED),
-                    Issue(title = "이슈2", project = project, state = com.github.search5.yona.domain.enumeration.State.CLOSED)
+                    Issue(title = "이슈1", project = project, state = State.CLOSED),
+                    Issue(title = "이슈2", project = project, state = State.CLOSED)
                 )
 
                 val result = mockMvc.perform(
@@ -298,7 +302,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                     temporaryUploadFiles = "900",
                     authentication = userAuth,
                     redirectAttributes = mockk(relaxed = true),
-                    model = org.springframework.ui.ExtendedModelMap()
+                    model = ExtendedModelMap()
                 )
 
                 result shouldBe "redirect:/owner/TestProj/milestone/100"
@@ -322,7 +326,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { milestoneRepository.findByProjectAndTitle(project, "새 마일스톤") } returns null
 
-                val model = org.springframework.ui.ExtendedModelMap()
+                val model = ExtendedModelMap()
                 val result = milestoneViewController.createMilestone(
                     owner = "owner",
                     projectName = "TestProj",
@@ -351,7 +355,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                 every { milestoneService.getMilestone(2L) } returns original
                 every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.MILESTONE, "2") } returns emptyList()
 
-                val model = org.springframework.ui.ExtendedModelMap()
+                val model = ExtendedModelMap()
                 val result = milestoneViewController.editMilestone(
                     owner = "owner",
                     projectName = "TestProj",

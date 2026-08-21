@@ -3,6 +3,7 @@ package com.github.search5.yona.domain.notification
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.support.DiffUtil
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
@@ -83,7 +84,7 @@ class NotificationMessageResolverSpec : DescribeSpec({
 
         it("ISSUE_BODY_CHANGED/POSTING_BODY_CHANGED는 DiffUtil로 렌더링한다") {
             val message = resolver.getMessage(event(EventType.ISSUE_BODY_CHANGED, oldValue = "old", newValue = "new"), locale)
-            message shouldBe com.github.search5.yona.domain.support.DiffUtil.getDiffText("old", "new")
+            message shouldBe DiffUtil.getDiffText("old", "new")
         }
 
         it("PULL_REQUEST_STATE_CHANGED: newValue가 OPEN이면 reopened를 반환한다") {
@@ -142,7 +143,7 @@ class NotificationMessageResolverSpec : DescribeSpec({
     describe("getPlainMessage") {
         it("ISSUE_BODY_CHANGED는 DiffUtil의 plain text 버전을 사용한다") {
             val plain = resolver.getPlainMessage(event(EventType.ISSUE_BODY_CHANGED, oldValue = "old", newValue = "new"), locale)
-            plain shouldBe com.github.search5.yona.domain.support.DiffUtil.getDiffPlainText("old", "new")
+            plain shouldBe DiffUtil.getDiffPlainText("old", "new")
         }
 
         it("그 외에는 getMessage 결과에서 '\\n\\n<br />\\n' 패턴만 제거한다") {

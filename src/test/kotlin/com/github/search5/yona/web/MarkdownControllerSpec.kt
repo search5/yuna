@@ -11,6 +11,10 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import org.springframework.test.web.servlet.setup.StandaloneMockMvcBuilder
+import org.springframework.web.filter.CharacterEncodingFilter
+import io.mockk.clearMocks
+import org.springframework.test.web.servlet.result.MockMvcResultHandlers
 
 class MarkdownControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -21,13 +25,13 @@ class MarkdownControllerSpec : DescribeSpec({
         markdownService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(markdownController)
-        .addFilters<org.springframework.test.web.servlet.setup.StandaloneMockMvcBuilder>(
-            org.springframework.web.filter.CharacterEncodingFilter("UTF-8", true)
+        .addFilters<StandaloneMockMvcBuilder>(
+            CharacterEncodingFilter("UTF-8", true)
         )
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, markdownService)
+        clearMocks(projectRepository, markdownService)
     }
 
     describe("MarkdownController 마크다운 렌더링 API TDD 검증") {
@@ -49,7 +53,7 @@ class MarkdownControllerSpec : DescribeSpec({
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(requestJson)
             )
-                .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
+                .andDo(MockMvcResultHandlers.print())
                 .andExpect(status().isOk)
                 .andExpect(content().string("<h2>테스트 마크다운</h2>\n"))
         }

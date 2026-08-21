@@ -26,6 +26,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.io.File
 import java.time.Instant
 import java.util.Optional
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.issue.Issue
 
 class AttachmentControllerSpec : DescribeSpec({
     val attachmentService = mockk<AttachmentService>()
@@ -50,7 +53,7 @@ class AttachmentControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(attachmentController).build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             attachmentService,
             attachmentRepository,
             userRepository,
@@ -196,8 +199,8 @@ class AttachmentControllerSpec : DescribeSpec({
 
         describe("POST /files/{id} (파일 삭제)") {
             it("삭제 요청 파라미터 _method=delete를 전달하면 파일을 삭제하고 성공 메시지를 반환한다") {
-                val project = mockk<com.github.search5.yona.domain.project.Project>()
-                val issue = mockk<com.github.search5.yona.domain.issue.Issue>()
+                val project = mockk<Project>()
+                val issue = mockk<Issue>()
                 every { issue.project } returns project
                 every { issue.authorLoginId } returns "tester"
                 every { issueRepository.findById(10L) } returns Optional.of(issue)

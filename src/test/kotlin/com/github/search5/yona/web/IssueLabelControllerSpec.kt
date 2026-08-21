@@ -32,6 +32,7 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
 
 class IssueLabelControllerSpec : DescribeSpec({
     val issueLabelService = mockk<IssueLabelService>()
@@ -65,7 +66,7 @@ class IssueLabelControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(issueLabelController).build()
 
     beforeTest {
-        io.mockk.clearMocks(issueLabelService, projectRepository, projectUserRepository, userRepository)
+        clearMocks(issueLabelService, projectRepository, projectUserRepository, userRepository)
     }
 
     describe("IssueLabelController 웹 API 테스트") {

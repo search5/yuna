@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.pullrequest
 
 import com.github.search5.yona.domain.comment.CommentService
+import com.github.search5.yona.domain.vcs.FileDiff
 import com.github.search5.yona.domain.vcs.GitCommit
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.vcs.GitRepository
@@ -26,6 +27,7 @@ import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.transport.RefSpec
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -46,7 +48,7 @@ class PullRequestServiceImpl(
     private val issueRepository: IssueRepository,
     private val issueEventRepository: IssueEventRepository,
     private val commentService: CommentService,
-    @org.springframework.beans.factory.annotation.Value("\${yuna.site-name:Yona}")
+    @Value("\${yuna.site-name:Yona}")
     private val siteName: String
 ) : PullRequestService {
 
@@ -802,12 +804,12 @@ class PullRequestServiceImpl(
         recordPullRequestEvent(pullRequest, EventType.PULL_REQUEST_REVIEW_STATE_CHANGED, reviewer.loginId, null, newValue)
     }
 
-    override fun getDiff(pullRequest: PullRequest): List<com.github.search5.yona.domain.vcs.FileDiff> {
+    override fun getDiff(pullRequest: PullRequest): List<FileDiff> {
         val playRepoA = repositoryService.getRepository(pullRequest.toProject)
-        
+
         if (pullRequest.mergedCommitIdFrom != null && pullRequest.mergedCommitIdTo != null) {
             @Suppress("UNCHECKED_CAST")
-            return playRepoA.getDiff(pullRequest.mergedCommitIdFrom!!, pullRequest.mergedCommitIdTo!!) as List<com.github.search5.yona.domain.vcs.FileDiff>
+            return playRepoA.getDiff(pullRequest.mergedCommitIdFrom!!, pullRequest.mergedCommitIdTo!!) as List<FileDiff>
         }
         
         val playRepoB = repositoryService.getRepository(pullRequest.fromProject)
@@ -820,14 +822,14 @@ class PullRequestServiceImpl(
         val revA = pullRequest.mergedCommitIdFrom ?: pullRequest.toBranch
         val revB = pullRequest.mergedCommitIdTo ?: pullRequest.lastCommitId ?: pullRequest.fromBranch
         @Suppress("UNCHECKED_CAST")
-        return playRepoA.getDiff(revA, revB) as List<com.github.search5.yona.domain.vcs.FileDiff>
+        return playRepoA.getDiff(revA, revB) as List<FileDiff>
     }
 
-    override fun getDiff(pullRequest: PullRequest, commitId: String): List<com.github.search5.yona.domain.vcs.FileDiff> {
-        val project = if (pullRequest.state == com.github.search5.yona.domain.enumeration.State.MERGED) pullRequest.toProject else pullRequest.fromProject
+    override fun getDiff(pullRequest: PullRequest, commitId: String): List<FileDiff> {
+        val project = if (pullRequest.state == State.MERGED) pullRequest.toProject else pullRequest.fromProject
         val playRepo = repositoryService.getRepository(project)
         @Suppress("UNCHECKED_CAST")
-        return playRepo.getDiff(commitId) as List<com.github.search5.yona.domain.vcs.FileDiff>
+        return playRepo.getDiff(commitId) as List<FileDiff>
     }
 
     @Transactional

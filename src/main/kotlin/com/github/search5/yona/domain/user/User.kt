@@ -4,8 +4,10 @@ import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.role.RoleType
 import jakarta.persistence.*
 import java.time.Instant
+import java.util.Locale
 
 @Entity
 @Table(name = "n4user")
@@ -69,7 +71,7 @@ class User(
     var emails: MutableList<Email> = mutableListOf()
 ) {
     fun getPreferredLanguage(): String {
-        return lang ?: java.util.Locale.getDefault().language
+        return lang ?: Locale.getDefault().language
     }
 
     fun enroll(project: Project) {
@@ -173,6 +175,6 @@ class User(
     }
 
     fun isManagerOf(project: Project): Boolean {
-        return projectUsers.any { it.project.id == project.id && it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+        return projectUsers.any { it.project.id == project.id && it.role.id == RoleType.MANAGER.roleType }
     }
 }

@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import io.mockk.clearMocks
 
 class LabelControllerSpec : DescribeSpec({
     val labelRepository = mockk<LabelRepository>()
@@ -17,7 +18,7 @@ class LabelControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(labelController).build()
 
     beforeTest {
-        io.mockk.clearMocks(labelRepository)
+        clearMocks(labelRepository)
     }
 
     describe("LabelController 자동완성 API 테스트") {

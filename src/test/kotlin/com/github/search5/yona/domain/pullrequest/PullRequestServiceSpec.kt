@@ -5,8 +5,11 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.vcs.RepositoryService
+import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.issue.Issue
@@ -20,11 +23,13 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.transport.RefSpec
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import java.util.UUID
 
 @Transactional
 class PullRequestServiceSpec @Autowired constructor(
@@ -61,7 +66,7 @@ class PullRequestServiceSpec @Autowired constructor(
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
 
-                val uniqueSuffix = System.currentTimeMillis().toString() + "-" + java.util.UUID.randomUUID().toString().take(6)
+                val uniqueSuffix = System.currentTimeMillis().toString() + "-" + UUID.randomUUID().toString().take(6)
 
                 contributor = userRepository.save(
                     User(loginId = "contrib-$uniqueSuffix", name = "기여자", email = "contrib-$uniqueSuffix@yona.io")
@@ -71,7 +76,7 @@ class PullRequestServiceSpec @Autowired constructor(
                 )
 
                 toProject = projectRepository.save(
-                    Project(name = "to-repo-$uniqueSuffix", owner = "owner-a", vcs = "GIT", projectScope = com.github.search5.yona.domain.project.ProjectScope.PUBLIC)
+                    Project(name = "to-repo-$uniqueSuffix", owner = "owner-a", vcs = "GIT", projectScope = ProjectScope.PUBLIC)
                 )
                 fromProject = projectRepository.save(
                     Project(name = "from-repo-$uniqueSuffix", owner = "owner-b", vcs = "GIT")
@@ -144,7 +149,7 @@ class PullRequestServiceSpec @Autowired constructor(
                     
                     git.push()
                         .setRemote("origin")
-                        .setRefSpecs(org.eclipse.jgit.transport.RefSpec("HEAD:refs/heads/$branch"))
+                        .setRefSpecs(RefSpec("HEAD:refs/heads/$branch"))
                         .setForce(true)
                         .call()
                     
@@ -174,7 +179,7 @@ class PullRequestServiceSpec @Autowired constructor(
                     config.save()
                     git.push()
                         .setRemote("dest")
-                        .setRefSpecs(org.eclipse.jgit.transport.RefSpec("HEAD:refs/heads/$branch"))
+                        .setRefSpecs(RefSpec("HEAD:refs/heads/$branch"))
                         .setForce(true)
                         .call()
                         
@@ -404,7 +409,7 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 val notiEventsAfterAdd = notificationEventRepository.findAll()
                 notiEventsAfterAdd.size shouldBe 1
-                notiEventsAfterAdd.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+                notiEventsAfterAdd.first().eventType shouldBe EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
                 notiEventsAfterAdd.first().newValue shouldBe "DONE"
                 // yona NotificationEvent.afterReviewed()의 title = formatReplyTitle(pullRequest) 대응 (P1-63).
                 // 리뷰어 참여/취소 여부와 무관하게 다른 PR 알림들과 동일한 "Re: [project] title (#number)" 포맷.
@@ -412,7 +417,7 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 val prEventsAfterAdd = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
                 prEventsAfterAdd.size shouldBe 1
-                prEventsAfterAdd.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+                prEventsAfterAdd.first().eventType shouldBe EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
             }
 
             it("5. 최소 리뷰어 수 미달 시 머지 실패 검증") {
@@ -598,12 +603,12 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 val notiEvents = notificationEventRepository.findAll()
                 notiEvents.size shouldBe 1
-                notiEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST
+                notiEvents.first().eventType shouldBe EventType.NEW_PULL_REQUEST
                 notiEvents.first().newValue shouldBe "본문 내용"
 
                 val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(created)
                 prEvents.size shouldBe 1
-                prEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST
+                prEvents.first().eventType shouldBe EventType.NEW_PULL_REQUEST
                 prEvents.first().senderLoginId shouldBe contributor.loginId
             }
 
@@ -650,13 +655,13 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 val notiEvents = notificationEventRepository.findAll()
                 notiEvents.size shouldBe 1
-                notiEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED
+                notiEvents.first().eventType shouldBe EventType.PULL_REQUEST_STATE_CHANGED
                 notiEvents.first().oldValue shouldBe State.OPEN.toString()
                 notiEvents.first().newValue shouldBe State.CLOSED.toString()
 
                 val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(updated)
                 prEvents.size shouldBe 1
-                prEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED
+                prEvents.first().eventType shouldBe EventType.PULL_REQUEST_STATE_CHANGED
                 prEvents.first().senderLoginId shouldBe contributor.loginId
             }
 
@@ -732,12 +737,12 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
                 prEvents.size shouldBe 1
-                prEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_COMMIT_CHANGED
+                prEvents.first().eventType shouldBe EventType.PULL_REQUEST_COMMIT_CHANGED
                 prEvents.first().senderLoginId shouldBe contributor.loginId
 
                 val notiEvents = notificationEventRepository.findAll()
                 notiEvents.size shouldBe 1
-                notiEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_COMMIT_CHANGED
+                notiEvents.first().eventType shouldBe EventType.PULL_REQUEST_COMMIT_CHANGED
             }
 
             it("PR 생성 시(isNewPullRequest=true)에는 커밋 변경 알림은 생략되지만 PullRequestEvent는 기록되어야 한다") {
@@ -763,14 +768,14 @@ class PullRequestServiceSpec @Autowired constructor(
                 // NotificationEvent는 NEW_PULL_REQUEST 하나뿐이어야 한다(커밋 변경 알림은 생성 시점엔 생략).
                 val notiEvents = notificationEventRepository.findAll()
                 notiEvents.size shouldBe 1
-                notiEvents.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST
+                notiEvents.first().eventType shouldBe EventType.NEW_PULL_REQUEST
 
                 // PullRequestEvent는 PULL_REQUEST_COMMIT_CHANGED + NEW_PULL_REQUEST 둘 다 남아야 한다.
                 val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(created)
                 prEvents.size shouldBe 2
                 prEvents.map { it.eventType } shouldBe listOf(
-                    com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_COMMIT_CHANGED,
-                    com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST
+                    EventType.PULL_REQUEST_COMMIT_CHANGED,
+                    EventType.NEW_PULL_REQUEST
                 )
 
                 val savedCommits = pullRequestCommitRepository.findByPullRequestAndState(created, PullRequestCommit.State.CURRENT)
@@ -878,12 +883,12 @@ class PullRequestServiceSpec @Autowired constructor(
                 afterConflict.isConflict shouldBe true
 
                 val notiEventsAfterConflict = notificationEventRepository.findAll()
-                    .filter { it.eventType == com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED }
+                    .filter { it.eventType == EventType.PULL_REQUEST_MERGED }
                 notiEventsAfterConflict.size shouldBe 1
                 notiEventsAfterConflict.first().newValue shouldBe "conflict"
 
                 val prEventsAfterConflict = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
-                    .filter { it.eventType == com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED }
+                    .filter { it.eventType == EventType.PULL_REQUEST_MERGED }
                 prEventsAfterConflict.size shouldBe 1
                 prEventsAfterConflict.first().newValue shouldBe "conflict"
                 prEventsAfterConflict.first().senderLoginId shouldBe contributor.loginId
@@ -896,12 +901,12 @@ class PullRequestServiceSpec @Autowired constructor(
                 afterResolved.isConflict shouldBe false
 
                 val notiEventsAfterResolved = notificationEventRepository.findAll()
-                    .filter { it.eventType == com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED }
+                    .filter { it.eventType == EventType.PULL_REQUEST_MERGED }
                 notiEventsAfterResolved.size shouldBe 2
                 notiEventsAfterResolved.last().newValue shouldBe "resolved"
 
                 val prEventsAfterResolved = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
-                    .filter { it.eventType == com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED }
+                    .filter { it.eventType == EventType.PULL_REQUEST_MERGED }
                 prEventsAfterResolved.size shouldBe 2
                 prEventsAfterResolved.last().newValue shouldBe "resolved"
             }
@@ -947,7 +952,7 @@ class PullRequestServiceSpec @Autowired constructor(
                     )
                 )
 
-                shouldThrow<com.github.search5.yona.domain.pullrequest.DuplicatedPullRequestException> {
+                shouldThrow<DuplicatedPullRequestException> {
                     pullRequestService.updatePullRequest(
                         pullRequestId = pr.id!!,
                         title = "수정하려는 PR",
@@ -981,10 +986,10 @@ class PullRequestServiceSpec @Autowired constructor(
                 // 최초 생성 시점의 참조 이벤트를 직접 만들어둔다(생성 경로는 createPullRequest에서
                 // 별도로 처리하므로, 이 테스트는 updateWith()의 재동기화만 검증한다).
                 issueEventRepository.save(
-                    com.github.search5.yona.domain.issue.IssueEvent(
+                    IssueEvent(
                         issue = issue1, senderLoginId = contributor.loginId,
                         newValue = pr.id.toString(),
-                        eventType = com.github.search5.yona.domain.enumeration.EventType.ISSUE_REFERRED_FROM_PULL_REQUEST
+                        eventType = EventType.ISSUE_REFERRED_FROM_PULL_REQUEST
                     )
                 )
 
@@ -1001,7 +1006,7 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 val issue2Events = issueEventRepository.findByIssueOrderByCreatedAsc(issue2)
                 issue2Events.size shouldBe 1
-                issue2Events.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.ISSUE_REFERRED_FROM_PULL_REQUEST
+                issue2Events.first().eventType shouldBe EventType.ISSUE_REFERRED_FROM_PULL_REQUEST
                 issue2Events.first().newValue shouldBe pr.id.toString()
                 issue2Events.first().senderLoginId shouldBe contributor.loginId
             }

@@ -41,6 +41,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.data.web.PageableHandlerMethodArgumentResolver
 import java.util.Optional
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.attachment.LogoValidator
+import com.github.search5.yona.domain.attachment.Attachment
 
 class OrganizationViewControllerSpec : DescribeSpec({
     val organizationRepository = mockk<OrganizationRepository>()
@@ -81,12 +84,12 @@ class OrganizationViewControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             organizationRepository, organizationUserRepository, userRepository,
             issueRepository, postingRepository, pullRequestRepository,
             organizationService, attachmentRepository, attachmentService
         )
-        every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns java.util.Optional.empty()
+        every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     }
 
     describe("OrganizationViewController 템플릿 연동 테스트") {
@@ -160,7 +163,7 @@ class OrganizationViewControllerSpec : DescribeSpec({
 
                 val oversizedFile = MockMultipartFile(
                     "logoPath", "logo.png", "image/png",
-                    ByteArray((com.github.search5.yona.domain.attachment.LogoValidator.LOGO_FILE_LIMIT_SIZE + 1).toInt())
+                    ByteArray((LogoValidator.LOGO_FILE_LIMIT_SIZE + 1).toInt())
                 )
 
                 mockMvc.perform(
@@ -180,7 +183,7 @@ class OrganizationViewControllerSpec : DescribeSpec({
                 every { organizationService.updateOrganizationSettings(org.id!!, "testorg", "", user.id!!) } returns Unit
                 every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
                 every { attachmentService.store(any(), any(), any(), any(), any()) } returns
-                    (mockk<com.github.search5.yona.domain.attachment.Attachment>(relaxed = true) to true)
+                    (mockk<Attachment>(relaxed = true) to true)
 
                 val goodFile = MockMultipartFile("logoPath", "logo.png", "image/png", ByteArray(10))
 

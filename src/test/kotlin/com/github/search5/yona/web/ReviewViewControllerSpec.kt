@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.view
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
 
 class ReviewViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -43,7 +44,7 @@ class ReviewViewControllerSpec : DescribeSpec({
     val auth = UsernamePasswordAuthenticationToken("gildong", "pass")
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, pullRequestRepository, userRepository, codeReviewService, accessControl)
+        clearMocks(projectRepository, pullRequestRepository, userRepository, codeReviewService, accessControl)
         every { accessControl.isProjectResourceCreatable(any(), any(), any()) } returns true
     }
 

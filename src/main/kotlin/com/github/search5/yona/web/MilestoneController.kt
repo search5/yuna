@@ -18,6 +18,9 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
 
 @RestController
 @RequestMapping("/api/projects/{projectId}/milestones")
@@ -159,14 +162,14 @@ class MilestoneController(
 
     // yona utils/JodaDateUtil.java:84-92 lastSecondOfDay() 대응. 날짜만 오든 전체 ISO 일시가 오든
     // 유연하게 파싱해 그날의 23:59:59로 정규화한다.
-    private fun parseDueOn(dueOn: String?): java.time.Instant? {
+    private fun parseDueOn(dueOn: String?): Instant? {
         if (dueOn.isNullOrBlank()) return null
         val localDate = try {
-            java.time.OffsetDateTime.parse(dueOn).toLocalDate()
+            OffsetDateTime.parse(dueOn).toLocalDate()
         } catch (e: Exception) {
-            java.time.LocalDate.parse(dueOn)
+            LocalDate.parse(dueOn)
         }
-        return localDate.atTime(23, 59, 59).atZone(java.time.ZoneId.systemDefault()).toInstant()
+        return localDate.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
     }
 
     @PutMapping("/{milestoneId}")

@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
 
 // yona ProjectApp.java:1268,1283,1313 @IsAllowed(Operation.UPDATE)(resourceType 기본값 PROJECT)
 // 대응(P1-87) — 세 엔드포인트 전부 매니저 또는 조직관리자만 허용됨을 검증한다.
@@ -34,7 +35,7 @@ class WebhookControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(webhookController).build()
 
     beforeTest {
-        io.mockk.clearMocks(webhookService, projectRepository, userRepository, accessControl)
+        clearMocks(webhookService, projectRepository, userRepository, accessControl)
     }
 
     describe("WebhookController API 단위 테스트") {

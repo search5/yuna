@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -21,7 +22,7 @@ class MailServiceImplSpec : DescribeSpec({
     val session = Session.getInstance(Properties())
 
     beforeTest {
-        io.mockk.clearMocks(mailSender, answers = false)
+        clearMocks(mailSender, answers = false)
         every { mailSender.createMimeMessage() } answers { MimeMessage(session) }
         every { mailSender.send(any<MimeMessage>()) } returns Unit
     }

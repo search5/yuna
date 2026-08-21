@@ -33,6 +33,8 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
+import io.mockk.slot
 
 class MilestoneControllerSpec : DescribeSpec({
     val milestoneService = mockk<MilestoneService>()
@@ -68,7 +70,7 @@ class MilestoneControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(milestoneController).build()
 
     beforeTest {
-        io.mockk.clearMocks(milestoneService, milestoneRepository, projectRepository, projectUserRepository, userRepository)
+        clearMocks(milestoneService, milestoneRepository, projectRepository, projectUserRepository, userRepository)
     }
 
     describe("MilestoneController 웹 API 테스트") {
@@ -210,7 +212,7 @@ class MilestoneControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { milestoneRepository.findByProjectAndTitle(project, "이미 있는 제목") } returns milestone
                 every { milestoneRepository.findByProjectAndTitle(project, "새 제목") } returns null
-                val savedSlot = io.mockk.slot<Milestone>()
+                val savedSlot = slot<Milestone>()
                 every { milestoneRepository.save(capture(savedSlot)) } answers { savedSlot.captured.apply { id = 40L } }
 
                 val jsonContent = """

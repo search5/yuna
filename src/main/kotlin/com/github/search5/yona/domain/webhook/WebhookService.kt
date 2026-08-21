@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.webhook
 
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.WebhookType
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
@@ -16,7 +17,7 @@ interface WebhookService {
     fun deleteWebhook(id: Long)
     fun sendWebhook(
         project: Project,
-        eventType: com.github.search5.yona.domain.enumeration.EventType,
+        eventType: EventType,
         sender: User,
         resource: Any
     )

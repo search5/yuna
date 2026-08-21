@@ -4,6 +4,7 @@ import tools.jackson.databind.ObjectMapper
 import tools.jackson.databind.node.ObjectNode
 import com.github.search5.yona.domain.user.User
 import org.tmatesoft.svn.core.*
+import org.tmatesoft.svn.core.io.SVNRepository
 import org.tmatesoft.svn.core.io.SVNRepositoryFactory
 import org.tmatesoft.svn.core.wc.SVNClientManager
 import org.tmatesoft.svn.core.wc.SVNRevision
@@ -11,6 +12,7 @@ import java.io.*
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.time.Instant
 import java.util.*
 
 class SvnRepository(
@@ -22,7 +24,7 @@ class SvnRepository(
 
     private val objectMapper = ObjectMapper()
 
-    private fun getSVNRepository(): org.tmatesoft.svn.core.io.SVNRepository {
+    private fun getSVNRepository(): SVNRepository {
         val svnURL = SVNURL.fromFile(getDirectory())
         return SVNRepositoryFactory.create(svnURL)
     }
@@ -95,7 +97,7 @@ class SvnRepository(
         return null
     }
 
-    private fun fileAsJson(path: String, repository: org.tmatesoft.svn.core.io.SVNRepository, revision: Long): ObjectNode {
+    private fun fileAsJson(path: String, repository: SVNRepository, revision: Long): ObjectNode {
         val baos = ByteArrayOutputStream()
         val prop = SVNProperties()
         repository.getFile(path, revision, prop, baos)
@@ -129,7 +131,7 @@ class SvnRepository(
         val commitDateStr = prop.getStringValue(SVNProperty.COMMITTED_DATE)
         val commitTime = try {
             if (commitDateStr != null) {
-                java.time.Instant.parse(commitDateStr).toEpochMilli()
+                Instant.parse(commitDateStr).toEpochMilli()
             } else {
                 entry.date.time
             }
@@ -300,7 +302,7 @@ class SvnRepository(
         if (!dir.exists()) {
             return true
         }
-        var repository: org.tmatesoft.svn.core.io.SVNRepository? = null
+        var repository: SVNRepository? = null
         try {
             val svnURL = SVNURL.fromFile(dir)
             repository = SVNRepositoryFactory.create(svnURL)
@@ -335,7 +337,7 @@ class SvnRepository(
         return File(File(baseDir), "$ownerName/$projectName")
     }
 
-    override fun getArchive(os: java.io.OutputStream, branchName: String) {
+    override fun getArchive(os: OutputStream, branchName: String) {
         // Not implemented (same as legacy Yona)
     }
 }

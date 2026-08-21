@@ -3,6 +3,7 @@ package com.github.search5.yona.domain.support
 import org.springframework.stereotype.Service
 import java.io.File
 import javax.sql.DataSource
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.javamail.JavaMailSender
 import com.github.search5.yona.domain.mail.ImapMailboxPoller
 
@@ -19,7 +20,7 @@ class DiagnosticService(
     // (WebhookServiceImpl/NotificationUrlResolver/NotificationMailRenderer/NotificationMailBodyProcessor
     // 4곳에서 재사용) — yona가 막으려던 "설정이 반쯤만 채워져 URL이 깨지는" 문제는 yuna에서는 이 값이
     // 비어있을 때 똑같이 발생하므로, 두 필드 조합이 아니라 이 단일 값의 공백 여부로 대응 이식한다.
-    @org.springframework.beans.factory.annotation.Value("\${yuna.base-url:}")
+    @Value("\${yuna.base-url:}")
     private val baseUrl: String = ""
 ) {
 

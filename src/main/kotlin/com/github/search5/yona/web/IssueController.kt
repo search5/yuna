@@ -14,6 +14,7 @@ import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.http.HttpStatus
@@ -99,7 +100,7 @@ class IssueController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val clampedPageable = org.springframework.data.domain.PageRequest.of(
+        val clampedPageable = PageRequest.of(
             pageable.pageNumber,
             minOf(pageable.pageSize, ITEMS_PER_PAGE_MAX),
             pageable.sort

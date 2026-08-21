@@ -5,16 +5,20 @@ import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.board.PostingService
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.RepositoryService
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestParam
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.board.PostingCommentRepository
@@ -28,6 +32,7 @@ import com.github.search5.yona.domain.issue.RecentIssueService
 import org.eclipse.jgit.lib.Constants
 import tools.jackson.databind.ObjectMapper
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 @Controller
 class BoardViewController(
@@ -40,7 +45,7 @@ class BoardViewController(
     private val watchService: WatchService,
     private val attachmentRepository: AttachmentRepository,
     private val objectMapper: ObjectMapper,
-    private val repositoryService: com.github.search5.yona.domain.vcs.RepositoryService,
+    private val repositoryService: RepositoryService,
     @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
     private val gitBaseDir: String,
     private val recentIssueService: RecentIssueService,
@@ -193,7 +198,7 @@ class BoardViewController(
             try {
                 val bytes = repositoryService.getRepository(project).getRawFile("HEAD", "README.md")
                 if (bytes != null) {
-                    preparedPostBody = String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+                    preparedPostBody = String(bytes, StandardCharsets.UTF_8)
                 }
             } catch (e: Exception) {}
         } else if (issueTemplate == true) {
@@ -202,7 +207,7 @@ class BoardViewController(
             try {
                 val bytes = repositoryService.getRepository(project).getRawFile(branch ?: "HEAD", path)
                 if (bytes != null) {
-                    preparedPostBody = String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+                    preparedPostBody = String(bytes, StandardCharsets.UTF_8)
                 }
             } catch (e: Exception) {}
         }
@@ -257,12 +262,12 @@ class BoardViewController(
         return "board/edit"
     }
 
-    @org.springframework.web.bind.annotation.PostMapping(value = ["/{owner}/{projectName}/post/{number}/editform", "/{owner}/{projectName}/post/{number}/edit"])
+    @PostMapping(value = ["/{owner}/{projectName}/post/{number}/editform", "/{owner}/{projectName}/post/{number}/edit"])
     fun editPost(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @PathVariable number: Long,
-        @org.springframework.web.bind.annotation.ModelAttribute request: PostingForm,
+        @ModelAttribute request: PostingForm,
         authentication: Authentication?
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
@@ -316,11 +321,11 @@ class BoardViewController(
         return "redirect:/$owner/$projectName/post/$number"
     }
 
-    @org.springframework.web.bind.annotation.PostMapping("/{owner}/{projectName}/posts")
+    @PostMapping("/{owner}/{projectName}/posts")
     fun createPost(
         @PathVariable owner: String,
         @PathVariable projectName: String,
-        @org.springframework.web.bind.annotation.ModelAttribute request: PostingForm,
+        @ModelAttribute request: PostingForm,
         authentication: Authentication?
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
@@ -417,10 +422,10 @@ class BoardViewController(
         return "redirect:/$owner/$projectName/post/${saved.number}"
     }
 
-    private fun getIssueTemplate(project: com.github.search5.yona.domain.project.Project): String {
+    private fun getIssueTemplate(project: Project): String {
         return try {
             val bytes = repositoryService.getRepository(project).getRawFile("HEAD", "ISSUE_TEMPLATE.md")
-            if (bytes != null) String(bytes, java.nio.charset.StandardCharsets.UTF_8) else ""
+            if (bytes != null) String(bytes, StandardCharsets.UTF_8) else ""
         } catch (e: Exception) {
             ""
         }

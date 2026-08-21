@@ -1,6 +1,7 @@
 package com.github.search5.yona.config
 
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.user.YonaUserDetails
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -38,8 +39,8 @@ class ApiTokenAuthenticationFilter(
             val token = extractToken(request)
             if (token != null) {
                 val user = userRepository.findByToken(token).orElse(null)
-                if (user != null && user.state != com.github.search5.yona.domain.user.UserState.LOCKED &&
-                    user.state != com.github.search5.yona.domain.user.UserState.DELETED
+                if (user != null && user.state != UserState.LOCKED &&
+                    user.state != UserState.DELETED
                 ) {
                     val userDetails = userDetailsService.loadUserByUsername(user.loginId) as YonaUserDetails
                     SecurityContextHolder.getContext().authentication =

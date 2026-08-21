@@ -18,10 +18,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.AuthenticationException
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.util.HtmlUtils
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.LocalDateTime
 import java.util.Base64
+import java.util.UUID
 
 @RestController
 class UserController(
@@ -86,7 +88,7 @@ class UserController(
 
         val users = userRepository.findAll().filter {
             (it.loginId.contains(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true)) &&
-                    it.state != com.github.search5.yona.domain.user.UserState.DELETED
+                    it.state != UserState.DELETED
         }.take(10)
 
         val result = users.map { user ->
@@ -223,7 +225,7 @@ class UserController(
                 return ResponseEntity.badRequest().body(mapOf("error" to "이미 사용 중인 이메일 주소입니다."))
             }
 
-            val escapedName = org.springframework.web.util.HtmlUtils.htmlEscape(name.trim())
+            val escapedName = HtmlUtils.htmlEscape(name.trim())
             user.name = escapedName
             user.email = email.trim()
             userRepository.save(user)
@@ -282,7 +284,7 @@ class UserController(
             }
 
             // 비밀번호 재설정
-            val newSalt = java.util.UUID.randomUUID().toString().substring(0, 8)
+            val newSalt = UUID.randomUUID().toString().substring(0, 8)
             val newHashed = hashPassword(request.password, newSalt)
             
             user.passwordSalt = newSalt
@@ -296,7 +298,7 @@ class UserController(
     }
 
     private fun hashPassword(password: String, salt: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val digest = MessageDigest.getInstance("SHA-256")
         digest.reset()
         digest.update(salt.toByteArray(Charsets.UTF_8))
         var hashed = digest.digest(password.toByteArray(Charsets.UTF_8))
@@ -304,7 +306,7 @@ class UserController(
             digest.reset()
             hashed = digest.digest(hashed)
         }
-        return java.util.Base64.getEncoder().encodeToString(hashed)
+        return Base64.getEncoder().encodeToString(hashed)
     }
 
     data class ChangePasswordRequest(
@@ -347,7 +349,7 @@ class UserController(
         }
 
         val opaqueRandomPassword = Base64.getEncoder().encodeToString(SecureRandom().generateSeed(20))
-        val salt = java.util.UUID.randomUUID().toString().substring(0, 8)
+        val salt = UUID.randomUUID().toString().substring(0, 8)
         val user = User(
             loginId = item.loginId,
             name = item.name,

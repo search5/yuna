@@ -32,6 +32,7 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
 
 // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57) 회귀 테스트.
 class ProjectMemberControllerSpec : DescribeSpec({
@@ -69,7 +70,7 @@ class ProjectMemberControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(projectMemberController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectUserService, projectRepository, projectUserRepository, userRepository, messageSource)
+        clearMocks(projectUserService, projectRepository, projectUserRepository, userRepository, messageSource)
     }
 
     describe("GET /api/projects/{projectId}/assignableUsers") {

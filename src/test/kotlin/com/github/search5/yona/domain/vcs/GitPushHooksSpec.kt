@@ -8,6 +8,7 @@ import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.User
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -64,7 +65,7 @@ class GitPushHooksSpec : DescribeSpec({
         )
 
         beforeTest {
-            io.mockk.clearMocks(projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher)
+            clearMocks(projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher)
             every { projectRepository.save(any()) } returns project
             every { pushedBranchRepository.findByProjectAndPushedDateBefore(any(), any()) } returns emptyList()
             every { pushedBranchRepository.findByProjectAndName(any(), any()) } returns Optional.empty()

@@ -24,13 +24,15 @@ import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.issue.IssueLabelRepository
+import com.github.search5.yona.domain.vcs.PushedBranchRepository
+import io.mockk.clearMocks
 
 class ProjectTransferForkSpec : DescribeSpec({
     val projectService = mockk<ProjectService>()
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
-    val pushedBranchRepository = mockk<com.github.search5.yona.domain.vcs.PushedBranchRepository>()
+    val pushedBranchRepository = mockk<PushedBranchRepository>()
     val titleHeadService = mockk<TitleHeadService>()
     val issueLabelRepository = mockk<IssueLabelRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
@@ -64,7 +66,7 @@ class ProjectTransferForkSpec : DescribeSpec({
     val auth = UsernamePasswordAuthenticationToken("gildong", "pass")
 
     beforeTest {
-        io.mockk.clearMocks(projectService, projectRepository, projectUserRepository, userRepository)
+        clearMocks(projectService, projectRepository, projectUserRepository, userRepository)
     }
 
     describe("프로젝트 이관 및 포크 TDD 검증") {

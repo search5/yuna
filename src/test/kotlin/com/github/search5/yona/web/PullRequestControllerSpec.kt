@@ -32,13 +32,19 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.pullrequest.PullRequestEvent
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.pullrequest.DuplicatedPullRequestException
+import com.github.search5.yona.domain.pullrequest.LackingReviewerException
 
 class PullRequestControllerSpec : DescribeSpec({
     val pullRequestService = mockk<PullRequestService>()
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
-    val pullRequestEventRepository = mockk<com.github.search5.yona.domain.pullrequest.PullRequestEventRepository>()
+    val pullRequestEventRepository = mockk<PullRequestEventRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -67,7 +73,7 @@ class PullRequestControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(pullRequestController).build()
 
     beforeTest {
-        io.mockk.clearMocks(pullRequestService, projectRepository, projectUserRepository, userRepository, pullRequestEventRepository)
+        clearMocks(pullRequestService, projectRepository, projectUserRepository, userRepository, pullRequestEventRepository)
     }
 
     describe("PullRequestController 웹 API 테스트") {
@@ -132,9 +138,9 @@ class PullRequestControllerSpec : DescribeSpec({
 
         describe("GET /api/projects/{projectId}/pullrequests/{number}/timeline") {
             it("PR의 변경 이력을 시간순으로 반환해야 한다") {
-                val prEvent = com.github.search5.yona.domain.pullrequest.PullRequestEvent(
+                val prEvent = PullRequestEvent(
                     id = 1L, pullRequest = pullRequest,
-                    eventType = com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED,
+                    eventType = EventType.PULL_REQUEST_STATE_CHANGED,
                     oldValue = "OPEN", newValue = "MERGED"
                 )
                 every { projectRepository.findById(1L) } returns Optional.of(project)
@@ -356,7 +362,7 @@ class PullRequestControllerSpec : DescribeSpec({
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
                 every {
                     pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문", "hotfix", "release")
-                } throws com.github.search5.yona.domain.pullrequest.DuplicatedPullRequestException("중복된 PR")
+                } throws DuplicatedPullRequestException("중복된 PR")
 
                 val jsonContent = """
                     {
@@ -502,7 +508,7 @@ class PullRequestControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
-                every { pullRequestService.merge(50L, user) } throws com.github.search5.yona.domain.pullrequest.LackingReviewerException("리뷰어 부족")
+                every { pullRequestService.merge(50L, user) } throws LackingReviewerException("리뷰어 부족")
 
                 mockMvc.perform(
                     post("/api/projects/1/pullrequests/1/merge")

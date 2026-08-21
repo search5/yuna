@@ -8,6 +8,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.*
+import org.hamcrest.Matchers
 
 class MessagesControllerSpec : DescribeSpec({
     val objectMapper = ObjectMapper()
@@ -24,8 +25,8 @@ class MessagesControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(content().contentType("application/javascript;charset=UTF-8"))
                     .andExpect(header().exists("Cache-Control"))
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("window.Messages = function(key)")))
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("app.name")))
+                    .andExpect(content().string(Matchers.containsString("window.Messages = function(key)")))
+                    .andExpect(content().string(Matchers.containsString("app.name")))
             }
 
             it("영어/기본 로케일에 대해 기본 messages 데이터를 포함한 JS 번들을 렌더링해야 한다") {
@@ -35,8 +36,8 @@ class MessagesControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
                     .andExpect(content().contentType("application/javascript;charset=UTF-8"))
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("window.Messages = function(key)")))
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("app.name")))
+                    .andExpect(content().string(Matchers.containsString("window.Messages = function(key)")))
+                    .andExpect(content().string(Matchers.containsString("app.name")))
             }
         }
     }

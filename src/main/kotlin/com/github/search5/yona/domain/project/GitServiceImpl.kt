@@ -1,6 +1,8 @@
 package com.github.search5.yona.domain.project
 
+import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.RepositoryBuilder
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.io.File
@@ -42,7 +44,7 @@ class GitServiceImpl(
         if (repoDir.exists()) {
             repoDir.deleteRecursively()
         }
-        val cloneCommand = org.eclipse.jgit.api.Git.cloneRepository()
+        val cloneCommand = Git.cloneRepository()
             .setURI(gitUrl)
             .setDirectory(repoDir)
             .setCloneAllBranches(true)
@@ -50,7 +52,7 @@ class GitServiceImpl(
 
         if (!authId.isNullOrEmpty() || !authPw.isNullOrEmpty()) {
             cloneCommand.setCredentialsProvider(
-                org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider(authId ?: "", authPw ?: "")
+                UsernamePasswordCredentialsProvider(authId ?: "", authPw ?: "")
             )
         }
 

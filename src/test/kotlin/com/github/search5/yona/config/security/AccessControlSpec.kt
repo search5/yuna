@@ -38,6 +38,7 @@ import com.github.search5.yona.domain.webhook.Webhook
 import com.github.search5.yona.domain.attachment.Attachment
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import java.util.Optional
@@ -67,7 +68,7 @@ class AccessControlSpec : DescribeSpec({
     )
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             projectUserRepository, organizationUserRepository, userRepository, organizationRepository,
             issueRepository, postingRepository, reviewCommentRepository, commitCommentRepository,
             milestoneRepository,

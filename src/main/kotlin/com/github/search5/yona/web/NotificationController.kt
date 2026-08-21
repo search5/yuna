@@ -1,6 +1,7 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.ResponseEntity
@@ -26,7 +27,7 @@ class NotificationController(
         val eventType: String
     )
 
-    private fun getLoginUser(authentication: Authentication?): com.github.search5.yona.domain.user.User {
+    private fun getLoginUser(authentication: Authentication?): User {
         if (authentication == null) throw IllegalArgumentException("Unauthorized")
         return userRepository.findByLoginId(authentication.name)
             .orElseThrow { IllegalArgumentException("User not found") }

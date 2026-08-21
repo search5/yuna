@@ -42,6 +42,17 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.vcs.RepositoryService
+import com.github.search5.yona.domain.issue.RecentIssueService
+import io.mockk.clearMocks
+import io.mockk.slot
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import java.io.File
+import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder
+import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.treewalk.TreeWalk
 
 class BoardViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -52,9 +63,9 @@ class BoardViewControllerSpec : DescribeSpec({
     val postingCommentRepository = mockk<PostingCommentRepository>()
     val watchService = mockk<WatchService>()
     val attachmentRepository = mockk<AttachmentRepository>()
-    val repositoryService = mockk<com.github.search5.yona.domain.vcs.RepositoryService>()
+    val repositoryService = mockk<RepositoryService>()
     val objectMapper = ObjectMapper()
-    val recentIssueService = mockk<com.github.search5.yona.domain.issue.RecentIssueService>(relaxed = true)
+    val recentIssueService = mockk<RecentIssueService>(relaxed = true)
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -94,7 +105,7 @@ class BoardViewControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, postingService, postingRepository, projectUserRepository, userRepository,
+        clearMocks(projectRepository, postingService, postingRepository, projectUserRepository, userRepository,
             postingCommentRepository, watchService, attachmentRepository)
     }
 
@@ -141,7 +152,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
-                val pageableSlot = io.mockk.slot<Pageable>()
+                val pageableSlot = slot<Pageable>()
                 every { postingRepository.findByProject(project, capture(pageableSlot)) } returns PageImpl(listOf(posting), pageRequest, 1)
                 every { postingService.getNotices(1L) } returns emptyList()
 
@@ -154,12 +165,12 @@ class BoardViewControllerSpec : DescribeSpec({
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57) — 직접 멤버가 아니어도
             // PROTECTED 프로젝트가 속한 조직의 멤버라면 읽을 수 있어야 한다.
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-                val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val org = Organization(id = 1L, name = "org")
                 val groupProject = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = org)
                 org.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = user, organization = org,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
 
@@ -194,7 +205,7 @@ class BoardViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("board/list"))
                     .andExpect(model().attribute("labelIds", listOf(3L, 4L)))
 
-                io.mockk.verify(exactly = 0) { postingRepository.findByProject(any(), any<Pageable>()) }
+                verify(exactly = 0) { postingRepository.findByProject(any(), any<Pageable>()) }
             }
         }
 
@@ -378,10 +389,10 @@ class BoardViewControllerSpec : DescribeSpec({
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저", email = "testuser@yona.io")
                 memberUser.projectUsers.add(ProjectUser(id = 955L, user = memberUser, project = codeEditProject, role = Role(id = RoleType.MEMBER.roleType)))
 
-                val gitBaseDir = java.io.File("/tmp/yuna/git")
-                val bareDir = java.io.File(gitBaseDir, "owner/CodeEditProj.git")
+                val gitBaseDir = File("/tmp/yuna/git")
+                val bareDir = File(gitBaseDir, "owner/CodeEditProj.git")
                 bareDir.deleteRecursively()
-                org.eclipse.jgit.api.Git.init().setDirectory(bareDir).setBare(true).call().close()
+                Git.init().setDirectory(bareDir).setBare(true).call().close()
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CodeEditProj") } returns Optional.of(codeEditProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
@@ -399,15 +410,15 @@ class BoardViewControllerSpec : DescribeSpec({
                 result shouldBe "redirect:/owner/CodeEditProj/code/develop/src/main/Foo.kt"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
 
-                val repository = org.eclipse.jgit.storage.file.FileRepositoryBuilder().setGitDir(bareDir).build()
+                val repository = FileRepositoryBuilder().setGitDir(bareDir).build()
                 try {
                     val developObjectId = repository.resolve("refs/heads/develop")
                     developObjectId shouldNotBe null
                     repository.findRef("refs/heads/master") shouldBe null
 
-                    val revWalk = org.eclipse.jgit.revwalk.RevWalk(repository)
+                    val revWalk = RevWalk(repository)
                     val commit = revWalk.parseCommit(developObjectId)
-                    val treeWalk = org.eclipse.jgit.treewalk.TreeWalk.forPath(repository, "src/main/Foo.kt", commit.tree)
+                    val treeWalk = TreeWalk.forPath(repository, "src/main/Foo.kt", commit.tree)
                     val committedContent = repository.open(treeWalk!!.getObjectId(0)).bytes.toString(Charsets.UTF_8)
                     committedContent shouldBe "package foo"
                     treeWalk.close()

@@ -43,6 +43,16 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
+import io.mockk.slot
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.pullrequest.PullRequestEvent
+import com.github.search5.yona.domain.enumeration.EventType
+import java.time.Instant
+import com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem
+import io.mockk.verify
+import com.github.search5.yona.domain.pullrequest.CommentThread
 
 class PullRequestViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -93,7 +103,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             projectRepository,
             pullRequestService,
             pullRequestRepository,
@@ -158,7 +168,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
-                val pageableSlot = io.mockk.slot<Pageable>()
+                val pageableSlot = slot<Pageable>()
                 every { pullRequestRepository.findByToProjectAndState(project, State.OPEN, capture(pageableSlot)) } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/pulls").principal(userAuth))
@@ -169,11 +179,11 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57) — checkMemberAccess() 공용 헬퍼
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-                val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val groupOrg = Organization(id = 1L, name = "org")
                 groupOrg.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = user, organization = groupOrg,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
                 val groupProject = Project(id = 12L, name = "group-project", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
@@ -270,17 +280,17 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { pullRequestService.attemptMerge(50L) } returns PullRequestMergeResult(pullRequest = pullRequest)
                 every { pullRequestCommitRepository.findByPullRequest(pullRequest) } returns emptyList()
 
-                val stateEvent = com.github.search5.yona.domain.pullrequest.PullRequestEvent(
+                val stateEvent = PullRequestEvent(
                     id = 1L, pullRequest = pullRequest, senderLoginId = "testuser",
-                    eventType = com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED,
+                    eventType = EventType.PULL_REQUEST_STATE_CHANGED,
                     oldValue = "OPEN", newValue = "CLOSED",
-                    created = java.time.Instant.parse("2026-01-02T00:00:00Z")
+                    created = Instant.parse("2026-01-02T00:00:00Z")
                 )
-                val newPrEvent = com.github.search5.yona.domain.pullrequest.PullRequestEvent(
+                val newPrEvent = PullRequestEvent(
                     id = 2L, pullRequest = pullRequest, senderLoginId = "testuser",
-                    eventType = com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST,
+                    eventType = EventType.NEW_PULL_REQUEST,
                     oldValue = null, newValue = "PR 본문",
-                    created = java.time.Instant.parse("2026-01-03T00:00:00Z")
+                    created = Instant.parse("2026-01-03T00:00:00Z")
                 )
                 every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest) } returns listOf(stateEvent, newPrEvent)
 
@@ -290,10 +300,10 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
                 val timeline = result.modelAndView!!.model["timeline"] as List<*>
                 timeline.size shouldBe 1
-                val eventIds = timeline.map { (it as com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem).event.id }
+                val eventIds = timeline.map { (it as PullRequestTimelineItem).event.id }
                 eventIds shouldBe listOf(1L)
                 result.modelAndView!!.model.containsKey("commentThreads") shouldBe false
-                io.mockk.verify(exactly = 0) { commentThreadRepository.findByPullRequest(pullRequest) }
+                verify(exactly = 0) { commentThreadRepository.findByPullRequest(pullRequest) }
             }
         }
 
@@ -354,7 +364,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andReturn()
 
                 val commentThreads = result.modelAndView!!.model["commentThreads"] as List<*>
-                val ids = commentThreads.map { (it as com.github.search5.yona.domain.pullrequest.CommentThread).id }
+                val ids = commentThreads.map { (it as CommentThread).id }
                 ids shouldBe listOf(802L, 804L)
             }
         }
@@ -410,7 +420,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andReturn()
 
                 val commentThreads = result.modelAndView!!.model["commentThreads"] as List<*>
-                val ids = commentThreads.map { (it as com.github.search5.yona.domain.pullrequest.CommentThread).id }
+                val ids = commentThreads.map { (it as CommentThread).id }
                 ids shouldBe listOf(811L, 813L)
             }
         }

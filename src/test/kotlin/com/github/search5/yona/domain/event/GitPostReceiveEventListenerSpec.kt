@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.event
 
 import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueEventRepository
@@ -14,6 +15,7 @@ import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.webhook.WebhookService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -65,11 +67,11 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
     val sender = User(id = 9L, loginId = "gildong", name = "길동", email = "gildong@example.com")
 
     beforeTest {
-        io.mockk.clearMocks(issueRepository, issueEventRepository, webhookService, notificationEventRecorder, watchService, eventPublisher, answers = false)
+        clearMocks(issueRepository, issueEventRepository, webhookService, notificationEventRecorder, watchService, eventPublisher, answers = false)
         every {
             watchService.findActualWatchers(
                 baseWatchers = emptySet(),
-                resourceType = com.github.search5.yona.domain.enumeration.ResourceType.PROJECT,
+                resourceType = ResourceType.PROJECT,
                 resourceId = "1",
                 projectId = 1L,
                 eventType = EventType.NEW_COMMIT
@@ -90,7 +92,7 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
             savedSlot.captured.senderLoginId shouldBe "gildong"
             savedSlot.captured.senderEmail shouldBe "gildong@example.com"
             savedSlot.captured.newValue shouldBe "abc123commit"
-            savedSlot.captured.eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.ISSUE_REFERRED_FROM_COMMIT
+            savedSlot.captured.eventType shouldBe EventType.ISSUE_REFERRED_FROM_COMMIT
         }
 
         it("언급된 이슈 번호가 프로젝트에 존재하지 않으면 조용히 스킵해야 한다") {
@@ -149,7 +151,7 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
             every {
                 watchService.findActualWatchers(
                     baseWatchers = emptySet(),
-                    resourceType = com.github.search5.yona.domain.enumeration.ResourceType.PROJECT,
+                    resourceType = ResourceType.PROJECT,
                     resourceId = "1",
                     projectId = 1L,
                     eventType = EventType.NEW_COMMIT

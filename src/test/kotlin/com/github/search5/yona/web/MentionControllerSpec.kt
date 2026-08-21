@@ -40,6 +40,16 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.issue.IssueComment
+import com.github.search5.yona.domain.watch.Watch
+import com.github.search5.yona.domain.issue.IssueSharer
+import com.github.search5.yona.domain.vcs.Commit
+import com.github.search5.yona.domain.vcs.PlayRepository
+import com.github.search5.yona.domain.pullrequest.CodeCommentThread
+import com.github.search5.yona.domain.support.CodeRange
+import com.github.search5.yona.domain.pullrequest.ReviewComment
+import com.github.search5.yona.domain.user.UserIdent
 
 class MentionControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -91,7 +101,7 @@ class MentionControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(mentionController).build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             projectRepository, projectUserRepository, organizationUserRepository, issueRepository, userRepository,
             issueCommentRepository, postingRepository, postingCommentRepository, pullRequestRepository, watchRepository,
             repositoryService, commentThreadRepository, reviewCommentRepository, commitCommentRepository
@@ -245,8 +255,8 @@ class MentionControllerSpec : DescribeSpec({
             every { projectUserRepository.findByProjectId(20L) } returns emptyList()
             every { issueRepository.findByProjectAndNumber(project, 3L) } returns issue
             every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(600L) } returns listOf(
-                com.github.search5.yona.domain.issue.IssueComment(authorLoginId = "commenterA", issue = issue),
-                com.github.search5.yona.domain.issue.IssueComment(authorLoginId = "commenterB", issue = issue)
+                IssueComment(authorLoginId = "commenterA", issue = issue),
+                IssueComment(authorLoginId = "commenterB", issue = issue)
             )
             every { userRepository.findByLoginId("commenterA") } returns Optional.of(commenterA)
             every { userRepository.findByLoginId("commenterB") } returns Optional.of(commenterB)
@@ -272,7 +282,7 @@ class MentionControllerSpec : DescribeSpec({
             val issueAuthor = User(id = 9L, loginId = "issueAuthor", name = "이슈작성자")
             val watcher = User(id = 11L, loginId = "watcher1", name = "워처")
             val issue = Issue(id = 700L, title = "이슈", project = project, authorId = 9L)
-            val watch = com.github.search5.yona.domain.watch.Watch(
+            val watch = Watch(
                 user = watcher, resourceType = ResourceType.PROJECT, resourceId = "21"
             )
 
@@ -300,7 +310,7 @@ class MentionControllerSpec : DescribeSpec({
             val project = Project(id = 22L, name = "p7", owner = "owner", projectScope = ProjectScope.PRIVATE)
             val sharer = User(id = 12L, loginId = "sharer1", name = "공유대상")
             val issue = Issue(id = 800L, title = "이슈", project = project, number = 4L)
-            val issueSharer = com.github.search5.yona.domain.issue.IssueSharer(loginId = "sharer1", user = sharer, issue = issue)
+            val issueSharer = IssueSharer(loginId = "sharer1", user = sharer, issue = issue)
             issue.sharers.add(issueSharer)
 
             every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p7") } returns Optional.of(project)
@@ -327,19 +337,19 @@ class MentionControllerSpec : DescribeSpec({
                 val project = Project(id = 30L, name = "cd1", owner = "owner", projectScope = ProjectScope.PRIVATE, vcs = "GIT")
                 val commitAuthor = User(id = 20L, loginId = "committer1", name = "커미터")
                 val codeCommenter = User(id = 21L, loginId = "codeCommenter1", name = "코드댓글러")
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>()
-                val repo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
-                val thread = com.github.search5.yona.domain.pullrequest.CodeCommentThread(
+                val commit = mockk<Commit>()
+                val repo = mockk<PlayRepository>()
+                val thread = CodeCommentThread(
                     id = 900L, project = project, commitId = "abc123",
-                    codeRange = com.github.search5.yona.domain.support.CodeRange(
-                        path = "a.kt", startSide = com.github.search5.yona.domain.support.CodeRange.Side.B,
+                    codeRange = CodeRange(
+                        path = "a.kt", startSide = CodeRange.Side.B,
                         startLine = 1, startColumn = 0,
-                        endSide = com.github.search5.yona.domain.support.CodeRange.Side.B, endLine = 1, endColumn = 0
+                        endSide = CodeRange.Side.B, endLine = 1, endColumn = 0
                     )
                 )
-                val reviewComment = com.github.search5.yona.domain.pullrequest.ReviewComment(
+                val reviewComment = ReviewComment(
                     contents = "댓글", thread = thread,
-                    author = com.github.search5.yona.domain.user.UserIdent(codeCommenter)
+                    author = UserIdent(codeCommenter)
                 )
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "cd1") } returns Optional.of(project)
@@ -379,17 +389,17 @@ class MentionControllerSpec : DescribeSpec({
                     id = 950L, title = "PR", toProject = project, fromProject = project,
                     toBranch = "master", fromBranch = "feature", contributor = contributor, number = 5L
                 )
-                val thread = com.github.search5.yona.domain.pullrequest.CodeCommentThread(
+                val thread = CodeCommentThread(
                     id = 901L, project = project, pullRequest = pullRequest, commitId = "def456",
-                    codeRange = com.github.search5.yona.domain.support.CodeRange(
-                        path = "b.kt", startSide = com.github.search5.yona.domain.support.CodeRange.Side.B,
+                    codeRange = CodeRange(
+                        path = "b.kt", startSide = CodeRange.Side.B,
                         startLine = 1, startColumn = 0,
-                        endSide = com.github.search5.yona.domain.support.CodeRange.Side.B, endLine = 1, endColumn = 0
+                        endSide = CodeRange.Side.B, endLine = 1, endColumn = 0
                     )
                 )
-                val reviewComment = com.github.search5.yona.domain.pullrequest.ReviewComment(
+                val reviewComment = ReviewComment(
                     contents = "리뷰", thread = thread,
-                    author = com.github.search5.yona.domain.user.UserIdent(reviewer)
+                    author = UserIdent(reviewer)
                 )
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "pr1") } returns Optional.of(project)

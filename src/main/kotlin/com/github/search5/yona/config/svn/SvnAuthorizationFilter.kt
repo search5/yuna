@@ -2,11 +2,14 @@ package com.github.search5.yona.config.svn
 
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectService
 import com.github.search5.yona.domain.user.UserRepository
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.security.authentication.AnonymousAuthenticationToken
+import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
@@ -55,7 +58,7 @@ class SvnAuthorizationFilter(
         // || isAllowedIfGroupMember(...)) 대응 (P1-23/P1-64): PROTECTED도 PUBLIC과 동일하게 인증 없이
         // 열람 가능했던 것을 PRIVATE와 같이 인증을 요구하도록 수정. 조직 그룹멤버 우회는 P1-64에서
         // isMember()에 추가.
-        val requiresAuth = project.projectScope != com.github.search5.yona.domain.project.ProjectScope.PUBLIC
+        val requiresAuth = project.projectScope != ProjectScope.PUBLIC
                 || project.isCodeAccessibleMemberOnly
                 || isWriteRequest
 
@@ -93,8 +96,8 @@ class SvnAuthorizationFilter(
         return !readMethods.contains(method)
     }
 
-    private fun isAnonymous(authentication: org.springframework.security.core.Authentication): Boolean {
-        return authentication is org.springframework.security.authentication.AnonymousAuthenticationToken
+    private fun isAnonymous(authentication: Authentication): Boolean {
+        return authentication is AnonymousAuthenticationToken
     }
 
     // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-64). 직접 멤버가 아니어도 프로젝트가 속한

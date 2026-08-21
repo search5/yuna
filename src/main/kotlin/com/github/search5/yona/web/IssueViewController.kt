@@ -22,10 +22,16 @@ import com.github.search5.yona.domain.watch.WatchService
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.security.core.Authentication
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Controller
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.ui.Model
+import org.springframework.http.HttpHeaders
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestParam
 import com.github.search5.yona.domain.user.FavoriteIssueRepository
 import com.github.search5.yona.domain.attachment.AttachmentRepository
@@ -35,9 +41,15 @@ import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.web.servlet.mvc.support.RedirectAttributes
 import com.github.search5.yona.domain.project.RecentProjectRepository
 import com.github.search5.yona.domain.user.User
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
- 
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.issue.IssueSpecification
 import com.github.search5.yona.domain.issue.IssueService
@@ -137,15 +149,15 @@ class IssueViewController(
             val excelData = issueExcelService.excelFrom(allIssues)
 
             val zoneId = ZoneId.systemDefault()
-            val dateStr = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmm")
+            val dateStr = DateTimeFormatter.ofPattern("yyyyMMddHHmm")
                 .withZone(zoneId)
                 .format(Instant.now())
             val filename = "${project.name}_issues_${dateStr}.xls"
-            val encodedFilename = java.net.URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
+            val encodedFilename = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
 
-            return org.springframework.http.ResponseEntity.ok()
-                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "application/vnd.ms-excel")
-                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''$encodedFilename")
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, "application/vnd.ms-excel")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''$encodedFilename")
                 .body(excelData)
         }
 
@@ -325,7 +337,7 @@ class IssueViewController(
                 return "error/404"
             }
 
-        val currentAuth = authentication ?: org.springframework.security.core.context.SecurityContextHolder.getContext().authentication
+        val currentAuth = authentication ?: SecurityContextHolder.getContext().authentication
         val loginUser = currentAuth?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.ISSUE_POST)) {
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
@@ -436,7 +448,7 @@ class IssueViewController(
         return "issue/edit"
     }
 
-    @org.springframework.web.bind.annotation.PostMapping("/{owner}/{projectName}/issues")
+    @PostMapping("/{owner}/{projectName}/issues")
     fun createIssue(
         @PathVariable owner: String,
         @PathVariable projectName: String,
@@ -477,8 +489,8 @@ class IssueViewController(
 
         if (!dueDate.isNullOrEmpty()) {
             try {
-                val localDate = java.time.LocalDate.parse(dueDate)
-                val zone = java.time.ZoneId.systemDefault()
+                val localDate = LocalDate.parse(dueDate)
+                val zone = ZoneId.systemDefault()
                 val instant = localDate.atTime(23, 59, 59).atZone(zone).toInstant()
                 issue.dueDate = instant
             } catch (e: Exception) {}
@@ -515,7 +527,7 @@ class IssueViewController(
     fun newDirectIssueForm(
         @RequestParam(required = false, defaultValue = "-1") commentId: Long,
         authentication: Authentication?,
-        model: org.springframework.ui.Model
+        model: Model
     ): String {
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "redirect:/users/loginform"
@@ -561,7 +573,7 @@ class IssueViewController(
     @GetMapping("/user/issues/new/mine")
     fun newDirectMyIssueForm(
         authentication: Authentication?,
-        model: org.springframework.ui.Model
+        model: Model
     ): String {
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "redirect:/users/loginform"
@@ -597,12 +609,12 @@ class IssueViewController(
         }
     }
 
-    @org.springframework.web.bind.annotation.PostMapping("/{owner}/{projectName}/issues/massupdate")
-    @org.springframework.transaction.annotation.Transactional
+    @PostMapping("/{owner}/{projectName}/issues/massupdate")
+    @Transactional
     fun massUpdate(
         @PathVariable owner: String,
         @PathVariable projectName: String,
-        @org.springframework.web.bind.annotation.ModelAttribute form: IssueMassUpdateForm,
+        @ModelAttribute form: IssueMassUpdateForm,
         authentication: Authentication?,
         @RequestParam(required = false, defaultValue = "false") delete: Boolean,
         @RequestParam(required = false, defaultValue = "false") isDueDateChanged: Boolean,
@@ -683,8 +695,8 @@ class IssueViewController(
                         issue.dueDate = null
                     } else {
                         try {
-                            val localDate = java.time.LocalDate.parse(dueDate)
-                            val zone = java.time.ZoneId.systemDefault()
+                            val localDate = LocalDate.parse(dueDate)
+                            val zone = ZoneId.systemDefault()
                             val instant = localDate.atTime(23, 59, 59).atZone(zone).toInstant()
                             issue.dueDate = instant
                         } catch (e: Exception) {}
@@ -702,21 +714,21 @@ class IssueViewController(
         return "redirect:/$owner/$projectName/issues"
     }
 
-    private fun getIssueTemplate(project: com.github.search5.yona.domain.project.Project): String {
+    private fun getIssueTemplate(project: Project): String {
         return try {
             val bytes = repositoryService.getRepository(project).getRawFile("HEAD", "ISSUE_TEMPLATE.md")
-            if (bytes != null) String(bytes, java.nio.charset.StandardCharsets.UTF_8) else ""
+            if (bytes != null) String(bytes, StandardCharsets.UTF_8) else ""
         } catch (e: Exception) {
             ""
         }
     }
 
-    @org.springframework.web.bind.annotation.PostMapping(value = ["/{owner}/{projectName}/issue/{number}/editform", "/{owner}/{projectName}/issue/{number}/edit"])
+    @PostMapping(value = ["/{owner}/{projectName}/issue/{number}/editform", "/{owner}/{projectName}/issue/{number}/edit"])
     fun editIssue(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @PathVariable number: Long,
-        @org.springframework.web.bind.annotation.ModelAttribute request: IssueForm,
+        @ModelAttribute request: IssueForm,
         authentication: Authentication?
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
@@ -744,9 +756,9 @@ class IssueViewController(
         
         if (!request.dueDate.isNullOrBlank()) {
             try {
-                val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
-                val localDate = java.time.LocalDate.parse(request.dueDate, formatter)
-                issue.dueDate = java.time.ZonedDateTime.of(localDate, java.time.LocalTime.MIDNIGHT, java.time.ZoneId.systemDefault()).toInstant()
+                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                val localDate = LocalDate.parse(request.dueDate, formatter)
+                issue.dueDate = ZonedDateTime.of(localDate, LocalTime.MIDNIGHT, ZoneId.systemDefault()).toInstant()
             } catch (e: Exception) {
                 // ignore
             }

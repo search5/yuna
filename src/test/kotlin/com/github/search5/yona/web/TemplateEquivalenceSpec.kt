@@ -29,6 +29,11 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.context.WebApplicationContext
+import com.github.search5.yona.domain.issue.IssueLabelRepository
+import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
+import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder
+import com.github.search5.yona.domain.issue.IssueLabelCategory
+import com.github.search5.yona.domain.issue.IssueLabel
 
 class TemplateEquivalenceSpec @Autowired constructor(
     private val wac: WebApplicationContext,
@@ -38,8 +43,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val roleRepository: RoleRepository,
     private val postingRepository: PostingRepository,
     private val issueRepository: IssueRepository,
-    private val issueLabelRepository: com.github.search5.yona.domain.issue.IssueLabelRepository,
-    private val issueLabelCategoryRepository: com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
+    private val issueLabelRepository: IssueLabelRepository,
+    private val issueLabelCategoryRepository: IssueLabelCategoryRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -49,7 +54,7 @@ class TemplateEquivalenceSpec @Autowired constructor(
     init {
         beforeSpec {
             mockMvc = MockMvcBuilders.webAppContextSetup(wac)
-                .apply<org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder>(SecurityMockMvcConfigurers.springSecurity())
+                .apply<DefaultMockMvcBuilder>(SecurityMockMvcConfigurers.springSecurity())
                 .build()
         }
 
@@ -80,7 +85,7 @@ class TemplateEquivalenceSpec @Autowired constructor(
             )
             val category = issueLabelCategoryRepository.findAll().find { it.project.id == publicProj.id }
                 ?: issueLabelCategoryRepository.save(
-                    com.github.search5.yona.domain.issue.IssueLabelCategory(
+                    IssueLabelCategory(
                         name = "테스트카테고리",
                         project = publicProj
                     )
@@ -88,7 +93,7 @@ class TemplateEquivalenceSpec @Autowired constructor(
 
             val label = issueLabelRepository.findAll().find { it.category.id == category.id }
                 ?: issueLabelRepository.save(
-                    com.github.search5.yona.domain.issue.IssueLabel(
+                    IssueLabel(
                         name = "테스트라벨",
                         color = "#FF0000",
                         category = category,

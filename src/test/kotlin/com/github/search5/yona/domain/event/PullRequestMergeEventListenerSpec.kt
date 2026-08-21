@@ -16,6 +16,7 @@ import com.github.search5.yona.domain.pullrequest.PullRequestService
 import com.github.search5.yona.domain.user.User
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -49,7 +50,7 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
     )
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             pullRequestRepository, pullRequestCommitRepository, issueRepository, issueService,
             pullRequestService, notificationEventRecorder, eventPublisher, pullRequestEventRepository, answers = false
         )

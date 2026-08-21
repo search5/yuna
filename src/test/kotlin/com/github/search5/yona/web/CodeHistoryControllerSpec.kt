@@ -34,6 +34,7 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
 
 class CodeHistoryControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -69,7 +70,7 @@ class CodeHistoryControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(codeHistoryController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, repositoryService, commitCommentRepository, userRepository, projectUserRepository)
+        clearMocks(projectRepository, repositoryService, commitCommentRepository, userRepository, projectUserRepository)
     }
 
     describe("CodeHistoryController 커밋 댓글 API") {

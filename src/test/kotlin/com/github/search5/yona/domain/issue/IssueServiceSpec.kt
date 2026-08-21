@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -43,7 +44,7 @@ class IssueServiceSpec @Autowired constructor(
     private val notificationEventRepository: NotificationEventRepository,
     private val issueCommentRepository: IssueCommentRepository,
     private val issueEventRepository: IssueEventRepository,
-    private val milestoneRepository: com.github.search5.yona.domain.milestone.MilestoneRepository,
+    private val milestoneRepository: MilestoneRepository,
     private val issueLabelRepository: IssueLabelRepository,
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
     private val watchRepository: WatchRepository,
@@ -150,7 +151,7 @@ class IssueServiceSpec @Autowired constructor(
                 val author = userRepository.save(User(loginId = "tester3", name = "테스터3", email = "tester3@yona.io"))
                 val project = projectRepository.save(Project(name = "milestone-test-project", owner = "tester3"))
                 val milestone = milestoneRepository.save(
-                    com.github.search5.yona.domain.milestone.Milestone(title = "1.0 출시", project = project)
+                    Milestone(title = "1.0 출시", project = project)
                 )
                 val issue = Issue(
                     title = "마일스톤 배정 테스트", body = "...", project = project,

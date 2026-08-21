@@ -2,21 +2,33 @@ package com.github.search5.yona.domain.pullrequest
 
 import com.github.search5.yona.AbstractIntegrationTest
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.notification.NotificationEventRecorder
+import com.github.search5.yona.domain.notification.NotificationEventRepository
+import com.github.search5.yona.domain.notification.NotificationMailRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.watch.Watch
 import com.github.search5.yona.domain.watch.WatchRepository
+import com.github.search5.yona.domain.watch.WatchService
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.every
+import io.mockk.mockk
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.transport.RefSpec
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.transaction.annotation.Transactional
 import java.io.File
 import java.nio.file.Files
@@ -55,7 +67,7 @@ private fun createTestCommit(
         git.commit().setSign(false).setAuthor(authorName, authorEmail).setMessage("commit").call()
         git.push()
             .setRemote("origin")
-            .setRefSpecs(org.eclipse.jgit.transport.RefSpec("HEAD:refs/heads/$branch"))
+            .setRefSpecs(RefSpec("HEAD:refs/heads/$branch"))
             .setForce(true)
             .call()
 
@@ -77,15 +89,15 @@ class CodeReviewServiceSpec @Autowired constructor(
     private val pullRequestCommitRepository: PullRequestCommitRepository,
     private val repositoryService: RepositoryService,
     private val pullRequestEventRepository: PullRequestEventRepository,
-    private val notificationEventRepository: com.github.search5.yona.domain.notification.NotificationEventRepository,
-    private val notificationMailRepository: com.github.search5.yona.domain.notification.NotificationMailRepository,
+    private val notificationEventRepository: NotificationEventRepository,
+    private val notificationMailRepository: NotificationMailRepository,
     private val commitCommentRepository: CommitCommentRepository,
     private val watchRepository: WatchRepository,
-    private val eventPublisher: org.springframework.context.ApplicationEventPublisher,
-    private val projectUserRepository: com.github.search5.yona.domain.project.ProjectUserRepository,
-    private val attachmentService: com.github.search5.yona.domain.attachment.AttachmentService,
-    private val commentService: com.github.search5.yona.domain.comment.CommentService,
-    private val watchService: com.github.search5.yona.domain.watch.WatchService,
+    private val eventPublisher: ApplicationEventPublisher,
+    private val projectUserRepository: ProjectUserRepository,
+    private val attachmentService: AttachmentService,
+    private val commentService: CommentService,
+    private val watchService: WatchService,
     private val pullRequestService: PullRequestService,
     private val accessControl: AccessControl
 ) : AbstractIntegrationTest() {
@@ -407,7 +419,7 @@ class CodeReviewServiceSpec @Autowired constructor(
 
                 val prEventsAfterAdd = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
                 prEventsAfterAdd.size shouldBe 1
-                prEventsAfterAdd.first().eventType shouldBe com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+                prEventsAfterAdd.first().eventType shouldBe EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
                 prEventsAfterAdd.first().newValue shouldBe "DONE"
                 prEventsAfterAdd.first().senderLoginId shouldBe otherUser.loginId
 
@@ -534,8 +546,8 @@ class CodeReviewServiceSpec @Autowired constructor(
                 // (receivers.isEmpty()면 조기 반환), 실제로 예외 경로를 타도록 감시자를 하나 둔다.
                 watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
 
-                val throwingRecorder = io.mockk.mockk<com.github.search5.yona.domain.notification.NotificationEventRecorder>()
-                io.mockk.every { throwingRecorder.record(any(), any()) } throws RuntimeException("메일 발송 인프라 장애 시뮬레이션")
+                val throwingRecorder = mockk<NotificationEventRecorder>()
+                every { throwingRecorder.record(any(), any()) } throws RuntimeException("메일 발송 인프라 장애 시뮬레이션")
 
                 val isolatedService = CodeReviewServiceImpl(
                     commentThreadRepository, reviewCommentRepository, pullRequestRepository, repositoryService,
@@ -623,7 +635,7 @@ class CodeReviewServiceSpec @Autowired constructor(
             // 지울 수 없는 과도한 제한이었다.
             it("사이트관리자는 작성자도 프로젝트 매니저도 아니어도 타인의 리뷰 댓글을 삭제할 수 있어야 한다") {
                 val siteAdmin = userRepository.save(
-                    User(loginId = "siteadmin", name = "사이트관리자", email = "siteadmin@yona.io", state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN)
+                    User(loginId = "siteadmin", name = "사이트관리자", email = "siteadmin@yona.io", state = UserState.SITE_ADMIN)
                 )
 
                 val codeRange = CodeRange(
@@ -654,7 +666,7 @@ class CodeReviewServiceSpec @Autowired constructor(
 
             it("사이트관리자는 작성자도 프로젝트 매니저도 아니어도 타인의 커밋 댓글을 삭제할 수 있어야 한다") {
                 val siteAdmin = userRepository.save(
-                    User(loginId = "siteadmin2", name = "사이트관리자2", email = "siteadmin2@yona.io", state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN)
+                    User(loginId = "siteadmin2", name = "사이트관리자2", email = "siteadmin2@yona.io", state = UserState.SITE_ADMIN)
                 )
 
                 val comment = codeReviewService.createCommitComment(

@@ -22,6 +22,7 @@ import com.github.search5.yona.domain.pullrequest.SimpleCommentThread
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -49,7 +50,7 @@ class WebhookNotificationEventListenerSpec : DescribeSpec({
     val sender = User(id = 9L, loginId = "gildong", name = "길동")
 
     beforeTest {
-        io.mockk.clearMocks(webhookService, userRepository, issueRepository, postingRepository, issueCommentRepository, postingCommentRepository, pullRequestRepository, reviewCommentRepository, commitCommentRepository, answers = false)
+        clearMocks(webhookService, userRepository, issueRepository, postingRepository, issueCommentRepository, postingCommentRepository, pullRequestRepository, reviewCommentRepository, commitCommentRepository, answers = false)
         every { userRepository.findById(9L) } returns Optional.of(sender)
     }
 

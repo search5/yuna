@@ -44,6 +44,29 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import org.springframework.context.MessageSource
+import com.github.search5.yona.domain.issue.IssueService
+import com.github.search5.yona.config.TemplateHelper
+import com.github.search5.yona.domain.issue.IssueExcelService
+import com.github.search5.yona.domain.issue.RecentIssueService
+import com.github.search5.yona.domain.project.TitleHeadService
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.project.ProjectUser
+import org.springframework.data.jpa.domain.Specification
+import io.mockk.slot
+import com.github.search5.yona.domain.issue.IssueComment
+import java.time.Instant
+import com.github.search5.yona.domain.issue.IssueEvent
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.issue.IssueTimelineItem
+import com.github.search5.yona.domain.project.RecentProject
+import com.github.search5.yona.domain.vcs.PlayRepository
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.role.RoleType
+import org.springframework.ui.ExtendedModelMap
 
 class IssueViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -57,14 +80,14 @@ class IssueViewControllerSpec : DescribeSpec({
     val issueLabelRepository = mockk<IssueLabelRepository>()
     val favoriteIssueRepository = mockk<FavoriteIssueRepository>()
     val attachmentRepository = mockk<AttachmentRepository>()
-    val messageSource = mockk<org.springframework.context.MessageSource>()
+    val messageSource = mockk<MessageSource>()
     val recentProjectRepository = mockk<RecentProjectRepository>()
-    val issueService = mockk<com.github.search5.yona.domain.issue.IssueService>()
-    val templateHelper = mockk<com.github.search5.yona.config.TemplateHelper>()
-    val issueExcelService = mockk<com.github.search5.yona.domain.issue.IssueExcelService>()
+    val issueService = mockk<IssueService>()
+    val templateHelper = mockk<TemplateHelper>()
+    val issueExcelService = mockk<IssueExcelService>()
     val repositoryService = mockk<RepositoryService>()
-    val recentIssueService = mockk<com.github.search5.yona.domain.issue.RecentIssueService>(relaxed = true)
-    val titleHeadService = mockk<com.github.search5.yona.domain.project.TitleHeadService>()
+    val recentIssueService = mockk<RecentIssueService>(relaxed = true)
+    val titleHeadService = mockk<TitleHeadService>()
     val issueEventRepository = mockk<IssueEventRepository>()
     val attachmentService = mockk<AttachmentService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
@@ -113,7 +136,7 @@ class IssueViewControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             projectRepository, projectService, issueRepository, projectUserRepository, userRepository, issueCommentRepository,
             watchService, milestoneService, issueLabelRepository, favoriteIssueRepository, attachmentRepository,
             messageSource, recentProjectRepository, issueService, templateHelper, issueExcelService, repositoryService,
@@ -124,11 +147,11 @@ class IssueViewControllerSpec : DescribeSpec({
     }
 
     describe("IssueViewController 템플릿 연동 테스트") {
-        val memberRole = com.github.search5.yona.domain.role.Role(id = 2L, name = "MEMBER")
+        val memberRole = Role(id = 2L, name = "MEMBER")
         val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
         
         val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
-        val projectUser = com.github.search5.yona.domain.project.ProjectUser(id = 1L, user = memberUser, project = project, role = memberRole)
+        val projectUser = ProjectUser(id = 1L, user = memberUser, project = project, role = memberRole)
         memberUser.projectUsers.add(projectUser)
 
         val nonMemberUser = User(id = 11L, loginId = "testuser", name = "테스트유저") // projectUsers가 비어있는 비멤버 유저
@@ -143,8 +166,8 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { issueRepository.findByProjectAndState(project, State.OPEN, any<Pageable>()) } returns PageImpl(listOf(issue), pageRequest, 1)
-                every { issueRepository.findAll(any<org.springframework.data.jpa.domain.Specification<Issue>>(), any<Pageable>()) } returns PageImpl(listOf(issue), pageRequest, 1)
-                every { issueRepository.count(any<org.springframework.data.jpa.domain.Specification<Issue>>()) } returns 1L
+                every { issueRepository.findAll(any<Specification<Issue>>(), any<Pageable>()) } returns PageImpl(listOf(issue), pageRequest, 1)
+                every { issueRepository.count(any<Specification<Issue>>()) } returns 1L
                 every { issueRepository.countByProjectAndState(project, State.OPEN) } returns 1L
                 every { issueRepository.countByProjectAndState(project, State.CLOSED) } returns 0L
                 every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
@@ -174,9 +197,9 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
                 every { projectUserRepository.findByProjectId(any<Long>()) } returns emptyList()
                 every { issueLabelRepository.findByProject(any<Project>()) } returns emptyList()
-                val pageableSlot = io.mockk.slot<Pageable>()
-                every { issueRepository.findAll(any<org.springframework.data.jpa.domain.Specification<Issue>>(), capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
-                every { issueRepository.count(any<org.springframework.data.jpa.domain.Specification<Issue>>()) } returns 1L
+                val pageableSlot = slot<Pageable>()
+                every { issueRepository.findAll(any<Specification<Issue>>(), capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
+                every { issueRepository.count(any<Specification<Issue>>()) } returns 1L
 
                 mockMvc.perform(get("/owner/TestProj/issues").principal(userAuth))
                     .andExpect(status().isOk)
@@ -192,9 +215,9 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
                 every { projectUserRepository.findByProjectId(any<Long>()) } returns emptyList()
                 every { issueLabelRepository.findByProject(any<Project>()) } returns emptyList()
-                val pageableSlot = io.mockk.slot<Pageable>()
-                every { issueRepository.findAll(any<org.springframework.data.jpa.domain.Specification<Issue>>(), capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
-                every { issueRepository.count(any<org.springframework.data.jpa.domain.Specification<Issue>>()) } returns 1L
+                val pageableSlot = slot<Pageable>()
+                every { issueRepository.findAll(any<Specification<Issue>>(), capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
+                every { issueRepository.count(any<Specification<Issue>>()) } returns 1L
 
                 mockMvc.perform(get("/owner/TestProj/issues").param("itemsPerPage", "999").principal(userAuth))
                     .andExpect(status().isOk)
@@ -210,7 +233,7 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
                 every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns emptyList()
                 every { watchService.isWatching(any(), any(), any()) } returns false
-                every { favoriteIssueRepository.findByUserIdAndIssueId(10L, 5L) } returns java.util.Optional.empty()
+                every { favoriteIssueRepository.findByUserIdAndIssueId(10L, 5L) } returns Optional.empty()
                 every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
 
                 mockMvc.perform(get("/owner/TestProj/issue/1").principal(userAuth))
@@ -225,26 +248,26 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
-                val comment = com.github.search5.yona.domain.issue.IssueComment(
+                val comment = IssueComment(
                     id = 300L, contents = "댓글", issue = issue,
-                    createdDate = java.time.Instant.parse("2026-01-01T00:00:00Z")
+                    createdDate = Instant.parse("2026-01-01T00:00:00Z")
                 )
                 every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns listOf(comment)
                 every { watchService.isWatching(any(), any(), any()) } returns false
-                every { favoriteIssueRepository.findByUserIdAndIssueId(10L, 5L) } returns java.util.Optional.empty()
+                every { favoriteIssueRepository.findByUserIdAndIssueId(10L, 5L) } returns Optional.empty()
                 every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
 
-                val stateEvent = com.github.search5.yona.domain.issue.IssueEvent(
+                val stateEvent = IssueEvent(
                     id = 1L, issue = issue, senderLoginId = "testuser",
-                    eventType = com.github.search5.yona.domain.enumeration.EventType.ISSUE_STATE_CHANGED,
+                    eventType = EventType.ISSUE_STATE_CHANGED,
                     oldValue = "OPEN", newValue = "CLOSED",
-                    created = java.time.Instant.parse("2026-01-02T00:00:00Z")
+                    created = Instant.parse("2026-01-02T00:00:00Z")
                 )
-                val bodyChangedEvent = com.github.search5.yona.domain.issue.IssueEvent(
+                val bodyChangedEvent = IssueEvent(
                     id = 2L, issue = issue, senderLoginId = "testuser",
-                    eventType = com.github.search5.yona.domain.enumeration.EventType.ISSUE_BODY_CHANGED,
+                    eventType = EventType.ISSUE_BODY_CHANGED,
                     oldValue = "이전 본문", newValue = "새 본문",
-                    created = java.time.Instant.parse("2026-01-03T00:00:00Z")
+                    created = Instant.parse("2026-01-03T00:00:00Z")
                 )
                 every { issueEventRepository.findByIssueOrderByCreatedAsc(issue) } returns listOf(stateEvent, bodyChangedEvent)
 
@@ -254,27 +277,27 @@ class IssueViewControllerSpec : DescribeSpec({
 
                 val timeline = result.modelAndView!!.model["timeline"] as List<*>
                 timeline.size shouldBe 2
-                val kinds = timeline.map { (it as com.github.search5.yona.domain.issue.IssueTimelineItem).kind }
+                val kinds = timeline.map { (it as IssueTimelineItem).kind }
                 kinds shouldBe listOf("COMMENT", "EVENT")
             }
         }
         describe("GET /user/issues/new") {
             it("commentId가 주어지면 해당 댓글을 조회하고 레퍼런스 본문 및 ISSUE_TEMPLATE을 포함하여 200 OK를 반환해야 한다") {
-                val recentProject = com.github.search5.yona.domain.project.RecentProject(id = 1L, userId = 10L, projectId = 1L)
+                val recentProject = RecentProject(id = 1L, userId = 10L, projectId = 1L)
                 every { recentProjectRepository.findByUserIdOrderByVisitedDateDesc(10L) } returns listOf(recentProject)
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
 
-                val mockComment = mockk<com.github.search5.yona.domain.issue.IssueComment>()
+                val mockComment = mockk<IssueComment>()
                 every { mockComment.id } returns 200L
                 every { mockComment.contents } returns "댓글 원본 내용"
                 every { mockComment.authorLoginId } returns "commenter"
                 every { mockComment.issue } returns issue
                 every { issueCommentRepository.findById(200L) } returns Optional.of(mockComment)
 
-                val mockPlayRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                val mockPlayRepo = mockk<PlayRepository>()
                 every { repositoryService.getRepository(project) } returns mockPlayRepo
                 every { mockPlayRepo.getRawFile("HEAD", "ISSUE_TEMPLATE.md") } returns "템플릿 내용".toByteArray()
 
@@ -306,8 +329,8 @@ class IssueViewControllerSpec : DescribeSpec({
                 } returns savedIssue
                 every {
                     attachmentService.moveOnlySelected(
-                        com.github.search5.yona.domain.enumeration.ResourceType.NOT_A_RESOURCE, "",
-                        com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "100",
+                        ResourceType.NOT_A_RESOURCE, "",
+                        ResourceType.ISSUE_POST, "100",
                         listOf(900L, 901L), "testuser"
                     )
                 } returns 2
@@ -333,8 +356,8 @@ class IssueViewControllerSpec : DescribeSpec({
                 result shouldBe "redirect:/owner/TestProj/issue/5"
                 verify(exactly = 1) {
                     attachmentService.moveOnlySelected(
-                        com.github.search5.yona.domain.enumeration.ResourceType.NOT_A_RESOURCE, "",
-                        com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "100",
+                        ResourceType.NOT_A_RESOURCE, "",
+                        ResourceType.ISSUE_POST, "100",
                         listOf(900L, 901L), "testuser"
                     )
                 }
@@ -377,12 +400,12 @@ class IssueViewControllerSpec : DescribeSpec({
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57) — 작성자 본인도 아니고
             // 직접 프로젝트 멤버도 아니지만, 프로젝트가 속한 조직의 멤버라면 이슈를 수정할 수 있어야 한다.
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 수정에 성공해야 한다") {
-                val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val org = Organization(id = 1L, name = "org")
                 val groupUser = User(id = 20L, loginId = "groupuser", name = "그룹멤버")
                 org.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = groupUser, organization = org,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
                 val groupProject = Project(id = 7L, name = "GroupProj", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = org)
@@ -432,7 +455,7 @@ class IssueViewControllerSpec : DescribeSpec({
                     delete = true,
                     isDueDateChanged = false,
                     dueDate = null,
-                    model = org.springframework.ui.ExtendedModelMap()
+                    model = ExtendedModelMap()
                 )
 
                 verify(exactly = 1) { issueService.deleteIssueCascade(toDelete) }

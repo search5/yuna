@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
 
 class FavoriteControllerSpec : DescribeSpec({
     val favoriteService = mockk<FavoriteService>()
@@ -25,7 +26,7 @@ class FavoriteControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(favoriteController).build()
 
     beforeTest {
-        io.mockk.clearMocks(favoriteService, userRepository)
+        clearMocks(favoriteService, userRepository)
     }
 
     describe("FavoriteController 단위 테스트") {

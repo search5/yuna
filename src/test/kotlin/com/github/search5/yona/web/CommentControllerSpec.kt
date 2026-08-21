@@ -35,6 +35,7 @@ import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
 
 class CommentControllerSpec : DescribeSpec({
     val commentService = mockk<CommentService>()
@@ -77,7 +78,7 @@ class CommentControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(commentController).build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             commentService, projectRepository, projectUserRepository, userRepository,
             issueRepository, postingRepository, issueCommentRepository, postingCommentRepository
         )

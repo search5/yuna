@@ -26,6 +26,15 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.support.MarkdownService
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.eclipse.jgit.api.errors.NoHeadException
 
 class CodeViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -34,7 +43,7 @@ class CodeViewControllerSpec : DescribeSpec({
     val repositoryService = mockk<RepositoryService>()
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val commitCommentRepository = mockk<CommitCommentRepository>()
-    val markdownService = mockk<com.github.search5.yona.domain.support.MarkdownService>()
+    val markdownService = mockk<MarkdownService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -66,7 +75,7 @@ class CodeViewControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             projectRepository,
             projectUserRepository,
             userRepository,
@@ -182,16 +191,16 @@ class CodeViewControllerSpec : DescribeSpec({
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-                val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
-                val groupUser = com.github.search5.yona.domain.user.User(id = 10L, loginId = "groupuser", name = "그룹멤버")
+                val groupOrg = Organization(id = 1L, name = "org")
+                val groupUser = User(id = 10L, loginId = "groupuser", name = "그룹멤버")
                 groupOrg.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = groupUser, organization = groupOrg,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
                 val groupProject = Project(id = 5L, owner = "testowner", name = "group-project", vcs = "GIT", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
-                val groupAuth = org.springframework.security.authentication.UsernamePasswordAuthenticationToken("groupuser", "password")
+                val groupAuth = UsernamePasswordAuthenticationToken("groupuser", "password")
                 val objectMapper = ObjectMapper()
                 val mockNode = objectMapper.createObjectNode()
                 mockNode.put("type", "file")
@@ -218,7 +227,7 @@ class CodeViewControllerSpec : DescribeSpec({
                 every { repositoryService.getRepository(project) } returns playRepo
                 every { playRepo.getRefNames() } returns emptyList()
                 every { playRepo.getHistory(0, 25, "HEAD", null) } throws
-                    org.eclipse.jgit.api.errors.NoHeadException("no HEAD")
+                    NoHeadException("no HEAD")
 
                 mockMvc.perform(get("/testowner/testproject/commits/HEAD"))
                     .andExpect(status().isOk)

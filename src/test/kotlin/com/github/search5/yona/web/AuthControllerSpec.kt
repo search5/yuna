@@ -11,11 +11,15 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.web.servlet.view.InternalResourceViewResolver
+import io.mockk.clearMocks
+import io.mockk.slot
+import com.github.search5.yona.domain.user.UserState
 
 class AuthControllerSpec : DescribeSpec({
     val userService = mockk<UserService>()
     val authController = AuthController(userService, "", false)
-    val viewResolver = org.springframework.web.servlet.view.InternalResourceViewResolver().apply {
+    val viewResolver = InternalResourceViewResolver().apply {
         setPrefix("/templates/")
         setSuffix(".html")
     }
@@ -24,7 +28,7 @@ class AuthControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(userService)
+        clearMocks(userService)
     }
 
     describe("AuthController") {
@@ -91,7 +95,7 @@ class AuthControllerSpec : DescribeSpec({
             // yona UserApp.java:1218-1224 isUsingSignUpConfirm()/:1260-1275 createNewUser() 대응 (P1-77).
             it("관리자 승인 대기 설정이 켜져 있으면 신규 유저가 LOCKED 상태로 생성되고 승인 대기 안내로 리다이렉트되어야 한다") {
                 val confirmController = AuthController(userService, "", true)
-                val confirmViewResolver = org.springframework.web.servlet.view.InternalResourceViewResolver().apply {
+                val confirmViewResolver = InternalResourceViewResolver().apply {
                     setPrefix("/templates/")
                     setSuffix(".html")
                 }
@@ -100,7 +104,7 @@ class AuthControllerSpec : DescribeSpec({
                     .build()
 
                 every { userService.isLoginIdExist("gildong") } returns false
-                val savedUserSlot = io.mockk.slot<User>()
+                val savedUserSlot = slot<User>()
                 every { userService.createUser(capture(savedUserSlot)) } answers { savedUserSlot.captured }
 
                 confirmMockMvc.perform(
@@ -114,12 +118,12 @@ class AuthControllerSpec : DescribeSpec({
                     .andExpect(status().is3xxRedirection)
                     .andExpect(redirectedUrl("/users/loginform?signupRequested"))
 
-                savedUserSlot.captured.state shouldBe com.github.search5.yona.domain.user.UserState.LOCKED
+                savedUserSlot.captured.state shouldBe UserState.LOCKED
             }
 
             it("관리자 승인 대기 설정이 꺼져 있으면(기본값) 기존과 동일하게 즉시 활성 상태로 생성되어야 한다") {
                 every { userService.isLoginIdExist("gildong") } returns false
-                val savedUserSlot = io.mockk.slot<User>()
+                val savedUserSlot = slot<User>()
                 every { userService.createUser(capture(savedUserSlot)) } answers { savedUserSlot.captured }
 
                 mockMvc.perform(
@@ -133,7 +137,7 @@ class AuthControllerSpec : DescribeSpec({
                     .andExpect(status().is3xxRedirection)
                     .andExpect(redirectedUrl("/users/loginform?signupSuccess"))
 
-                savedUserSlot.captured.state shouldBe com.github.search5.yona.domain.user.UserState.ACTIVE
+                savedUserSlot.captured.state shouldBe UserState.ACTIVE
             }
 
             it("비밀번호 재입력이 일치하지 않으면 회원가입 폼이 유지되어야 한다") {
@@ -158,7 +162,7 @@ class AuthControllerSpec : DescribeSpec({
 
             it("허용된 이메일 도메인 설정이 있고 그 목록에 없는 도메인이면 가입이 거부되어야 한다") {
                 val restrictedController = AuthController(userService, "allowed.com", false)
-                val restrictedViewResolver = org.springframework.web.servlet.view.InternalResourceViewResolver().apply {
+                val restrictedViewResolver = InternalResourceViewResolver().apply {
                     setPrefix("/templates/")
                     setSuffix(".html")
                 }

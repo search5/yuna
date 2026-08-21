@@ -1,6 +1,7 @@
 package com.github.search5.yona.config
 
 import com.github.search5.yona.config.git.GitProjectVisitRecorder
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.User
@@ -12,6 +13,8 @@ import org.eclipse.jgit.http.server.GitServlet
 import org.eclipse.jgit.lfs.server.LfsProtocolServlet
 import org.eclipse.jgit.lfs.server.LargeFileRepository
 import org.eclipse.jgit.lfs.server.fs.FileLfsRepository
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder
+import org.eclipse.jgit.transport.ReceivePack
 import org.eclipse.jgit.transport.resolver.ReceivePackFactory
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -19,6 +22,7 @@ import org.springframework.boot.web.servlet.ServletRegistrationBean
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.context.SecurityContextHolder
 import java.io.File
 import java.util.regex.Pattern
@@ -57,11 +61,11 @@ class GitServletConfig(
         val gitServlet = GitServlet().apply {
             setRepositoryResolver { _, name ->
                 val repoFile = File(gitBaseDir, name)
-                val builder = org.eclipse.jgit.storage.file.FileRepositoryBuilder()
+                val builder = FileRepositoryBuilder()
                 builder.setGitDir(repoFile).build()
             }
             setReceivePackFactory(ReceivePackFactory { req, repo ->
-                val receivePack = org.eclipse.jgit.transport.ReceivePack(repo)
+                val receivePack = ReceivePack(repo)
                 receivePack.setPreReceiveHook(RejectPushToReservedRefsPreReceiveHook())
 
                 val project = resolveProject(req)
@@ -134,7 +138,7 @@ class GitServletConfig(
         return registrationBean
     }
 
-    private fun resolveProject(req: HttpServletRequest): com.github.search5.yona.domain.project.Project? {
+    private fun resolveProject(req: HttpServletRequest): Project? {
         val matcher = gitUriPattern.matcher(req.requestURI)
         if (!matcher.matches()) {
             return null
@@ -149,7 +153,7 @@ class GitServletConfig(
     private fun resolveCurrentUser(): User? {
         val authentication = SecurityContextHolder.getContext().authentication ?: return null
         if (!authentication.isAuthenticated ||
-            authentication is org.springframework.security.authentication.AnonymousAuthenticationToken
+            authentication is AnonymousAuthenticationToken
         ) {
             return null
         }

@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
 
 class SearchControllerSpec : DescribeSpec({
     val searchService = mockk<SearchService>()
@@ -39,7 +40,7 @@ class SearchControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(searchController).build()
 
     beforeTest {
-        io.mockk.clearMocks(searchService, userRepository, projectRepository, organizationRepository, organizationUserRepository)
+        clearMocks(searchService, userRepository, projectRepository, organizationRepository, organizationUserRepository)
     }
 
     describe("SearchController 웹 진입점 테스트") {

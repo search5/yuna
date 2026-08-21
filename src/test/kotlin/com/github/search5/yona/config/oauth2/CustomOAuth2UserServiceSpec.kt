@@ -10,6 +10,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.shouldBe
 import io.mockk.*
+import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
@@ -147,7 +148,7 @@ class CustomOAuth2UserServiceSpec : DescribeSpec({
 
         it("익명 인증 상태(로그인 안 함)면 로그인 중인 사용자로 취급하지 않고 일반 로그인/자동가입 분기를 타야 한다") {
             SecurityContextHolder.getContext().authentication =
-                org.springframework.security.authentication.AnonymousAuthenticationToken(
+                AnonymousAuthenticationToken(
                     "key", "anonymousUser", listOf(SimpleGrantedAuthority("ROLE_ANONYMOUS"))
                 )
 

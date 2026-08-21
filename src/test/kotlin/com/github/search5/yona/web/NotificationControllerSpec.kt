@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.time.Instant
 import java.util.Optional
+import io.mockk.clearMocks
 
 class NotificationControllerSpec : DescribeSpec({
     val notificationEventRepository = mockk<NotificationEventRepository>()
@@ -26,7 +27,7 @@ class NotificationControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(notificationController).build()
 
     beforeTest {
-        io.mockk.clearMocks(notificationEventRepository, userRepository)
+        clearMocks(notificationEventRepository, userRepository)
     }
 
     describe("NotificationController 웹 API 테스트") {

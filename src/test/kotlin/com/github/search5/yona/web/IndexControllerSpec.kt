@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.time.Instant
 import java.util.Optional
+import io.mockk.clearMocks
 
 class IndexControllerSpec : DescribeSpec({
     val notificationEventRepository = mockk<NotificationEventRepository>()
@@ -51,7 +52,7 @@ class IndexControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(indexController).build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             notificationEventRepository,
             userRepository,
             projectRepository,

@@ -16,6 +16,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.model
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
+import org.hamcrest.Matchers
 
 class MigrationControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
@@ -37,7 +39,7 @@ class MigrationControllerSpec : DescribeSpec({
     ).build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             userRepository,
             migrationService
         )
@@ -239,9 +241,9 @@ class MigrationControllerSpec : DescribeSpec({
                 mockMvcAllow.perform(get("/migration/owner1/projects/proj1/issues").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.issues[0].issue.title").value("이슈1"))
-                    .andExpect(jsonPath("$.issues[0].issue.body").value(org.hamcrest.Matchers.containsString("이슈 본문 내용")))
-                    .andExpect(jsonPath("$.issues[0].issue.body").value(org.hamcrest.Matchers.containsString("--- attachments ---")))
-                    .andExpect(jsonPath("$.issues[0].issue.body").value(org.hamcrest.Matchers.containsString("[test.txt](/files/88)")))
+                    .andExpect(jsonPath("$.issues[0].issue.body").value(Matchers.containsString("이슈 본문 내용")))
+                    .andExpect(jsonPath("$.issues[0].issue.body").value(Matchers.containsString("--- attachments ---")))
+                    .andExpect(jsonPath("$.issues[0].issue.body").value(Matchers.containsString("[test.txt](/files/88)")))
                     .andExpect(jsonPath("$.issues[0].comments[0].body").value("코멘트 내용"))
             }
         }
@@ -264,7 +266,7 @@ class MigrationControllerSpec : DescribeSpec({
                 mockMvcAllow.perform(get("/migration/owner1/projects/proj1/posts").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.issues[0].issue.title").value("포스트1"))
-                    .andExpect(jsonPath("$.issues[0].issue.body").value(org.hamcrest.Matchers.containsString("포스팅 본문 내용")))
+                    .andExpect(jsonPath("$.issues[0].issue.body").value(Matchers.containsString("포스팅 본문 내용")))
             }
         }
     }

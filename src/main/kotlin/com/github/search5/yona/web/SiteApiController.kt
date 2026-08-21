@@ -34,7 +34,7 @@ class SiteApiController(
     private val yonaUpdateService: YonaUpdateService,
     private val dataBackupService: DataBackupService,
     private val objectMapper: ObjectMapper,
-    private val environment: org.springframework.core.env.Environment
+    private val environment: Environment
 ) {
 
     private fun checkAdmin(authentication: Authentication?): User {

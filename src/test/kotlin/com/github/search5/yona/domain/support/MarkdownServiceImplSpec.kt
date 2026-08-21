@@ -1,5 +1,7 @@
 package com.github.search5.yona.domain.support
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
@@ -10,17 +12,24 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.Commit
+import com.github.search5.yona.domain.vcs.GitBranch
 import com.github.search5.yona.domain.vcs.PlayRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.context.MessageSource
+import tools.jackson.databind.node.ObjectNode
+import java.io.File
+import java.io.OutputStream
+import java.util.Date
 import java.util.Optional
 import java.util.Locale
+import java.util.TimeZone
 
 class MarkdownServiceImplSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>(relaxed = true)
@@ -42,7 +51,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
     val issueMarkdownProjectRepository = mockk<ProjectRepository>()
     val issueMarkdownIssueRepository = mockk<IssueRepository>()
     val issueMarkdownUserRepository = mockk<UserRepository>()
-    val issueMarkdownAccessControl = mockk<com.github.search5.yona.config.security.AccessControl>()
+    val issueMarkdownAccessControl = mockk<AccessControl>()
 
     val markdownService = MarkdownServiceImpl(
         autoLinkRenderer, repositoryService,
@@ -67,7 +76,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
         )
 
         beforeTest {
-            io.mockk.clearMocks(
+            clearMocks(
                 issueMarkdownProjectRepository, issueMarkdownIssueRepository,
                 issueMarkdownUserRepository, issueMarkdownAccessControl,
                 answers = false
@@ -78,7 +87,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
         it("호스트가 일치하는 순수 이슈 URL은 #번호.제목 + 상태뱃지로 바뀌어야 한다") {
             every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(project)
             every { issueMarkdownIssueRepository.findByProjectAndNumber(project, 5L) } returns openIssue
-            every { issueMarkdownAccessControl.isAllowed(null, project, openIssue, com.github.search5.yona.domain.enumeration.Operation.READ) } returns true
+            every { issueMarkdownAccessControl.isAllowed(null, project, openIssue, Operation.READ) } returns true
             every { messageSource.getMessage("issue.state.open", null, "open", any()) } returns "열림"
 
             val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/5")
@@ -92,7 +101,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
             val privateIssue = Issue(id = 11L, title = "비공개 이슈", project = project, number = 6L, state = State.OPEN, authorId = 1L)
             every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(project)
             every { issueMarkdownIssueRepository.findByProjectAndNumber(project, 6L) } returns privateIssue
-            every { issueMarkdownAccessControl.isAllowed(null, project, privateIssue, com.github.search5.yona.domain.enumeration.Operation.READ) } returns false
+            every { issueMarkdownAccessControl.isAllowed(null, project, privateIssue, Operation.READ) } returns false
 
             val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/6")
 
@@ -212,20 +221,20 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 override fun getAuthor(): User? = null
                 override fun getAuthorName(): String? = null
                 override fun getAuthorEmail(): String? = null
-                override fun getAuthorDate(): java.util.Date? = null
-                override fun getAuthorTimezone(): java.util.TimeZone? = null
+                override fun getAuthorDate(): Date? = null
+                override fun getAuthorTimezone(): TimeZone? = null
                 override fun getCommitterName(): String? = null
                 override fun getCommitterEmail(): String? = null
-                override fun getCommitterDate(): java.util.Date? = null
-                override fun getCommitterTimezone(): java.util.TimeZone? = null
+                override fun getCommitterDate(): Date? = null
+                override fun getCommitterTimezone(): TimeZone? = null
                 override fun getParentCount(): Int = 0
             }
 
             val playRepo = object : PlayRepository {
                 override fun create() {}
                 override fun isIntermediateFolder(path: String): Boolean = false
-                override fun getMetaDataFromPath(path: String): tools.jackson.databind.node.ObjectNode? = null
-                override fun getMetaDataFromPath(branch: String, path: String): tools.jackson.databind.node.ObjectNode? = null
+                override fun getMetaDataFromPath(path: String): ObjectNode? = null
+                override fun getMetaDataFromPath(branch: String, path: String): ObjectNode? = null
                 override fun getRawFile(revision: String, path: String): ByteArray = ByteArray(0)
                 override fun delete() {}
                 override fun getPatch(commitId: String): String = ""
@@ -242,15 +251,15 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 override fun renameTo(projectName: String): Boolean = true
                 override fun getDefaultBranch(): String = "main"
                 override fun setDefaultBranch(target: String) {}
-                override fun getBranches(): List<com.github.search5.yona.domain.vcs.GitBranch> = emptyList()
-                override fun getHeadBranch(): com.github.search5.yona.domain.vcs.GitBranch? = null
+                override fun getBranches(): List<GitBranch> = emptyList()
+                override fun getHeadBranch(): GitBranch? = null
                 override fun deleteBranch(branchName: String) {}
                 override fun createBranch(branchName: String, startPoint: String) {}
                 override fun getParentCommitOf(commitId: String): Commit? = null
                 override fun isEmpty(): Boolean = false
                 override fun move(srcProjectOwner: String, srcProjectName: String, destProjectOwner: String, destProjectName: String): Boolean = true
-                override fun getDirectory(): java.io.File = java.io.File("/tmp")
-                override fun getArchive(os: java.io.OutputStream, branchName: String) {}
+                override fun getDirectory(): File = File("/tmp")
+                override fun getArchive(os: OutputStream, branchName: String) {}
                 override fun getBlobId(revision: String, path: String): String? = null
             }
 

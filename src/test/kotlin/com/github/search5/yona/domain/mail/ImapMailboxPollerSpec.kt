@@ -1,19 +1,25 @@
 package com.github.search5.yona.domain.mail
 
+import com.github.search5.yona.domain.support.PropertyService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
+import jakarta.activation.DataHandler
+import jakarta.mail.Message
+import jakarta.mail.Part
 import jakarta.mail.Session
 import jakarta.mail.internet.MimeBodyPart
 import jakarta.mail.internet.MimeMessage
 import jakarta.mail.internet.MimeMultipart
+import jakarta.mail.util.ByteArrayDataSource
+import org.springframework.scheduling.TaskScheduler
 import java.util.Properties
 
 // yona mailbox/CreationViaEmail.java의 MIME 파트 트리 순회(processPart 등) 대응 (P1-29).
 // 실제 jakarta.mail 객체를 구성해 IMAP 서버 연결 없이도 파싱 로직을 검증한다.
 class ImapMailboxPollerSpec : DescribeSpec({
-    val propertyService = mockk<com.github.search5.yona.domain.support.PropertyService>(relaxed = true)
-    val taskScheduler = mockk<org.springframework.scheduling.TaskScheduler>(relaxed = true)
+    val propertyService = mockk<PropertyService>(relaxed = true)
+    val taskScheduler = mockk<TaskScheduler>(relaxed = true)
     val poller = ImapMailboxPoller(
         incomingMailProcessingService = mockk(relaxed = true),
         propertyService = propertyService,
@@ -38,7 +44,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
         it("text/plain 단일 파트 메일은 본문을 그대로 추출하고 첨부파일은 없어야 한다") {
             val message = MimeMessage(session)
             message.setFrom("gildong@example.com")
-            message.setRecipients(jakarta.mail.Message.RecipientType.TO, "yona+dlab/hive@example.com")
+            message.setRecipients(Message.RecipientType.TO, "yona+dlab/hive@example.com")
             message.subject = "제목"
             message.setText("안녕하세요, 본문입니다.", "UTF-8")
             message.saveChanges()
@@ -52,7 +58,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
         it("multipart/mixed 메일에서 첨부파일을 추출해야 한다") {
             val message = MimeMessage(session)
             message.setFrom("gildong@example.com")
-            message.setRecipients(jakarta.mail.Message.RecipientType.TO, "yona+dlab/hive@example.com")
+            message.setRecipients(Message.RecipientType.TO, "yona+dlab/hive@example.com")
             message.subject = "첨부파일 테스트"
 
             val textPart = MimeBodyPart()
@@ -61,7 +67,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
             val attachmentPart = MimeBodyPart()
             attachmentPart.setFileName("hello.txt")
             attachmentPart.setContent("attachment content", "text/plain")
-            attachmentPart.setDisposition(jakarta.mail.Part.ATTACHMENT)
+            attachmentPart.setDisposition(Part.ATTACHMENT)
 
             val multipart = MimeMultipart("mixed")
             multipart.addBodyPart(textPart)
@@ -80,7 +86,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
         it("첨부파일이 여러 개면 전부 추출해야 한다") {
             val message = MimeMessage(session)
             message.setFrom("gildong@example.com")
-            message.setRecipients(jakarta.mail.Message.RecipientType.TO, "yona+dlab/hive@example.com")
+            message.setRecipients(Message.RecipientType.TO, "yona+dlab/hive@example.com")
             message.subject = "여러 첨부파일"
 
             val textPart = MimeBodyPart()
@@ -89,12 +95,12 @@ class ImapMailboxPollerSpec : DescribeSpec({
             val attachment1 = MimeBodyPart()
             attachment1.setFileName("a.txt")
             attachment1.setContent("A", "text/plain")
-            attachment1.setDisposition(jakarta.mail.Part.ATTACHMENT)
+            attachment1.setDisposition(Part.ATTACHMENT)
 
             val attachment2 = MimeBodyPart()
             attachment2.setFileName("b.txt")
             attachment2.setContent("B", "text/plain")
-            attachment2.setDisposition(jakarta.mail.Part.ATTACHMENT)
+            attachment2.setDisposition(Part.ATTACHMENT)
 
             val multipart = MimeMultipart("mixed")
             multipart.addBodyPart(textPart)
@@ -111,7 +117,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
         it("text/html뿐인 메일은 태그를 벗기지 않고 원본 HTML을 그대로 보존하고 isHtml=true여야 한다(P1-47)") {
             val message = MimeMessage(session)
             message.setFrom("gildong@example.com")
-            message.setRecipients(jakarta.mail.Message.RecipientType.TO, "yona+dlab/hive@example.com")
+            message.setRecipients(Message.RecipientType.TO, "yona+dlab/hive@example.com")
             message.subject = "HTML 메일"
             message.setContent("<p>안녕하세요 <b>굵게</b></p>", "text/html; charset=UTF-8")
             message.saveChanges()
@@ -125,7 +131,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
         it("인라인 이미지 첨부의 Content-ID를 추출해야 한다(P1-47)") {
             val message = MimeMessage(session)
             message.setFrom("gildong@example.com")
-            message.setRecipients(jakarta.mail.Message.RecipientType.TO, "yona+dlab/hive@example.com")
+            message.setRecipients(Message.RecipientType.TO, "yona+dlab/hive@example.com")
             message.subject = "인라인 이미지"
 
             val htmlPart = MimeBodyPart()
@@ -133,11 +139,11 @@ class ImapMailboxPollerSpec : DescribeSpec({
 
             val imagePart = MimeBodyPart()
             imagePart.fileName = "photo.png"
-            imagePart.dataHandler = jakarta.activation.DataHandler(
-                jakarta.mail.util.ByteArrayDataSource("fake-image-bytes".toByteArray(), "image/png")
+            imagePart.dataHandler = DataHandler(
+                ByteArrayDataSource("fake-image-bytes".toByteArray(), "image/png")
             )
             imagePart.setContentID("<image1>")
-            imagePart.setDisposition(jakarta.mail.Part.INLINE)
+            imagePart.setDisposition(Part.INLINE)
 
             val multipart = MimeMultipart("related")
             multipart.addBodyPart(htmlPart)

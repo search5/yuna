@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.support.isModifiedByOthers
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -97,7 +98,7 @@ class CommentController(
             ?: return ResponseEntity.notFound().build()
 
         val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
 
         if (comment.authorId != user.id && !isManager) {
@@ -134,7 +135,7 @@ class CommentController(
             ?: return ResponseEntity.notFound().build()
 
         val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
 
         if (comment.authorId != user.id && !isManager) {
@@ -197,7 +198,7 @@ class CommentController(
             ?: return ResponseEntity.notFound().build()
 
         val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
 
         if (comment.authorId != user.id && !isManager) {
@@ -234,7 +235,7 @@ class CommentController(
             ?: return ResponseEntity.notFound().build()
 
         val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
 
         if (comment.authorId != user.id && !isManager) {

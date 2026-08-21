@@ -9,11 +9,14 @@ import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectService
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.project.TitleHeadService
+import com.github.search5.yona.domain.project.UpdateProjectParam
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.PushedBranchRepository
+import java.time.Duration
 import java.time.Instant
+import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -56,7 +59,7 @@ class ProjectController(
         authentication: Authentication?
     ): ResponseEntity<List<String>> {
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        val pageable = org.springframework.data.domain.PageRequest.of(0, 100)
+        val pageable = PageRequest.of(0, 100)
         val projectNames = if (user.isSiteManager) {
             projectRepository.findProjectsForAdmin(query, pageable).content.map { "${it.owner}/${it.name}" }
         } else {
@@ -89,7 +92,7 @@ class ProjectController(
         val updated = try {
             projectService.updateProject(
                 projectId = projectId,
-                param = com.github.search5.yona.domain.project.UpdateProjectParam(
+                param = UpdateProjectParam(
                     name = request.name,
                     overview = request.overview,
                     projectScope = request.projectScope,
@@ -324,7 +327,7 @@ class ProjectController(
         }
 
         // yona Project.getRecentlyPushedBranches(): 최근 1시간 이내에 push된 것만 노출한다.
-        val cutoff = Instant.now().minus(java.time.Duration.ofHours(1))
+        val cutoff = Instant.now().minus(Duration.ofHours(1))
         val branches = pushedBranchRepository.findByProjectAndPushedDateAfter(project, cutoff)
         return ResponseEntity.ok(branches)
     }

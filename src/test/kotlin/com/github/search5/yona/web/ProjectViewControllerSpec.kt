@@ -45,6 +45,14 @@ import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.vcs.PlayRepository
+import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+import org.springframework.ui.ExtendedModelMap
+import org.springframework.http.HttpStatus
 
 class ProjectViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -112,7 +120,7 @@ class ProjectViewControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             projectRepository, projectUserRepository, userRepository, repositoryService, projectService,
             organizationUserRepository, attachmentRepository, attachmentService, organizationRepository,
             messageSource, mailService, markdownService, roleRepository, projectTransferRepository,
@@ -153,7 +161,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             it("readme 탭이면 README.md를 renderFileInReadme로 렌더링해 markdownHtml에 담아야 한다") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 901L, user = memberUser, project = project, role = managerRole))
-                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                val playRepo = mockk<PlayRepository>()
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
@@ -178,7 +186,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 val noCodeProject = Project(id = 5L, name = "NoCodeProj", owner = "owner", projectScope = ProjectScope.PRIVATE, isCodeEnabled = false)
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 902L, user = memberUser, project = noCodeProject, role = managerRole))
-                val readmePosting = com.github.search5.yona.domain.board.Posting(
+                val readmePosting = Posting(
                     id = 700L, title = "README", body = "게시판 README 본문", project = noCodeProject, number = 1L, readme = true
                 )
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoCodeProj") } returns Optional.of(noCodeProject)
@@ -187,7 +195,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.findByProjectId(5L) } returns emptyList()
                 every { watchService.isWatching(any(), any(), any()) } returns false
                 every { watchService.findWatchers(any(), any()) } returns emptySet()
-                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                val playRepo = mockk<PlayRepository>()
                 every { repositoryService.getRepository(noCodeProject) } returns playRepo
                 every { playRepo.isFile("README.md") } returns true
                 every { postingRepository.findByProjectAndReadme(noCodeProject, true) } returns listOf(readmePosting)
@@ -209,7 +217,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.findByProjectId(6L) } returns emptyList()
                 every { watchService.isWatching(any(), any(), any()) } returns false
                 every { watchService.findWatchers(any(), any()) } returns emptySet()
-                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                val playRepo = mockk<PlayRepository>()
                 every { repositoryService.getRepository(noCodeProject) } returns playRepo
                 every { playRepo.isFile("README.md") } returns true
                 every { playRepo.getRawFile("HEAD", "README.md") } returns "# git readme".toByteArray(Charsets.UTF_8)
@@ -232,9 +240,9 @@ class ProjectViewControllerSpec : DescribeSpec({
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-                val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val groupOrg = Organization(id = 1L, name = "org")
                 groupOrg.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = user, organization = groupOrg,
                         role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
@@ -288,7 +296,7 @@ class ProjectViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/setting") {
             it("MANAGER 권한을 지닌 멤버라면 200 OK와 project/setting 뷰를 반환해야 한다") {
-                val playRepository = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                val playRepository = mockk<PlayRepository>()
                 every { repositoryService.getRepository(project) } returns playRepository
                 every { playRepository.getRefNames() } returns listOf("refs/heads/master")
                 every { playRepository.getDefaultBranch() } returns "refs/heads/master"
@@ -338,7 +346,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
                 every { projectService.changeVCS(1L) } returns project
 
-                mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/owner/TestProj/changeVCS").principal(userAuth))
+                mockMvc.perform(MockMvcRequestBuilders.post("/owner/TestProj/changeVCS").principal(userAuth))
                     .andExpect(status().isNoContent)
             }
         }
@@ -347,7 +355,7 @@ class ProjectViewControllerSpec : DescribeSpec({
         // 생성 가능" 가드 + "그 조직에 project.organization 연동" 대응 (P2-34).
         describe("POST /projectform (프로젝트 생성)") {
             fun newProjectRequest(owner: String) =
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/projectform")
+                MockMvcRequestBuilders.post("/projectform")
                     .principal(userAuth)
                     .param("owner", owner)
                     .param("name", "newproj")
@@ -370,11 +378,11 @@ class ProjectViewControllerSpec : DescribeSpec({
             }
 
             it("owner가 기존 조직명이고 사용자가 그 조직의 admin이면 조직이 연동된 채 생성된다") {
-                val org = com.github.search5.yona.domain.organization.Organization(id = 50L, name = "myorg")
+                val org = Organization(id = 50L, name = "myorg")
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { organizationRepository.findByName("myorg") } returns Optional.of(org)
                 every { organizationUserRepository.findByOrganizationIdAndUserId(50L, 10L) } returns
-                    Optional.of(com.github.search5.yona.domain.organization.OrganizationUser(user = user, organization = org, role = Role(id = RoleType.ORG_ADMIN.roleType)))
+                    Optional.of(OrganizationUser(user = user, organization = org, role = Role(id = RoleType.ORG_ADMIN.roleType)))
                 val projectSlot = slot<Project>()
                 val created = Project(id = 901L, owner = "myorg", name = "newproj", organization = org)
                 every { projectService.createProject(capture(projectSlot), user) } returns created
@@ -388,7 +396,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             }
 
             it("owner가 기존 조직명인데 사용자가 그 조직의 admin이 아니면 403 Forbidden을 반환하고 생성하지 않는다") {
-                val org = com.github.search5.yona.domain.organization.Organization(id = 51L, name = "otherorg")
+                val org = Organization(id = 51L, name = "otherorg")
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { organizationRepository.findByName("otherorg") } returns Optional.of(org)
                 every { organizationUserRepository.findByOrganizationIdAndUserId(51L, 10L) } returns Optional.empty()
@@ -413,7 +421,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             }
 
             it("[Test-12-5-2] 공개 프로젝트이며 isCodeAccessibleMemberOnly가 true이고 멤버인 경우 200 OK와 올바른 zip 출력을 해야 한다") {
-                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                val playRepo = mockk<PlayRepository>()
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns true
@@ -432,7 +440,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             // 404로 명확히 거부해야 한다(응답 헤더를 이미 써버린 뒤 스트리밍 도중 예외가 나는 것을
             // 방지).
             it("존재하지 않는 브랜치면 아카이브를 생성하지 않고 404를 반환해야 한다 (P2-30)") {
-                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                val playRepo = mockk<PlayRepository>()
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns true
@@ -461,13 +469,13 @@ class ProjectViewControllerSpec : DescribeSpec({
         )
 
         it("HTML 목록은 error/403 뷰를 반환해야 한다") {
-            val result = hiddenController.projects(filter = "", pageNum = 1, authentication = null, model = org.springframework.ui.ExtendedModelMap())
+            val result = hiddenController.projects(filter = "", pageNum = 1, authentication = null, model = ExtendedModelMap())
             result shouldBe "error/403"
         }
 
         it("JSON API는 403 Forbidden을 반환해야 한다") {
             val response = hiddenController.projectsJson(query = "", filter = "", authentication = null)
-            response.statusCode shouldBe org.springframework.http.HttpStatus.FORBIDDEN
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
         }
     }
 })

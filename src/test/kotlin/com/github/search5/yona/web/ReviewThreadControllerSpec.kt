@@ -25,6 +25,12 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 
 class ReviewThreadControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -58,13 +64,13 @@ class ReviewThreadControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(reviewThreadController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, reviewThreadService, userRepository, projectUserRepository)
+        clearMocks(projectRepository, reviewThreadService, userRepository, projectUserRepository)
     }
 
     describe("ReviewThreadController TDD 검증") {
         val project = Project(id = 1L, name = "TestProject", owner = "owner", projectScope = ProjectScope.PUBLIC)
         val memberOnlyProject = Project(id = 2L, name = "MemberOnlyProject", owner = "owner", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true)
-        val user = com.github.search5.yona.domain.user.User(id = 10L, loginId = "testuser", name = "테스트유저")
+        val user = User(id = 10L, loginId = "testuser", name = "테스트유저")
         val userAuth = UsernamePasswordAuthenticationToken("testuser", "")
 
         it("리뷰 스레드 목록 화면 요청 시 200 OK와 reviewthread/list 뷰를 반환해야 한다") {
@@ -118,11 +124,11 @@ class ReviewThreadControllerSpec : DescribeSpec({
 
         // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
         it("직접 멤버가 아니어도 PROTECTED 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-            val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+            val groupOrg = Organization(id = 1L, name = "org")
             groupOrg.organizationUsers.add(
-                com.github.search5.yona.domain.organization.OrganizationUser(
+                OrganizationUser(
                     id = 1L, user = user, organization = groupOrg,
-                    role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                    role = Role(id = RoleType.ORG_MEMBER.roleType)
                 )
             )
             val groupProject = Project(id = 13L, name = "GroupProject", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
