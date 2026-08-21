@@ -34,6 +34,14 @@ class BranchApiController(
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
+        // yona BranchApp.java:47 @IsOnlyGitAvailable(클래스 레벨, IsOnlyGitAvailableAction.isGit())
+        // 대응 (P2-29). Git이 아닌 프로젝트(SVN 등)에 브랜치 조작을 요청하면 400으로 명확히
+        // 거부해야 한다 — 이전에는 이 가드가 없어 SVN 프로젝트에도 그대로 진행되다 실질적으로
+        // 아무 일도 하지 않으면서(no-op) 302 리다이렉트로 성공 신호를 돌려주는 오탐이 있었다.
+        if (project.vcs?.uppercase() != "GIT") {
+            return "error/400"
+        }
+
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
             return "error/403"
@@ -56,6 +64,14 @@ class BranchApiController(
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
+
+        // yona BranchApp.java:47 @IsOnlyGitAvailable(클래스 레벨, IsOnlyGitAvailableAction.isGit())
+        // 대응 (P2-29). Git이 아닌 프로젝트(SVN 등)에 브랜치 조작을 요청하면 400으로 명확히
+        // 거부해야 한다 — 이전에는 이 가드가 없어 SVN 프로젝트에도 그대로 진행되다 실질적으로
+        // 아무 일도 하지 않으면서(no-op) 302 리다이렉트로 성공 신호를 돌려주는 오탐이 있었다.
+        if (project.vcs?.uppercase() != "GIT") {
+            return "error/400"
+        }
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         // yona BranchApp.java:71-72 @IsAllowed(Operation.DELETE)(resourceType 기본값 PROJECT) 대응
