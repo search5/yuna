@@ -40,7 +40,7 @@ class ReviewThreadController(
         authentication: Authentication?,
         model: Model
     ): Any {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val currentUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }

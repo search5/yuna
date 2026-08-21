@@ -68,7 +68,7 @@ class ReviewThreadControllerSpec : DescribeSpec({
         val userAuth = UsernamePasswordAuthenticationToken("testuser", "")
 
         it("리뷰 스레드 목록 화면 요청 시 200 OK와 reviewthread/list 뷰를 반환해야 한다") {
-            every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
             every { reviewThreadService.getReviewThreads(eq(project), any(), any()) } returns PageImpl(emptyList())
             every { reviewThreadService.countReviewThreads(eq(project), any()) } returns 0L
 
@@ -81,7 +81,7 @@ class ReviewThreadControllerSpec : DescribeSpec({
         }
 
         it("엑셀 다운로드 요청 시 200 OK와 엑셀 바이너리를 반환해야 한다") {
-            every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
             every { reviewThreadService.getReviewThreads(eq(project), any()) } returns emptyList()
 
             mockMvc.perform(
@@ -93,7 +93,7 @@ class ReviewThreadControllerSpec : DescribeSpec({
         }
 
         it("[Test-16-3-1] isCodeAccessibleMemberOnly가 true이고 비회원(비인증)인 경우 403 에러 뷰를 반환해야 한다") {
-            every { projectRepository.findByOwnerAndName("owner", "MemberOnlyProject") } returns Optional.of(memberOnlyProject)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MemberOnlyProject") } returns Optional.of(memberOnlyProject)
 
             mockMvc.perform(
                 get("/owner/MemberOnlyProject/reviews")
@@ -103,7 +103,7 @@ class ReviewThreadControllerSpec : DescribeSpec({
         }
 
         it("[Test-16-3-2] isCodeAccessibleMemberOnly가 true이고 가입된 멤버인 경우 정상적으로 200 OK를 반환해야 한다") {
-            every { projectRepository.findByOwnerAndName("owner", "MemberOnlyProject") } returns Optional.of(memberOnlyProject)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MemberOnlyProject") } returns Optional.of(memberOnlyProject)
             every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(2L, 10L) } returns true
             every { reviewThreadService.getReviewThreads(eq(memberOnlyProject), any(), any()) } returns PageImpl(emptyList())
@@ -127,7 +127,7 @@ class ReviewThreadControllerSpec : DescribeSpec({
             )
             val groupProject = Project(id = 13L, name = "GroupProject", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
 
-            every { projectRepository.findByOwnerAndName("owner", "GroupProject") } returns Optional.of(groupProject)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "GroupProject") } returns Optional.of(groupProject)
             every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(13L, 10L) } returns false
             every { reviewThreadService.getReviewThreads(eq(groupProject), any(), any()) } returns PageImpl(emptyList())

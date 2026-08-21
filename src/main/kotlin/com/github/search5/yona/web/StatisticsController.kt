@@ -23,7 +23,7 @@ class StatisticsController(
         @PathVariable projectName: String,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         model.addAttribute("project", project)

@@ -82,7 +82,7 @@ class ReviewApiControllerSpec : DescribeSpec({
 
         it("리뷰어 등록 API 호출 시 302 리다이렉트와 서비스 메소드가 정상 호출되어야 한다") {
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every { projectUserRepository.existsByProjectIdAndUserId(10L, 1L) } returns true
             every { pullRequestRepository.findById(100L) } returns Optional.of(pullRequest)
             every { codeReviewService.addReviewer(100L, 1L) } returns Unit
@@ -99,7 +99,7 @@ class ReviewApiControllerSpec : DescribeSpec({
 
         it("리뷰어 해제 API 호출 시 302 리다이렉트와 서비스 메소드가 정상 호출되어야 한다") {
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every { projectUserRepository.existsByProjectIdAndUserId(10L, 1L) } returns true
             every { pullRequestRepository.findById(100L) } returns Optional.of(pullRequest)
             every { codeReviewService.removeReviewer(100L, 1L) } returns Unit
@@ -121,7 +121,7 @@ class ReviewApiControllerSpec : DescribeSpec({
             val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "pass")
 
             every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
-            every { projectRepository.findByOwnerAndName("owner", "public-project") } returns Optional.of(publicProject)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "public-project") } returns Optional.of(publicProject)
             every { projectUserRepository.existsByProjectIdAndUserId(11L, 2L) } returns false
 
             mockMvc.perform(
@@ -139,7 +139,7 @@ class ReviewApiControllerSpec : DescribeSpec({
             val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "pass")
 
             every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
-            every { projectRepository.findByOwnerAndName("owner", "public-project") } returns Optional.of(publicProject)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "public-project") } returns Optional.of(publicProject)
             every { projectUserRepository.existsByProjectIdAndUserId(11L, 2L) } returns false
 
             mockMvc.perform(

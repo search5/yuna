@@ -111,7 +111,7 @@ class WatchController(
         authentication: Authentication?
     ): ResponseEntity<Unit> {
         val user = getLoginUser(authentication)
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
         if (!accessControl.isAllowed(user, project, Operation.WATCH)) {
@@ -130,7 +130,7 @@ class WatchController(
         authentication: Authentication?
     ): ResponseEntity<Unit> {
         val user = getLoginUser(authentication)
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
         if (!accessControl.isAllowed(user, project, Operation.WATCH)) {
@@ -202,7 +202,7 @@ class WatchController(
         @PathVariable number: Long,
         @RequestParam("type") type: String
     ): ResponseEntity<WatchersResponse> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
 
@@ -239,7 +239,7 @@ class WatchController(
         @PathVariable projectName: String,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
 

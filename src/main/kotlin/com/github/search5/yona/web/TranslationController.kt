@@ -40,7 +40,7 @@ class TranslationController(
         val user = userRepository.findByLoginId(authentication.name).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
 
-        val project = projectRepository.findByOwnerAndName(request.owner, request.projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(request.owner, request.projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         var text = ""

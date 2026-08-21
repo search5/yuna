@@ -65,7 +65,7 @@ class StatisticsViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/statistics") {
             it("비공개 프로젝트일 때 로그인한 멤버라면 200 OK와 project/statistics 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "PrivateProj") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProj") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
 
@@ -76,7 +76,7 @@ class StatisticsViewControllerSpec : DescribeSpec({
             }
 
             it("공개 프로젝트일 때 로그인한 사용자라면 멤버가 아니더라도 200 OK와 project/statistics 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "PublicProj") } returns Optional.of(publicProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PublicProj") } returns Optional.of(publicProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
 
                 mockMvc.perform(get("/owner/PublicProj/statistics").principal(userAuth))
@@ -86,14 +86,14 @@ class StatisticsViewControllerSpec : DescribeSpec({
             }
 
             it("로그인하지 않은 익명 사용자일 때 403 Forbidden 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "PublicProj") } returns Optional.of(publicProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PublicProj") } returns Optional.of(publicProject)
 
                 mockMvc.perform(get("/owner/PublicProj/statistics"))
                     .andExpect(view().name("error/403"))
             }
 
             it("비공개 프로젝트이고 로그인한 사용자이지만 멤버가 아닐 때 403 Forbidden 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "PrivateProj") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProj") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
@@ -112,7 +112,7 @@ class StatisticsViewControllerSpec : DescribeSpec({
                 )
                 val groupProject = Project(id = 14L, name = "GroupProj", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
 
-                every { projectRepository.findByOwnerAndName("owner", "GroupProj") } returns Optional.of(groupProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "GroupProj") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(14L, 10L) } returns false
 
@@ -122,7 +122,7 @@ class StatisticsViewControllerSpec : DescribeSpec({
             }
 
             it("프로젝트가 존재하지 않을 때 404 Not Found 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "NonExistProj") } returns Optional.empty()
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NonExistProj") } returns Optional.empty()
 
                 mockMvc.perform(get("/owner/NonExistProj/statistics").principal(userAuth))
                     .andExpect(view().name("error/404"))

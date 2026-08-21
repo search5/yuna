@@ -167,7 +167,7 @@ class ProjectControllerSpec : DescribeSpec({
             val memberProjectUser = ProjectUser(id = 200L, user = user, project = privateProject, role = memberRole)
 
             it("공개 프로젝트는 비회원도 라벨 목록을 조회할 수 있어야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "pub") } returns Optional.of(publicProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "pub") } returns Optional.of(publicProject)
                 every { projectService.getProjectLabels(30L) } returns setOf(Label(id = 1L, category = "os", name = "linux"))
 
                 mockMvc.perform(get("/api/owner/pub/labels"))
@@ -175,14 +175,14 @@ class ProjectControllerSpec : DescribeSpec({
             }
 
             it("비공개 프로젝트는 비회원이 조회하면 403을 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
 
                 mockMvc.perform(get("/api/owner/priv/labels"))
                     .andExpect(status().isForbidden)
             }
 
             it("프로젝트 멤버(MEMBER 권한도 포함)는 라벨을 붙일 수 있어야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
                 every { projectService.attachLabel(31L, "os", "linux") } returns
@@ -198,7 +198,7 @@ class ProjectControllerSpec : DescribeSpec({
             }
 
             it("프로젝트 멤버가 아니면 라벨 붙이기가 403을 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns false
 
@@ -211,7 +211,7 @@ class ProjectControllerSpec : DescribeSpec({
             }
 
             it("이미 붙어있는 라벨을 다시 붙이면 204 No Content를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
                 every { projectService.attachLabel(31L, null, "linux") } returns
@@ -226,7 +226,7 @@ class ProjectControllerSpec : DescribeSpec({
             }
 
             it("멤버는 라벨을 뗄 수 있어야 하고 204를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
                 every { projectService.detachLabel(31L, 1L) } returns true
@@ -239,7 +239,7 @@ class ProjectControllerSpec : DescribeSpec({
             }
 
             it("존재하지 않는 라벨을 떼려고 하면 404를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
                 every { projectService.detachLabel(31L, 999L) } returns false
@@ -256,7 +256,7 @@ class ProjectControllerSpec : DescribeSpec({
             val branchProject = Project(id = 40L, name = "bp", owner = "owner", projectScope = ProjectScope.PRIVATE)
 
             it("비회원은 최근 push된 브랜치 목록 조회 시 403을 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "bp") } returns Optional.of(branchProject)
 
                 mockMvc.perform(get("/api/owner/bp/pushedBranches"))
                     .andExpect(status().isForbidden)
@@ -264,7 +264,7 @@ class ProjectControllerSpec : DescribeSpec({
 
             it("프로젝트 멤버는 최근 push된 브랜치 목록을 조회할 수 있어야 한다") {
                 val branch = PushedBranch(id = 1L, name = "feature/x", pushedDate = Instant.now(), project = branchProject)
-                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "bp") } returns Optional.of(branchProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns true
                 user.projectUsers.add(ProjectUser(id = 400L, user = user, project = branchProject, role = Role(id = RoleType.MEMBER.roleType)))
@@ -279,7 +279,7 @@ class ProjectControllerSpec : DescribeSpec({
 
             it("프로젝트 멤버는 push된 브랜치 기록을 삭제할 수 있어야 한다") {
                 val branch = PushedBranch(id = 2L, name = "feature/y", project = branchProject)
-                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "bp") } returns Optional.of(branchProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns true
                 every { pushedBranchRepository.findById(2L) } returns Optional.of(branch)
@@ -294,7 +294,7 @@ class ProjectControllerSpec : DescribeSpec({
             }
 
             it("존재하지 않는 id를 삭제해도 yona와 동일하게 200 OK를 반환해야 한다(404 아님)") {
-                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "bp") } returns Optional.of(branchProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns true
                 every { pushedBranchRepository.findById(999L) } returns Optional.empty()
@@ -308,7 +308,7 @@ class ProjectControllerSpec : DescribeSpec({
             }
 
             it("프로젝트 멤버가 아니면 삭제 시 403을 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "bp") } returns Optional.of(branchProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "bp") } returns Optional.of(branchProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(40L, 10L) } returns false
 

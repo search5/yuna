@@ -89,7 +89,7 @@ class MilestoneViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -123,7 +123,7 @@ class MilestoneViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -166,7 +166,7 @@ class MilestoneViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -188,7 +188,7 @@ class MilestoneViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -232,7 +232,7 @@ class MilestoneViewController(
         redirectAttributes: RedirectAttributes,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -303,7 +303,7 @@ class MilestoneViewController(
         redirectAttributes: RedirectAttributes,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -384,7 +384,7 @@ class MilestoneViewController(
         @PathVariable id: Long,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
@@ -413,7 +413,7 @@ class MilestoneViewController(
         @PathVariable id: Long,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
@@ -443,7 +443,7 @@ class MilestoneViewController(
         @PathVariable id: Long,
         authentication: Authentication?
     ): org.springframework.http.ResponseEntity<Void> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return org.springframework.http.ResponseEntity.notFound().build()
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build()

@@ -70,7 +70,7 @@ class TranslationControllerSpec : DescribeSpec({
                 val issue = Issue(id = 100L, title = "한글 타이틀", body = "한글 내용", project = project)
 
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
                 every { translationService.translate(any()) } returns "Translated Title\n\nTranslated Body"
                 every { markdownService.render("Translated Title\n\nTranslated Body", true, project) } returns "<p>Translated Title</p><p>Translated Body</p>"
@@ -98,7 +98,7 @@ class TranslationControllerSpec : DescribeSpec({
                 val issue = Issue(id = 100L, title = "한글 타이틀", body = "한글 내용", project = project)
 
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
                 every { translationService.translate(any()) } returns null
 
@@ -125,7 +125,7 @@ class TranslationControllerSpec : DescribeSpec({
                 val comment = IssueComment(id = 200L, contents = "댓글 내용", issue = mockk())
 
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { issueCommentRepository.findById(200L) } returns Optional.of(comment)
                 every { translationService.translate("댓글 내용") } returns "Translated Comment"
                 every { markdownService.render("Translated Comment", true, project) } returns "<p>Translated Comment</p>"

@@ -83,7 +83,7 @@ class VoteControllerSpec : DescribeSpec({
         }
 
         it("이슈 투표 요청 시 302 리다이렉트와 함께 해당 이슈 상세 뷰로 이동해야 한다") {
-            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
             user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
@@ -101,7 +101,7 @@ class VoteControllerSpec : DescribeSpec({
         }
 
         it("이슈 투표 취소 요청 시 302 리다이렉트와 함께 해당 이슈 상세 뷰로 이동해야 한다") {
-            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
             user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
@@ -119,7 +119,7 @@ class VoteControllerSpec : DescribeSpec({
         }
 
         it("이슈 댓글 투표 요청 시 302 리다이렉트와 함께 해당 이슈 상세 뷰로 이동해야 한다") {
-            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
             user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
@@ -137,7 +137,7 @@ class VoteControllerSpec : DescribeSpec({
         }
 
         it("이슈 댓글 투표 취소 요청 시 302 리다이렉트와 함께 해당 이슈 상세 뷰로 이동해야 한다") {
-            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
             user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
@@ -155,7 +155,7 @@ class VoteControllerSpec : DescribeSpec({
         }
 
         it("익명 사용자가 이슈 추천 시 401 Unauthorized 상태코드를 반환해야 한다") {
-            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
             
             mockMvc.perform(
                 post("/tester/test-project/issue/1/vote")
@@ -165,7 +165,7 @@ class VoteControllerSpec : DescribeSpec({
 
         it("읽기 권한이 없는 사용자가 이슈 추천 시 403 Forbidden 상태코드를 반환해야 한다") {
             val privateProject = Project(id = 1L, name = "test-project", owner = "tester", projectScope = com.github.search5.yona.domain.project.ProjectScope.PRIVATE)
-            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(privateProject)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(privateProject)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
@@ -177,7 +177,7 @@ class VoteControllerSpec : DescribeSpec({
         }
 
         it("이슈 복수형 라우트(/issues)로 투표 요청 시에도 정상적으로 302 리다이렉트가 발생해야 한다") {
-            every { projectRepository.findByOwnerAndName("tester", "test-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
             every { userRepository.findByLoginId("tester") } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
             user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))

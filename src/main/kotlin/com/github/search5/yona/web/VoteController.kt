@@ -46,7 +46,7 @@ class VoteController(
         @PathVariable issueNumber: Long,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val user = getLoginUser(authentication)
@@ -71,7 +71,7 @@ class VoteController(
         @PathVariable issueNumber: Long,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val user = getLoginUser(authentication)
@@ -97,7 +97,7 @@ class VoteController(
         @PathVariable commentId: Long,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val user = getLoginUser(authentication)
@@ -123,7 +123,7 @@ class VoteController(
         @PathVariable commentId: Long,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val user = getLoginUser(authentication)

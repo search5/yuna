@@ -71,7 +71,7 @@ class BranchApiControllerSpec : DescribeSpec({
 
         describe("POST /{owner}/{projectName}/code/{branch}/setAsDefault") {
             it("성공 시 302 리다이렉트와 setDefaultBranch 메소드가 정상 호출되어야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { repositoryService.getRepository(project) } returns playRepository
@@ -97,7 +97,7 @@ class BranchApiControllerSpec : DescribeSpec({
                     )
                 )
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(groupProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
                 every { repositoryService.getRepository(groupProject) } returns playRepository
@@ -122,7 +122,7 @@ class BranchApiControllerSpec : DescribeSpec({
                     )
                 )
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(managerUser)
                 every { repositoryService.getRepository(project) } returns playRepository
                 every { playRepository.deleteBranch("feature-a") } returns Unit
@@ -145,7 +145,7 @@ class BranchApiControllerSpec : DescribeSpec({
                     )
                 )
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
 
                 mockMvc.perform(

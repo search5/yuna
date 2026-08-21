@@ -83,7 +83,7 @@ class IssueViewController(
         authentication: Authentication?,
         model: Model
     ): Any {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: run {
                 model.addAttribute("messageKey", "error.forbidden.or.notfound")
                 return "error/404"
@@ -228,7 +228,7 @@ class IssueViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: run {
                 model.addAttribute("messageKey", "error.forbidden.or.notfound")
                 return "error/404"
@@ -298,7 +298,7 @@ class IssueViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: run {
                 model.addAttribute("messageKey", "error.forbidden.or.notfound")
                 return "error/404"
@@ -359,7 +359,7 @@ class IssueViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: run {
                 model.addAttribute("messageKey", "error.forbidden.or.notfound")
                 return "error/404"
@@ -431,7 +431,7 @@ class IssueViewController(
         @RequestParam(required = false) temporaryUploadFiles: String?,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -585,7 +585,7 @@ class IssueViewController(
         @RequestParam(required = false) dueDate: String?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "redirect:/error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -693,7 +693,7 @@ class IssueViewController(
         @org.springframework.web.bind.annotation.ModelAttribute request: IssueForm,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }

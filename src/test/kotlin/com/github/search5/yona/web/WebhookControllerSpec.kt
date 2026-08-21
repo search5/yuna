@@ -57,7 +57,7 @@ class WebhookControllerSpec : DescribeSpec({
 
         describe("GET /projects/{owner}/{projectName}/webhooks") {
             it("웹훅 설정 페이지 뷰를 정상 반환한다") {
-                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
                 every { webhookService.findByProject(1L) } returns listOf(webhook)
 
                 mockMvc.perform(
@@ -73,7 +73,7 @@ class WebhookControllerSpec : DescribeSpec({
 
         describe("POST /projects/{owner}/{projectName}/webhooks") {
             it("유효한 웹훅 폼 데이터를 받아 웹훅을 등록하고 웹훅 목록으로 리다이렉트한다") {
-                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
                 every {
                     webhookService.createWebhook(
                         project,
@@ -109,7 +109,7 @@ class WebhookControllerSpec : DescribeSpec({
 
         describe("DELETE /projects/{owner}/{projectName}/webhooks/{id}") {
             it("웹훅 삭제 비즈니스를 호출하고 200 OK를 반환한다") {
-                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
                 every { webhookService.deleteWebhook(10L) } returns Unit
 
                 mockMvc.perform(
@@ -124,7 +124,7 @@ class WebhookControllerSpec : DescribeSpec({
 
         describe("권한 검사 (P1-87)") {
             it("비로그인 사용자는 웹훅 목록 조회가 403으로 거부된다") {
-                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
                 every { accessControl.isAllowed(null, project, Operation.UPDATE) } returns false
 
                 mockMvc.perform(get("/projects/owner/test-project/webhooks"))
@@ -134,7 +134,7 @@ class WebhookControllerSpec : DescribeSpec({
             it("프로젝트 매니저가 아닌 로그인 사용자는 웹훅 생성이 403으로 거부된다") {
                 val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
                 val stranger = User(id = 200L, loginId = "stranger", name = "stranger")
-                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
                 every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
                 every { accessControl.isAllowed(stranger, project, Operation.UPDATE) } returns false
 
@@ -152,7 +152,7 @@ class WebhookControllerSpec : DescribeSpec({
             it("프로젝트 매니저가 아닌 로그인 사용자는 웹훅 삭제가 403으로 거부된다") {
                 val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
                 val stranger = User(id = 200L, loginId = "stranger", name = "stranger")
-                every { projectRepository.findByOwnerAndName("owner", "test-project") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
                 every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
                 every { accessControl.isAllowed(stranger, project, Operation.UPDATE) } returns false
 

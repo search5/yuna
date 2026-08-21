@@ -129,7 +129,7 @@ class IssueViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/issues") {
             it("비공개 프로젝트일 때 멤버라면 200 OK와 issue/list 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { issueRepository.findByProjectAndState(project, State.OPEN, any<Pageable>()) } returns PageImpl(listOf(issue), pageRequest, 1)
                 every { issueRepository.findAll(any<org.springframework.data.jpa.domain.Specification<Issue>>(), any<Pageable>()) } returns PageImpl(listOf(issue), pageRequest, 1)
@@ -147,7 +147,7 @@ class IssueViewControllerSpec : DescribeSpec({
             }
 
             it("프로젝트 멤버가 아닐 경우 403 Forbidden 뷰 혹은 status를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(nonMemberUser)
 
                 mockMvc.perform(get("/owner/TestProj/issues").principal(userAuth))
@@ -157,7 +157,7 @@ class IssueViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/issue/{number}") {
             it("프로젝트 멤버가 이슈 조회를 요청하면 200 OK와 issue/view 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
                 every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns emptyList()
@@ -176,7 +176,7 @@ class IssueViewControllerSpec : DescribeSpec({
                 val recentProject = com.github.search5.yona.domain.project.RecentProject(id = 1L, userId = 10L, projectId = 1L)
                 every { recentProjectRepository.findByUserIdOrderByVisitedDateDesc(10L) } returns listOf(recentProject)
                 every { projectRepository.findById(1L) } returns Optional.of(project)
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
 
@@ -210,7 +210,7 @@ class IssueViewControllerSpec : DescribeSpec({
                 val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
                 val savedIssue = Issue(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every {
                     issueService.createIssue(any(), any(), any(), any(), any())
@@ -252,7 +252,7 @@ class IssueViewControllerSpec : DescribeSpec({
                 val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
                 val savedIssue = Issue(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every {
                     issueService.createIssue(any(), any(), any(), any(), any())
@@ -296,7 +296,7 @@ class IssueViewControllerSpec : DescribeSpec({
                 val groupIssue = Issue(id = 50L, number = 3L, title = "원제목", authorLoginId = "otherauthor", project = groupProject)
                 val auth = UsernamePasswordAuthenticationToken("groupuser", "pass")
 
-                every { projectRepository.findByOwnerAndName("owner", "GroupProj") } returns Optional.of(groupProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "GroupProj") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("groupuser") } returns Optional.of(groupUser)
                 every { issueRepository.findByProjectAndNumber(groupProject, 3L) } returns groupIssue
                 every { projectUserRepository.existsByProjectIdAndUserId(7L, 20L) } returns false

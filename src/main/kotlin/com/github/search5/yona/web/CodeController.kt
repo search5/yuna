@@ -23,7 +23,7 @@ class CodeController(
         @RequestParam(required = false, defaultValue = "HEAD") branch: String,
         @RequestParam(required = false, defaultValue = "") path: String
     ): ResponseEntity<ObjectNode> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val repository = repositoryService.getRepository(project)
@@ -40,7 +40,7 @@ class CodeController(
         @RequestParam(required = false, defaultValue = "HEAD") branch: String,
         @RequestParam(required = false, defaultValue = "") path: String
     ): ResponseEntity<List<ObjectNode>> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val repository = repositoryService.getRepository(project)

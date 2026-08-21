@@ -70,7 +70,7 @@ class BranchViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/branches") {
             it("성공 시 200 OK와 올바른 뷰 이름, 모델 속성을 반환해야 한다 (HEAD 브랜치 제외 확인)") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
                 every { repositoryService.getRepository(project) } returns playRepository
                 every { playRepository.getBranches() } returns listOf(headBranch, otherBranch)
                 every { playRepository.getHeadBranch() } returns headBranch
@@ -89,7 +89,7 @@ class BranchViewControllerSpec : DescribeSpec({
 
             it("[Test-12-4] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 브랜치 조회를 403 Forbidden 차단해야 한다") {
                 val memberOnlyProject = Project(id = 4L, owner = "owner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
-                every { projectRepository.findByOwnerAndName("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
 
                 mockMvc.perform(
                     get("/owner/memberonly-project/branches")
@@ -111,7 +111,7 @@ class BranchViewControllerSpec : DescribeSpec({
                 val groupProject = Project(id = 5L, owner = "owner", name = "group-project", vcs = "git", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
                 val groupAuth = org.springframework.security.authentication.UsernamePasswordAuthenticationToken("groupuser", "password")
 
-                every { projectRepository.findByOwnerAndName("owner", "group-project") } returns Optional.of(groupProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "group-project") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("groupuser") } returns Optional.of(groupUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(5L, 10L) } returns false
                 every { repositoryService.getRepository(groupProject) } returns playRepository

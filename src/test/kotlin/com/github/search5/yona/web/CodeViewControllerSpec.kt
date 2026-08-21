@@ -80,7 +80,7 @@ class CodeViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/code") {
             it("저장소가 비어 있는 경우 code/nohead 뷰로 가야 한다") {
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { repositoryService.getRepository(project) } returns playRepo
                 every { playRepo.isEmpty() } returns true
 
@@ -93,7 +93,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("저장소가 비어 있지 않은 경우 기본 브랜치로 리다이렉트되어야 한다") {
                 val gitBranch = mockk<GitBranch>()
                 every { gitBranch.shortName } returns "main"
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { repositoryService.getRepository(project) } returns playRepo
                 every { playRepo.isEmpty() } returns false
                 every { playRepo.getHeadBranch() } returns gitBranch
@@ -105,7 +105,7 @@ class CodeViewControllerSpec : DescribeSpec({
 
             it("[Test-12-2] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 403 Forbidden을 반환해야 한다") {
                 val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
-                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
 
                 mockMvc.perform(get("/testowner/memberonly-project/code"))
                     .andExpect(status().isOk)
@@ -119,7 +119,7 @@ class CodeViewControllerSpec : DescribeSpec({
                 val mockNode = objectMapper.createObjectNode()
                 mockNode.put("type", "file")
 
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { repositoryService.getRepository(project) } returns playRepo
                 every { playRepo.getRefNames() } returns listOf("refs/heads/main", "refs/heads/dev")
                 every { repositoryService.getMetaDataFromAncestorDirectories(playRepo, "main", "src/Main.kt") } returns listOf(mockNode)
@@ -135,7 +135,7 @@ class CodeViewControllerSpec : DescribeSpec({
 
             it("[Test-12-2-1] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 상세 경로 접근 시 403 Forbidden을 반환해야 한다") {
                 val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
-                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
 
                 mockMvc.perform(get("/testowner/memberonly-project/code/main/src/Main.kt"))
                     .andExpect(status().isOk)
@@ -158,7 +158,7 @@ class CodeViewControllerSpec : DescribeSpec({
                 val mockNode = objectMapper.createObjectNode()
                 mockNode.put("type", "file")
 
-                every { projectRepository.findByOwnerAndName("testowner", "group-project") } returns Optional.of(groupProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "group-project") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("groupuser") } returns Optional.of(groupUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(5L, 10L) } returns false
                 every { repositoryService.getRepository(groupProject) } returns playRepo
@@ -175,7 +175,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("바이너리/텍스트 데이터를 응답 헤더와 함께 올바르게 스트리밍해야 한다") {
                 val rawBytes = "println('Hello')".toByteArray()
 
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { repositoryService.getFileAsRaw("testowner", "testproject", "main", "src/Main.kt") } returns rawBytes
 
                 mockMvc.perform(get("/testowner/testproject/rawcode/main/src/Main.kt"))
@@ -186,7 +186,7 @@ class CodeViewControllerSpec : DescribeSpec({
 
             it("[Test-12-3] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 rawcode 다운로드 시 403 Forbidden을 반환해야 한다") {
                 val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
-                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
 
                 mockMvc.perform(get("/testowner/memberonly-project/rawcode/main/src/Main.kt"))
                     .andExpect(status().isForbidden)

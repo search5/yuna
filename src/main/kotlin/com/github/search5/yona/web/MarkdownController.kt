@@ -28,7 +28,7 @@ class MarkdownController(
         @PathVariable projectName: String,
         @RequestBody request: MarkdownRenderRequest
     ): ResponseEntity<String> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val html = markdownService.render(request.body, request.breaks, project)

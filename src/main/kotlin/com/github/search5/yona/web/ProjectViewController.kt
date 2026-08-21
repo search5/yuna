@@ -81,7 +81,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -254,7 +254,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -278,7 +278,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -323,7 +323,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -355,7 +355,7 @@ class ProjectViewController(
         @PathVariable projectName: String,
         authentication: Authentication?
     ): ResponseEntity<Void> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -382,7 +382,7 @@ class ProjectViewController(
         authentication: Authentication?,
         response: jakarta.servlet.http.HttpServletResponse
     ) {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: throw org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -585,7 +585,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -617,7 +617,7 @@ class ProjectViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
 
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, loginUser.id!!)
@@ -758,7 +758,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -788,7 +788,7 @@ class ProjectViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
 
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, loginUser.id!!)
@@ -814,7 +814,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -844,7 +844,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val originalProject = projectRepository.findByOwnerAndName(ownerName, projectName).orElse(null)
+        val originalProject = projectRepository.findByOwnerAndNameOrPreviousPlace(ownerName, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -871,7 +871,7 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val originalProject = projectRepository.findByOwnerAndName(ownerName, projectName).orElse(null)
+        val originalProject = projectRepository.findByOwnerAndNameOrPreviousPlace(ownerName, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }

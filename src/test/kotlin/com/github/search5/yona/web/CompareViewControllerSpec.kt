@@ -85,7 +85,7 @@ class CompareViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/compare/{revA}..{revB}") {
             it("프로젝트가 존재하지 않으면 404 응답을 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("testowner", "nonexistent") } returns Optional.empty()
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "nonexistent") } returns Optional.empty()
 
                 mockMvc.perform(get("/testowner/nonexistent/compare/aaaaaaa..bbbbbbb").principal(userAuth))
                     .andExpect(status().isOk)
@@ -93,7 +93,7 @@ class CompareViewControllerSpec : DescribeSpec({
             }
 
             it("비공개 프로젝트일 때 프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("testowner", "private-project") } returns Optional.of(privateProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "private-project") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(2L, 10L) } returns false
 
@@ -113,7 +113,7 @@ class CompareViewControllerSpec : DescribeSpec({
                 )
                 val groupProject = Project(id = 6L, owner = "testowner", name = "group-project", projectScope = ProjectScope.PROTECTED, vcs = "GIT", organization = org)
 
-                every { projectRepository.findByOwnerAndName("testowner", "group-project") } returns Optional.of(groupProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "group-project") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(6L, 10L) } returns false
                 every { repositoryService.getRepository(groupProject) } returns playRepository
@@ -129,7 +129,7 @@ class CompareViewControllerSpec : DescribeSpec({
 
             it("[Test-12-1-1] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비로그인 익명 유저가 접근 시 403 Forbidden을 반환해야 한다") {
                 val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
-                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
 
                 mockMvc.perform(get("/testowner/memberonly-project/compare/aaaaaaa..bbbbbbb"))
                     .andExpect(status().isOk)
@@ -138,7 +138,7 @@ class CompareViewControllerSpec : DescribeSpec({
 
             it("[Test-12-1-2] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 프로젝트 비멤버가 로그인 상태로 접근 시 403 Forbidden을 반환해야 한다") {
                 val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
-                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns false
 
@@ -149,7 +149,7 @@ class CompareViewControllerSpec : DescribeSpec({
 
             it("[Test-12-1-3] 공개 프로젝트이며 isCodeAccessibleMemberOnly가 true이고 프로젝트 멤버가 접근 시 정상 200 OK를 반환해야 한다") {
                 val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
-                every { projectRepository.findByOwnerAndName("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns true
                 every { repositoryService.getRepository(memberOnlyProject) } returns playRepository
@@ -164,7 +164,7 @@ class CompareViewControllerSpec : DescribeSpec({
             }
 
             it("공개 프로젝트이며 Git 저장소일 때 200 OK와 code/compare 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("testowner", "public-project") } returns Optional.of(publicProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "public-project") } returns Optional.of(publicProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { repositoryService.getRepository(publicProject) } returns playRepository
                 every { playRepository.getCommit("aaaaaaa") } returns commitA
@@ -179,7 +179,7 @@ class CompareViewControllerSpec : DescribeSpec({
             }
 
             it("공개 프로젝트이며 SVN 저장소일 때 200 OK와 code/compare_svn 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("testowner", "svn-project") } returns Optional.of(svnProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "svn-project") } returns Optional.of(svnProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { repositoryService.getRepository(svnProject) } returns playRepository
                 every { playRepository.getCommit("aaaaaaa") } returns commitA
@@ -194,7 +194,7 @@ class CompareViewControllerSpec : DescribeSpec({
             }
 
             it("커밋이 존재하지 않는 리비전일 경우 404 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("testowner", "public-project") } returns Optional.of(publicProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "public-project") } returns Optional.of(publicProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { repositoryService.getRepository(publicProject) } returns playRepository
                 every { playRepository.getCommit("aaaaaaa") } returns null

@@ -116,7 +116,7 @@ class SearchControllerSpec : DescribeSpec({
         it("GET /{owner}/{projectName}/search - 프로젝트 검색 시 200 OK와 search/list 뷰를 반환해야 한다") {
             val project = Project(id = 1L, name = "TestProj", owner = "owner")
             every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
             every { searchService.searchInAProject("yona", SearchType.ISSUE, user, project, any()) } returns searchResult
 
             mockMvc.perform(

@@ -34,7 +34,7 @@ class StatisticsControllerSpec : DescribeSpec({
         val user = User(id = 10L, loginId = "testuser", name = "테스트유저")
 
         it("프로젝트 통계 페이지 요청 시 200 OK와 statistics 뷰를 반환해야 한다 (TDD Red 예상)") {
-            every { projectRepository.findByOwnerAndName("owner", "TestProject") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
 
             mockMvc.perform(
                 get("/projects/owner/TestProject/statistics")

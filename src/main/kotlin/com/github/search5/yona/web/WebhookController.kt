@@ -48,7 +48,7 @@ class WebhookController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val user = getLoginUser(authentication)
@@ -72,7 +72,7 @@ class WebhookController(
         @RequestParam("webhookType") webhookTypeStr: String,
         authentication: Authentication?
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val user = getLoginUser(authentication)
@@ -105,7 +105,7 @@ class WebhookController(
         @PathVariable("id") id: Long,
         authentication: Authentication?
     ): ResponseEntity<Unit> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val user = getLoginUser(authentication)
