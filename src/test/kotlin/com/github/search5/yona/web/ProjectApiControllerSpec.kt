@@ -1,18 +1,36 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.attachment.Attachment
+import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.issue.Assignee
+import com.github.search5.yona.domain.issue.AssigneeRepository
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueComment
+import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.issue.IssueLabel
+import com.github.search5.yona.domain.issue.IssueLabelCategory
+import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.notification.NotificationUrlResolver
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.board.PostingComment
+import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleRepository
@@ -26,6 +44,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.*
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -60,6 +79,14 @@ class ProjectApiControllerSpec : DescribeSpec({
         milestoneRepository
     )
 
+    val issueCommentRepository = mockk<IssueCommentRepository>()
+    val postingCommentRepository = mockk<PostingCommentRepository>()
+    val issueLabelRepository = mockk<IssueLabelRepository>()
+    val assigneeRepository = mockk<AssigneeRepository>()
+    val attachmentRepository = mockk<AttachmentRepository>()
+    val pullRequestRepository = mockk<PullRequestRepository>()
+    val notificationUrlResolver = mockk<NotificationUrlResolver>()
+
     val controller = ProjectApiController(
         projectRepository,
         projectUserRepository,
@@ -67,7 +94,17 @@ class ProjectApiControllerSpec : DescribeSpec({
         organizationRepository,
         roleRepository,
         repositoryService,
-        accessControl
+        accessControl,
+        issueRepository,
+        postingRepository,
+        issueCommentRepository,
+        postingCommentRepository,
+        milestoneRepository,
+        issueLabelRepository,
+        assigneeRepository,
+        attachmentRepository,
+        pullRequestRepository,
+        notificationUrlResolver
     )
 
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
@@ -77,7 +114,8 @@ class ProjectApiControllerSpec : DescribeSpec({
             projectRepository, projectUserRepository, userRepository, organizationRepository,
             roleRepository, repositoryService, organizationUserRepository,
             issueRepository, postingRepository, reviewCommentRepository, commitCommentRepository,
-            milestoneRepository,
+            milestoneRepository, issueCommentRepository, postingCommentRepository, issueLabelRepository,
+            assigneeRepository, attachmentRepository, pullRequestRepository, notificationUrlResolver,
             answers = false
         )
         every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
@@ -377,6 +415,157 @@ class ProjectApiControllerSpec : DescribeSpec({
 
             // SITEMANAGER 역할 배정(1회) 외에 멤버 배정 저장이 없어야 한다.
             verify(exactly = 1) { projectUserRepository.save(any()) }
+        }
+    }
+
+    // yona ProjectApi.java:46-72 exports() 대응 (P2-46).
+    describe("GET /api/projects/{owner}/{projectName}/exports (P2-46)") {
+        val manager = User(id = 30L, loginId = "manager", name = "매니저", email = "manager@example.com")
+        val managerAuth = UsernamePasswordAuthenticationToken("manager", "password")
+        val nonMember = User(id = 31L, loginId = "outsider", name = "외부인")
+        val nonMemberAuth = UsernamePasswordAuthenticationToken("outsider", "password")
+        val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+        val project = Project(
+            id = 200L, owner = "acme", name = "widget", overview = "위젯 프로젝트",
+            vcs = "GIT", projectScope = ProjectScope.PRIVATE
+        )
+        val managerProjectUser = ProjectUser(id = 900L, user = manager, project = project, role = managerRole)
+        project.projectUsers.add(managerProjectUser)
+        manager.projectUsers.add(managerProjectUser)
+
+        it("존재하지 않는 프로젝트는 404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndName("acme", "nope") } returns Optional.empty()
+
+            mockMvc.perform(get("/api/projects/acme/nope/exports").principal(managerAuth))
+                .andExpect(status().isNotFound)
+        }
+
+        it("매니저/조직관리자가 아니면 403을 반환해야 한다") {
+            every { projectRepository.findByOwnerAndName("acme", "widget") } returns Optional.of(project)
+            every { userRepository.findByLoginId("outsider") } returns Optional.of(nonMember)
+
+            mockMvc.perform(get("/api/projects/acme/widget/exports").principal(nonMemberAuth))
+                .andExpect(status().isForbidden)
+        }
+
+        it("매니저는 프로젝트 전체(이슈/게시글/멤버/라벨/마일스톤/작성자/담당가능자)를 JSON으로 내보낼 수 있어야 한다") {
+            every { projectRepository.findByOwnerAndName("acme", "widget") } returns Optional.of(project)
+            every { userRepository.findByLoginId("manager") } returns Optional.of(manager)
+
+            val assigneeUser = User(id = 40L, loginId = "assignee1", name = "담당자1", email = "assignee1@example.com")
+            val issueAuthor = User(id = 41L, loginId = "issueauthor", name = "이슈작성자", email = "issueauthor@example.com")
+            val postAuthor = User(id = 42L, loginId = "postauthor", name = "글작성자", email = "postauthor@example.com")
+            val prContributor = User(id = 43L, loginId = "contributor1", name = "기여자1", email = "contributor1@example.com")
+
+            val milestone = Milestone(id = 500L, title = "1.0", contents = "첫 릴리즈", project = project, state = State.OPEN)
+            val category = IssueLabelCategory(id = 600L, name = "우선순위", isExclusive = true, project = project)
+            val label = IssueLabel(id = 601L, name = "긴급", color = "#ff0000", category = category, project = project)
+
+            val issueCreated = java.time.Instant.parse("2026-01-01T00:00:00Z")
+            val issue = Issue(
+                id = 700L, title = "버그 발생", body = "이슈 본문", project = project, number = 1L,
+                authorId = issueAuthor.id, createdDate = issueCreated, updatedDate = issueCreated,
+                state = State.OPEN, milestone = milestone,
+                assignee = Assignee(id = 701L, user = assigneeUser, project = project)
+            )
+            issue.labels.add(label)
+
+            val posting = Posting(
+                id = 800L, title = "공지사항", body = "게시글 본문", project = project, number = 1L,
+                authorId = postAuthor.id, createdDate = issueCreated, updatedDate = issueCreated
+            )
+
+            val topComment = IssueComment(
+                id = 900L, contents = "댓글입니다", issue = issue, authorId = issueAuthor.id, createdDate = issueCreated
+            )
+            val replyComment = IssueComment(
+                id = 901L, contents = "답글입니다", issue = issue, authorId = manager.id,
+                parentComment = topComment, createdDate = issueCreated
+            )
+            // legacy는 부모가 top-level 목록에 없는(2단계 이상 중첩) 답글이 섞이면 NPE로 exports() 전체가
+            // 죽는데, yuna는 이를 재현하지 않고 조용히 무시한다 — 그 케이스도 여기서 함께 검증.
+            val orphanReply = IssueComment(
+                id = 902L, contents = "고아 답글", issue = issue, authorId = manager.id,
+                parentComment = replyComment, createdDate = issueCreated
+            )
+
+            val attachment = Attachment(
+                id = 1000L, name = "screenshot.png", hash = "abc123",
+                containerType = ResourceType.ISSUE_POST, containerId = "700",
+                mimeType = "image/png", size = 1024L, createdDate = issueCreated, ownerLoginId = "issueauthor"
+            )
+
+            every { issueRepository.findByProject(project) } returns listOf(issue)
+            every { postingRepository.findByProject(project) } returns listOf(posting)
+            every { milestoneRepository.findByProject(project) } returns listOf(milestone)
+            every { issueLabelRepository.findByProject(project) } returns listOf(label)
+            every { projectUserRepository.findByProjectId(200L) } returns project.projectUsers
+            every { assigneeRepository.findByProjectId(200L) } returns listOf(Assignee(id = 702L, user = assigneeUser, project = project))
+            every { pullRequestRepository.findByToProject(project) } returns listOf(
+                com.github.search5.yona.domain.pullrequest.PullRequest(
+                    id = 1100L, number = 1L, toProject = project, fromProject = project, contributor = prContributor
+                )
+            )
+            every { userRepository.findById(issueAuthor.id!!) } returns Optional.of(issueAuthor)
+            every { userRepository.findById(postAuthor.id!!) } returns Optional.of(postAuthor)
+            every { userRepository.findById(prContributor.id!!) } returns Optional.of(prContributor)
+            every { userRepository.findById(manager.id!!) } returns Optional.of(manager)
+            every { notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "700") } returns "http://localhost/acme/widget/issue/1"
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "700") } returns listOf(attachment)
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.BOARD_POST, "800") } returns emptyList()
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_COMMENT, any()) } returns emptyList()
+            every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(700L) } returns listOf(topComment, replyComment, orphanReply)
+            every { postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(800L) } returns emptyList()
+
+            mockMvc.perform(get("/api/projects/acme/widget/exports").principal(managerAuth))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.owner").value("acme"))
+                .andExpect(jsonPath("$.projectName").value("widget"))
+                .andExpect(jsonPath("$.projectDescription").value("위젯 프로젝트"))
+                .andExpect(jsonPath("$.projectVcs").value("GIT"))
+                .andExpect(jsonPath("$.projectScope").value("PRIVATE"))
+                .andExpect(jsonPath("$.memberCount").value(1))
+                .andExpect(jsonPath("$.members[0].loginId").value("manager"))
+                .andExpect(jsonPath("$.members[0].role").value(managerRole.name))
+                .andExpect(jsonPath("$.assignees[0].loginId").value("assignee1"))
+                // authors: 이슈작성자, 게시글작성자, PR기여자 순서로 중복없이 모두 포함
+                .andExpect(jsonPath("$.authors[0].loginId").value("issueauthor"))
+                .andExpect(jsonPath("$.authors[1].loginId").value("postauthor"))
+                .andExpect(jsonPath("$.authors[2].loginId").value("contributor1"))
+                .andExpect(jsonPath("$.issueCount").value(1))
+                .andExpect(jsonPath("$.postCount").value(1))
+                .andExpect(jsonPath("$.milestoneCount").value(1))
+                // project 최상위 labels는 isExclusive 포함
+                .andExpect(jsonPath("$.labels[0].labelName").value("긴급"))
+                .andExpect(jsonPath("$.labels[0].isExclusive").value(true))
+                .andExpect(jsonPath("$.milestones[0].id").value(500))
+                .andExpect(jsonPath("$.milestones[0].state").value("open"))
+                // 이슈 본문
+                .andExpect(jsonPath("$.issues[0].id").value(700))
+                .andExpect(jsonPath("$.issues[0].type").value("ISSUE_POST"))
+                .andExpect(jsonPath("$.issues[0].author.loginId").value("issueauthor"))
+                .andExpect(jsonPath("$.issues[0].assignees[0].loginId").value("assignee1"))
+                .andExpect(jsonPath("$.issues[0].state").value("OPEN"))
+                // 이슈 안의 labels는 isExclusive가 없어야 한다(project 최상위 labels와 다른 형태)
+                .andExpect(jsonPath("$.issues[0].labels[0].labelName").value("긴급"))
+                .andExpect(jsonPath("$.issues[0].labels[0].isExclusive").doesNotExist())
+                .andExpect(jsonPath("$.issues[0].milestoneId").value(500))
+                .andExpect(jsonPath("$.issues[0].milestoneTitle").value("1.0"))
+                .andExpect(jsonPath("$.issues[0].refUrl").value("http://localhost/acme/widget/issue/1"))
+                .andExpect(jsonPath("$.issues[0].attachments[0].name").value("screenshot.png"))
+                // 댓글: top-level 1개(답글 포함), 고아 답글은 NPE 없이 조용히 누락
+                .andExpect(jsonPath("$.issues[0].comments.length()").value(1))
+                .andExpect(jsonPath("$.issues[0].comments[0].id").value(900))
+                .andExpect(jsonPath("$.issues[0].comments[0].childComments[0].id").value(901))
+                .andExpect(jsonPath("$.issues[0].comments[0].childComments[0].childComments").doesNotExist())
+                // 게시글 본문 — 이슈 전용 필드(assignees/state/labels/milestoneId/dueDate/refUrl) 없음
+                .andExpect(jsonPath("$.posts[0].id").value(800))
+                .andExpect(jsonPath("$.posts[0].type").value("BOARD_POST"))
+                .andExpect(jsonPath("$.posts[0].author.loginId").value("postauthor"))
+                .andExpect(jsonPath("$.posts[0].state").doesNotExist())
+                .andExpect(jsonPath("$.posts[0].assignees").doesNotExist())
+                .andExpect(jsonPath("$.posts[0].refUrl").doesNotExist())
         }
     }
 })

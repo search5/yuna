@@ -1,14 +1,35 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.attachment.Attachment
+import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.issue.Assignee
+import com.github.search5.yona.domain.issue.AssigneeRepository
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueComment
+import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.issue.IssueLabel
+import com.github.search5.yona.domain.issue.IssueLabelRepository
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.board.PostingComment
+import com.github.search5.yona.domain.board.PostingCommentRepository
+import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.notification.NotificationUrlResolver
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.support.Comment
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
@@ -16,6 +37,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -37,7 +59,18 @@ class ProjectApiController(
     private val organizationRepository: OrganizationRepository,
     private val roleRepository: RoleRepository,
     private val repositoryService: RepositoryService,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    // yona ProjectApi.java:46-72 exports() 대응 (P2-46)에 필요한 의존성.
+    private val issueRepository: IssueRepository,
+    private val postingRepository: PostingRepository,
+    private val issueCommentRepository: IssueCommentRepository,
+    private val postingCommentRepository: PostingCommentRepository,
+    private val milestoneRepository: MilestoneRepository,
+    private val issueLabelRepository: IssueLabelRepository,
+    private val assigneeRepository: AssigneeRepository,
+    private val attachmentRepository: AttachmentRepository,
+    private val pullRequestRepository: PullRequestRepository,
+    private val notificationUrlResolver: NotificationUrlResolver
 ) {
     private val logger = LoggerFactory.getLogger(ProjectApiController::class.java)
 
@@ -192,6 +225,274 @@ class ProjectApiController(
             "overview" to project.overview,
             "vcs" to project.vcs
         )
+    }
+
+    // yona ProjectApi.java:46-72 exports() 대응 (P2-46) — 프로젝트를 이슈/게시글/댓글/마일스톤/라벨까지
+    // 포함해 JSON으로 전체 직렬화한다. legacy `@IsAllowed(Operation.DELETE)`(프로젝트 매니저/조직관리자
+    // 전용)와 동일하게 accessControl.isAllowed(user, project, Operation.DELETE)로 게이트한다.
+    @GetMapping("/api/projects/{owner}/{projectName}/exports")
+    fun exports(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        authentication: Authentication?
+    ): ResponseEntity<*> {
+        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build<Any>()
+
+        val user = getLoginUser(authentication)
+        if (!accessControl.isAllowed(user, project, Operation.DELETE)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build<Any>()
+        }
+
+        val issues = issueRepository.findByProject(project)
+        val postings = postingRepository.findByProject(project)
+        val milestones = milestoneRepository.findByProject(project)
+        val labels = issueLabelRepository.findByProject(project)
+        val members = projectUserRepository.findByProjectId(project.id!!)
+        val assignees = assigneeRepository.findByProjectId(project.id!!)
+
+        val result = linkedMapOf<String, Any?>(
+            "owner" to project.owner,
+            "projectName" to project.name,
+            "projectDescription" to project.overview,
+            "projectCreatedDate" to formatProjectApiDate(project.createdDate),
+            "projectVcs" to project.vcs,
+            "projectScope" to project.projectScope.name,
+            "assignees" to assignees.map { composeUserJson(it.user) },
+            "authors" to findAuthors(project, issues, postings).map { composeUserJson(it) },
+            "memberCount" to members.size,
+            "members" to members.map { composeMemberJson(it) },
+            "issueCount" to issues.size,
+            "postCount" to postings.size,
+            "milestoneCount" to milestones.size,
+            "labels" to labels.map { composeAllLabelsJson(it) },
+            "issues" to issues.map { getIssueResult(it) },
+            "posts" to postings.map { getPostingResult(it) },
+            "milestones" to milestones.map { getMilestoneNode(it) }
+        )
+
+        return ResponseEntity.ok(result)
+    }
+
+    // yona Project.java:182-212 findAuthors()/getIssueUsers()/getPostingUsers()/getPullRequestUsers()
+    // 대응 — 이슈 작성자 + 게시글 작성자 + (이 프로젝트로 들어온) PR 기여자를 순서대로 합쳐 중복
+    // 제거한다(legacy도 LinkedHashSet<User>로 등장 순서를 보존하며 중복 제거).
+    private fun findAuthors(project: Project, issues: List<Issue>, postings: List<Posting>): List<User> {
+        val authors = LinkedHashMap<Long, User>()
+        fun addAuthor(authorId: Long?) {
+            if (authorId == null || authors.containsKey(authorId)) return
+            userRepository.findById(authorId).ifPresent { authors[authorId] = it }
+        }
+        issues.forEach { addAuthor(it.authorId) }
+        postings.forEach { addAuthor(it.authorId) }
+        pullRequestRepository.findByToProject(project).forEach { addAuthor(it.contributor?.id) }
+        return authors.values.toList()
+    }
+
+    // yona ProjectApi.java:87-109 getAssginees()/getAuthors() + composeAuthorJson()/composeAssigneeJson()
+    // 대응 — 네 메서드 모두 {loginId,name,email} 동일한 형태를 만들어 하나로 합친다(출력 결과가
+    // 완전히 동일해 legacy의 중복 코드 4벌을 그대로 옮기지 않고 공유 — 로직/출력 분기 자체가 없어
+    // "행동을 단순화"하는 게 아니라 순수 중복 제거).
+    private fun composeUserJson(user: User?): Map<String, Any?> {
+        return mapOf("loginId" to user?.loginId, "name" to user?.name, "email" to user?.email)
+    }
+
+    // yona ProjectApi.java:350-364 composeMembersJson() 대응.
+    private fun composeMemberJson(projectUser: ProjectUser): Map<String, Any?> {
+        return mapOf(
+            "loginId" to projectUser.user.loginId,
+            "name" to projectUser.user.name,
+            "role" to projectUser.role.name,
+            "email" to projectUser.user.email
+        )
+    }
+
+    // yona ProjectApi.java:366-376 composeLabelJson() 대응 — 이슈 안에 포함되는 라벨 표현(isExclusive
+    // 없음). getAllLabels()(project 최상위 labels 필드용, isExclusive 포함)와는 필드가 달라 별도로 둔다.
+    private fun composeLabelJson(label: IssueLabel): Map<String, Any?> {
+        return mapOf("labelName" to label.name, "labelColor" to label.color, "category" to label.category.name)
+    }
+
+    // yona ProjectApi.java:378-389 getAllLabels() 대응.
+    private fun composeAllLabelsJson(label: IssueLabel): Map<String, Any?> {
+        return mapOf(
+            "labelName" to label.name,
+            "labelColor" to label.color,
+            "category" to label.category.name,
+            "isExclusive" to label.category.isExclusive
+        )
+    }
+
+    // yona ProjectApi.java:441-450 getMilestoneNode() 대응.
+    private fun getMilestoneNode(milestone: Milestone): Map<String, Any?> {
+        val node = linkedMapOf<String, Any?>(
+            "id" to milestone.id,
+            "title" to milestone.title,
+            "state" to milestone.state.state(),
+            "description" to milestone.contents
+        )
+        milestone.dueDate?.let { node["dueDate"] = formatProjectApiDate(it) }
+        return node
+    }
+
+    // yona ProjectApi.java:276-320 getResult(AbstractPosting)의 ISSUE_POST 케이스 대응.
+    private fun getIssueResult(issue: Issue): Map<String, Any?> {
+        val result = linkedMapOf<String, Any?>(
+            "number" to issue.number,
+            "id" to issue.id,
+            "title" to issue.title,
+            "type" to ResourceType.ISSUE_POST.name,
+            "author" to composeUserJson(resolveUser(issue.authorId)),
+            "createdAt" to formatIsoDate(issue.createdDate),
+            "updatedAt" to formatIsoDate(issue.updatedDate),
+            "body" to issue.body,
+            "owner" to issue.project.owner,
+            "projectName" to issue.project.name
+        )
+
+        issue.assignee?.let { result["assignees"] = listOf(composeUserJson(it.user)) }
+        result["state"] = issue.state.name
+        if (issue.labels.isNotEmpty()) {
+            result["labels"] = issue.labels.map { composeLabelJson(it) }
+        }
+        issue.milestone?.let {
+            result["milestoneId"] = it.id
+            result["milestoneTitle"] = it.title
+        }
+        issue.dueDate?.let { result["dueDate"] = formatProjectApiDate(it) }
+        result["refUrl"] = notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, issue.id.toString())
+
+        val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, issue.id.toString())
+        if (attachments.isNotEmpty()) {
+            result["attachments"] = attachments.map { composeAttachmentJson(it) }
+        }
+
+        val comments = composeIssueCommentsJson(issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!))
+        if (comments.isNotEmpty()) {
+            result["comments"] = comments
+        }
+
+        return result
+    }
+
+    // yona ProjectApi.java:276-320 getResult(AbstractPosting)의 그 외(BOARD_POST) 케이스 대응 —
+    // ISSUE_POST 전용 필드(assignees/state/labels/milestone*/dueDate/refUrl)는 legacy의
+    // `if (type == ISSUE_POST)` 분기 밖이라 전혀 나오지 않는다.
+    private fun getPostingResult(posting: Posting): Map<String, Any?> {
+        val result = linkedMapOf<String, Any?>(
+            "number" to posting.number,
+            "id" to posting.id,
+            "title" to posting.title,
+            "type" to ResourceType.BOARD_POST.name,
+            "author" to composeUserJson(resolveUser(posting.authorId)),
+            "createdAt" to formatIsoDate(posting.createdDate),
+            "updatedAt" to formatIsoDate(posting.updatedDate),
+            "body" to posting.body,
+            "owner" to posting.project.owner,
+            "projectName" to posting.project.name
+        )
+
+        val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.BOARD_POST, posting.id.toString())
+        if (attachments.isNotEmpty()) {
+            result["attachments"] = attachments.map { composeAttachmentJson(it) }
+        }
+
+        val comments = composePostingCommentsJson(postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(posting.id!!))
+        if (comments.isNotEmpty()) {
+            result["comments"] = comments
+        }
+
+        return result
+    }
+
+    // yona ProjectApi.java:391-421 composePlainCommentsJson()의 ISSUE_COMMENT 케이스 대응 —
+    // yuna는 IssueComment/PostingComment가 parentComment 필드 타입이 서로 달라(자기 자신 타입만
+    // 부모가 될 수 있음) 공통 상위타입으로 일반화할 수 없어 타입별로 나눠 이식한다(순수 아키텍처 차이,
+    // 트리 조립 알고리즘 자체는 동일).
+    private fun composeIssueCommentsJson(comments: List<IssueComment>): List<Map<String, Any?>> {
+        val topLevel = LinkedHashMap<Long, MutableMap<String, Any?>>()
+        val children = LinkedHashMap<Long, MutableList<Map<String, Any?>>>()
+        for (comment in comments) {
+            val parentId = comment.parentComment?.id
+            if (parentId != null) {
+                children.getOrPut(parentId) { mutableListOf() }.add(composeCommentNode(comment, ResourceType.ISSUE_COMMENT))
+            } else {
+                comment.id?.let { topLevel[it] = composeCommentNode(comment, ResourceType.ISSUE_COMMENT) }
+            }
+        }
+        // yona 원본은 commentMap.get(key)가 null이면(부모가 top-level에 없는, 즉 2단계 이상 중첩된
+        // 답글) NPE를 던진다 — exports() 전체를 500으로 죽이는 명백한 결함이라 그대로 재현하지 않고
+        // 조용히 건너뛴다(의도적 축약이 아니라 legacy 버그 재현 거부, 근거 명시).
+        children.forEach { (parentId, childList) -> topLevel[parentId]?.set("childComments", childList) }
+        return topLevel.values.toList()
+    }
+
+    // yona ProjectApi.java:391-421 composePlainCommentsJson()의 NONISSUE_COMMENT 케이스 대응.
+    private fun composePostingCommentsJson(comments: List<PostingComment>): List<Map<String, Any?>> {
+        val topLevel = LinkedHashMap<Long, MutableMap<String, Any?>>()
+        val children = LinkedHashMap<Long, MutableList<Map<String, Any?>>>()
+        for (comment in comments) {
+            val parentId = comment.parentComment?.id
+            if (parentId != null) {
+                children.getOrPut(parentId) { mutableListOf() }.add(composeCommentNode(comment, ResourceType.NONISSUE_COMMENT))
+            } else {
+                comment.id?.let { topLevel[it] = composeCommentNode(comment, ResourceType.NONISSUE_COMMENT) }
+            }
+        }
+        children.forEach { (parentId, childList) -> topLevel[parentId]?.set("childComments", childList) }
+        return topLevel.values.toList()
+    }
+
+    // yona ProjectApi.java:423-439 getCommentNode() 대응 — IssueComment/PostingComment가 공유하는
+    // support.Comment 기반클래스(id/contents/createdDate/authorId)만으로 충분해 타입별로 나누지 않는다.
+    private fun composeCommentNode(comment: Comment, resourceType: ResourceType): MutableMap<String, Any?> {
+        val node = linkedMapOf<String, Any?>(
+            "id" to comment.id,
+            "type" to resourceType.name,
+            "author" to composeUserJson(resolveUser(comment.authorId)),
+            "createdAt" to formatIsoDate(comment.createdDate),
+            "body" to comment.contents
+        )
+        val attachments = attachmentRepository.findByContainerTypeAndContainerId(resourceType, comment.id.toString())
+        if (attachments.isNotEmpty()) {
+            node["attachments"] = attachments.map { composeAttachmentJson(it) }
+        }
+        return node
+    }
+
+    // yona ProjectApi.java 46-72 exports()의 toJson(attachments)(Attachment 엔티티 기본 Jackson
+    // 직렬화) 대응 — yuna Attachment 엔티티 필드가 legacy와 1:1로 대응해 같은 필드명을 그대로 쓴다.
+    private fun composeAttachmentJson(attachment: Attachment): Map<String, Any?> {
+        return mapOf(
+            "id" to attachment.id,
+            "name" to attachment.name,
+            "hash" to attachment.hash,
+            "containerType" to attachment.containerType.name,
+            "mimeType" to attachment.mimeType,
+            "size" to attachment.size,
+            "containerId" to attachment.containerId,
+            "createdDate" to attachment.createdDate?.let { formatIsoDate(it) },
+            "ownerLoginId" to attachment.ownerLoginId
+        )
+    }
+
+    private fun resolveUser(userId: Long?): User? {
+        if (userId == null) return null
+        return userRepository.findById(userId).orElse(null)
+    }
+
+    // yona utils/JodaDateUtil.java:16 ISO_FORMAT("yyyy-MM-dd'T'HH:mm:ssZ") 대응 — issue/posting/comment의
+    // createdAt/updatedAt에 쓰인다. null이면 legacy도 빈 문자열을 반환한다(JodaDateUtil.getDateString).
+    private fun formatIsoDate(instant: Instant?): String {
+        if (instant == null) return ""
+        return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(java.util.Date.from(instant))
+    }
+
+    // yona ProjectApi.java:322-325 getDateString()("yyyy-MM-dd a hh:mm:ss Z", Locale.ENGLISH) 대응 —
+    // projectCreatedDate/dueDate(이슈+마일스톤)에 쓰인다. parseProjectCreatedDate()의 역함수와 동일 포맷.
+    private fun formatProjectApiDate(instant: Instant?): String? {
+        if (instant == null) return null
+        return SimpleDateFormat("yyyy-MM-dd a hh:mm:ss Z", Locale.ENGLISH).format(java.util.Date.from(instant))
     }
 }
 
