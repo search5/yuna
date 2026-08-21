@@ -217,6 +217,35 @@ class AttachmentServiceSpec @Autowired constructor(
                 second.id shouldBe first.id
                 attachmentRepository.count() shouldBe 1
             }
+
+            // yona FileUtil.java:113-142 detectMediaType() 대응 (P2-25). 실제 저장 파일은 해시
+            // 이름(확장자 없음)이므로, JDK Files.probeContentType()은 사실상 항상 감지에 실패해
+            // application/octet-stream만 반환했다 — Tika로 실제 콘텐츠(매직 바이트)를 감지해야 한다.
+            it("9. 물리 저장 파일명이 확장자 없는 해시여도 실제 콘텐츠(매직 바이트)로 MIME 타입을 정확히 감지해야 한다 (P2-25)") {
+                val pngMagicBytes = byteArrayOf(
+                    0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                    1, 2, 3, 4, 5, 6, 7, 8
+                )
+
+                val (attachment, _) = attachmentService.store(
+                    ByteArrayInputStream(pngMagicBytes), "screenshot.png",
+                    ResourceType.ISSUE_POST, "1", "chulsoo"
+                )
+
+                attachment.mimeType shouldBe "image/png"
+            }
+
+            it("10. 텍스트 파일은 콘텐츠 기반 charset 파라미터를 포함한 MIME 타입으로 감지돼야 한다 (P2-25)") {
+                // 비-ASCII(한글) 바이트가 있어야 UniversalDetector가 US-ASCII가 아닌 UTF-8로 확정 감지한다.
+                val content = "안녕하세요, 요나!"
+
+                val (attachment, _) = attachmentService.store(
+                    ByteArrayInputStream(content.toByteArray(Charsets.UTF_8)), "note.txt",
+                    ResourceType.ISSUE_POST, "2", "chulsoo"
+                )
+
+                attachment.mimeType shouldBe "text/plain; charset=UTF-8"
+            }
         }
     }
 }
