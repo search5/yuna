@@ -5,7 +5,12 @@ import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CodeCommentThread
+import com.github.search5.yona.domain.pullrequest.CodeReviewService
+import com.github.search5.yona.domain.pullrequest.CommentThread
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.NonRangedCodeCommentThread
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
 import com.github.search5.yona.domain.vcs.RepositoryService
@@ -31,7 +36,8 @@ class PullRequestViewController(
     private val pullRequestEventRepository: com.github.search5.yona.domain.pullrequest.PullRequestEventRepository,
     private val pullRequestCommitRepository: com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository,
     private val issueRepository: com.github.search5.yona.domain.issue.IssueRepository,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val codeReviewService: CodeReviewService
 ) {
     // 이슈 자동 닫기 정규식 패턴 (대소문자 구분 없이 close(s/d), fix(es/ed), resolve(s/d) #숫자)
     private val closePattern = "(?i)(?:close[s|d]?|fix[e[s|d]]?|resolve[s|d]?)\\s+#(\\d+)".toRegex()
@@ -166,8 +172,11 @@ class PullRequestViewController(
                 emptyList()
             }
             model.addAttribute("diffs", diffs)
-            
-            val commentThreads = commentThreadRepository.findByPullRequest(pullRequest)
+
+            // yona PullRequest.java:1063-1103 getCodeCommentThreadsForChanges() 대응 (P1-114) —
+            // viewChangesInternal()과 동일하게 buildCommentThreadsForChanges() 재사용(commitId 없는
+            // "전체 변경사항" 경로).
+            val commentThreads = buildCommentThreadsForChanges(pullRequest, null)
             model.addAttribute("commentThreads", commentThreads)
         } else if (tab == "conversation") {
             val commentThreads = commentThreadRepository.findByPullRequest(pullRequest)
@@ -349,6 +358,31 @@ class PullRequestViewController(
         return viewChangesInternal(owner, projectName, number, commitId, authentication, model)
     }
 
+    // yona PullRequest.java:1063-1103 getCodeCommentThreadsForChanges() + git/viewChanges.scala.html:142
+    // renderNonRangedThreads(pull.commentThreads.toList, commitId, ...) 대응 (P1-114). yona는 diff에
+    // 라인 단위로 붙는 CodeCommentThread(ranged)는 getCodeCommentThreadsForChanges()로 outdated/커밋
+    // 필터링해 노출하고, PR 전체에 붙는 NonRangedCodeCommentThread는 필터링 없이(단 commitId 지정 시
+    // 그 커밋 것만) 그대로 노출한다 — 서로 다른 두 목록이다. yuna 템플릿(pullrequest/view.html,
+    // code/diff.html)은 이 둘을 하나의 commentThreads 모델 속성으로 합쳐서 쓰므로, 여기서 두 필터를
+    // 각각 적용한 뒤 합쳐서 반환한다.
+    private fun buildCommentThreadsForChanges(pullRequest: PullRequest, commitId: String?): List<CommentThread> {
+        val allThreads = commentThreadRepository.findByPullRequest(pullRequest)
+
+        val rangedThreads = allThreads.filterIsInstance<CodeCommentThread>().let { ranged ->
+            if (!commitId.isNullOrEmpty()) {
+                ranged.filter { it.commitId == commitId }
+            } else {
+                ranged.filter { !it.isCommitComment() }
+                    .filter { !codeReviewService.isThreadOutdated(it.id!!) }
+            }
+        }
+
+        val nonRangedThreads = allThreads.filterIsInstance<NonRangedCodeCommentThread>()
+            .filter { commitId.isNullOrEmpty() || it.commitId == commitId }
+
+        return rangedThreads + nonRangedThreads
+    }
+
     private fun viewChangesInternal(
         owner: String,
         projectName: String,
@@ -383,7 +417,7 @@ class PullRequestViewController(
             emptyList()
         }
 
-        val commentThreads = commentThreadRepository.findByPullRequest(pullRequest)
+        val commentThreads = buildCommentThreadsForChanges(pullRequest, commitId)
         val referredIssues = getReferredIssues(pullRequest)
 
         model.addAttribute("project", project)

@@ -7,7 +7,10 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CodeCommentThread
+import com.github.search5.yona.domain.pullrequest.CodeReviewService
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.NonRangedCodeCommentThread
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
@@ -52,6 +55,8 @@ class PullRequestViewControllerSpec : DescribeSpec({
     val pullRequestEventRepository = mockk<PullRequestEventRepository>()
     val pullRequestCommitRepository = mockk<PullRequestCommitRepository>()
     val issueRepository = mockk<IssueRepository>()
+    val codeReviewService = mockk<CodeReviewService>()
+    every { codeReviewService.isThreadOutdated(any()) } returns false
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -80,7 +85,8 @@ class PullRequestViewControllerSpec : DescribeSpec({
         pullRequestEventRepository,
         pullRequestCommitRepository,
         issueRepository,
-        accessControl
+        accessControl,
+        codeReviewService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(pullRequestViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -313,6 +319,46 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("pullrequest/view"))
                     .andExpect(model().attributeExists("project", "pr", "diffs", "mergeResult"))
             }
+
+            // yona PullRequest.java:1063-1103 getCodeCommentThreadsForChanges() 대응 (P1-114).
+            // commitId 없이 조회하는 "전체 변경사항"에서는 커밋 단위 스레드(isCommitComment)와
+            // outdated 스레드를 제외하고, NonRangedCodeCommentThread는 필터링 없이 그대로 포함해야 한다.
+            it("commentThreads는 커밋단위/outdated 스레드를 제외하고 non-ranged 스레드는 그대로 포함해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 906L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.attemptMerge(50L) } returns PullRequestMergeResult(pullRequest = pullRequest)
+                every { pullRequestService.getDiff(pullRequest) } returns emptyList()
+
+                val outdatedThread = CodeCommentThread(
+                    id = 801L, pullRequest = pullRequest, prevCommitId = "prev1", commitId = "commit1"
+                )
+                val validThread = CodeCommentThread(
+                    id = 802L, pullRequest = pullRequest, prevCommitId = "prev2", commitId = "commit2"
+                )
+                val commitCommentThread = CodeCommentThread(
+                    id = 803L, pullRequest = pullRequest, prevCommitId = "", commitId = "commit3"
+                )
+                val nonRangedThread = NonRangedCodeCommentThread(
+                    id = 804L, pullRequest = pullRequest, prevCommitId = "prev4", commitId = "commit4"
+                )
+                every { commentThreadRepository.findByPullRequest(pullRequest) } returns
+                    listOf(outdatedThread, validThread, commitCommentThread, nonRangedThread)
+                every { pullRequestCommitRepository.findByPullRequest(pullRequest) } returns emptyList()
+                every { codeReviewService.isThreadOutdated(801L) } returns true
+                every { codeReviewService.isThreadOutdated(802L) } returns false
+
+                val result = mockMvc.perform(get("/owner/TestProj/pull/1/changes").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andReturn()
+
+                val commentThreads = result.modelAndView!!.model["commentThreads"] as List<*>
+                val ids = commentThreads.map { (it as com.github.search5.yona.domain.pullrequest.CommentThread).id }
+                ids shouldBe listOf(802L, 804L)
+            }
         }
 
         describe("GET /{owner}/{projectName}/pullRequest/{number}/changes/{commitId}") {
@@ -334,6 +380,40 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("pullrequest/view"))
                     .andExpect(model().attributeExists("project", "pr", "diffs", "commitId"))
+            }
+
+            // yona PullRequest.java:1074-1077 대응 (P1-114). commitId를 지정해 조회할 때는 outdated
+            // 여부와 무관하게 그 커밋에 달린 스레드만 노출해야 한다(다른 커밋 스레드는 제외).
+            it("commitId 지정 조회 시 해당 커밋의 스레드만 commentThreads에 포함해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 907L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.attemptMerge(50L) } returns PullRequestMergeResult(pullRequest = pullRequest)
+                every { pullRequestService.getDiff(pullRequest, "abcdefg") } returns emptyList()
+
+                val matchingThread = CodeCommentThread(
+                    id = 811L, pullRequest = pullRequest, prevCommitId = "", commitId = "abcdefg"
+                )
+                val otherThread = CodeCommentThread(
+                    id = 812L, pullRequest = pullRequest, prevCommitId = "", commitId = "zzzzzzz"
+                )
+                val matchingNonRanged = NonRangedCodeCommentThread(
+                    id = 813L, pullRequest = pullRequest, prevCommitId = "", commitId = "abcdefg"
+                )
+                every { commentThreadRepository.findByPullRequest(pullRequest) } returns
+                    listOf(matchingThread, otherThread, matchingNonRanged)
+                every { pullRequestCommitRepository.findByPullRequest(pullRequest) } returns emptyList()
+
+                val result = mockMvc.perform(get("/owner/TestProj/pullRequest/1/changes/abcdefg").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andReturn()
+
+                val commentThreads = result.modelAndView!!.model["commentThreads"] as List<*>
+                val ids = commentThreads.map { (it as com.github.search5.yona.domain.pullrequest.CommentThread).id }
+                ids shouldBe listOf(811L, 813L)
             }
         }
 
