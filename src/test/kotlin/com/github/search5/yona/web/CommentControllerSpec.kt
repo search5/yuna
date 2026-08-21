@@ -265,6 +265,46 @@ class CommentControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.contents").value("수정된게시판댓글"))
             }
+
+            it("original이 현재 댓글 내용과 일치하면 정상적으로 수정해야 한다 (P1-107)") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+
+                val updatedComment = PostingComment(id = 200L, contents = "수정된게시판댓글", posting = posting, authorId = user.id, authorLoginId = user.loginId, authorName = user.name)
+                every { commentService.updatePostingComment(200L, "수정된게시판댓글", user) } returns updatedComment
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/200")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정된게시판댓글\", \"original\": \"게시판댓글\"}")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.contents").value("수정된게시판댓글"))
+            }
+
+            it("original이 현재 댓글 내용과 다르면 409 Conflict와 storedContent를 반환하고 저장하지 않아야 한다 (P1-107)") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/200")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정된게시판댓글\", \"original\": \"다른사람이 이미 바꾼 내용\"}")
+                )
+                    .andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.message").value("Already modified by someone."))
+                    .andExpect(jsonPath("$.storedContent").value("게시판댓글"))
+
+                verify(exactly = 0) { commentService.updatePostingComment(any(), any(), any()) }
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/posts/{number}/comments/{commentId} (게시글 댓글 삭제)") {

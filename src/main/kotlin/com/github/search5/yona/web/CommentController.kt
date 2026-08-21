@@ -164,6 +164,9 @@ class CommentController(
     }
 
     // 게시판 댓글 수정
+    // yona BoardApi.java:198-238 updatePostingComment() 대응 (P1-107). request.original이 전달되면
+    // 저장 직전 화면 원문과 현재 DB 값을 비교해 그 사이 다른 사용자가 이미 수정했는지 확인, 다르면
+    // 409(conflicted)로 거부한다 — updateIssueComment(P1-102)와 동일한 패턴.
     @PutMapping("/api/projects/{projectId}/posts/{number}/comments/{commentId}")
     fun updatePostingComment(
         @PathVariable projectId: Long,
@@ -171,7 +174,7 @@ class CommentController(
         @PathVariable commentId: Long,
         @RequestBody request: CommentRequest,
         authentication: Authentication?
-    ): ResponseEntity<PostingComment> {
+    ): ResponseEntity<Any> {
         val project = projectRepository.findById(projectId).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
@@ -189,6 +192,12 @@ class CommentController(
 
         if (comment.authorId != user.id && !isManager) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val original = request.original
+        if (original != null && isModifiedByOthers(comment.contents, original)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(mapOf("message" to "Already modified by someone.", "storedContent" to comment.contents))
         }
 
         val updated = commentService.updatePostingComment(commentId, request.contents, user)
