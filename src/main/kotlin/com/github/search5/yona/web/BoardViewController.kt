@@ -175,7 +175,11 @@ class BoardViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
+        // yona BoardApp.java:119 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113). 공개 프로젝트의
+        // 비멤버 로그인 사용자도 게시글을 쓸 수 있는데(다른 리소스 타입과 동일 규칙), 여기서는
+        // 프로젝트 멤버/그룹멤버로만 좁게 검사해 yona보다 과도하게 제한하고 있었다 — yuna
+        // IssueViewController.createIssueForm이 이미 쓰고 있는 정답 패턴을 그대로 재사용.
+        if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.BOARD_POST)) {
             return "error/403"
         }
 
@@ -322,9 +326,10 @@ class BoardViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
 
-        if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) &&
-            !accessControl.isAllowedIfGroupMember(project, loginUser)
-        ) {
+        // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113). 공개 프로젝트의
+        // 비멤버 로그인 사용자도 게시글을 쓸 수 있는데, 여기서는 프로젝트 멤버/그룹멤버로만 좁게
+        // 검사해 yona보다 과도하게 제한하고 있었다 — createPostForm과 동일한 정답 패턴으로 교체.
+        if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.BOARD_POST)) {
             return "error/403"
         }
 

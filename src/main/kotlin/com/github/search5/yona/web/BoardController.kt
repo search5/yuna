@@ -5,6 +5,7 @@ import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.board.PostingService
 import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -42,10 +43,12 @@ class BoardController(
         return accessControl.isAllowed(user, project, Operation.READ)
     }
 
+    // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113). 공개 프로젝트의
+    // 비멤버 로그인 사용자도 게시글을 쓸 수 있는데, 여기서는 프로젝트 멤버/그룹멤버로만 좁게 검사해
+    // yona보다 과도하게 제한하고 있었다. 이 함수는 createPosting()에서만 쓰이므로(UPDATE/DELETE는
+    // 별도의 더 엄격한 규칙을 씀) 안전하게 생성 권한 규칙으로 교체한다.
     private fun checkWritePermission(project: Project, user: User?): Boolean {
-        if (user == null) return false
-        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            accessControl.isAllowedIfGroupMember(project, user)
+        return accessControl.isProjectResourceCreatable(user, project, ResourceType.BOARD_POST)
     }
 
     // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE(15) 대응 (P1-105). 게시글 목록은 이슈와 달리
