@@ -300,5 +300,62 @@ class BoardViewControllerSpec : DescribeSpec({
                 }
             }
         }
+
+        // yona BoardApp.newPost()의 README 게시글 중복 생성 방지 대응 (P1-109).
+        describe("POST /{owner}/{projectName}/posts - README 게시글 중복 생성 방지") {
+            it("이미 README 게시글이 있으면 새로 만들지 않고 기존 게시글을 수정해야 한다") {
+                val existingReadme = Posting(id = 50L, number = 3L, title = "옛 README", body = "옛 본문", readme = true, project = project)
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { postingRepository.findByProjectAndReadme(project, true) } returns listOf(existingReadme)
+                every { postingService.getPosting(1L, 3L) } returns existingReadme
+                every {
+                    postingService.updatePosting(1L, 3L, "새 README", "새 본문", false, true, 10L, false)
+                } returns existingReadme
+
+                val request = PostingForm(title = "새 README", body = "새 본문", readme = true)
+
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
+
+                result shouldBe "redirect:/owner/TestProj"
+                verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
+                verify(exactly = 1) { postingService.updatePosting(1L, 3L, "새 README", "새 본문", false, true, 10L, false) }
+            }
+
+            it("README 게시글이 아직 없으면 정상적으로 새로 생성해야 한다") {
+                val savedPosting = Posting(id = 60L, number = 4L, title = "첫 README", body = "본문", readme = true, project = project)
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { postingRepository.findByProjectAndReadme(project, true) } returns emptyList()
+                every { postingService.createPosting(1L, any(), 10L) } returns savedPosting
+
+                val request = PostingForm(title = "첫 README", body = "본문", readme = true)
+
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
+
+                result shouldBe "redirect:/owner/TestProj"
+                verify(exactly = 1) { postingService.createPosting(1L, any(), 10L) }
+            }
+        }
+
+        // yona BoardApp.newPost()의 issueTemplate write-path 대응 (P1-110).
+        describe("POST /{owner}/{projectName}/posts - issueTemplate 커밋 경로") {
+            it("issueTemplate=true면 게시글을 생성하지 않고 프로젝트 홈으로 리다이렉트해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+
+                val request = PostingForm(title = "이슈 템플릿", body = "템플릿 내용", issueTemplate = "true")
+
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
+
+                result shouldBe "redirect:/owner/TestProj"
+                verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
+            }
+        }
     }
 })

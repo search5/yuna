@@ -328,6 +328,30 @@ class BoardViewController(
             return "error/403"
         }
 
+        // yona BoardApp.newPost()의 "if (post.readme) { Posting readmePosting = ...; if (readmePosting
+        // != null) return editPost(...); }" 대응 (P1-109) — README 게시글은 프로젝트당 하나만 존재해야
+        // 하는데, 이미 있으면 새로 만들지 않고 기존 것을 수정하는 editPost로 위임한다(같은 요청의
+        // request/authentication을 그대로 재사용 — legacy도 같은 폼 데이터를 재바인딩해 in-process로
+        // editPost를 호출하는 것과 동일).
+        if (request.readme == true) {
+            val existingReadme = postingRepository.findByProjectAndReadme(project, true).firstOrNull()
+            if (existingReadme != null) {
+                return editPost(owner, projectName, existingReadme.number!!, request, authentication)
+            }
+        }
+
+        // yona BoardApp.newPost()의 "if (post.issueTemplate.equals("true")) { commitIssueTemplateFile(...);
+        // return redirect(...); }" 대응 (P1-110) — 게시글 DB 행을 만들지 않고 ISSUE_TEMPLATE.md만 커밋.
+        if (request.issueTemplate == "true") {
+            try {
+                val bare = BareCommit(project, loginUser, gitBaseDir)
+                bare.commitTextFile("ISSUE_TEMPLATE.md", request.body ?: "", request.title)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return "redirect:/$owner/$projectName"
+        }
+
         val posting = Posting(
             title = request.title,
             body = request.body ?: "",
@@ -385,6 +409,8 @@ data class PostingForm(
     var notice: Boolean? = false,
     var readme: Boolean? = false,
     var temporaryUploadFiles: String? = null,
-    var sendNotificationMail: Boolean? = false
+    var sendNotificationMail: Boolean? = false,
+    // yona Posting.java:37 issueTemplate 대응 (P1-110) — "true"일 때 게시글 대신 ISSUE_TEMPLATE.md로 커밋.
+    var issueTemplate: String? = null
 )
 
