@@ -206,8 +206,13 @@
                 <img th:src="@{/{owner}/{projectName}/rawcode/{branch}/{path}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, path=${path})}" style="max-width: 100%; border: 1px solid #ddd;"/>
               </div>
 
+              <!-- 마크다운 파일인 경우 (yona partial_view_file.scala.html:109-114 isMarkdownExtension() 대응, P1-139) -->
+              <div th:if="${markdownHtml != null and !fileInfo.get('mimeType')?.asText()?.startsWith('image/')}" id="codeVal" class="markdown-wrap codebrowser-markdown">
+                <div th:utext="${markdownHtml}">Rendered markdown</div>
+              </div>
+
               <!-- 일반 소스 코드 텍스트인 경우 -->
-              <div th:if="${!fileInfo.get('mimeType')?.asText()?.startsWith('image/')}" style="position: relative;">
+              <div th:if="${markdownHtml == null and !fileInfo.get('mimeType')?.asText()?.startsWith('image/')}" style="position: relative;">
                 <pre class="code-wrap"><code id="code-content" th:text="${fileInfo.get('data')?.asText()}">Code content</code></pre>
               </div>
             </div>

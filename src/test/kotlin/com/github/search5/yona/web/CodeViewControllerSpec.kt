@@ -34,6 +34,7 @@ class CodeViewControllerSpec : DescribeSpec({
     val repositoryService = mockk<RepositoryService>()
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val commitCommentRepository = mockk<CommitCommentRepository>()
+    val markdownService = mockk<com.github.search5.yona.domain.support.MarkdownService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -58,7 +59,8 @@ class CodeViewControllerSpec : DescribeSpec({
         repositoryService,
         commentThreadRepository,
         commitCommentRepository,
-        accessControl
+        accessControl,
+        markdownService
     )
 
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
@@ -131,6 +133,42 @@ class CodeViewControllerSpec : DescribeSpec({
                     .andExpect(model().attribute("branches", listOf("refs/heads/main", "refs/heads/dev")))
                     .andExpect(model().attribute("branch", "main"))
                     .andExpect(model().attribute("path", "src/Main.kt"))
+            }
+
+            // yona views/code/partial_view_file.scala.html:109-114 isMarkdownExtension() 분기 대응 (P1-139).
+            it(".md 파일이면 렌더링된 마크다운 HTML을 markdownHtml 모델 속성으로 담아야 한다") {
+                val objectMapper = ObjectMapper()
+                val mockNode = objectMapper.createObjectNode()
+                mockNode.put("type", "file")
+                mockNode.put("data", "# 제목")
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
+                every { repositoryService.getRepository(project) } returns playRepo
+                every { playRepo.getRefNames() } returns listOf("refs/heads/main")
+                every { repositoryService.getMetaDataFromAncestorDirectories(playRepo, "main", "README.md") } returns listOf(mockNode)
+                every { markdownService.renderFileInCodeBrowser("# 제목", project) } returns "<h1>제목</h1>"
+
+                mockMvc.perform(get("/testowner/testproject/code/main/README.md"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/view"))
+                    .andExpect(model().attribute("markdownHtml", "<h1>제목</h1>"))
+            }
+
+            it(".md가 아닌 일반 파일이면 markdownHtml 모델 속성을 담지 않아야 한다") {
+                val objectMapper = ObjectMapper()
+                val mockNode = objectMapper.createObjectNode()
+                mockNode.put("type", "file")
+                mockNode.put("data", "fun main() {}")
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
+                every { repositoryService.getRepository(project) } returns playRepo
+                every { playRepo.getRefNames() } returns listOf("refs/heads/main")
+                every { repositoryService.getMetaDataFromAncestorDirectories(playRepo, "main", "src/Main.kt") } returns listOf(mockNode)
+
+                mockMvc.perform(get("/testowner/testproject/code/main/src/Main.kt"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/view"))
+                    .andExpect(model().attributeDoesNotExist("markdownHtml"))
             }
 
             it("[Test-12-2-1] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 상세 경로 접근 시 403 Forbidden을 반환해야 한다") {
