@@ -135,10 +135,13 @@ class CommentControllerSpec : DescribeSpec({
                 verify(exactly = 1) { commentService.createIssueComment(50L, "답글", user, 100L) }
             }
 
-            it("권한이 없는 멤버가 호출 시 403 Forbidden을 반환해야 한다") {
+            // P2-34: AccessControl.isResourceCreatable() 이식 후, 프로젝트 READ 권한이 아니라
+            // 이슈 작성자/담당자/공유대상 우회 + 프로젝트 생성권한으로 판단한다 — 이 이슈의 작성자도
+            // 담당자도 공유대상도 아니고 프로젝트 멤버도 아닌 사용자는 403.
+            it("이슈 작성자/담당자/공유대상도 아니고 프로젝트 멤버도 아닌 사용자가 호출 시 403 Forbidden을 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
-                every { projectUserRepository.existsByProjectIdAndUserId(1L, 20L) } returns false
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
 
                 mockMvc.perform(
                     post("/api/projects/1/issues/5/comments")
@@ -147,6 +150,27 @@ class CommentControllerSpec : DescribeSpec({
                         .content("{\"contents\": \"이슈댓글\"}")
                 )
                     .andExpect(status().isForbidden)
+            }
+
+            // P2-34: yona AccessControl.java isAllowedIfAuthor() 우회 대응 — 프로젝트 비멤버라도
+            // 이슈 작성자라면 댓글을 달 수 있다.
+            it("프로젝트 비멤버라도 이슈 작성자라면 201 Created를 반환해야 한다") {
+                val nonMemberAuthor = User(id = 30L, loginId = "issueauthor", name = "이슈작성자")
+                val authoredIssue = Issue(id = 51L, number = 7L, title = "비멤버작성이슈", body = "내용", project = project, authorId = nonMemberAuthor.id)
+                val authorAuth = UsernamePasswordAuthenticationToken("issueauthor", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("issueauthor") } returns Optional.of(nonMemberAuthor)
+                every { issueRepository.findByProjectAndNumber(project, 7L) } returns authoredIssue
+                every { commentService.createIssueComment(51L, "이슈댓글", nonMemberAuthor) } returns issueComment
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/7/comments")
+                        .principal(authorAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"이슈댓글\"}")
+                )
+                    .andExpect(status().isCreated)
             }
         }
 
@@ -280,6 +304,44 @@ class CommentControllerSpec : DescribeSpec({
                     .andExpect(status().isCreated)
 
                 verify(exactly = 1) { commentService.createPostingComment(60L, "답글", user, 200L) }
+            }
+
+            // P2-34: AccessControl.isResourceCreatable() 이식 후, 프로젝트 READ 권한이 아니라
+            // 게시글 작성자 우회 + 프로젝트 생성권한으로 판단한다 — 작성자도 아니고 프로젝트
+            // 멤버도 아닌 사용자는 403.
+            it("게시글 작성자도 아니고 프로젝트 멤버도 아닌 사용자가 호출 시 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { postingRepository.findByProjectAndNumber(project, 6L) } returns posting
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts/6/comments")
+                        .principal(otherAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"게시판댓글\"}")
+                )
+                    .andExpect(status().isForbidden)
+            }
+
+            // P2-34: yona AccessControl.java isAllowedIfAuthor() 우회 대응 — 프로젝트 비멤버라도
+            // 게시글 작성자라면 댓글을 달 수 있다.
+            it("프로젝트 비멤버라도 게시글 작성자라면 201 Created를 반환해야 한다") {
+                val nonMemberAuthor = User(id = 31L, loginId = "postauthor", name = "게시글작성자")
+                val authoredPosting = Posting(id = 61L, number = 8L, title = "비멤버작성글", body = "내용", project = project, authorId = nonMemberAuthor.id)
+                val authorAuth = UsernamePasswordAuthenticationToken("postauthor", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("postauthor") } returns Optional.of(nonMemberAuthor)
+                every { postingRepository.findByProjectAndNumber(project, 8L) } returns authoredPosting
+                every { commentService.createPostingComment(61L, "게시판댓글", nonMemberAuthor) } returns postingComment
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts/8/comments")
+                        .principal(authorAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"게시판댓글\"}")
+                )
+                    .andExpect(status().isCreated)
             }
         }
 

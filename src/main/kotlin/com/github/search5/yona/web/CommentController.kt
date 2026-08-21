@@ -46,6 +46,10 @@ class CommentController(
     }
 
     // 이슈 댓글 생성
+    // yona IssueApp.java:959-973 newComment() 대응 (P2-34) — 프로젝트 READ 권한이 아니라
+    // AccessControl.isResourceCreatable()(ISSUE_COMMENT 케이스)로 판단한다. 프로젝트 멤버가 아니어도
+    // 그 이슈의 작성자/담당자/공유대상이면 댓글을 달 수 있다(legacy isAllowedIfAuthor/isAllowedIfAssignee/
+    // isAllowedIfSharer 우회) — 이 판단에 이슈 자체가 필요해 이슈 조회를 권한체크보다 먼저 한다(legacy와 동일 순서).
     @PostMapping("/api/projects/{projectId}/issues/{number}/comments")
     fun createIssueComment(
         @PathVariable projectId: Long,
@@ -57,12 +61,13 @@ class CommentController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!checkReadPermission(project, user)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
-        }
 
         val issue = issueRepository.findByProjectAndNumber(project, number)
             ?: return ResponseEntity.notFound().build()
+
+        if (!accessControl.isIssueCommentCreatable(user, project, issue)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
 
         val savedComment = commentService.createIssueComment(issue.id!!, request.contents, user, request.parentCommentId)
         return ResponseEntity.status(HttpStatus.CREATED).body(savedComment)
@@ -141,6 +146,10 @@ class CommentController(
     }
 
     // 게시판 댓글 생성
+    // yona BoardApp.java:396-425 newComment() 대응 (P2-34) — 프로젝트 READ 권한이 아니라
+    // AccessControl.isResourceCreatable()(NONISSUE_COMMENT 케이스)로 판단한다. 프로젝트 멤버가
+    // 아니어도 그 게시글의 작성자면 댓글을 달 수 있다(legacy isAllowedIfAuthor 우회) — 이 판단에
+    // 게시글 자체가 필요해 게시글 조회를 권한체크보다 먼저 한다(legacy와 동일 순서).
     @PostMapping("/api/projects/{projectId}/posts/{number}/comments")
     fun createPostingComment(
         @PathVariable projectId: Long,
@@ -152,12 +161,13 @@ class CommentController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!checkReadPermission(project, user)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
-        }
 
         val posting = postingRepository.findByProjectAndNumber(project, number)
             ?: return ResponseEntity.notFound().build()
+
+        if (!accessControl.isPostingCommentCreatable(user, project, posting)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
 
         val savedComment = commentService.createPostingComment(posting.id!!, request.contents, user, request.parentCommentId)
         return ResponseEntity.status(HttpStatus.CREATED).body(savedComment)

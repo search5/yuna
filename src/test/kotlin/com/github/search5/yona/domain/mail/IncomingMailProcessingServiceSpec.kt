@@ -30,6 +30,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserIdent
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
@@ -174,6 +175,31 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
 
             result shouldBe listOf(IncomingMailOutcome.IssueCommentCreated(200L, 50L))
             verify(exactly = 0) { issueService.createIssue(any(), any(), any(), any(), any()) }
+        }
+
+        // yona IssueApp.java:1004-1011 newReferComment()의 isResourceCreatable() 거부 분기 대응
+        // (P2-34) — 비공개 프로젝트에서 발신자가 그 이슈의 작성자/담당자/공유대상도 아니고 프로젝트
+        // 멤버도 아니면, 메일 답장으로도 댓글을 달 수 없고 조용히 Rejected를 반환한다(legacy도 forbidden
+        // 대신 로그만 남기고 조용히 무시).
+        it("비공개 프로젝트에서 이슈 작성자/담당자/공유대상이 아니고 프로젝트 멤버도 아니면 댓글 생성 없이 Rejected를 반환해야 한다") {
+            val privateProject = Project(id = 11L, name = "secret", owner = "dlab", projectScope = ProjectScope.PRIVATE)
+            every { projectRepository.findByOwnerAndName("dlab", "secret") } returns Optional.of(privateProject)
+
+            val originalIssueEmail = OriginalEmail(
+                id = 2L, messageId = "<original2@mail.example.com>",
+                resourceType = ResourceType.ISSUE_POST, resourceId = "51"
+            )
+            every { originalEmailRepository.findByMessageId("<original2@mail.example.com>") } returns Optional.of(originalIssueEmail)
+
+            val privateIssue = Issue(id = 51L, title = "비공개 이슈", body = "...", project = privateProject, number = 1L, authorId = 999L)
+            every { issueRepository.findById(51L) } returns Optional.of(privateIssue)
+
+            val result = service.process(
+                baseMessage(recipients = listOf("yona+dlab/secret@example.com"), inReplyTo = "<original2@mail.example.com>")
+            )
+
+            result.filterIsInstance<IncomingMailOutcome.Rejected>() shouldHaveSize 1
+            verify(exactly = 0) { commentService.createIssueComment(any(), any(), any()) }
         }
 
         it("References가 같은 프로젝트의 기존 게시글을 가리키면 게시글 댓글을 생성해야 한다") {
