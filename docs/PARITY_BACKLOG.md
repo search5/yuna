@@ -166,7 +166,7 @@
 | P1-116 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰/커밋 댓글 삭제 권한이 "작성자 또는 MANAGER"로 과도 제한(P1-90~95와 동일 유형이나 조사 누락) | `AccessControl.java` | `CodeReviewServiceImpl.hasPermission()` | **완료(아래 완료 로그 참고)** |
 | P1-117 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 조직 그룹 기반 담당자 후보(조직 관리자/멤버/사이트매니저) 확장 로직 없음 | `User.java` | `ProjectMemberController.assignableUsers()` | **완료(아래 완료 로그 참고)** |
 | P1-118 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** 사이트관리자 전용 벌크 사용자 생성(`newUser`)/API 전용 토큰 로그인(`newToken`)/사용자 전체 조회·상태변경(`users`/`updateUserState`) API 부재 | `UserApi.java` | `UserController.kt` | **완료(아래 완료 로그 참고)** |
-| P1-119 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** `loginId=="admin"`이면 상태 무관 항상 `isSiteManager=true`로 판정하는 yona에 없는 하드코딩 분기 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `User.kt`, `UserDetailsServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-119 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** `loginId=="admin"`이면 상태 무관 항상 `isSiteManager=true`로 판정하는 yona에 없는 하드코딩 분기 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `User.kt`, `UserDetailsServiceImpl.kt` | **완료(아래 완료 로그 참고)** |
 | P1-120 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `HIDE_PROJECT_LISTING` 403 체크 및 `@GuestProhibit` 미이식 | `OrganizationApp.java` | `OrganizationViewController.orgList()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-121 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 게스트 계정 조직 생성 차단(`@GuestProhibit`) 미이식 | `OrganizationApp.java` | `OrganizationViewController.createOrganization()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-122 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 중복 가입 신청 가드 없어 재신청 시 알림 중복 발행(Project P1-16과 동일 유형, 대칭 미적용) | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.enroll()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -243,6 +243,12 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-119**: `User.isSiteManager`/`UserDetailsServiceImpl.loadUserByUsername()`의 `loginId=="admin"` 하드코딩 우회 분기 제거(권한 상승 소지가 있는 yuna 자체 버그, 대응하는 yona 소스 없음).
+  - yona 원본 재확인: `User.java:563-569 isSiteManager()`는 별도 `SiteAdmin` 테이블 소속 여부(`SiteAdmin.exists(this)`)로만 판단하고 `loginId`를 특별 취급하지 않음. yuna는 이 개념을 `User.state == UserState.SITE_ADMIN` 하나로 흡수하는 설계 자체는(이미 이전에 확립된) 정당한 스키마 단순화이나, 그 위에 `|| loginId == "admin"`을 추가로 얹은 부분은 legacy에 없는 순수 yuna 버그 — `admin`이라는 로그인ID를 가진 계정이면 실제 상태(잠김/탈퇴 등)와 무관하게 항상 사이트관리자 권한을 갖게 되는 문제.
+  - `UserDetailsServiceImpl.kt`에도 동일한 `username == "admin"` 우회가 중복돼 있어 `ROLE_SITE_ADMIN`/`ROLE_ADMIN` Spring Security 권한까지 함께 부여되고 있었음 — 두 곳 모두 제거.
+  - 코드베이스 전수 확인 결과 이 우회 분기에 실제로 의존하는 테스트/부트스트랩 로직은 없음(기존 `loginId="admin"` 픽스처는 전부 `state = UserState.SITE_ADMIN`도 함께 설정하고 있었음).
+  - 테스트: 신규 `UserSpec.kt`(3건)/`UserDetailsServiceImplSpec.kt`(2건) — 둘 다 "loginId가 admin이어도 state가 SITE_ADMIN이 아니면 권한 없음"을 검증. 수정 전 실행해 실패(RED) 확인 후 코드 수정으로 통과(GREEN) 확인.
 
 - **2026-08-21 — P1-118**: `UserApi.java`의 site-manager 전용 API 4종(`newUser`/`newToken`/`users`/`updateUserState`)을 `UserController.kt`에 신규 이식.
   - 착수 전 `newToken`(아이디+비밀번호로 API 토큰 발급)이 로컬 비밀번호 인증을 전제로 하는데 yuna 로그인은 OAuth2 전용으로 재설계된 것처럼 보여(BCrypt/PasswordEncoder 코드 전무) 아키텍처 차이로 판단해 사용자에게 처리 방향을 확인 — 이후 `AuthController.signup()`/`YonaAuthenticationProvider`를 재확인한 결과 **로컬 비밀번호 인증(Shiro Sha256Hash+salt+1024회 반복과 동일한 알고리즘)이 이미 완전히 구현돼 있었음**을 확인(오판이었음, 사용자 승인 후 진행 방향은 동일하게 유지: 전부 이식).
