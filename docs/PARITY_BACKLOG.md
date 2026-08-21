@@ -178,7 +178,7 @@
 | P1-128 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** orderBy/orderDir 정렬 파라미터 및 완료율 정렬 로직 전체 없음 | `MilestoneApp.java` | `MilestoneViewController.listMilestones()` | **완료(아래 완료 로그 참고)** |
 | P1-129 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 벌크 마일스톤 임포트 API 전체 미이식(단건 생성만 지원) | `MilestoneApi.java` | `MilestoneController.kt` | **완료(아래 완료 로그 참고)** |
 | P1-130 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** ORGANIZATION/COMMIT_COMMENT/REVIEW_COMMENT/USER_AVATAR에서 `isAllowedAttachment()` 미재사용, 원본 업로더 전용으로 과잉 제한 — 단, 원 서술의 예시 시나리오는 재확인 결과 부정확했음: yona도 ORGANIZATION/USER_AVATAR는 사이트매니저가 아니면 삭제 불가(조직 관리자도 불가)라 이 두 타입은 yuna와 결과가 같음. 실제 과잉 제한이 재현되는 지점은 COMMIT_COMMENT/REVIEW_COMMENT — yona는 이 두 타입을 project-scoped ATTACHMENT로 취급해 프로젝트 멤버 누구나 UPDATE 가능하지만, yuna `deleteFile()`은 이 두 타입도 명시 케이스 없이 catch-all(업로더 전용)로 처리해 일반 멤버가 차단됨. | `AccessControl.java` | `AttachmentController.deleteFile()` | **완료(아래 완료 로그 참고)** |
-| P1-131 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 감시/즐겨찾기 도메인)** 감시자 목록이 명시적 Watch row만 반환, 작성자/담당자/투표자/프로젝트감시자 합산 및 권한 필터 없음 | `WatcherApi.getWatchers()` | `WatchController.getWatchers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-131 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 감시/즐겨찾기 도메인)** 감시자 목록이 명시적 Watch row만 반환, 작성자/담당자/투표자/프로젝트감시자 합산 및 권한 필터 없음 | `WatcherApi.getWatchers()` | `WatchController.getWatchers()` | **완료(아래 완료 로그 참고)** |
 | P1-132 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** 모든 이벤트 텍스트 메시지에 리소스 링크 전혀 없음 | `Webhook.buildRequestMessage()` | `WebhookServiceImpl.buildTextMessage()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-133 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** DETAIL_SLACK attachment의 이슈 필드 축소, PR attachment는 완전 미지원 | `Webhook.buildIssueDetails/buildJsonWithPullReqtuestDetails` | `WebhookServiceImpl.buildPayload()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-134 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** Hangout Chat 스레드 키가 댓글 이벤트에서 부모 리소스가 아닌 댓글 자신으로 계산돼 스레드 그룹핑 무력화 — 재확인 결과 범위가 이슈/게시글 댓글보다 넓음: yona `Webhook.java:480`은 PR 리뷰 댓글(REVIEW_COMMENT)도 부모 PullRequest를 스레드 키로 쓰는데, yuna `WebhookNotificationEventListener.resolveResource()`는 REVIEW_COMMENT/COMMIT_COMMENT 둘 다 댓글 자신을 반환해 동일 패턴이 재발함(단, CommitComment는 yona Webhook.java에 대응 오버로드 자체가 없어 이 부분만은 회귀보다 "yuna 신규 기능의 자기 불일치"에 가까움). | `Webhook.java`(threadJSON) | `WebhookNotificationEventListener.resolveResource()` | 2026-08-21 백엔드 전수 감사에서 발견, Serena 재검증 과정에서 서술 정정·보강됨. 착수 여부는 사용자 결정 대기 |
@@ -246,6 +246,12 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-131**: `WatchController.getWatchers()`가 명시적 Watch row만 반환하던 것을 yona `AbstractPosting.getWatchers()`/`Issue.getWatchers()`(→ `Watch.findActualWatchers()`) 대응으로 교체.
+  - yona 알고리즘: baseWatchers(이슈는 담당자+투표자, 게시글은 없음) + 작성자 + 명시적 Watch row + 프로젝트 감시자를 합산하고, 명시적 Unwatch는 제외, 읽기 권한 없는 사용자는 필터링.
+  - yuna에는 이미 이 정확한 알고리즘이 `WatchService.findActualWatchers(baseWatchers, resourceType, resourceId, projectId, allowedWatchersOnly=true, eventType=null)`로 구현돼 있었음(P1-21/22에서 구축, 다른 알림 발행 코드 전반에서 이미 재사용 중) — `WatchController`만 이걸 안 쓰고 `findWatchers()`(명시적 row만)를 직접 호출하고 있었다. `eventType`을 생략(null)하면 yona에 없는 뮤트 필터(P1-22, 알림 발행 전용 확장)가 자동으로 비활성화되어 정확히 yona의 3-인자 `Watch.findActualWatchers()`와 동치.
+  - `getWatchers()`에서 이슈는 `assignee.user`+`voters`+작성자를, 게시글은 작성자만 baseWatchers로 구성해 전달. LIMIT=100 절단 로직(yona `WatcherApi.java`)도 함께 이식.
+  - 테스트: `WatchControllerSpec.kt` +1(명시적으로 감시 신청한 적 없는 작성자/담당자/투표자도 감시자 목록에 포함), 기존 2건도 `findWatchers` → `findActualWatchers` 목킹으로 정정. 전체 통과.
 
 - **2026-08-21 — P1-130**: `AttachmentController.deleteFile()`의 `COMMIT_COMMENT`/`REVIEW_COMMENT` 첨부파일 삭제 권한을 컨테이너(커밋/리뷰 댓글)의 UPDATE 권한으로 위임하도록 수정.
   - `deleteFile()`은 ISSUE_POST/BOARD_POST/MILESTONE는 각각 전용 헬퍼(`isAllowedToUpdateIssue` 등)로 컨테이너에 위임하면서, COMMIT_COMMENT/REVIEW_COMMENT는 명시 케이스가 없어 catch-all(업로더 본인 또는 사이트매니저만)로 떨어져 일반 프로젝트 멤버가 차단되고 있었음.

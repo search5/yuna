@@ -206,28 +206,40 @@ class WatchController(
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
 
-        val watchers = when (type.lowercase()) {
+        // yona AbstractPosting.getWatchers()/Issue.getWatchers()의 Watch.findActualWatchers()
+        // (작성자/담당자/투표자 + 명시적 Watch row + 프로젝트 감시자 합산, 읽기 권한 없는 사용자
+        // 필터링) 대응 (P1-131). 명시적 Watch row만 반환하던 것을 watchService.findActualWatchers()
+        // 재사용으로 교체한다.
+        val watchers: Set<User> = when (type.lowercase()) {
             "issues" -> {
                 val issue = issueRepository.findByProjectAndNumber(project, number)
                     ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "이슈를 찾을 수 없습니다.")
-                watchService.findWatchers(ResourceType.ISSUE_POST, issue.id.toString())
+                val baseWatchers = mutableSetOf<User>()
+                issue.assignee?.user?.let { baseWatchers.add(it) }
+                baseWatchers.addAll(issue.voters)
+                issue.authorId?.let { authorId -> userRepository.findById(authorId).ifPresent { baseWatchers.add(it) } }
+                watchService.findActualWatchers(baseWatchers, ResourceType.ISSUE_POST, issue.id.toString(), project.id)
             }
             "posts" -> {
                 val posting = postingRepository.findByProjectAndNumber(project, number)
                     ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "게시글을 찾을 수 없습니다.")
-                watchService.findWatchers(ResourceType.BOARD_POST, posting.id.toString())
+                val baseWatchers = mutableSetOf<User>()
+                posting.authorId?.let { authorId -> userRepository.findById(authorId).ifPresent { baseWatchers.add(it) } }
+                watchService.findActualWatchers(baseWatchers, ResourceType.BOARD_POST, posting.id.toString(), project.id)
             }
             else -> emptySet()
         }
 
-        val watcherDtos = watchers.map {
+        // yona WatcherApi.java:26-58의 LIMIT=100 대응.
+        val limited = watchers.take(100)
+        val watcherDtos = limited.map {
             WatcherDto(name = it.name, url = "/user/${it.loginId}")
         }
 
         return ResponseEntity.ok(
             WatchersResponse(
                 totalWatchers = watchers.size,
-                watchersInList = watchers.size,
+                watchersInList = limited.size,
                 watchers = watcherDtos
             )
         )

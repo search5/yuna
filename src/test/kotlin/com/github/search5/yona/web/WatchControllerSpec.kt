@@ -179,7 +179,9 @@ class WatchControllerSpec : DescribeSpec({
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
-                every { watchService.findWatchers(ResourceType.ISSUE_POST, "100") } returns setOf(user1, user2)
+                every {
+                    watchService.findActualWatchers(any(), ResourceType.ISSUE_POST, "100", project.id)
+                } returns setOf(user1, user2)
 
                 mockMvc.perform(get("/-_-api/v1/owners/owner/projects/TestProj/posts/5/watchers")
                     .param("type", "issues"))
@@ -190,12 +192,43 @@ class WatchControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.watchers[0].url").value("/user/user1"))
             }
 
+            // yona AbstractPosting.getWatchers()/Issue.getWatchers()의 Watch.findActualWatchers()
+            // (작성자/담당자/투표자 + 명시적 Watch row + 프로젝트 감시자 합산) 대응 (P1-131). 명시적으로
+            // Watch 행을 만든 적 없는 작성자/담당자/투표자도 baseWatchers로 넘겨져 감시자에 포함돼야 한다.
+            it("명시적으로 감시 신청을 한 적 없는 작성자/담당자/투표자도 감시자 목록에 포함되어야 한다") {
+                val author = User(id = 30L, loginId = "author1", name = "작성자1")
+                val assigneeUser = User(id = 31L, loginId = "assignee1", name = "담당자1")
+                val voter = User(id = 32L, loginId = "voter1", name = "투표자1")
+                val issue = Issue(
+                    id = 101L, number = 6L, title = "Test Issue 2", project = project,
+                    authorId = 30L,
+                    assignee = com.github.search5.yona.domain.issue.Assignee(id = 1L, user = assigneeUser, project = project),
+                    voters = mutableSetOf(voter)
+                )
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 6L) } returns issue
+                every { userRepository.findById(30L) } returns Optional.of(author)
+                val baseWatchersSlot = io.mockk.slot<Set<User>>()
+                every {
+                    watchService.findActualWatchers(capture(baseWatchersSlot), ResourceType.ISSUE_POST, "101", project.id)
+                } answers { baseWatchersSlot.captured }
+
+                mockMvc.perform(get("/-_-api/v1/owners/owner/projects/TestProj/posts/6/watchers")
+                    .param("type", "issues"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.totalWatchers").value(3))
+                    .andExpect(jsonPath("$.watchers[*].name", org.hamcrest.Matchers.containsInAnyOrder("작성자1", "담당자1", "투표자1")))
+            }
+
             it("type이 posts일 때 해당 게시글의 감시자 JSON 정보를 올바르게 반환해야 한다") {
                 val posting = Posting(id = 200L, number = 3L, title = "Test Post", project = project)
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { postingRepository.findByProjectAndNumber(project, 3L) } returns posting
-                every { watchService.findWatchers(ResourceType.BOARD_POST, "200") } returns setOf(user2)
+                every {
+                    watchService.findActualWatchers(any(), ResourceType.BOARD_POST, "200", project.id)
+                } returns setOf(user2)
 
                 mockMvc.perform(get("/-_-api/v1/owners/owner/projects/TestProj/posts/3/watchers")
                     .param("type", "posts"))
