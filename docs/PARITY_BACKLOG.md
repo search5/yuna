@@ -165,6 +165,16 @@
 
 ---
 
+## P3 — 신규 인프라 개선 (yona 동치성과 무관)
+
+yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라 "yuna를 실제 운영 가능한 서비스로 만들기 위한 신규 도입" 성격이라 위 P0~P2(동치성 회귀)와는 판단 기준이 다르다 — TDD/JaCoCo 진행 규칙은 동일하게 적용하되, "yona 원본과 대조"가 아니라 "설계 검토 후 구현"이 완료 기준이다.
+
+| # | 상태 | 제목 | 비고 |
+|---|---|---|---|
+| P3-01 | [ ] | Observability(메트릭/로깅/트레이싱) 인프라 도입 | **2026-08-21 사용자 제안, 현재 상태 검증 완료**: `build.gradle.kts`에 `spring-boot-starter-actuator`+`micrometer-registry-prometheus` 의존성 이미 포함(27-28행), `application.yml`에 `/actuator/health`,`/actuator/prometheus` 노출 설정도 이미 있음(105-109행) — **그러나 커스텀 메트릭 코드(`MeterRegistry`/`@Timed`/`Counter.builder`)가 저장소 전체에 0건**이라 JVM/HTTP 기본 지표만 나가고 비즈니스 지표(알림 발송량, 웹훅 성공률, IMAP 폴링 상태, PR 재병합 소요시간 등)는 전혀 없음 확인. 구조화 로깅(`logback-spring.xml`)도 없어 기본 텍스트 로그뿐이고, 분산 트레이싱 의존성도 없음(`micrometer-tracing` 등 미포함) — `@Async`/`@EventListener` 체인이 많아(웹훅 발송/PR 재병합/알림메일 다이제스트 등) 트레이싱 부재가 특히 아쉬운 지점. 구성 제안: 메트릭→기존 Prometheus 스크랩, 로그→`logstash-encoder`+Loki/Promtail, 트레이싱→`micrometer-tracing-bridge-otel`+OTLP+Tempo/Jaeger, 대시보드→Grafana(K3s+Traefik 홈랩 구성 기준). **계측 지점 후보 6곳**(전부 실존 클래스 확인됨): (1) `domain/notification/NotificationEventRecorder.kt`의 `record()` — 전체 알림이 거치는 단일 지점, `eventType`/`resourceType` 태그 카운터 하나로 시스템 전체 활동량 파악 (2) `IssueEvent`/`PullRequestEvent`의 draft-time 병합 확장함수(P1-38/40 대응) — "새 이벤트 저장" vs "직전 이벤트 병합" 비율 (3) `domain/notification/NotificationMailDigestScheduler.kt` — 60초 배치 처리시간, 원시 이벤트 대비 병합된 메일 수(병합률), 발송 성공/실패, 발송 대기 큐 적체 게이지 (4) `domain/mail/ImapMailboxPoller.kt` — 폴링 사이클 소요시간, 처리 메시지 수, UID 재동기화 발생 카운터(IMAP 서버 재시작 등 엣지케이스 알람감) (5) `domain/event/PullRequestMergeEventListener.kt` — 처리 PR 수, `attemptMerge` 소요시간, 충돌 상태 전이(없음→발생/발생→해소) 카운터(P1-52의 5종 부수효과 실제 발동 검증용) (6) `domain/webhook/WebhookNotificationEventListener.kt`+`domain/vcs/GitPushHooks.kt` — 웹훅 발송 성공/실패(HTTP status 태그)+응답시간, git push 훅 처리시간+`PushedBranch` 갱신 건수. 착수 여부 및 우선순위(메트릭부터 vs 6곳 한번에)는 사용자 결정 대기 |
+
+---
+
 ## 완료 로그
 
 - **2026-08-20 — P1-86(구 P2-12)**: 이슈 담당자(assignee) 기반 권한 오버라이드를 쓰기 엔드포인트 전체에 일관 적용.
