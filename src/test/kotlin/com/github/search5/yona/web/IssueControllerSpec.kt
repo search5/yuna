@@ -594,5 +594,48 @@ class IssueControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.status").value("success"))
             }
         }
+
+        // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101).
+        describe("POST /api/projects/{projectId}/issues/{issueId}/upvoteWeight") {
+            it("프로젝트 멤버가 이슈 가중치를 +1 하면 갱신된 weight를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueService.upvoteWeight(5L) } returns issue.also { it.weight = 1 }
+
+                mockMvc.perform(post("/api/projects/1/issues/5/upvoteWeight").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.weight").value(1))
+
+                verify(exactly = 1) { issueService.upvoteWeight(5L) }
+            }
+
+            it("프로젝트 멤버가 아니면 403 Forbidden을 반환하고 서비스를 호출하지 않아야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/1/issues/5/upvoteWeight").principal(otherAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.upvoteWeight(any()) }
+            }
+        }
+
+        describe("POST /api/projects/{projectId}/issues/{issueId}/downvoteWeight") {
+            it("프로젝트 멤버가 이슈 가중치를 -1 하면 갱신된 weight를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueService.downvoteWeight(5L) } returns issue.also { it.weight = -1 }
+
+                mockMvc.perform(post("/api/projects/1/issues/5/downvoteWeight").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.weight").value(-1))
+
+                verify(exactly = 1) { issueService.downvoteWeight(5L) }
+            }
+        }
     }
 })

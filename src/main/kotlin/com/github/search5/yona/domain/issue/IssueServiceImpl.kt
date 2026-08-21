@@ -557,6 +557,22 @@ class IssueServiceImpl(
         issueRepository.save(issue)
     }
 
+
+    // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101).
+    override fun upvoteWeight(issueId: Long): Issue {
+        val issue = issueRepository.findById(issueId)
+            .orElseThrow { IllegalArgumentException("Issue not found: $issueId") }
+        issue.weight = issue.weight + 1
+        return issueRepository.save(issue)
+    }
+
+    override fun downvoteWeight(issueId: Long): Issue {
+        val issue = issueRepository.findById(issueId)
+            .orElseThrow { IllegalArgumentException("Issue not found: $issueId") }
+        issue.weight = issue.weight - 1
+        return issueRepository.save(issue)
+    }
+
     override fun unvoteIssue(issueId: Long, user: User) {
         val issue = issueRepository.findById(issueId)
             .orElseThrow { IllegalArgumentException("Issue not found: $issueId") }

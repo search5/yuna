@@ -447,6 +447,36 @@ class IssueServiceSpec @Autowired constructor(
                 }
             }
 
+            // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101). 이슈에
+            // +1/-1 가중치를 매기는 기능 — Issue.voters(공감 투표)와는 별개의 정수 카운터.
+            it("이슈 가중치(weight)를 증감시킬 수 있어야 한다") {
+                val author = userRepository.save(
+                    User(loginId = "weight-tester", name = "가중치테스터", email = "weight-tester@yona.io")
+                )
+                val project = projectRepository.save(
+                    Project(name = "weight-project", owner = "weight-tester")
+                )
+                val issue = issueRepository.save(
+                    Issue(
+                        title = "가중치 테스트 이슈", body = "본문", project = project,
+                        authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                        createdDate = Instant.now()
+                    )
+                )
+                issue.weight shouldBe 0
+
+                val upvoted = issueService.upvoteWeight(issue.id!!)
+                upvoted.weight shouldBe 1
+                issueRepository.findById(issue.id!!).get().weight shouldBe 1
+
+                val upvotedAgain = issueService.upvoteWeight(issue.id!!)
+                upvotedAgain.weight shouldBe 2
+
+                val downvoted = issueService.downvoteWeight(issue.id!!)
+                downvoted.weight shouldBe 1
+                issueRepository.findById(issue.id!!).get().weight shouldBe 1
+            }
+
             it("사용자가 이슈 댓글에 투표를 던지거나 취소할 수 있어야 한다") {
                 // Given
                 val author = userRepository.save(
