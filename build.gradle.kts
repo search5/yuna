@@ -76,6 +76,11 @@ dependencies {
 	// JExcelAPI (Legacy Yona Excel support)
 	implementation("net.sourceforge.jexcelapi:jxl:2.6.12")
 
+	// Apache Tika (yona FileUtil.detectMediaType()의 콘텐츠 기반 MIME 감지 대응, P2-25) — 확장자가
+	// 없는 해시 파일명(SHA-256 원문 저장 방식) 그대로 JDK Files.probeContentType()에 넘기면 사실상
+	// 항상 감지 실패해 모든 첨부가 application/octet-stream으로 저장된다.
+	implementation("org.apache.tika:tika-core:2.9.2")
+
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.security:spring-security-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

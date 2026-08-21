@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.attachment
 
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.support.FileUtil
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -67,8 +68,12 @@ class AttachmentServiceImpl(
             return existing to false
         }
 
+        // yona FileUtil.detectMediaType(file, name) 대응 (P2-25) — 해시 파일명(targetFile)의 실제
+        // 콘텐츠를 Tika로 감지하고, 원본 파일명(name)은 힌트로만 넘긴다. 기존 Files.probeContentType()은
+        // 사실상 확장자 기반이라 확장자 없는 해시 파일명에서 거의 항상 application/octet-stream으로
+        // 오탐했다.
         val mimeType = try {
-            Files.probeContentType(targetFile.toPath())
+            FileUtil.detectMediaType(targetFile, name)
         } catch (e: Exception) {
             "application/octet-stream"
         }
@@ -78,7 +83,7 @@ class AttachmentServiceImpl(
             hash = hash,
             containerType = containerType,
             containerId = containerId,
-            mimeType = mimeType ?: "application/octet-stream",
+            mimeType = mimeType,
             size = size,
             createdDate = Instant.now(),
             ownerLoginId = ownerLoginId
