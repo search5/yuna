@@ -176,7 +176,7 @@
 | P1-126 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직/프로젝트 그룹 멘션 확장 없음, `@owner/project` 정규식 매칭도 불가 | `NotificationEvent.getMentionedUsers()` | `CommentServiceImpl.extractMentionedUsers()` | **완료(아래 완료 로그 참고)** |
 | P1-127 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 신규 이슈/게시글/PR 생성 시 본문 `@멘션` 알림 수신자 계산 자체가 없음 | `NotificationEvent.java` | `IssueServiceImpl/PostingServiceImpl/PullRequestServiceImpl` 생성 로직 | **완료(아래 완료 로그 참고)** |
 | P1-128 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** orderBy/orderDir 정렬 파라미터 및 완료율 정렬 로직 전체 없음 | `MilestoneApp.java` | `MilestoneViewController.listMilestones()` | **완료(아래 완료 로그 참고)** |
-| P1-129 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 벌크 마일스톤 임포트 API 전체 미이식(단건 생성만 지원) | `MilestoneApi.java` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-129 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 벌크 마일스톤 임포트 API 전체 미이식(단건 생성만 지원) | `MilestoneApi.java` | `MilestoneController.kt` | **완료(아래 완료 로그 참고)** |
 | P1-130 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** ORGANIZATION/COMMIT_COMMENT/REVIEW_COMMENT/USER_AVATAR에서 `isAllowedAttachment()` 미재사용, 원본 업로더 전용으로 과잉 제한 — 단, 원 서술의 예시 시나리오는 재확인 결과 부정확했음: yona도 ORGANIZATION/USER_AVATAR는 사이트매니저가 아니면 삭제 불가(조직 관리자도 불가)라 이 두 타입은 yuna와 결과가 같음. 실제 과잉 제한이 재현되는 지점은 COMMIT_COMMENT/REVIEW_COMMENT — yona는 이 두 타입을 project-scoped ATTACHMENT로 취급해 프로젝트 멤버 누구나 UPDATE 가능하지만, yuna `deleteFile()`은 이 두 타입도 명시 케이스 없이 catch-all(업로더 전용)로 처리해 일반 멤버가 차단됨. | `AccessControl.java` | `AttachmentController.deleteFile()` | 2026-08-21 백엔드 전수 감사에서 발견, Serena 재검증 과정에서 서술 정정·보강됨. 착수 여부는 사용자 결정 대기 |
 | P1-131 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 감시/즐겨찾기 도메인)** 감시자 목록이 명시적 Watch row만 반환, 작성자/담당자/투표자/프로젝트감시자 합산 및 권한 필터 없음 | `WatcherApi.getWatchers()` | `WatchController.getWatchers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-132 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** 모든 이벤트 텍스트 메시지에 리소스 링크 전혀 없음 | `Webhook.buildRequestMessage()` | `WebhookServiceImpl.buildTextMessage()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -246,6 +246,13 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-129**: `MilestoneController`에 `POST /api/projects/{projectId}/milestones/bulk` 신규 추가 — yona `controllers/api/MilestoneApi.java newMilestone()`(GitHub 이슈 임포트 등에서 쓰는 벌크 마일스톤 생성) 대응.
+  - 권한은 기존 단건 생성과 동일하게 `accessControl.isProjectResourceCreatable(user, project, ResourceType.MILESTONE)` 재사용(yona `@IsCreatable(ResourceType.MILESTONE)` 대응 — `MILESTONE`은 `AccessControl.isProjectResourceCreatable()`의 공개 프로젝트 비멤버 허용 목록에 없어 site manager/조직관리자/멤버/그룹멤버만 가능).
+  - 각 항목은 프로젝트 내 제목 유일성을 먼저 검사(`milestoneRepository.findByProjectAndTitle`)해 중복이면 생성하지 않고 `{milestone, message}` 형태로, 성공하면 `MigrationApp.getMilestoneNode()`와 동일한 `{id, title, state, description, due_on}` 형태로 응답 — legacy와 동일하게 배열 내 항목마다 응답 스키마가 다르다.
+  - **구현 중 발견**: 기존 `MilestoneServiceImpl.createMilestone()`이 `state`를 항상 `OPEN`으로 강제 덮어써서(다른 목적의 단건 생성 경로 보호용으로 보임) 이 서비스 메서드를 그대로 쓰면 CLOSED 상태 마일스톤을 임포트할 수 없어, 벌크 생성 경로는 `milestoneRepository.save()`를 직접 호출하도록 우회(기존 단건 생성 API/서비스 메서드는 건드리지 않음).
+  - `due_on` 파싱은 yona `JodaDateUtil.lastSecondOfDay()`(날짜/일시 모두 파싱해 그날 23:59:59로 정규화) 대응.
+  - 테스트: `MilestoneControllerSpec.kt` +2(비멤버 403 + 저장 미호출, 중복 제목은 메시지만·새 제목은 CLOSED 상태로 정상 저장) — 신규 생성자 파라미터(`milestoneRepository`) 반영. 전체 통과.
 
 - **2026-08-21 — P1-128**: `MilestoneViewController.listMilestones()`에 yona `MilestoneApp.java`(`MilestoneCondition.orderBy`/`orderDir`, 기본값 `dueDate`/`asc`) + `Milestone.java:188-230 findMilestones()` 정렬 로직 대응.
   - UI가 노출하는 정렬 기준은 `dueDate`(DB 컬럼, `Sort`로 위임)와 `completionRate`(계산 필드, DB 컬럼이 아님) 둘뿐(`milestone/list.scala.html`의 `makeFilterLink` 2곳으로 확인) — yona도 `completionRate`일 때만 DB 정렬을 건너뛰고 조회 후 `Collections.sort()`로 별도 재정렬하는 특별 케이스를 두고 있어 동일하게 이식.
