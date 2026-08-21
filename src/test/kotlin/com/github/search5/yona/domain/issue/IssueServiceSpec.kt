@@ -3,6 +3,7 @@ package com.github.search5.yona.domain.issue
 import com.github.search5.yona.AbstractIntegrationTest
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.TitleHeadRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.enumeration.State
@@ -38,7 +39,8 @@ class IssueServiceSpec @Autowired constructor(
     private val issueLabelRepository: IssueLabelRepository,
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
     private val watchRepository: WatchRepository,
-    private val projectUserRepository: ProjectUserRepository
+    private val projectUserRepository: ProjectUserRepository,
+    private val titleHeadRepository: TitleHeadRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -53,6 +55,7 @@ class IssueServiceSpec @Autowired constructor(
                 issueLabelRepository.deleteAll()
                 issueLabelCategoryRepository.deleteAll()
                 milestoneRepository.deleteAll()
+                titleHeadRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
             }
@@ -875,6 +878,51 @@ class IssueServiceSpec @Autowired constructor(
                     shouldThrow<IllegalArgumentException> {
                         issueService.publishIssue(999999L, author)
                     }
+                }
+            }
+
+            // yona AbstractPosting.save()/AbstractPostingApp.editPosting()의 TitleHead 연동 대응 (P1-103).
+            describe("createIssue/updateIssue의 TitleHead(제목 머리말 자동완성) 연동") {
+                it("createIssue로 대괄호 머리말이 있는 제목을 만들면 TitleHead가 빈도 1로 저장되어야 한다") {
+                    val author = userRepository.save(User(loginId = "th-author1", name = "작성자", email = "th1@yona.io"))
+                    val project = projectRepository.save(Project(name = "th-proj1", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+
+                    issueService.createIssue(issue = Issue(title = "[Bug] 로그인 오류", body = "본문", project = project), author = author)
+
+                    val found = titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "Bug")
+                    found shouldNotBe null
+                    found!!.frequency shouldBe 1
+                }
+
+                it("updateIssue로 제목을 바꾸면 새 머리말은 생기고 예전 머리말은 사라져야 한다") {
+                    val author = userRepository.save(User(loginId = "th-author2", name = "작성자2", email = "th2@yona.io"))
+                    val project = projectRepository.save(Project(name = "th-proj2", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val issue = issueService.createIssue(issue = Issue(title = "[Bug] 로그인 오류", body = "본문", project = project), author = author)
+
+                    issueService.updateIssue(
+                        issueId = issue.id!!,
+                        title = "[Feature] 새 기능",
+                        body = "본문",
+                        updater = author
+                    )
+
+                    titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "Bug") shouldBe null
+                    titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "Feature")!!.frequency shouldBe 1
+                }
+
+                it("updateIssue를 호출해도 제목의 머리말이 그대로면 빈도가 순변화 없이 유지되어야 한다") {
+                    val author = userRepository.save(User(loginId = "th-author3", name = "작성자3", email = "th3@yona.io"))
+                    val project = projectRepository.save(Project(name = "th-proj3", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val issue = issueService.createIssue(issue = Issue(title = "[Bug] 로그인 오류", body = "본문", project = project), author = author)
+
+                    issueService.updateIssue(
+                        issueId = issue.id!!,
+                        title = "[Bug] 로그인 오류(내용만 수정)",
+                        body = "수정된 본문",
+                        updater = author
+                    )
+
+                    titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "Bug")!!.frequency shouldBe 1
                 }
             }
         }

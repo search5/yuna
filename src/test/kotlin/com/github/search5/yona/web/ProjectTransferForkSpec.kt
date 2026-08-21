@@ -23,6 +23,7 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.issue.IssueLabelRepository
 
 class ProjectTransferForkSpec : DescribeSpec({
     val projectService = mockk<ProjectService>()
@@ -30,6 +31,8 @@ class ProjectTransferForkSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
     val pushedBranchRepository = mockk<com.github.search5.yona.domain.vcs.PushedBranchRepository>()
+    val titleHeadService = mockk<TitleHeadService>()
+    val issueLabelRepository = mockk<IssueLabelRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -53,7 +56,9 @@ class ProjectTransferForkSpec : DescribeSpec({
         projectUserRepository,
         userRepository,
         pushedBranchRepository,
-        accessControl
+        accessControl,
+        titleHeadService,
+        issueLabelRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(projectController).build()
     val auth = UsernamePasswordAuthenticationToken("gildong", "pass")

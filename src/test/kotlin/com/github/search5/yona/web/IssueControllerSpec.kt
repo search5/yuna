@@ -47,6 +47,7 @@ class IssueControllerSpec : DescribeSpec({
     val attachmentService = mockk<com.github.search5.yona.domain.attachment.AttachmentService>()
     val issueCommentRepository = mockk<IssueCommentRepository>()
     val issueEventRepository = mockk<com.github.search5.yona.domain.issue.IssueEventRepository>()
+    val titleHeadService = mockk<com.github.search5.yona.domain.project.TitleHeadService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -73,14 +74,16 @@ class IssueControllerSpec : DescribeSpec({
         attachmentService,
         issueCommentRepository,
         issueEventRepository,
-        accessControl
+        accessControl,
+        titleHeadService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(issueService, issueRepository, projectRepository, projectUserRepository, userRepository, attachmentService, issueCommentRepository, issueEventRepository)
+        io.mockk.clearMocks(issueService, issueRepository, projectRepository, projectUserRepository, userRepository, attachmentService, issueCommentRepository, issueEventRepository, titleHeadService)
+        every { titleHeadService.deleteTitleHeadKeyword(any(), any()) } returns Unit
     }
 
     describe("IssueController 웹 API 테스트") {
@@ -592,6 +595,22 @@ class IssueControllerSpec : DescribeSpec({
                 mockMvc.perform(delete("/api/projects/1/issues/6").principal(otherAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
+            }
+
+            // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
+            it("이슈를 삭제하면 TitleHead 머리말 정리가 호출되어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
+                every { issueRepository.delete(issue) } returns Unit
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns emptyList()
+                every { attachmentService.deleteAll(com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "5") } returns Unit
+
+                mockMvc.perform(delete("/api/projects/1/issues/5").principal(managerAuth))
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { titleHeadService.deleteTitleHeadKeyword(project, issue.title) }
             }
         }
 

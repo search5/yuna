@@ -2,11 +2,13 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectService
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.project.TitleHeadService
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -24,7 +26,9 @@ class ProjectController(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val pushedBranchRepository: PushedBranchRepository,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val titleHeadService: TitleHeadService,
+    private val issueLabelRepository: IssueLabelRepository
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -250,6 +254,49 @@ class ProjectController(
             return ResponseEntity.notFound().build()
         }
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build()
+    }
+
+    // yona ProjectApi.titleHeads()/getherTitleHeads()/getherProjectLabels()/getTitleHeadNode()/
+    // getIssueLabelNode() 대응 (P1-103). 이슈/게시글 제목 자동완성에 쓰는 "이전에 쓰인 대괄호 머리말
+    // 사용 빈도"와 "프로젝트 이슈 라벨 목록"을 하나의 배열로 합쳐 반환한다(머리말 먼저, 라벨 나중 —
+    // legacy와 동일한 순서).
+    @GetMapping("/api/{owner}/{projectName}/titleHeads")
+    fun titleHeads(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam(required = false, defaultValue = "") query: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!checkReadPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val titleHeadNodes = titleHeadService.search(project, query).map {
+            mapOf(
+                "name" to it.headKeyword,
+                "frequency" to it.frequency,
+                "category" to "",
+                "searchText" to it.headKeyword
+            )
+        }
+        val labelNodes = issueLabelRepository.findByProject(project).map { label ->
+            mapOf(
+                "name" to label.name,
+                "frequency" to 0,
+                "category" to label.category.name,
+                "categoryId" to label.category.id,
+                "id" to label.id,
+                "labelColor" to label.color,
+                "isExclusive" to label.category.isExclusive,
+                "searchText" to "${label.name}/${label.category.name}"
+            )
+        }
+
+        return ResponseEntity.ok(mapOf("result" to (titleHeadNodes + labelNodes)))
     }
 
     // yona ProjectApp.getRecentlyPushedBranches()/partial_recently_pushed_branches.scala.html 대응 (P1-15/24).

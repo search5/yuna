@@ -8,6 +8,7 @@ import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.TitleHeadService
 import com.github.search5.yona.domain.support.HistoryUtil
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -30,7 +31,8 @@ class IssueServiceImpl(
     private val issueCommentRepository: IssueCommentRepository,
     private val watchService: WatchService,
     private val issueEventRepository: IssueEventRepository,
-    private val issueLabelService: IssueLabelService
+    private val issueLabelService: IssueLabelService,
+    private val titleHeadService: TitleHeadService
 ) : IssueService {
 
     override fun createIssue(
@@ -71,6 +73,9 @@ class IssueServiceImpl(
         }
 
         val savedIssue = issueRepository.save(issue)
+
+        // yona AbstractPosting.save()의 TitleHead.saveTitleHeadKeyword() 대응 (P1-103).
+        titleHeadService.saveTitleHeadKeyword(project, savedIssue.title)
 
         // yona IssueApp.newIssue()의 "if (!newIssue.isDraft) { NotificationEvent.afterNewIssue(newIssue); }"
         // 대응 — 초안은 발행(publishIssue) 시점에야 처음 알림이 발행된다.
@@ -149,6 +154,7 @@ class IssueServiceImpl(
         val issue = issueRepository.findById(issueId).orElseThrow { IllegalArgumentException("Issue not found") }
         val oldBody = issue.body
         val oldLabelNames = issue.labels.map { it.name }.sorted()
+        val oldTitle = issue.title
 
         issue.title = title
         issue.body = (body)
@@ -192,6 +198,13 @@ class IssueServiceImpl(
         checkExclusiveLabelCategories(issue.labels)
 
         val savedIssue = issueRepository.save(issue)
+
+        // yona AbstractPostingApp.editPosting()의 "TitleHead.saveTitleHeadKeyword(posting.project,
+        // posting.title); TitleHead.deleteTitleHeadKeyword(original.project, original.title);" 대응
+        // (P1-103). 제목이 안 바뀌었어도 legacy와 동일하게 매 수정마다 무조건 두 호출을 모두 실행한다
+        // (그런 경우 새 키워드 +1/-1이 상쇄돼 관찰 가능한 순변화는 없다).
+        titleHeadService.saveTitleHeadKeyword(savedIssue.project, savedIssue.title)
+        titleHeadService.deleteTitleHeadKeyword(savedIssue.project, oldTitle)
 
         if (oldBody != body) {
             recordIssueEvent(savedIssue, EventType.ISSUE_BODY_CHANGED, updater.loginId!!, oldBody, body)

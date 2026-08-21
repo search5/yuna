@@ -37,6 +37,8 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.issue.IssueLabelRepository
+import com.github.search5.yona.domain.project.TitleHeadService
 
 class ProjectControllerSpec : DescribeSpec({
     val projectService = mockk<ProjectService>()
@@ -44,6 +46,8 @@ class ProjectControllerSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
     val pushedBranchRepository = mockk<PushedBranchRepository>()
+    val titleHeadService = mockk<TitleHeadService>()
+    val issueLabelRepository = mockk<IssueLabelRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -67,12 +71,14 @@ class ProjectControllerSpec : DescribeSpec({
         projectUserRepository,
         userRepository,
         pushedBranchRepository,
-        accessControl
+        accessControl,
+        titleHeadService,
+        issueLabelRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(projectController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectService, projectRepository, projectUserRepository, userRepository, pushedBranchRepository)
+        io.mockk.clearMocks(projectService, projectRepository, projectUserRepository, userRepository, pushedBranchRepository, titleHeadService, issueLabelRepository)
     }
 
     describe("ProjectController 웹 API 테스트") {
@@ -249,6 +255,49 @@ class ProjectControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isNotFound)
+            }
+        }
+
+        // yona ProjectApi.titleHeads()/getherTitleHeads()/getherProjectLabels() 대응 (P1-103).
+        describe("GET /api/{owner}/{projectName}/titleHeads") {
+            val titleHeadProject = Project(id = 50L, name = "th", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "type", isExclusive = false, project = titleHeadProject)
+            val label = com.github.search5.yona.domain.issue.IssueLabel(id = 9L, category = category, color = "#ff0000", name = "bug", project = titleHeadProject)
+
+            it("공개 프로젝트는 비회원도 조회 가능하고, 머리말과 라벨을 합쳐서 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "th") } returns Optional.of(titleHeadProject)
+                every { titleHeadService.search(titleHeadProject, "bu") } returns listOf(
+                    com.github.search5.yona.domain.project.TitleHead(id = 1L, project = titleHeadProject, headKeyword = "Bug", frequency = 3)
+                )
+                every { issueLabelRepository.findByProject(titleHeadProject) } returns listOf(label)
+
+                mockMvc.perform(get("/api/owner/th/titleHeads").param("query", "bu"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.result[0].name").value("Bug"))
+                    .andExpect(jsonPath("$.result[0].frequency").value(3))
+                    .andExpect(jsonPath("$.result[0].searchText").value("Bug"))
+                    .andExpect(jsonPath("$.result[1].name").value("bug"))
+                    .andExpect(jsonPath("$.result[1].category").value("type"))
+                    .andExpect(jsonPath("$.result[1].labelColor").value("#ff0000"))
+                    .andExpect(jsonPath("$.result[1].searchText").value("bug/type"))
+            }
+
+            it("query 파라미터가 없으면 빈 문자열로 전체 조회해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "th") } returns Optional.of(titleHeadProject)
+                every { titleHeadService.search(titleHeadProject, "") } returns emptyList()
+                every { issueLabelRepository.findByProject(titleHeadProject) } returns emptyList()
+
+                mockMvc.perform(get("/api/owner/th/titleHeads"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.result").isArray)
+            }
+
+            it("비공개 프로젝트는 비회원이 조회하면 403을 반환해야 한다") {
+                val privateTitleHeadProject = Project(id = 51L, name = "th-priv", owner = "owner", projectScope = ProjectScope.PRIVATE)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "th-priv") } returns Optional.of(privateTitleHeadProject)
+
+                mockMvc.perform(get("/api/owner/th-priv/titleHeads"))
+                    .andExpect(status().isForbidden)
             }
         }
 

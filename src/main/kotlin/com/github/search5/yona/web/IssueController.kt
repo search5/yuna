@@ -26,6 +26,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueEventRepository
+import com.github.search5.yona.domain.project.TitleHeadService
 import com.github.search5.yona.domain.support.isModifiedByOthers
 import com.github.search5.yona.domain.support.sha1Hex
 
@@ -40,7 +41,8 @@ class IssueController(
     private val attachmentService: AttachmentService,
     private val issueCommentRepository: IssueCommentRepository,
     private val issueEventRepository: IssueEventRepository,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val titleHeadService: TitleHeadService
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -298,6 +300,8 @@ class IssueController(
         }
 
         attachmentService.deleteAll(ResourceType.ISSUE_POST, issue.id.toString())
+        // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
+        titleHeadService.deleteTitleHeadKeyword(issue.project, issue.title)
         issueRepository.delete(issue)
         return ResponseEntity.ok(mapOf("status" to "success"))
     }
