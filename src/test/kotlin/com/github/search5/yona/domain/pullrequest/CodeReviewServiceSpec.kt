@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.pullrequest
 
 import com.github.search5.yona.AbstractIntegrationTest
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.project.Project
@@ -85,7 +86,8 @@ class CodeReviewServiceSpec @Autowired constructor(
     private val attachmentService: com.github.search5.yona.domain.attachment.AttachmentService,
     private val commentService: com.github.search5.yona.domain.comment.CommentService,
     private val watchService: com.github.search5.yona.domain.watch.WatchService,
-    private val pullRequestService: PullRequestService
+    private val pullRequestService: PullRequestService,
+    private val accessControl: AccessControl
 ) : AbstractIntegrationTest() {
 
     init {
@@ -539,7 +541,7 @@ class CodeReviewServiceSpec @Autowired constructor(
                     commentThreadRepository, reviewCommentRepository, pullRequestRepository, repositoryService,
                     userRepository, throwingRecorder, commitCommentRepository, eventPublisher,
                     projectUserRepository, attachmentService, pullRequestCommitRepository, commentService,
-                    watchService, pullRequestService
+                    watchService, pullRequestService, accessControl
                 )
 
                 // 예외가 이 메서드 밖으로 전파되지 않아야 한다(전파되면 @Transactional에 의해
@@ -613,6 +615,62 @@ class CodeReviewServiceSpec @Autowired constructor(
                     codeReviewService.deleteReviewComment(commentId, otherUser)
                 }
                 exception.message shouldBe "Permission denied"
+            }
+
+            // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). 삭제 권한이
+            // "작성자 또는 프로젝트 role==MANAGER"로만 좁게 구현돼 있었으나, yona는 사이트매니저/조직관리자도
+            // 항상 우회할 수 있다 — 이 우회가 yuna에는 빠져 있어 사이트관리자조차 타인의 리뷰/커밋 댓글을
+            // 지울 수 없는 과도한 제한이었다.
+            it("사이트관리자는 작성자도 프로젝트 매니저도 아니어도 타인의 리뷰 댓글을 삭제할 수 있어야 한다") {
+                val siteAdmin = userRepository.save(
+                    User(loginId = "siteadmin", name = "사이트관리자", email = "siteadmin@yona.io", state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN)
+                )
+
+                val codeRange = CodeRange(
+                    path = "src/main/kotlin/App.kt",
+                    startSide = CodeRange.Side.B,
+                    startLine = 10,
+                    startColumn = 0,
+                    endSide = CodeRange.Side.B,
+                    endLine = 10,
+                    endColumn = 0
+                )
+
+                val comment = codeReviewService.createReviewComment(
+                    project = project,
+                    pullRequest = pullRequest,
+                    commitId = "1234567890abcdef",
+                    contents = "삭제될 리뷰",
+                    codeRange = codeRange,
+                    threadId = null,
+                    currentUser = user
+                )
+                val commentId = comment.id!!
+
+                codeReviewService.deleteReviewComment(commentId, siteAdmin)
+
+                reviewCommentRepository.findById(commentId).isPresent shouldBe false
+            }
+
+            it("사이트관리자는 작성자도 프로젝트 매니저도 아니어도 타인의 커밋 댓글을 삭제할 수 있어야 한다") {
+                val siteAdmin = userRepository.save(
+                    User(loginId = "siteadmin2", name = "사이트관리자2", email = "siteadmin2@yona.io", state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN)
+                )
+
+                val comment = codeReviewService.createCommitComment(
+                    project = project,
+                    commitId = "1234567890abcdef",
+                    contents = "커밋에 대한 댓글",
+                    path = null,
+                    line = null,
+                    side = null,
+                    currentUser = user
+                )
+                val commentId = comment.id!!
+
+                codeReviewService.deleteCommitComment(commentId, siteAdmin)
+
+                commitCommentRepository.findById(commentId).isPresent shouldBe false
             }
 
             describe("isThreadOutdated (P1-20, yona CodeCommentThread.isOutdated() 대응)") {

@@ -1,5 +1,7 @@
 package com.github.search5.yona.domain.pullrequest
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
@@ -13,7 +15,6 @@ import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.comment.CommentService
-import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.watch.WatchService
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -37,7 +38,8 @@ class CodeReviewServiceImpl(
     private val pullRequestCommitRepository: PullRequestCommitRepository,
     private val commentService: CommentService,
     private val watchService: WatchService,
-    private val pullRequestService: PullRequestService
+    private val pullRequestService: PullRequestService,
+    private val accessControl: AccessControl
 ) : CodeReviewService {
 
     private val logger = LoggerFactory.getLogger(CodeReviewServiceImpl::class.java)
@@ -207,9 +209,13 @@ class CodeReviewServiceImpl(
 
         val thread = comment.thread ?: throw IllegalStateException("Comment has no associated thread.")
         val threadId = thread.id ?: throw IllegalStateException("Thread has no id.")
-        val projectId = thread.project?.id ?: thread.pullRequest?.toProject?.id
+        // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). 작성자 또는
+        // 프로젝트 role==MANAGER로만 좁게 검사하던 것을, 사이트매니저/조직관리자 우회까지 포함하는
+        // AccessControl.isAllowed(user, project, reviewComment, Operation)로 교체.
+        val project = thread.project ?: thread.pullRequest?.toProject
+            ?: throw IllegalStateException("Comment has no associated project.")
 
-        if (!hasPermission(projectId, comment.author?.id, currentUser.id)) {
+        if (!accessControl.isAllowed(currentUser, project, comment, Operation.DELETE)) {
             throw IllegalArgumentException("Permission denied")
         }
 
@@ -283,21 +289,17 @@ class CodeReviewServiceImpl(
         val comment = commitCommentRepository.findById(commentId)
             .orElseThrow { IllegalArgumentException("CommitComment not found for id: $commentId") }
 
-        if (!hasPermission(comment.project?.id, comment.author?.id, currentUser.id)) {
+        // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). deleteReviewComment와
+        // 동일하게 사이트매니저/조직관리자 우회를 포함하는 AccessControl.isAllowed()로 교체.
+        val project = comment.project ?: throw IllegalStateException("Comment has no associated project.")
+        if (!accessControl.isAllowed(currentUser, project, comment, Operation.DELETE)) {
             throw IllegalArgumentException("Permission denied")
         }
 
         commitCommentRepository.delete(comment)
     }
 
-    private fun hasPermission(projectId: Long?, commentAuthorId: Long?, requestUserId: Long?): Boolean {
-        if (requestUserId == null) return false
-        if (commentAuthorId == requestUserId) return true
-        if (projectId == null) return false
-        return projectUserRepository.findByProjectIdAndUserId(projectId, requestUserId)
-            .map { it.role.id == RoleType.MANAGER.roleType }
-            .orElse(false)
-    }
+    
 
     override fun updateThreadState(
         threadId: Long,
