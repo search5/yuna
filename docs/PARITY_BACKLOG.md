@@ -170,7 +170,7 @@
 | P1-120 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `HIDE_PROJECT_LISTING` 403 체크 및 `@GuestProhibit` 미이식 | `OrganizationApp.java` | `OrganizationViewController.orgList()` | **완료(아래 완료 로그 참고)** |
 | P1-121 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 게스트 계정 조직 생성 차단(`@GuestProhibit`) 미이식 | `OrganizationApp.java` | `OrganizationViewController.createOrganization()` | **완료(아래 완료 로그 참고)** |
 | P1-122 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 중복 가입 신청 가드 없어 재신청 시 알림 중복 발행(Project P1-16과 동일 유형, 대칭 미적용) | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.enroll()` | **완료(아래 완료 로그 참고)** |
-| P1-123 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 대기 신청 여부 확인 없이 무조건 취소 알림 발행, isGuest 가드도 없음 | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.cancelEnroll()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-123 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 대기 신청 여부 확인 없이 무조건 취소 알림 발행, isGuest 가드도 없음 | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.cancelEnroll()` | **완료(아래 완료 로그 참고)** |
 | P1-124 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 조직 로고 업로드 시 이미지 타입/크기(`LOGO_FILE_LIMIT_SIZE`) 검증 미이식 | `OrganizationApp.java` | `OrganizationViewController.updateOrganization()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-125 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 멘션 인덱스 엔티티 자체가 yuna에 없음(2, 3번의 근본 원인) | `Mention.java` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-126 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직/프로젝트 그룹 멘션 확장 없음, `@owner/project` 정규식 매칭도 불가 | `NotificationEvent.getMentionedUsers()` | `CommentServiceImpl.extractMentionedUsers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -189,6 +189,7 @@
 | P1-139 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** 코드 브라우저에서 `.md`/README 마크다운 렌더링 자체가 없음(markdownService 호출 0건) | `CodeApp.java`(renderFileInCodeBrowser/renderFileInReadme) | `CodeViewController.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-140 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** lang 오버로드/렌더 캐시 없음, 다이제스트 메일 배치 스레드에서 로케일 미반영 가능성 | `Markdown.render(...,lang)` | `MarkdownService.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-141 | [ ] | **(2026-08-21 백엔드 전수 감사 재검증 중 발견 — PR/코드리뷰 도메인)** PR 생성(`createPullRequest`)이 yona보다 과도하게 제한됨 — yona `PullRequestApp.newPullRequest()`는 `@IsCreatable(ResourceType.FORK)`로 게이트되고 `AccessControl.isProjectResourceCreatable()`의 공개 프로젝트 허용 타입에 `FORK`가 포함돼 있어, 로그인한 비멤버도 공개 프로젝트에 PR을 보낼 수 있다. yuna `PullRequestController.createPullRequest`는 `checkWritePermission`(멤버 또는 그룹멤버만)만 써서 비멤버는 아예 차단됨 — 게시판 결손(P1-113)과 동일 유형의 회귀. | `app/controllers/PullRequestApp.java:253-254`(`@IsCreatable(ResourceType.FORK)`), `app/utils/AccessControl.java:35-80`(`isProjectResourceCreatable`, FORK 포함) | `web/PullRequestController.kt`(`createPullRequest`, `checkWritePermission`) | 2026-08-21 게시판 도메인의 `checkWritePermission` 패턴이 PR 컨트롤러에도 복제된 것을 의심해 직접 확인, 확정. 착수 여부는 사용자 결정 대기 |
+| P1-142 | [x] | **(2026-08-21 P1-123 구현 중 발견)** Organization의 `cancelEnroll()`과 동일한 유형의 결함이 Project 쪽에도 대칭으로 존재 — 대기 신청 여부 확인 없이 무조건 취소 알림 발행, 이미 정식 멤버여도 취소를 거부하지 않음(`EnrollProjectApp.cancelEnroll()`의 `ProjectUser.isGuest()`/`User.enrolled()` 이중 가드 미이식) | `EnrollProjectApp.java:55-71` | `ProjectUserServiceImpl.cancelEnroll()` | P1-123(Organization의 동일 결함) 수정 중 대칭 지점인 `ProjectUserServiceImpl.cancelEnroll()`을 대조하다 동일 결함 발견 — 같은 타이밍에 즉시 수정. **완료(아래 완료 로그 참고)** |
 
 ## P2 — 참고 (경미 / 확인 필요)
 
@@ -229,6 +230,7 @@
 | P2-37 | [ ] | **(2026-08-21 P0-19 구현 중 발견)** 다단계 fork 네트워크에서, fork가 제3의 프로젝트로 보낸 PR에 달린 CommentThread는(thread.project가 그 제3 프로젝트일 경우) 원본 프로젝트 삭제 시 함께 정리되지 않아 PR 삭제 후 고아 CommentThread가 남을 수 있음(매우 드문 edge case, legacy도 동일 범위까지만 처리) | `Project.java` deleteFork()/forkingProjects 루프(동일한 범위 제약을 가짐) | `ProjectServiceImpl.deleteProject()` | P0-19 구현 중 다단계 fork 시나리오를 설계 검토하다 발견 — legacy 자체도 이 경로를 완전히 처리하지 않아 "동일 결함 재현"에 해당, 착수 여부는 사용자 결정 대기 |
 | P2-38 | [ ] | **(2026-08-21 P0-25 구현 중 발견)** 사용자 프로필의 이슈 목록이 `daysAgo` 파라미터로 최근 N일 필터링되지 않고 항상 전체 기간을 반환(화면에는 `daysAgo` 값 자체는 표시됨) | `UserApp.java:754-755 Issue.findRecentlyIssuesByDaysAgo(user, daysAgo)` | `UserViewController.kt userProfile()`(`issueRepository.findByAuthorId`만 호출, daysAgo 미사용) | P0-25(프로필 ACL 필터링) 구현 중 `UserApp.java:752` 주변을 대조하다 발견 — 보안 이슈 아닌 기능 완성도 문제라 별도 등록. 착수 여부는 사용자 결정 대기 |
 | P2-39 | [ ] | **(2026-08-21 P1-114 구현 중 발견)** PR "conversation" 탭이 댓글 스레드(commentThreads)를 이벤트와 함께 시간순 타임라인으로 렌더링하는데, legacy `git/view.scala.html`(conversation 탭 실제 뷰)은 `pull.pullRequestEvents`만 렌더링하고 comment thread는 전혀 표시하지 않음(댓글은 오직 "changes" 탭의 diff 인라인에서만 노출) — P1-106에서 도입된 기능 자체가 원본 범위를 넘어선 것일 수 있음 | `git/view.scala.html`(comment thread 미사용, `partial_pull_request_event`만) | `PullRequestViewController.kt viewPullRequest()` tab=="conversation" 분기(P1-106에서 도입) | P1-114(`getCodeCommentThreadsForChanges` 필터링) 작업 중 "changes"/"conversation" 두 탭의 원본 동작을 대조하다 발견. P1-106을 되돌릴지(unfiltered 유지) 여부는 UX 영향이 있어 사용자 결정 대기 |
+| P2-40 | [ ] | **(2026-08-21 P1-122/123 구현 중 발견)** `OrganizationServiceImpl`의 조직 가입 신청 알림 3곳(`enroll`/`cancelEnroll`/`addOrganizationMember`의 ACCEPT)이 전부 `oldValue="NONE"`을 쓰는데, yona `NotificationEvent.afterOrganizationMemberRequest()`는 REQUEST↔CANCEL을 서로의 oldValue로 교차 기록해(`NONE` 대신) `NotificationEventRecorder`의 30초 draft-window 상쇄 병합(즉시 신청→취소가 알림 0건으로 합쳐지는 P1-27 로직)이 정상 작동하도록 설계되어 있음. yuna는 이 교차 기록이 없어 즉시 신청 후 취소해도 관리자에게 알림이 그대로 나가는(Project 쪽은 이미 올바르게 구현됨, `ProjectUserServiceImpl.enroll/cancelEnroll`의 `oldValue="CANCEL"/"REQUEST"` 참고) 대칭 불일치 | `NotificationEvent.java:1256-1285 afterOrganizationMemberRequest()` | `OrganizationServiceImpl.kt`(`enroll`/`cancelEnroll`/`addOrganizationMember`) | P1-122/123 작업 중 Organization 쪽 알림이 Project와 다른 `oldValue="NONE"` 컨벤션을 쓰고 있어 병합 로직이 무력화되는 것을 발견 — 기능이 완전히 깨진 건 아니고(중복 알림이 아니라 오히려 병합 최적화가 빠진 것) UX 영향 정도라 P2로 등록, 착수 여부는 사용자 결정 대기 |
 
 ---
 
@@ -243,6 +245,18 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-142**: (P1-123 작업 중 발견한 대칭 결함) `ProjectUserServiceImpl.cancelEnroll()`에도 동일한 이중 가드 추가.
+  - yona `EnrollProjectApp.java:55-71`을 재확인한 결과 Organization과 완전히 동일한 패턴(`ProjectUser.isGuest()`=이미 정식 멤버면 거부, `User.enrolled()`=실제 대기 신청 없으면 조용히 무시) — Project 쪽의 `enroll()`은 P1-16에서 이미 고쳐졌지만 `cancelEnroll()`은 그 대칭 결함이 남아 있었음.
+  - `existsByProjectIdAndUserId`(이미 멤버 → 예외) + `user.enrolledProjects.none { it.id == project.id }`(대기 신청 없음 → 조용히 반환) 두 단계 가드 추가.
+  - 테스트: `ProjectUserServiceSpec.kt` +3(대기 신청 없이 취소 시 알림 없음/이미 멤버면 예외/정상 취소 시 목록에서 제거) — 9건째 테스트를 처음엔 "취소 알림 1건 발행"으로 잘못 작성했다가, `NotificationEventRecorder`의 30초 draft-window 상쇄 병합(P1-27, 즉시 REQUEST→CANCEL은 서로 상쇄돼 0건이 되는 게 legacy와 일치하는 정상 동작)을 재확인하고 "알림 0건"으로 정정. 전체 12건 통과.
+
+- **2026-08-21 — P1-123**: `OrganizationServiceImpl.cancelEnroll()`에 yona `EnrollOrganizationApp.java` `validateForCancelEnroll()`/`User.enrolled()` 이중 가드 추가.
+  - 기존 코드는 대기 중인 가입 신청이 실제로 있는지 확인하지 않고 무조건 `user.cancelEnroll()`+알림 발행을 수행했고, 이미 정식 멤버(ORG_ADMIN/ORG_MEMBER)인 유저의 취소 요청도 막지 않았음.
+  - `organizationUserRepository.existsByOrganizationIdAndUserId`(이미 멤버 → 예외) + `user.enrolledOrganizations.none { it.id == organization.id }`(대기 신청 없음 → 조용히 반환) 두 단계 가드를 P1-122와 동일한 스타일로 추가.
+  - **범위 내 부수 발견 → 즉시 수정**: 대칭 지점인 `ProjectUserServiceImpl.cancelEnroll()`에도 동일한 결함이 있는 것을 발견해 P1-142로 등록 후 같은 타이밍에 수정(위 항목 참고).
+  - **범위 외 발견, 백로그 등록**: Organization 쪽 알림 3곳이 전부 `oldValue="NONE"`을 써서 Project와 달리 draft-window 상쇄 병합이 작동하지 않는 불일치 발견(P2-40) — 기능 결함이 아니라 UX 최적화 누락이라 별도 등록, 착수 여부는 사용자 결정 대기.
+  - 테스트: `OrganizationServiceSpec.kt` +3(대기 신청 없이 취소 시 알림 없음/이미 멤버면 예외/정상 취소 시 목록 제거+알림 1건) — 수정 전 실행해 2건 실패(RED) 확인 후 통과(GREEN) 확인. 전체 13건 통과.
 
 - **2026-08-21 — P1-122**: `OrganizationServiceImpl.enroll()`에 P1-16(`ProjectUserServiceImpl.enroll()`)과 대칭인 "이미 대기 중인 가입 신청" 가드 추가.
   - 이미 멤버인 유저의 중복 신청 차단 가드는 기존에 이미 있었으나(`existsByOrganizationIdAndUserId`), "이미 대기 중인(아직 승인 전) 가입 신청"에 대한 가드가 빠져 있어 재신청할 때마다 무조건 알림 발행 로직까지 진행하던 문제 — P1-16과 동일하게 `user.enrolledOrganizations.any { it.id == organization.id }`(참조 동등성 대신 ID 비교, P1-16에서 확립한 이유와 동일)면 조용히 반환하도록 수정.

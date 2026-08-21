@@ -70,6 +70,18 @@ class ProjectUserServiceImpl(
         val user = userRepository.findById(userId)
             .orElseThrow { IllegalArgumentException("User with ID $userId not found") }
 
+        // yona EnrollProjectApp.java:61-63 ProjectUser.isGuest() 가드 대응 (P1-142, P1-123과 대칭).
+        // 이미 프로젝트 정식 멤버라면 가입 신청 취소 자체가 성립하지 않는다.
+        if (projectUserRepository.existsByProjectIdAndUserId(projectId, userId)) {
+            throw IllegalArgumentException("이미 프로젝트 멤버입니다.")
+        }
+
+        // yona EnrollProjectApp.java:65 User.enrolled(project) 가드 대응. 실제 대기 중인 가입
+        // 신청이 없으면 취소할 것도, 알릴 것도 없다(조용히 무시).
+        if (user.enrolledProjects.none { it.id == project.id }) {
+            return
+        }
+
         user.cancelEnroll(project)
         userRepository.save(user)
 
