@@ -15,17 +15,21 @@ interface PostingCommentRepository : JpaRepository<PostingComment, Long> {
 
     @Query("""
         SELECT pc FROM PostingComment pc 
-        WHERE pc.posting.project.id IN :projectIds 
-          AND pc.contents LIKE :keyword
+        WHERE (pc.posting.project.id IN :projectIds
+               AND pc.contents LIKE :keyword)
+           OR (:userId IS NOT NULL AND pc.authorId = :userId
+               AND pc.contents LIKE :keyword)
     """)
-    fun searchPostingComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<PostingComment>
+    fun searchPostingComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?, pageable: Pageable): Page<PostingComment>
 
     @Query("""
         SELECT COUNT(pc) FROM PostingComment pc 
-        WHERE pc.posting.project.id IN :projectIds 
-          AND pc.contents LIKE :keyword
+        WHERE (pc.posting.project.id IN :projectIds
+               AND pc.contents LIKE :keyword)
+           OR (:userId IS NOT NULL AND pc.authorId = :userId
+               AND pc.contents LIKE :keyword)
     """)
-    fun countSearchPostingComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
+    fun countSearchPostingComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?): Int
 
     @Query("""
         SELECT pc FROM PostingComment pc 

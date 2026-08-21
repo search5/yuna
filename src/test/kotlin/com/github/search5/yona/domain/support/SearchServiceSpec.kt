@@ -51,11 +51,11 @@ class SearchServiceSpec : DescribeSpec({
             every { userRepository.countSearchUsers("%test%") } returns 0
             every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 0
             every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%", 10L) } returns 1
-            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
+            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 0
-            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
-            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%") } returns 0
-            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             // search result mock
             val expectedIssues: Page<com.github.search5.yona.domain.issue.Issue> = PageImpl(emptyList())
@@ -94,11 +94,11 @@ class SearchServiceSpec : DescribeSpec({
             every { userRepository.countSearchUsers("%test%") } returns 0
             every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 3
             every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%", 10L) } returns 0
-            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
+            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 0
-            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
-            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%") } returns 0
-            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             val expectedProjects: Page<Project> = PageImpl(emptyList())
             every { projectRepository.searchProjects(listOf(1L, 2L), "%test%", pageable) } returns expectedProjects
@@ -114,11 +114,11 @@ class SearchServiceSpec : DescribeSpec({
             every { userRepository.countSearchUsers("%test%") } returns 5
             every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 0
             every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%", 10L) } returns 0
-            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
+            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 0
-            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
-            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%") } returns 0
-            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             val expectedUsers: Page<User> = PageImpl(emptyList())
             every { userRepository.searchUsers("%test%", pageable) } returns expectedUsers
@@ -134,11 +134,11 @@ class SearchServiceSpec : DescribeSpec({
             every { userRepository.countSearchUsers("%test%") } returns 0
             every { projectRepository.countSearchProjects(listOf(1L, 2L), "%test%") } returns 0
             every { issueRepository.countSearchIssues(listOf(1L, 2L), "%test%", 10L) } returns 0
-            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%") } returns 0
+            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%test%") } returns 1
-            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%") } returns 0
-            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%") } returns 0
-            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             val expectedMilestones: Page<com.github.search5.yona.domain.milestone.Milestone> = PageImpl(emptyList())
             every { milestoneRepository.searchMilestones(listOf(1L, 2L), "%test%", pageable) } returns expectedMilestones

@@ -52,11 +52,11 @@ class SearchServiceImpl(
             SearchType.ISSUE -> result.issues = issueRepository.searchIssues(allowedProjectIds, processedKeyword, user?.id, pageable)
             SearchType.USER -> result.users = userRepository.searchUsers(processedKeyword, pageable)
             SearchType.PROJECT -> result.projects = projectRepository.searchProjects(allowedProjectIds, processedKeyword, pageable)
-            SearchType.POST -> result.posts = postingRepository.searchPostings(allowedProjectIds, processedKeyword, pageable)
+            SearchType.POST -> result.posts = postingRepository.searchPostings(allowedProjectIds, processedKeyword, user?.id, pageable)
             SearchType.MILESTONE -> result.milestones = milestoneRepository.searchMilestones(allowedProjectIds, processedKeyword, pageable)
-            SearchType.ISSUE_COMMENT -> result.issueComments = issueCommentRepository.searchIssueComments(allowedProjectIds, processedKeyword, pageable)
-            SearchType.POST_COMMENT -> result.postComments = postingCommentRepository.searchPostingComments(allowedProjectIds, processedKeyword, pageable)
-            SearchType.REVIEW -> result.reviews = reviewCommentRepository.searchReviewComments(allowedProjectIds, processedKeyword, pageable)
+            SearchType.ISSUE_COMMENT -> result.issueComments = issueCommentRepository.searchIssueComments(allowedProjectIds, processedKeyword, user?.id, pageable)
+            SearchType.POST_COMMENT -> result.postComments = postingCommentRepository.searchPostingComments(allowedProjectIds, processedKeyword, user?.id, pageable)
+            SearchType.REVIEW -> result.reviews = reviewCommentRepository.searchReviewComments(allowedProjectIds, processedKeyword, user?.id, pageable)
             else -> {}
         }
 
@@ -111,11 +111,11 @@ class SearchServiceImpl(
             SearchType.ISSUE -> result.issues = issueRepository.searchIssues(groupProjectIds, processedKeyword, user?.id, pageable)
             SearchType.USER -> result.users = userRepository.searchUsers(processedKeyword, pageable)
             SearchType.PROJECT -> result.projects = projectRepository.searchProjects(groupProjectIds, processedKeyword, pageable)
-            SearchType.POST -> result.posts = postingRepository.searchPostings(groupProjectIds, processedKeyword, pageable)
+            SearchType.POST -> result.posts = postingRepository.searchPostings(groupProjectIds, processedKeyword, user?.id, pageable)
             SearchType.MILESTONE -> result.milestones = milestoneRepository.searchMilestones(groupProjectIds, processedKeyword, pageable)
-            SearchType.ISSUE_COMMENT -> result.issueComments = issueCommentRepository.searchIssueComments(groupProjectIds, processedKeyword, pageable)
-            SearchType.POST_COMMENT -> result.postComments = postingCommentRepository.searchPostingComments(groupProjectIds, processedKeyword, pageable)
-            SearchType.REVIEW -> result.reviews = reviewCommentRepository.searchReviewComments(groupProjectIds, processedKeyword, pageable)
+            SearchType.ISSUE_COMMENT -> result.issueComments = issueCommentRepository.searchIssueComments(groupProjectIds, processedKeyword, user?.id, pageable)
+            SearchType.POST_COMMENT -> result.postComments = postingCommentRepository.searchPostingComments(groupProjectIds, processedKeyword, user?.id, pageable)
+            SearchType.REVIEW -> result.reviews = reviewCommentRepository.searchReviewComments(groupProjectIds, processedKeyword, user?.id, pageable)
             else -> {}
         }
 
@@ -129,11 +129,11 @@ class SearchServiceImpl(
             usersCount = userRepository.countSearchUsers(processedKeyword),
             projectsCount = projectRepository.countSearchProjects(projectIds, processedKeyword),
             issuesCount = issueRepository.countSearchIssues(projectIds, processedKeyword, userId),
-            postsCount = postingRepository.countSearchPostings(projectIds, processedKeyword),
+            postsCount = postingRepository.countSearchPostings(projectIds, processedKeyword, userId),
             milestonesCount = milestoneRepository.countSearchMilestones(projectIds, processedKeyword),
-            issueCommentsCount = issueCommentRepository.countSearchIssueComments(projectIds, processedKeyword),
-            postCommentsCount = postingCommentRepository.countSearchPostingComments(projectIds, processedKeyword),
-            reviewsCount = reviewCommentRepository.countSearchReviewComments(projectIds, processedKeyword)
+            issueCommentsCount = issueCommentRepository.countSearchIssueComments(projectIds, processedKeyword, userId),
+            postCommentsCount = postingCommentRepository.countSearchPostingComments(projectIds, processedKeyword, userId),
+            reviewsCount = reviewCommentRepository.countSearchReviewComments(projectIds, processedKeyword, userId)
         )
     }
 }

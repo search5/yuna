@@ -14,17 +14,21 @@ interface ReviewCommentRepository : JpaRepository<ReviewComment, Long> {
 
     @Query("""
         SELECT rc FROM ReviewComment rc 
-        WHERE rc.thread.project.id IN :projectIds 
-          AND rc.contents LIKE :keyword
+        WHERE (rc.thread.project.id IN :projectIds
+               AND rc.contents LIKE :keyword)
+           OR (:userId IS NOT NULL AND rc.author.id = :userId
+               AND rc.contents LIKE :keyword)
      """)
-    fun searchReviewComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<ReviewComment>
+    fun searchReviewComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?, pageable: Pageable): Page<ReviewComment>
 
     @Query("""
         SELECT COUNT(rc) FROM ReviewComment rc 
-        WHERE rc.thread.project.id IN :projectIds 
-          AND rc.contents LIKE :keyword
+        WHERE (rc.thread.project.id IN :projectIds
+               AND rc.contents LIKE :keyword)
+           OR (:userId IS NOT NULL AND rc.author.id = :userId
+               AND rc.contents LIKE :keyword)
     """)
-    fun countSearchReviewComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
+    fun countSearchReviewComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?): Int
 
     @Query("""
         SELECT rc FROM ReviewComment rc 
