@@ -185,6 +185,39 @@ class AttachmentControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(content().string(containsString("removed successfully")))
             }
+
+            // yona AccessControl.java:250-263 isProjectResourceAllowed()의 ATTACHMENT 케이스(컨테이너의
+            // UPDATE 권한으로 위임) 대응 (P1-130). 업로더 본인이 아니어도 커밋/리뷰 댓글의 UPDATE 권한이
+            // 있는(=프로젝트 멤버) 사용자면 첨부파일을 삭제할 수 있어야 한다.
+            it("커밋 댓글 첨부파일은 업로더 본인이 아니어도 컨테이너 UPDATE 권한이 있으면 삭제할 수 있다") {
+                val commitCommentAttachment = Attachment(
+                    id = 200L,
+                    name = "commit-attach.png",
+                    hash = "commithash456",
+                    containerType = ResourceType.COMMIT_COMMENT,
+                    containerId = "50",
+                    mimeType = "image/png",
+                    size = 34L,
+                    createdDate = Instant.now(),
+                    ownerLoginId = "someone-else"
+                )
+
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every { attachmentRepository.findById(200L) } returns Optional.of(commitCommentAttachment)
+                every {
+                    accessControl.isAllowedAttachment(loginUser, commitCommentAttachment, Operation.UPDATE)
+                } returns true
+                every { attachmentService.delete(commitCommentAttachment) } returns Unit
+                every { attachmentRepository.existsByHash("commithash456") } returns false
+
+                mockMvc.perform(
+                    post("/files/200")
+                        .param("_method", "delete")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(content().string(containsString("removed successfully")))
+            }
         }
 
         describe("GET /files (파일 목록 조회)") {
