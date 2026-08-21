@@ -218,5 +218,31 @@ class OrganizationViewControllerSpec : DescribeSpec({
                 result shouldBe "error/403"
             }
         }
+
+        // yona OrganizationApp.java:485-486 @GuestProhibit 대응 (P1-120). 게스트 계정은 조직 목록으로
+        // 들어오지 못하고 인덱스로 리다이렉트된다(로그인하지 않은 익명 사용자는 그대로 통과 — isGuest는
+        // 로그인 상태의 특수 계정 플래그이지 익명 여부가 아니다).
+        describe("GET /orgs 게스트 계정 차단") {
+            it("게스트 계정으로 조회하면 인덱스로 리다이렉트해야 한다") {
+                val guestAuth = UsernamePasswordAuthenticationToken("guestuser", "password")
+                val guestUser = User(id = 30L, loginId = "guestuser", name = "게스트", state = UserState.ACTIVE, isGuest = true)
+                every { userRepository.findByLoginId("guestuser") } returns Optional.of(guestUser)
+
+                val result = organizationViewController.orgList(
+                    filter = "", pageNum = 1, authentication = guestAuth, model = ExtendedModelMap()
+                )
+                result shouldBe "redirect:/"
+            }
+
+            it("비로그인(익명) 사용자는 차단되지 않고 목록을 그대로 볼 수 있어야 한다") {
+                every { organizationRepository.findByNameContainingIgnoreCaseOrDescrContainingIgnoreCase(any(), any(), any()) } returns
+                    PageImpl(emptyList<Organization>())
+
+                val result = organizationViewController.orgList(
+                    filter = "", pageNum = 1, authentication = null, model = ExtendedModelMap()
+                )
+                result shouldBe "organization/list"
+            }
+        }
     }
 })
