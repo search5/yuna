@@ -35,7 +35,7 @@
 | P0-15 | [x] | Board 라우트 누락 (postlabel) | `conf/routes` (BoardApp) | `web/BoardController.kt` | **완료** — `PUT /api/projects/{id}/posts/{postId}/labels` |
 | P0-16 | [x] | CodeHistory 라우트 누락 (커밋 댓글) | `conf/routes` (CodeHistoryApp) | `web/CodeHistoryController.kt` | **완료** — create/delete/list 3개 엔드포인트 |
 | P0-17 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** 조직 게시판 목록에 프로젝트 가시성 필터 없어 비공개 프로젝트 게시글 노출(접근제어 회귀) | `BoardApp.java` | `OrganizationViewController.organizationBoards` | **완료(아래 완료 로그 참고, P0-20과 함께 처리)** |
-| P0-18 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰 스레드 열기/닫기에 권한 체크 전무, 무관한 사용자가 임의 프로젝트 스레드 조작 가능 | `CommentThreadApp.java` | `CommentThreadController.open()/close()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P0-18 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰 스레드 열기/닫기에 권한 체크 전무, 무관한 사용자가 임의 프로젝트 스레드 조작 가능 | `CommentThreadApp.java` | `CommentThreadController.open()/close()` | **완료(아래 완료 로그 참고)** |
 | P0-19 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 계단식 삭제(PR/이슈/게시글/라벨/웹훅 등) 미이식, cascade 선언 없어 삭제 실패 또는 고아 행 발생 | `Project.java` | `ProjectServiceImpl.deleteProject()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P0-20 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `getVisibleProjects` 필터 없이 비공개 포함 전체 프로젝트 노출 | `Organization.java` | `OrganizationViewController.organizationHome()` | **완료(P0-17과 동일 원인·동일 커밋, 아래 완료 로그 참고)** |
 | P0-21 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 사이트매니저 전역 우회 로직 부재, REST API에서 설정변경/삭제 시 403 가능성(P2-16 "문제없음" 판정과 배치) | `AccessControl.java` | `OrganizationController.kt`(REST) `isOrgAdmin()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -238,6 +238,12 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P0-18**: 리뷰 스레드 open/close에 권한 체크 부재(무관한 로그인 사용자가 임의 프로젝트 스레드를 열고/닫을 수 있던 취약점) 수정.
+  - Serena LSP로 yona `CommentThreadApp.java:36-71 updateState()`를 재확인 — `AccessControl.isAllowed(currentUser, thread.asResource(), operation)`(OPEN→`Operation.REOPEN`, CLOSED→`Operation.CLOSE`)를 상태변경 직전에 호출해 거부 시 403을 반환함을 확인. yuna `CommentThreadController.kt`의 `open()`/`close()`는 401(비로그인) 체크만 있고 이 권한 검사 자체가 전혀 없었음(서비스 계층 `CodeReviewServiceImpl.updateThreadState()`에도 없음, 컨트롤러+서비스 어디에도 권한 검사 없이 상태변경이 즉시 커밋되는 구조였음을 확인).
+  - `CommentThreadController.kt`에 `CommentThreadRepository`/`AccessControl` 주입, `open()`/`close()`를 yona와 동일하게 공용 `updateState(id, state, authentication)`로 통합 — 스레드 조회(404) → `thread.project`로 project 확보(404) → `accessControl.isAllowed(user, project, thread, REOPEN/CLOSE)`(P1-85 1b에서 이미 구현된 COMMENT_THREAD 리소스 오버로드 재사용, 매니저/작성자/조직관리자/사이트매니저 우회 및 일반 멤버 규칙 그대로 적용) → 거부 시 403 → 서비스 호출.
+  - 테스트: `CommentThreadControllerSpec.kt` — 기존 2건(open/close 정상 동작)에 권한 mock 배선 추가, REOPEN/CLOSE 권한 거부 시 403+서비스 미호출 2건, 존재하지 않는 스레드 404 1건, 비로그인 401 1건 신규 추가(총 6건).
+  - 검증: `./gradlew test --tests "...CommentThreadControllerSpec"` 전체 통과, 이어서 `./gradlew test` 전체 통과(회귀 없음 확인).
 
 - **2026-08-21 — P0-17, P0-20**: 조직 프로젝트 목록 화면들(게시판/이슈/PR/홈)에 프로젝트 가시성 필터 부재로 비공개 프로젝트 콘텐츠가 노출되던 접근제어 회귀를 수정.
   - Serena LSP로 yona `models/Organization.java:112-140 getVisibleProjects(User)`를 재확인 — 사이트매니저/조직관리자는 전체, 조직멤버는 비공개 중 자신이 프로젝트멤버인 것만, 그 외(비회원·비로그인·게스트 계정)는 `Application.HIDE_PROJECT_LISTING`(기본 false) 플래그가 꺼져 있는 한 공개 프로젝트만(단, 프로젝트 멤버면 포함) 노출하는 로직을 확인. `OrganizationUser.isAdmin/isMember(Organization, User)`가 별개 role row(ORG_ADMIN/ORG_MEMBER 상호 배타)임도 함께 확인.
