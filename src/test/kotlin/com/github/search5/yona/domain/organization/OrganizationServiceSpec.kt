@@ -65,6 +65,18 @@ class OrganizationServiceSpec @Autowired constructor(
                 }
             }
 
+            // yona models/Organization.java:42 @Constraints.Pattern(User.LOGIN_ID_PATTERN) 대응 (P1-108).
+            it("형식에 맞지 않는(공백 포함) 조직 이름이면 예외가 발생해야 한다") {
+                shouldThrow<IllegalArgumentException> {
+                    organizationService.createOrganization("my org", "설명", admin.id!!)
+                }
+            }
+
+            it("형식에 맞는(영문/숫자/하이픈) 조직 이름은 정상 생성되어야 한다") {
+                val org = organizationService.createOrganization("my-valid-org123", "설명", admin.id!!)
+                org.name shouldBe "my-valid-org123"
+            }
+
             it("2. 조직 멤버 추가 검증") {
                 val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
 
