@@ -10,6 +10,7 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.support.isModifiedByOthers
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.Page
@@ -150,6 +151,40 @@ class BoardController(
         return ResponseEntity.ok(updated)
     }
 
+
+    // yona BoardApi.java:128-159 updatePostingContent() 대응 (P1-107). 게시글 본문만 인라인 수정하는
+    // 경량 API — updateIssueContent(이슈, P1-102)와 동일하게 클라이언트가 저장 직전 화면 원문
+    // (request.original)을 그대로 보내면, 서버가 그 원문과 현재 DB 값을 각각 해시해 비교해 다르면
+    // (=그 사이 다른 사람이 이미 수정) 409로 거부한다. legacy와 동일하게 권한 확인이 충돌 검사보다 먼저다.
+    @PatchMapping("/{postId}/content")
+    fun updatePostingContent(
+        @PathVariable projectId: Long,
+        @PathVariable postId: Long,
+        @RequestBody request: UpdatePostingContentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val posting = postingService.getPosting(projectId, postId)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!accessControl.isAllowed(user, project, posting, Operation.UPDATE)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        if (isModifiedByOthers(posting.body ?: "", request.original)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(mapOf("message" to "Already modified by someone.", "storedContent" to posting.body))
+        }
+
+        posting.body = request.content
+        postingRepository.save(posting)
+
+        return ResponseEntity.ok(mapOf("body" to posting.body))
+    }
+
     // yona api.BoardApi.updatePostLabel 대응 — 게시글에 붙은 라벨 집합을 통째로 교체한다.
     @PutMapping("/{postId}/labels")
     fun updatePostLabels(
@@ -209,6 +244,12 @@ class BoardController(
         val notice: Boolean?,
         val readme: Boolean?,
         val sendNotificationMail: Boolean? = null
+    )
+
+
+    data class UpdatePostingContentRequest(
+        val content: String,
+        val original: String
     )
 
     companion object {

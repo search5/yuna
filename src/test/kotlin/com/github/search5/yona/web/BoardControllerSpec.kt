@@ -217,6 +217,47 @@ class BoardControllerSpec : DescribeSpec({
             }
         }
 
+        // yona BoardApi.java:128-159 updatePostingContent() 대응 (P1-107).
+        describe("PATCH /api/projects/{projectId}/posts/{postId}/content") {
+            it("original이 현재 본문과 일치하면 정상적으로 갱신해야 한다") {
+                val editablePosting = Posting(id = 52L, title = "포스트3", body = "원본 내용", project = project, authorId = user.id, number = 3L)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 3L) } returns editablePosting
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { postingRepository.save(editablePosting) } returns editablePosting
+
+                mockMvc.perform(
+                    patch("/api/projects/1/posts/3/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\": \"수정된 내용\", \"original\": \"원본 내용\"}")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.body").value("수정된 내용"))
+            }
+
+            it("original이 현재 본문과 다르면 409 Conflict와 storedContent를 반환하고 저장하지 않아야 한다") {
+                val contentPosting = Posting(id = 51L, title = "포스트2", body = "원본 내용", project = project, authorId = user.id, number = 2L)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 2L) } returns contentPosting
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+
+                mockMvc.perform(
+                    patch("/api/projects/1/posts/2/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\": \"수정된 내용\", \"original\": \"다른사람이 이미 바꾼 내용\"}")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.message").value("Already modified by someone."))
+                    .andExpect(jsonPath("$.storedContent").value("원본 내용"))
+
+                verify(exactly = 0) { postingRepository.save(any()) }
+            }
+        }
+
         describe("DELETE /api/projects/{projectId}/posts/{postId}") {
             it("관리자가 포스트를 삭제하면 200 OK를 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
