@@ -160,6 +160,37 @@ class BoardControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isCreated)
             }
+
+            // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113) — 공개
+            // 프로젝트의 비멤버 로그인 사용자도 게시글을 쓸 수 있어야 한다(회귀 수정 검증).
+            it("공개 프로젝트의 비멤버 로그인 사용자도 게시글을 작성할 수 있어야 한다") {
+                val publicProject = Project(id = 2L, name = "PublicProject", projectScope = ProjectScope.PUBLIC)
+                val nonMember = User(id = 30L, loginId = "nonmember", name = "비멤버")
+                val nonMemberAuth = UsernamePasswordAuthenticationToken("nonmember", "password")
+                val publicPosting = Posting(id = 2L, number = 1L, title = "포스트 제목", body = "포스트 내용", project = publicProject)
+
+                every { projectRepository.findById(2L) } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("nonmember") } returns Optional.of(nonMember)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 30L) } returns false
+                every { postingService.createPosting(2L, any(), 30L) } returns publicPosting
+
+                val jsonContent = """
+                    {
+                        "title": "포스트 제목",
+                        "body": "포스트 내용",
+                        "notice": false,
+                        "readme": false
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    post("/api/projects/2/posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(nonMemberAuth)
+                )
+                    .andExpect(status().isCreated)
+            }
         }
 
         describe("PUT /api/projects/{projectId}/posts/{postId}") {

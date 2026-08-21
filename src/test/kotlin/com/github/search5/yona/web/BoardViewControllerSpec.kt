@@ -218,8 +218,10 @@ class BoardViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/post/new") {
             it("멤버라면 200 OK와 board/create 뷰를 반환해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 950L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
 
                 mockMvc.perform(get("/owner/TestProj/post/new").principal(userAuth))
@@ -273,9 +275,11 @@ class BoardViewControllerSpec : DescribeSpec({
         describe("POST /{owner}/{projectName}/posts - 임시 업로드 첨부파일 연결") {
             it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 moveOnlySelected를 통해 생성된 게시글로 옮겨져야 한다") {
                 val savedPosting = Posting(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 951L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { postingService.createPosting(1L, any(), 10L) } returns savedPosting
                 every {
@@ -305,9 +309,11 @@ class BoardViewControllerSpec : DescribeSpec({
         describe("POST /{owner}/{projectName}/posts - README 게시글 중복 생성 방지") {
             it("이미 README 게시글이 있으면 새로 만들지 않고 기존 게시글을 수정해야 한다") {
                 val existingReadme = Posting(id = 50L, number = 3L, title = "옛 README", body = "옛 본문", readme = true, project = project)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 952L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { postingRepository.findByProjectAndReadme(project, true) } returns listOf(existingReadme)
                 every { postingService.getPosting(1L, 3L) } returns existingReadme
@@ -326,9 +332,11 @@ class BoardViewControllerSpec : DescribeSpec({
 
             it("README 게시글이 아직 없으면 정상적으로 새로 생성해야 한다") {
                 val savedPosting = Posting(id = 60L, number = 4L, title = "첫 README", body = "본문", readme = true, project = project)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 953L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { postingRepository.findByProjectAndReadme(project, true) } returns emptyList()
                 every { postingService.createPosting(1L, any(), 10L) } returns savedPosting
@@ -345,8 +353,10 @@ class BoardViewControllerSpec : DescribeSpec({
         // yona BoardApp.newPost()의 issueTemplate write-path 대응 (P1-110).
         describe("POST /{owner}/{projectName}/posts - issueTemplate 커밋 경로") {
             it("issueTemplate=true면 게시글을 생성하지 않고 프로젝트 홈으로 리다이렉트해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 954L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
-                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
 
                 val request = PostingForm(title = "이슈 템플릿", body = "템플릿 내용", issueTemplate = "true")
@@ -355,6 +365,28 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 result shouldBe "redirect:/owner/TestProj"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
+            }
+        }
+
+        // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113) — 공개 프로젝트의
+        // 비멤버 로그인 사용자도 게시글을 쓸 수 있어야 한다(회귀 수정 검증).
+        describe("POST /{owner}/{projectName}/posts - 공개 프로젝트 비멤버 작성 권한 (P1-113)") {
+            it("공개 프로젝트의 비멤버 로그인 사용자도 게시글을 작성할 수 있어야 한다") {
+                val publicProject = Project(id = 2L, name = "PublicProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+                val nonMember = User(id = 40L, loginId = "nonmember", name = "비멤버")
+                val nonMemberAuth = UsernamePasswordAuthenticationToken("nonmember", "password")
+                val savedPosting = Posting(id = 70L, number = 1L, title = "제목", body = "본문", project = publicProject)
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PublicProj") } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("nonmember") } returns Optional.of(nonMember)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 40L) } returns false
+                every { postingService.createPosting(2L, any(), 40L) } returns savedPosting
+
+                val request = PostingForm(title = "제목", body = "본문")
+
+                val result = boardViewController.createPost("owner", "PublicProj", request, nonMemberAuth)
+
+                result shouldBe "redirect:/owner/PublicProj/post/1"
             }
         }
     }
