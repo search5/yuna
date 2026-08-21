@@ -44,11 +44,16 @@ class WebhookServiceSpec : DescribeSpec({
     val webhookRepository = mockk<WebhookRepository>()
     val webhookThreadRepository = mockk<WebhookThreadRepository>()
     val projectRepository = mockk<ProjectRepository>()
+    // relaxed=true: 대부분의 테스트는 리소스 링크와 무관하므로 stub하지 않은 호출은 null(링크 없음)로
+    // 흘러가게 두고, 링크 자체를 검증하는 테스트에서만 개별적으로 every {}를 재정의한다.
+    val notificationUrlResolver = mockk<com.github.search5.yona.domain.notification.NotificationUrlResolver>(relaxed = true)
 
-    val webhookService = WebhookServiceImpl(webhookRepository, webhookThreadRepository, "https://yona.example.com")
+    val webhookService = WebhookServiceImpl(
+        webhookRepository, webhookThreadRepository, "https://yona.example.com", notificationUrlResolver
+    )
 
     beforeTest {
-        io.mockk.clearMocks(webhookRepository, webhookThreadRepository, projectRepository)
+        io.mockk.clearMocks(webhookRepository, webhookThreadRepository, projectRepository, notificationUrlResolver)
     }
 
     describe("WebhookService 비즈니스 테스트") {
@@ -234,6 +239,90 @@ class WebhookServiceSpec : DescribeSpec({
                 val json = tools.jackson.databind.ObjectMapper().readTree(payload)
 
                 json.get("sender").get("site_admin").asBoolean() shouldBe false
+            }
+        }
+
+        // yona Webhook.java:182-192 buildRequestMessage() 대응 (P1-132) — 텍스트 메시지에 리소스 링크가
+        // 전혀 없던 것을 Slack 링크 문법(" <url|text>")으로 붙이도록 수정.
+        describe("buildPayload - 텍스트 메시지 리소스 링크 (P1-132)") {
+            it("SIMPLE 웹훅은 텍스트 메시지 끝에 이슈 링크를 붙여야 한다") {
+                val simpleWebhook = Webhook(
+                    id = 40L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.SIMPLE
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = com.github.search5.yona.domain.issue.Issue(
+                    id = 100L, title = "웹훅 테스트 이슈", body = "내용", project = project, number = 10
+                )
+                every {
+                    notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "100")
+                } returns "https://yona.example.com/owner/test-project/issue/10"
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_ISSUE, sender, issue)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 이슈를 등록했습니다. <https://yona.example.com/owner/test-project/issue/10|#10: 웹훅 테스트 이슈>"
+            }
+
+            it("DETAIL_SLACK 웹훅은 링크 텍스트의 '>'를 '&gt;'로 이스케이프해야 한다") {
+                val slackWebhook = Webhook(
+                    id = 41L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.DETAIL_SLACK
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = com.github.search5.yona.domain.issue.Issue(
+                    id = 101L, title = "A > B 비교", body = "내용", project = project, number = 11
+                )
+                every {
+                    notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "101")
+                } returns "https://yona.example.com/owner/test-project/issue/11"
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issue)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 이슈를 등록했습니다. <https://yona.example.com/owner/test-project/issue/11|#11: A &gt; B 비교>"
+            }
+
+            it("이슈 댓글은 댓글 자신이 아니라 부모 이슈의 #번호: 제목을 링크 텍스트로 써야 한다") {
+                val simpleWebhook = Webhook(
+                    id = 42L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.SIMPLE
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val parentIssue = com.github.search5.yona.domain.issue.Issue(
+                    id = 200L, title = "부모 이슈", body = "내용", project = project, number = 20
+                )
+                val comment = com.github.search5.yona.domain.issue.IssueComment(
+                    id = 300L, contents = "댓글 내용입니다", issue = parentIssue
+                )
+                every {
+                    notificationUrlResolver.getUrl(ResourceType.ISSUE_COMMENT, "300")
+                } returns "https://yona.example.com/owner/test-project/issue/20#comment-300"
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_COMMENT, sender, comment)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 댓글을 등록했습니다. <https://yona.example.com/owner/test-project/issue/20#comment-300|#20: 부모 이슈>"
+            }
+
+            it("리소스 URL을 찾지 못하면 링크 없이 본문 텍스트만 반환해야 한다") {
+                val simpleWebhook = Webhook(
+                    id = 43L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.SIMPLE
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = com.github.search5.yona.domain.issue.Issue(
+                    id = 102L, title = "삭제된 이슈", body = "내용", project = project, number = 12
+                )
+                every { notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "102") } returns null
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_ISSUE, sender, issue)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe "[test-project] 송신자님이 새 이슈를 등록했습니다."
             }
         }
     }
