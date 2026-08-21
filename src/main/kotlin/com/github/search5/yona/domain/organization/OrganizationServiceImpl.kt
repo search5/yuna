@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.user.LoginIdFormatValidator
 import com.github.search5.yona.domain.user.ReservedWordsValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -39,6 +40,10 @@ class OrganizationServiceImpl(
 
     @Transactional
     override fun createOrganization(name: String, descr: String?, creatorId: Long): Organization {
+        // yona models/Organization.java:42 @Constraints.Pattern(User.LOGIN_ID_PATTERN) 대응 (P1-108).
+        if (!LoginIdFormatValidator.isValid(name)) {
+            throw IllegalArgumentException("Organization name format is invalid: $name")
+        }
         if (isNameExist(name)) {
             throw IllegalArgumentException("Organization name already exists: $name")
         }
