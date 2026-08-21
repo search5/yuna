@@ -323,6 +323,51 @@ class IssueController(
         return ResponseEntity.ok(updated)
     }
 
+
+    // yona IssueApi.java:1176-1191 upvoteWeight() 대응 (P1-101). Issue.voters(공감 투표)와는 별개로
+    // 이슈 자체에 +1 가중치를 매기는 정수 카운터. legacy는 AccessControl.isAllowed(user, issue.asResource(),
+    // Operation.UPDATE)로 권한을 확인한다.
+    @PostMapping("/{number}/upvoteWeight")
+    fun upvoteWeight(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Issue> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!accessControl.isAllowed(user, project, issue, Operation.UPDATE)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        return ResponseEntity.ok(issueService.upvoteWeight(issue.id!!))
+    }
+
+    // yona IssueApi.java:1194-1209 downvoteWeight() 대응 (P1-101).
+    @PostMapping("/{number}/downvoteWeight")
+    fun downvoteWeight(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Issue> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!accessControl.isAllowed(user, project, issue, Operation.UPDATE)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        return ResponseEntity.ok(issueService.downvoteWeight(issue.id!!))
+    }
+
     data class CreateIssueRequest(
         val title: String,
         val body: String?,

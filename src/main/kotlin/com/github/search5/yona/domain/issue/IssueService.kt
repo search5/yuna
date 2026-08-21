@@ -45,6 +45,11 @@ interface IssueService {
     fun unvoteIssue(issueId: Long, user: User)
     fun voteComment(commentId: Long, user: User)
     fun unvoteComment(commentId: Long, user: User)
+
+    // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101). Issue.voters(공감
+    // 투표)와는 별개로, 이슈 자체에 +1/-1 가중치를 매기는 정수 카운터.
+    fun upvoteWeight(issueId: Long): Issue
+    fun downvoteWeight(issueId: Long): Issue
 }
 
 // yona Issue.checkLabels()/IssueLabel.IssueLabelException 대응 (P1-80).
