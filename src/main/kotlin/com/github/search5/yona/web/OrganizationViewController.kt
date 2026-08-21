@@ -3,6 +3,7 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.role.RoleType
@@ -46,7 +47,7 @@ class OrganizationViewController(
     private val organizationService: OrganizationService,
     private val attachmentRepository: AttachmentRepository,
     private val attachmentService: AttachmentService,
-    private val accessControl: com.github.search5.yona.config.security.AccessControl
+    private val accessControl: AccessControl
 ) {
 
     @GetMapping(value = ["/org/{orgName}", "/organizations/{orgName}"])

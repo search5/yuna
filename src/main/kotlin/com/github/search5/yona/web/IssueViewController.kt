@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
 import com.github.search5.yona.domain.user.FavoriteIssueRepository
 import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.attachment.AttachmentService
 import org.springframework.context.MessageSource
 import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.web.servlet.mvc.support.RedirectAttributes
@@ -66,7 +67,8 @@ class IssueViewController(
     private val recentIssueService: RecentIssueService,
     private val accessControl: AccessControl,
     private val titleHeadService: TitleHeadService,
-    private val issueEventRepository: IssueEventRepository
+    private val issueEventRepository: IssueEventRepository,
+    private val attachmentService: AttachmentService
 ) {
 
     @GetMapping("/{owner}/{projectName}/issues")
@@ -494,13 +496,16 @@ class IssueViewController(
 
         if (!temporaryUploadFiles.isNullOrBlank()) {
             val fileIds = temporaryUploadFiles.split(",").mapNotNull { it.trim().toLongOrNull() }
-            fileIds.forEach { fileId ->
-                attachmentRepository.findById(fileId).ifPresent { attachment ->
-                    attachment.containerType = ResourceType.ISSUE_POST
-                    attachment.containerId = saved.id.toString()
-                    attachmentRepository.save(attachment)
-                }
-            }
+            // yona Attachment.moveOnlySelected() 대응 (P0-22) — 소유권 검증 없이 요청받은 ID를
+            // 그대로 재배선하지 않고, 실제로 이 로그인 사용자가 업로드한 임시 첨부만 옮긴다.
+            attachmentService.moveOnlySelected(
+                fromType = ResourceType.NOT_A_RESOURCE,
+                fromId = "",
+                toType = ResourceType.ISSUE_POST,
+                toId = saved.id.toString(),
+                selectedIds = fileIds,
+                moverLoginId = loginUser.loginId ?: ""
+            )
         }
 
         return "redirect:/$owner/$projectName/issue/${saved.number}"

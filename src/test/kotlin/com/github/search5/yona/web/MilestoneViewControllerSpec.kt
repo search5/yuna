@@ -18,10 +18,13 @@ import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.support.MarkdownService
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
@@ -59,6 +62,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
         milestoneRepositoryForAccessControl
     )
 
+    val attachmentService = mockk<AttachmentService>()
     val milestoneViewController = MilestoneViewController(
         projectRepository,
         milestoneService,
@@ -68,7 +72,8 @@ class MilestoneViewControllerSpec : DescribeSpec({
         userRepository,
         attachmentRepository,
         markdownService,
-        accessControl
+        accessControl,
+        attachmentService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(milestoneViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -83,7 +88,8 @@ class MilestoneViewControllerSpec : DescribeSpec({
             projectUserRepository,
             userRepository,
             attachmentRepository,
-            markdownService
+            markdownService,
+            attachmentService
         )
     }
 
@@ -172,6 +178,49 @@ class MilestoneViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("milestone/create"))
                     .andExpect(model().attributeExists("project"))
+            }
+        }
+
+        // yona Attachment.moveOnlySelected() 대응 (P0-22) — 요청받은 첨부파일 ID를 검증 없이 그대로
+        // 재배선하지 않고, 실제로 이 로그인 사용자가 업로드한 임시 첨부만 옮기는지 검증한다.
+        describe("POST /{owner}/{projectName}/milestones - 임시 업로드 첨부파일 연결") {
+            it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 moveOnlySelected를 통해 생성된 마일스톤으로 옮겨져야 한다") {
+                val savedMilestone = Milestone(id = 100L, title = "새 마일스톤", project = project)
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { milestoneRepository.findByProjectAndTitle(project, "새 마일스톤") } returns null
+                every { milestoneService.createMilestone(1L, any()) } returns savedMilestone
+                every {
+                    attachmentService.moveOnlySelected(
+                        ResourceType.NOT_A_RESOURCE, "",
+                        ResourceType.MILESTONE, "100",
+                        listOf(900L), "testuser"
+                    )
+                } returns 1
+
+                val result = milestoneViewController.createMilestone(
+                    owner = "owner",
+                    projectName = "TestProj",
+                    title = "새 마일스톤",
+                    contents = null,
+                    dueDate = null,
+                    state = State.OPEN,
+                    temporaryUploadFiles = "900",
+                    authentication = userAuth,
+                    redirectAttributes = mockk(relaxed = true),
+                    model = org.springframework.ui.ExtendedModelMap()
+                )
+
+                result shouldBe "redirect:/owner/TestProj/milestone/100"
+                verify(exactly = 1) {
+                    attachmentService.moveOnlySelected(
+                        ResourceType.NOT_A_RESOURCE, "",
+                        ResourceType.MILESTONE, "100",
+                        listOf(900L), "testuser"
+                    )
+                }
             }
         }
     }

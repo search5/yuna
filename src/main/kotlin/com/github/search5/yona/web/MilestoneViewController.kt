@@ -13,6 +13,7 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.support.MarkdownService
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Controller
@@ -36,7 +37,8 @@ class MilestoneViewController(
     private val userRepository: UserRepository,
     private val attachmentRepository: AttachmentRepository,
     private val markdownService: MarkdownService,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val attachmentService: AttachmentService
 ) {
 
     data class MilestoneViewDto(
@@ -277,13 +279,16 @@ class MilestoneViewController(
 
         if (!temporaryUploadFiles.isNullOrBlank()) {
             val fileIds = temporaryUploadFiles.split(",").mapNotNull { it.trim().toLongOrNull() }
-            fileIds.forEach { fileId ->
-                attachmentRepository.findById(fileId).ifPresent { attachment ->
-                    attachment.containerType = ResourceType.MILESTONE
-                    attachment.containerId = savedMilestone.id.toString()
-                    attachmentRepository.save(attachment)
-                }
-            }
+            // yona Attachment.moveOnlySelected() 대응 (P0-22) — 소유권 검증 없이 요청받은 ID를
+            // 그대로 재배선하지 않고, 실제로 이 로그인 사용자가 업로드한 임시 첨부만 옮긴다.
+            attachmentService.moveOnlySelected(
+                fromType = ResourceType.NOT_A_RESOURCE,
+                fromId = "",
+                toType = ResourceType.MILESTONE,
+                toId = savedMilestone.id.toString(),
+                selectedIds = fileIds,
+                moverLoginId = loginUser.loginId ?: ""
+            )
         }
 
         return "redirect:/$owner/$projectName/milestone/${savedMilestone.id}"
@@ -365,13 +370,16 @@ class MilestoneViewController(
 
         if (!temporaryUploadFiles.isNullOrBlank()) {
             val fileIds = temporaryUploadFiles.split(",").mapNotNull { it.trim().toLongOrNull() }
-            fileIds.forEach { fileId ->
-                attachmentRepository.findById(fileId).ifPresent { attachment ->
-                    attachment.containerType = ResourceType.MILESTONE
-                    attachment.containerId = updated.id.toString()
-                    attachmentRepository.save(attachment)
-                }
-            }
+            // yona Attachment.moveOnlySelected() 대응 (P0-22) — 소유권 검증 없이 요청받은 ID를
+            // 그대로 재배선하지 않고, 실제로 이 로그인 사용자가 업로드한 임시 첨부만 옮긴다.
+            attachmentService.moveOnlySelected(
+                fromType = ResourceType.NOT_A_RESOURCE,
+                fromId = "",
+                toType = ResourceType.MILESTONE,
+                toId = updated.id.toString(),
+                selectedIds = fileIds,
+                moverLoginId = loginUser.loginId ?: ""
+            )
         }
 
         return "redirect:/$owner/$projectName/milestone/$id"
