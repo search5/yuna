@@ -174,6 +174,67 @@ class PullRequestControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isCreated)
             }
+
+            // yona PullRequestApp.java:254 @IsCreatable(ResourceType.FORK) 대응 (P1-141) — 공개 프로젝트는
+            // 로그인한 비멤버도 PR을 보낼 수 있어야 하는데, checkWritePermission(멤버/그룹멤버 전용)만
+            // 쓰면 이 케이스가 차단돼 yona보다 과도하게 제한됐었다.
+            it("공개 프로젝트는 로그인한 비멤버도 새 PR을 제출하면 201 Created를 반환해야 한다") {
+                val publicProject = Project(id = 3L, name = "PublicProject", projectScope = ProjectScope.PUBLIC)
+                val nonMember = User(id = 30L, loginId = "nonmember", name = "비멤버")
+                val nonMemberAuth = UsernamePasswordAuthenticationToken("nonmember", "password")
+
+                every { projectRepository.findById(3L) } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("nonmember") } returns Optional.of(nonMember)
+                every {
+                    pullRequestService.createPullRequest("PR 제목", "PR 본문", 2L, 3L, "feature", "master", nonMember)
+                } returns pullRequest
+
+                val jsonContent = """
+                    {
+                        "title": "PR 제목",
+                        "body": "PR 본문",
+                        "fromProjectId": 2,
+                        "fromBranch": "feature",
+                        "toBranch": "master"
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    post("/api/projects/3/pullrequests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(nonMemberAuth)
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("비공개 프로젝트는 로그인한 비멤버가 PR을 제출하면 403 Forbidden을 반환해야 한다") {
+                val nonMember = User(id = 31L, loginId = "nonmember2", name = "비멤버2")
+                val nonMemberAuth = UsernamePasswordAuthenticationToken("nonmember2", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("nonmember2") } returns Optional.of(nonMember)
+
+                val jsonContent = """
+                    {
+                        "title": "PR 제목",
+                        "body": "PR 본문",
+                        "fromProjectId": 2,
+                        "fromBranch": "feature",
+                        "toBranch": "master"
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    post("/api/projects/1/pullrequests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(nonMemberAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { pullRequestService.createPullRequest(any(), any(), any(), any(), any(), any(), any()) }
+            }
         }
 
         describe("PUT /api/projects/{projectId}/pullrequests/{number}") {
