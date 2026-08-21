@@ -27,6 +27,7 @@ import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.webhook.Webhook
 import com.github.search5.yona.domain.attachment.Attachment
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
 // yona utils/AccessControl.java 대응 (P1-85). isOrganizationAdmin()이 organizationUsers 엔티티 컬렉션
@@ -50,8 +51,16 @@ class AccessControl(
     private val postingRepository: PostingRepository,
     private val reviewCommentRepository: ReviewCommentRepository,
     private val commitCommentRepository: CommitCommentRepository,
-    private val milestoneRepository: MilestoneRepository
+    private val milestoneRepository: MilestoneRepository,
+    // yona AccessControl.java:21,95-97,336-337 allowsAnonymousAccess/isAnonymousNotAllowed() 대응 (P1-99).
+    // 기동 시 한 번 읽어 static 필드에 캐싱하던 legacy와 달리, Spring 표준 프로퍼티 주입으로 대체한다
+    // (기본값 true로 legacy 기본값과 동일). yona conf/application.conf.default:21에 명시적으로 true.
+    @Value("\${yuna.access.allows-anonymous-access:true}")
+    private val allowsAnonymousAccess: Boolean = true
 ) {
+
+    // yona AccessControl.java:95-97 isAnonymousNotAllowed() 대응 (P1-99).
+    private fun isAnonymousNotAllowed(): Boolean = !allowsAnonymousAccess
 
     /**
      * Checks if a user has a permission to read a project.
@@ -232,12 +241,14 @@ class AccessControl(
     // 없어 리소스 타입별 오버로드로 분리해 그대로 이식한다(docs/P1-85_PLAN.md). 이 단계에서는 아직 어떤
     // 컨트롤러도 이 함수들을 호출하지 않는다(순수 추가, 배선은 후속 P1-87~98에서 진행).
     //
-    // yona AccessControl.isAnonymousNotAllowed()(site 설정 `application.allowsAnonymousAccess`,
-    // 기본값 true)는 yuna에 대응하는 사이트 설정 자체가 아직 이식되지 않아, 기본값(익명 허용)에 해당하는
-    // 동작만 반영하고 이 게이트는 이식하지 않았다 — 사이트 설정 이식은 별도 후속 항목으로 백로그에 기록한다.
+    // yona AccessControl.isAnonymousNotAllowed()(site 설정 `application.allowsAnonymousAccess`, 기본값
+    // true, yona도 DB 사이트 설정이 아니라 conf/application.conf 부트타임 설정임을 재확인)는 P1-99에서
+    // `yuna.access.allows-anonymous-access` 프로퍼티(기본값 true)로 이식, 아래 모든 isAllowed(...)
+    // 오버로드 + isAllowedAttachment() 시작부에 동일하게 배선했다.
 
     // yona AccessControl.java:119-203 isGlobalResourceAllowed()의 PROJECT 리소스 케이스 대응.
     fun isAllowed(user: User?, project: Project, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
 
         if (operation == Operation.ASSIGN_ISSUE) {
@@ -272,6 +283,7 @@ class AccessControl(
     // READ는 (프로젝트가 아닌 리소스는 누구나 읽을 수 있다는 legacy 규칙에 따라) 익명 포함 항상 true,
     // 그 외 모든 연산은 조직 관리자만 허용된다.
     fun isAllowed(user: User?, organization: Organization, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (operation == Operation.READ) return true
         return isOrganizationAdmin(organization, user)
@@ -281,6 +293,7 @@ class AccessControl(
     // isAllowedIfAuthor/isAllowedIfAssignee가 적용되는 리소스 타입 — 작성자 또는 담당자는 연산 종류와
     // 무관하게 항상 허용된다(legacy AccessControl.java:225-227).
     fun isAllowed(user: User?, project: Project, issue: Issue, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
 
@@ -307,6 +320,7 @@ class AccessControl(
 
     // yona AccessControl.java:205-301 isProjectResourceAllowed()의 ISSUE_COMMENT 리소스 케이스 대응.
     fun isAllowed(user: User?, project: Project, issueComment: IssueComment, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
 
@@ -332,6 +346,7 @@ class AccessControl(
 
     // yona AccessControl.java:205-301 isProjectResourceAllowed()의 BOARD_POST 리소스 케이스 대응.
     fun isAllowed(user: User?, project: Project, posting: Posting, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
 
@@ -356,6 +371,7 @@ class AccessControl(
 
     // yona AccessControl.java:205-301 isProjectResourceAllowed()의 NONISSUE_COMMENT 리소스 케이스 대응.
     fun isAllowed(user: User?, project: Project, postingComment: PostingComment, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
 
@@ -383,6 +399,7 @@ class AccessControl(
     // 자동 승격이 없다) contributor 여부는 이 중앙 함수가 아니라 각 컨트롤러의 별도 isManagerOrContributor류
     // 로직이 추가로 처리한다 — legacy도 동일하게 컨트롤러 액션 단에서 별도 체크한다(P1-85_PLAN.md 참고).
     fun isAllowed(user: User?, project: Project, pullRequest: PullRequest, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
         if (user?.isManagerOf(project) == true) return true
@@ -405,6 +422,7 @@ class AccessControl(
 
     // yona AccessControl.java:205-301 isProjectResourceAllowed()의 COMMIT_COMMENT 리소스 케이스 대응.
     fun isAllowed(user: User?, project: Project, commitComment: CommitComment, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
 
@@ -429,6 +447,7 @@ class AccessControl(
 
     // yona AccessControl.java:205-301 isProjectResourceAllowed()의 COMMENT_THREAD 리소스 케이스 대응.
     fun isAllowed(user: User?, project: Project, commentThread: CommentThread, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
 
@@ -453,6 +472,7 @@ class AccessControl(
 
     // yona AccessControl.java:205-301 isProjectResourceAllowed()의 REVIEW_COMMENT 리소스 케이스 대응.
     fun isAllowed(user: User?, project: Project, reviewComment: ReviewComment, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
 
@@ -478,6 +498,7 @@ class AccessControl(
     // yona AccessControl.java:205-301 isProjectResourceAllowed()의 MILESTONE 리소스 케이스 대응.
     // MILESTONE은 isAllowedIfAuthor 대상이 아니다(legacy 스위치에 없음) — 작성자 개념이 없는 리소스.
     fun isAllowed(user: User?, project: Project, milestone: Milestone, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
         if (user?.isManagerOf(project) == true) return true
@@ -503,6 +524,7 @@ class AccessControl(
     // 스위치를 그대로 따른다 — legacy 규칙상 프로젝트 멤버라면 누구나 webhook을 UPDATE할 수 있다는 점에
     // 유의(매니저 전용이 아님, legacy 원본 그대로).
     fun isAllowed(user: User?, project: Project, webhook: Webhook, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
         if (user?.isManagerOf(project) == true) return true
@@ -528,6 +550,7 @@ class AccessControl(
     // resource.getType()==CODE면 무조건 false(저장소 자체 삭제는 이 경로로 허용하지 않음 — legacy
     // AccessControl.java:264-267)로 특별 취급한다.
     fun isAllowed(user: User?, project: Project, resourceType: ResourceType, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (isOrganizationAdmin(project.organization, user)) return true
         if (user?.isManagerOf(project) == true) return true
@@ -553,6 +576,7 @@ class AccessControl(
     // (다른 모든 리소스 타입과 달리 매니저/조직관리자 우회보다도 먼저 체크되며, ACCEPT 연산만 정의돼
     // 있고 그 외는 항상 false다 — legacy AccessControl.java:217-227).
     fun isAllowed(user: User?, projectTransfer: ProjectTransfer, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
         if (operation != Operation.ACCEPT || user == null) return false
 
@@ -576,6 +600,7 @@ class AccessControl(
     // 댓글 첨부의 임시 보관은 containerType=USER를 그대로 쓴다(CodeReviewServiceImpl.kt) — 두 경우 모두
     // ownerLoginId(원 업로더)로 판별하면 legacy의 "업로더 본인만 허용" 규칙과 동일한 결과가 된다.
     fun isAllowedAttachment(user: User?, attachment: Attachment, operation: Operation): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
 
         if (attachment.containerType == ResourceType.USER || attachment.containerType == ResourceType.NOT_A_RESOURCE) {
