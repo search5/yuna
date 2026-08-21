@@ -34,10 +34,10 @@
 | P0-14 | [x] | PullRequest 라우트 누락 | `conf/routes` (PullRequestApp) | `web/PullRequestController.kt`, `PullRequestViewController.kt` | **완료(범위 조정, 아래 참고)** — closedPullRequests/sentPullRequests/deleteFromBranch/restoreFromBranch 구현 |
 | P0-15 | [x] | Board 라우트 누락 (postlabel) | `conf/routes` (BoardApp) | `web/BoardController.kt` | **완료** — `PUT /api/projects/{id}/posts/{postId}/labels` |
 | P0-16 | [x] | CodeHistory 라우트 누락 (커밋 댓글) | `conf/routes` (CodeHistoryApp) | `web/CodeHistoryController.kt` | **완료** — create/delete/list 3개 엔드포인트 |
-| P0-17 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** 조직 게시판 목록에 프로젝트 가시성 필터 없어 비공개 프로젝트 게시글 노출(접근제어 회귀) | `BoardApp.java` | `OrganizationViewController.organizationBoards` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P0-17 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** 조직 게시판 목록에 프로젝트 가시성 필터 없어 비공개 프로젝트 게시글 노출(접근제어 회귀) | `BoardApp.java` | `OrganizationViewController.organizationBoards` | **완료(아래 완료 로그 참고, P0-20과 함께 처리)** |
 | P0-18 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰 스레드 열기/닫기에 권한 체크 전무, 무관한 사용자가 임의 프로젝트 스레드 조작 가능 | `CommentThreadApp.java` | `CommentThreadController.open()/close()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P0-19 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 계단식 삭제(PR/이슈/게시글/라벨/웹훅 등) 미이식, cascade 선언 없어 삭제 실패 또는 고아 행 발생 | `Project.java` | `ProjectServiceImpl.deleteProject()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
-| P0-20 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `getVisibleProjects` 필터 없이 비공개 포함 전체 프로젝트 노출 | `Organization.java` | `OrganizationViewController.organizationHome()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P0-20 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `getVisibleProjects` 필터 없이 비공개 포함 전체 프로젝트 노출 | `Organization.java` | `OrganizationViewController.organizationHome()` | **완료(P0-17과 동일 원인·동일 커밋, 아래 완료 로그 참고)** |
 | P0-21 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 사이트매니저 전역 우회 로직 부재, REST API에서 설정변경/삭제 시 403 가능성(P2-16 "문제없음" 판정과 배치) | `AccessControl.java` | `OrganizationController.kt`(REST) `isOrgAdmin()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P0-22 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** 소유권/원컨테이너 검증 우회, 임의 첨부파일 강제 재배선 가능(보안) | `Attachment.moveOnlySelected()` | `IssueViewController/MilestoneViewController/BoardViewController` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P0-23 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** `HIDE_PROJECT_LISTING` 플래그 및 관련 분기 전무(익명 검색 PUBLIC 필터, 조직검색 게이트 포함), 비공개 모드 우회 노출 | `Search.java`, `SearchApp.java` | `SearchServiceImpl.kt`/`SearchController.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -238,6 +238,14 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P0-17, P0-20**: 조직 프로젝트 목록 화면들(게시판/이슈/PR/홈)에 프로젝트 가시성 필터 부재로 비공개 프로젝트 콘텐츠가 노출되던 접근제어 회귀를 수정.
+  - Serena LSP로 yona `models/Organization.java:112-140 getVisibleProjects(User)`를 재확인 — 사이트매니저/조직관리자는 전체, 조직멤버는 비공개 중 자신이 프로젝트멤버인 것만, 그 외(비회원·비로그인·게스트 계정)는 `Application.HIDE_PROJECT_LISTING`(기본 false) 플래그가 꺼져 있는 한 공개 프로젝트만(단, 프로젝트 멤버면 포함) 노출하는 로직을 확인. `OrganizationUser.isAdmin/isMember(Organization, User)`가 별개 role row(ORG_ADMIN/ORG_MEMBER 상호 배타)임도 함께 확인.
+  - `config/security/AccessControl.kt`에 `getVisibleProjects(organization, user: User?)` 신규 공개 함수 추가 — 기존 P1-85에서 이미 만들어진 `isOrganizationAdmin(Organization?, User?)`/`isOrganizationMember(Organization?, User?)` private 헬퍼를 재사용해 yona 로직을 그대로 이식(이름순 정렬 포함). `user` 파라미터는 nullable로 받아 yona의 익명 `NullUser`(isGuest=false, 조직/프로젝트 비회원)와 동일하게 동작하도록 처리.
+  - `HIDE_PROJECT_LISTING` 대응으로 `hideProjectListing`(`@Value("\${yuna.application.hide-project-listing:false}")`, 기본값 false로 legacy와 동일) 필드를 `AccessControl` 생성자에 추가 — P0-23(검색/사이트관리 도메인)이 이 플래그의 나머지 소비처(SearchServiceImpl/SearchController 등)를 마저 배선할 때 재사용.
+  - `OrganizationViewController`에 `AccessControl` 주입, `organizationBoards`(P0-17 본 대상)뿐 아니라 같은 파일의 동일 결함인 `organizationHome`(P0-20)·`organizationIssues`·`organizationPullRequests`도 함께 `org.projects` 직접 참조를 `accessControl.getVisibleProjects(org, loginUser)`로 교체(같은 근본 원인, 같은 유틸 함수라 한 커밋으로 처리하는 것이 안전). `organizationIssues`/`organizationPullRequests`는 신규 백로그 항목이 아니었던 부수 발견이나, 사용자 지시("중간에 추가된 이슈들은 반드시 이번 타이밍에 작업")에 따라 함께 수정.
+  - 테스트: `AccessControlSpec.kt` +8(조직관리자 전체 노출+정렬/사이트매니저 우회/조직멤버 비공개 필터/조직멤버가 해당 비공개 프로젝트 멤버인 경우 포함/비회원 로그인 사용자 공개만/비회원이라도 프로젝트 멤버면 포함/익명 공개만/게스트 계정은 공개도 제외), `OrganizationViewControllerSpec.kt` +2(`GET /org/{orgName}/boards` 비회원 필터링 vs 조직관리자 전체 노출, `postingRepository.findByProjectIn`에 전달된 프로젝트 목록을 `slot`으로 캡처해 검증).
+  - 검증: `./gradlew test --tests "...AccessControlSpec" --tests "...OrganizationViewControllerSpec"` 전체 통과, 이어서 `./gradlew test` 전체 통과(회귀 없음 확인).
 
 - **2026-08-21 — P1-108**: 조직명 형식(정규식) 검증을 P1-104의 `LoginIdFormatValidator` 재사용으로 이식.
   - Serena LSP로 yona `models/Organization.java:42`를 재확인 — `@Constraints.Pattern(User.LOGIN_ID_PATTERN)`으로 `User.java`의 동일 상수를 그대로 재사용함을 확인(별도 정규식이 아님).

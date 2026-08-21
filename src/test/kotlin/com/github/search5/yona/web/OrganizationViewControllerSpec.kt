@@ -1,9 +1,17 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
@@ -16,8 +24,12 @@ import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageImpl
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
@@ -35,6 +47,17 @@ class OrganizationViewControllerSpec : DescribeSpec({
     val organizationService = mockk<OrganizationService>()
     val attachmentRepository = mockk<AttachmentRepository>()
     val attachmentService = mockk<AttachmentService>()
+    val accessControl = AccessControl(
+        mockk<ProjectUserRepository>(),
+        organizationUserRepository,
+        userRepository,
+        organizationRepository,
+        issueRepository,
+        postingRepository,
+        mockk<ReviewCommentRepository>(),
+        mockk<CommitCommentRepository>(),
+        mockk<MilestoneRepository>()
+    )
 
     val organizationViewController = OrganizationViewController(
         organizationRepository,
@@ -45,7 +68,8 @@ class OrganizationViewControllerSpec : DescribeSpec({
         pullRequestRepository,
         organizationService,
         attachmentRepository,
-        attachmentService
+        attachmentService,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(organizationViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -57,6 +81,7 @@ class OrganizationViewControllerSpec : DescribeSpec({
             issueRepository, postingRepository, pullRequestRepository,
             organizationService, attachmentRepository, attachmentService
         )
+        every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns java.util.Optional.empty()
     }
 
     describe("OrganizationViewController 템플릿 연동 테스트") {
@@ -134,6 +159,47 @@ class OrganizationViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("organization/members"))
                     .andExpect(model().attributeExists("org", "orgUsers", "currentUser"))
+            }
+        }
+
+        // yona BoardApp.organizationBoards()가 Organization.getVisibleProjects(User)로 비공개 프로젝트를
+        // 걸러내던 것을 대응(P0-17). 조직 게시판 목록에 비공개 프로젝트 게시글이 노출되지 않아야 한다.
+        describe("GET /org/{orgName}/boards") {
+            val publicProject = Project(id = 100L, name = "pub", projectScope = ProjectScope.PUBLIC, organization = org)
+            val privateProject = Project(id = 101L, name = "priv", projectScope = ProjectScope.PRIVATE, organization = org)
+
+            it("조직 비회원에게는 비공개 프로젝트를 제외한 게시글 목록만 노출해야 한다") {
+                org.projects = mutableListOf(publicProject, privateProject)
+                org.organizationUsers = mutableListOf()
+                every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                val projectsSlot = slot<List<Project>>()
+                every {
+                    postingRepository.findByProjectIn(capture(projectsSlot), any())
+                } returns PageImpl(emptyList<Posting>())
+
+                mockMvc.perform(get("/org/testorg/boards").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("organization/boardList"))
+
+                projectsSlot.captured.map { it.id } shouldBe listOf(publicProject.id)
+            }
+
+            it("조직 관리자에게는 비공개 프로젝트를 포함한 게시글 목록을 노출해야 한다") {
+                org.projects = mutableListOf(publicProject, privateProject)
+                every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { organizationUserRepository.findByOrganizationIdAndUserId(org.id!!, user.id!!) } returns
+                    Optional.of(OrganizationUser(id = 3L, user = user, organization = org, role = roleAdmin))
+                val projectsSlot = slot<List<Project>>()
+                every {
+                    postingRepository.findByProjectIn(capture(projectsSlot), any())
+                } returns PageImpl(emptyList<Posting>())
+
+                mockMvc.perform(get("/org/testorg/boards").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                projectsSlot.captured.map { it.id }.toSet() shouldBe setOf(publicProject.id, privateProject.id)
             }
         }
     }

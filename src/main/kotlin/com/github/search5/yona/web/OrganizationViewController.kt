@@ -45,7 +45,8 @@ class OrganizationViewController(
     private val pullRequestRepository: PullRequestRepository,
     private val organizationService: OrganizationService,
     private val attachmentRepository: AttachmentRepository,
-    private val attachmentService: AttachmentService
+    private val attachmentService: AttachmentService,
+    private val accessControl: com.github.search5.yona.config.security.AccessControl
 ) {
 
     @GetMapping(value = ["/org/{orgName}", "/organizations/{orgName}"])
@@ -72,7 +73,7 @@ class OrganizationViewController(
         }
 
         model.addAttribute("org", org)
-        model.addAttribute("projects", org.projects)
+        model.addAttribute("projects", accessControl.getVisibleProjects(org, loginUser))
         model.addAttribute("orgUsers", org.organizationUsers)
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("isGuest", isGuest)
@@ -121,7 +122,7 @@ class OrganizationViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
-        val projects = org.projects
+        val projects = accessControl.getVisibleProjects(org, loginUser)
         val issueState = if (state.lowercase() == "closed") State.CLOSED else State.OPEN
 
         val page = if (projects.isEmpty()) {
@@ -151,7 +152,7 @@ class OrganizationViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
-        val projects = org.projects
+        val projects = accessControl.getVisibleProjects(org, loginUser)
         val page = if (projects.isEmpty()) {
             Page.empty()
         } else {
@@ -186,7 +187,7 @@ class OrganizationViewController(
         val isClosed = category.lowercase() == "closed" || request.requestURI.contains("closed")
         val prState = if (isClosed) State.CLOSED else State.OPEN
 
-        val projects = org.projects
+        val projects = accessControl.getVisibleProjects(org, loginUser)
         val page = if (projects.isEmpty()) {
             Page.empty()
         } else {
