@@ -2,12 +2,14 @@ package com.github.search5.yona.domain.project
 
 import com.github.search5.yona.AbstractIntegrationTest
 import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.watch.WatchService
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldNotContain
@@ -25,7 +27,8 @@ class ProjectUserServiceSpec @Autowired constructor(
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
     private val notificationEventRepository: NotificationEventRepository,
-    private val entityManager: EntityManager
+    private val entityManager: EntityManager,
+    private val watchService: WatchService
 ) : AbstractIntegrationTest() {
 
     init {
@@ -59,6 +62,12 @@ class ProjectUserServiceSpec @Autowired constructor(
 
                 // 관리자 멤버 관계 등록
                 projectUserRepository.save(ProjectUser(project = project, user = manager, role = roleManager))
+
+                // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 매니저가
+                // 가입요청/취소 알림을 받으려면 프로젝트를 감시(Watch) 중이어야 한다. 대부분의 시나리오는
+                // "매니저가 감시 중"인 일반적인 경우를 검증하므로 기본으로 감시 상태를 만들어 둔다
+                // (감시하지 않는 매니저는 알림을 못 받는다는 사실 자체는 별도 테스트로 검증).
+                watchService.watch(manager, ResourceType.PROJECT, project.id.toString())
             }
 
             it("1. 가입 신청 및 대기 신청 정상 등록 검증") {
@@ -160,6 +169,23 @@ class ProjectUserServiceSpec @Autowired constructor(
                         it.newValue == "REQUEST"
                 }
                 requestEvents.size shouldBe 1
+            }
+
+            // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 프로젝트를
+            // 감시(Watch)하지 않는 매니저는 가입요청/취소 알림 수신자에서 빠져야 한다.
+            it("8. 프로젝트를 감시하지 않는 매니저는 가입요청 알림을 받지 않아야 한다 (P2-20)") {
+                watchService.unwatch(manager, ResourceType.PROJECT, project.id.toString())
+
+                projectUserService.enroll(project.id!!, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                val requestEvents = notificationEventRepository.findAll().filter {
+                    it.resourceId == project.id.toString() &&
+                        it.eventType == EventType.MEMBER_ENROLL_REQUEST &&
+                        it.newValue == "REQUEST"
+                }
+                requestEvents.size shouldBe 0
             }
 
             // yona EnrollProjectApp.java:55-71 대응 (P1-142, P1-123과 대칭인 신규 발견). 대기 중인
