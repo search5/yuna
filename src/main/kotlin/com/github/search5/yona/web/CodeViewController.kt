@@ -221,8 +221,17 @@ class CodeViewController(
 
         val repository = repositoryService.getRepository(project)
         val branches = repository.getRefNames()
-        
-        val commits = repository.getHistory(page, 25, decodedBranch, decodedPath)
+
+        // yona CodeHistoryApp.history()의 "catch (NoHeadException e) { return notFound(nohead.render(project)); }"
+        // 대응 (P1-136) — 커밋이 하나도 없는 빈 저장소에서 히스토리를 조회하면 JGit이 NoHeadException을
+        // 던진다. 잡지 않으면 500으로 전파되므로, 코드브라우저 루트(codeBrowserRoot)와 동일한
+        // code/nohead(_svn) 뷰로 안내한다.
+        val commits = try {
+            repository.getHistory(page, 25, decodedBranch, decodedPath)
+        } catch (e: org.eclipse.jgit.api.errors.NoHeadException) {
+            model.addAttribute("project", project)
+            return if (project.vcs == "SUBVERSION") "code/nohead_svn" else "code/nohead"
+        }
 
         model.addAttribute("project", project)
         model.addAttribute("branches", branches)

@@ -183,7 +183,7 @@
 | P1-133 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** DETAIL_SLACK attachment의 이슈 필드 축소, PR attachment는 완전 미지원 | `Webhook.buildIssueDetails/buildJsonWithPullReqtuestDetails` | `WebhookServiceImpl.buildPayload()` | **완료(아래 완료 로그 참고)** |
 | P1-134 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** Hangout Chat 스레드 키가 댓글 이벤트에서 부모 리소스가 아닌 댓글 자신으로 계산돼 스레드 그룹핑 무력화 — 재확인 결과 범위가 이슈/게시글 댓글보다 넓음: yona `Webhook.java:480`은 PR 리뷰 댓글(REVIEW_COMMENT)도 부모 PullRequest를 스레드 키로 쓰는데, yuna `WebhookNotificationEventListener.resolveResource()`는 REVIEW_COMMENT/COMMIT_COMMENT 둘 다 댓글 자신을 반환해 동일 패턴이 재발함(단, CommitComment는 yona Webhook.java에 대응 오버로드 자체가 없어 이 부분만은 회귀보다 "yuna 신규 기능의 자기 불일치"에 가까움). | `Webhook.java`(threadJSON) | `WebhookServiceImpl.threadKeyOf()`(신규) | **완료(아래 완료 로그 참고, P1-143 직후 처리)** |
 | P1-135 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 코드/Git/SVN 도메인)** refName이 "refs/heads/master" 하드코딩, 브랜치 지정 커밋 기능 소실 | `GitUtil.commitTextFile` | `domain/vcs/BareCommit.kt` | **완료(아래 완료 로그 참고, P1-111과 함께 처리)** |
-| P1-136 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 코드/Git/SVN 도메인)** 빈 저장소 NoHeadException 미처리, 전역 핸들러도 없어 500 전파 가능 | `CodeHistoryApp.history` | `CodeViewController.history/historyUntilHead` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-136 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 코드/Git/SVN 도메인)** 빈 저장소 NoHeadException 미처리, 전역 핸들러도 없어 500 전파 가능 | `CodeHistoryApp.history` | `CodeViewController.history/historyUntilHead` | **완료(아래 완료 로그 참고)** |
 | P1-137 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** 진단 체크 내용이 원본 3개(메일수신/hostname/중복설정)와 전혀 다른 3개로 대체돼 원래 문제를 검출 못 함 | `Diagnostic.java`/`SimpleDiagnostic.java` | `DiagnosticService.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-138 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** 익명 사용자를 프로젝트 스코프 확인 전에 무조건 403 — PUBLIC 프로젝트 통계도 로그인 요구(회귀) | `StatisticsApp.java`(`@AnonymousCheck`) | `StatisticsViewController.statistics()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-139 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** 코드 브라우저에서 `.md`/README 마크다운 렌더링 자체가 없음(markdownService 호출 0건) | `CodeApp.java`(renderFileInCodeBrowser/renderFileInReadme) | `CodeViewController.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -248,6 +248,10 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-136**: `CodeViewController.history()`에 yona `CodeHistoryApp.history()`의 `catch (NoHeadException e) { return notFound(nohead.render(project)); }` 대응 추가.
+  - 커밋이 하나도 없는 빈 저장소에서 `/{owner}/{project}/commits/{branch}`를 조회하면 JGit `LogCommand.call()`이 `NoHeadException`을 던지는데(HEAD가 리졸브되지 않음), yuna는 이를 잡지 않아 500으로 전파되고 있었다. `repository.getHistory(...)` 호출을 try/catch로 감싸 `NoHeadException`이면 코드브라우저 루트(`codeBrowserRoot`)가 이미 쓰는 것과 동일한 `code/nohead`(SVN이면 `code/nohead_svn`) 뷰로 안내(project 모델 속성만 채움)하도록 수정. `historyUntilHead()`는 `history(...)`에 위임하는 구조라 별도 수정 불필요.
+  - 테스트: `CodeViewControllerSpec.kt` +1(빈 저장소면 500 대신 code/nohead 뷰 반환). 전체 통과.
 
 - **2026-08-21 — P1-134**: `WebhookServiceImpl`에 새 private `threadKeyOf(resource)`를 추가해, Hangout Chat 스레드 키를 댓글 자신이 아니라 부모 리소스 기준으로 계산하도록 수정(yona `Webhook.java:346` `eventComment.getParent().asResource()` / `:480` `eventPullRequest.asResource()` 대응). P1-143(스레드 저장 경로) 직후 곧바로 처리 — 저장 경로가 없으면 키를 고쳐도 검증할 방법이 없었기 때문.
   - IssueComment → 부모 Issue(ISSUE_POST), PostingComment → 부모 Posting(BOARD_POST), ReviewComment → `thread.pullRequest`(PULL_REQUEST). CommitComment는 yona `Webhook.java`에 대응 이벤트 자체가 없어(P2-18) 부모 매핑 규칙이 없으므로 자기 자신의 키(COMMIT_COMMENT)를 그대로 사용 — 레거시에 없는 매핑을 새로 만들지 않았다. Issue/Posting/PullRequest 등 비-댓글 리소스는 기존과 동일하게 자기 자신의 키를 쓴다.
