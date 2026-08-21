@@ -220,7 +220,7 @@
 | P2-25 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** MIME 감지가 Tika(콘텐츠기반)→JDK probeContentType(확장자기반)으로 바뀌어 해시 파일명에서 오탐 가능. MIME 감지는 Tika 라이브러리 추가 | `FileUtil.detectMediaType` | `AttachmentServiceImpl.kt` | **완료(아래 완료 로그 참고)** |
 | P2-26 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** 임시 첨부 정리 스케줄러의 createdDate 비교 방향이 yona와 반대(사실만 기록) | `Attachment.java` | `AttachmentCleanupScheduler.kt` | **완료(레거시 그대로 포팅, 아래 완료 로그의 TODO 참고)** |
 | P2-27 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 감시/즐겨찾기 도메인)** 프로젝트 개명/이전 시 `FavoriteProject.owner/projectName` 동기화 코드 없음 | `FavoriteProject.updateFavoriteProject()` | `ProjectServiceImpl.acceptTransfer()` | **완료(아래 완료 로그 참고, P1-144 별도 등록)** |
-| P2-28 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** payloadUrl/secret 길이·필수 검증 미이식, DB 제약 위반 500 노출 가능 | `Webhook.java`(@Size 검증) | `WebhookController.newWebhook()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P2-28 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** payloadUrl/secret 길이·필수 검증 미이식, DB 제약 위반 500 노출 가능 | `Webhook.java`(@Size 검증) | `WebhookController.newWebhook()` | **완료(아래 완료 로그 참고)** |
 | P2-29 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 코드/Git/SVN 도메인)** Git 전용 가드 누락, SVN 프로젝트에 호출 시 no-op이나 성공 신호 반환 | `BranchApp.java`(`@IsOnlyGitAvailable`) | `BranchApiController.setAsDefault/deleteBranch` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-30 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 코드/Git/SVN 도메인)** zip 다운로드 시 경로 사전 존재 검증 및 path 파라미터 자체 소실 | `CodeApp.download` | `ProjectViewController.downloadCode` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-31 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** SearchType.NA/PROJECT 400 처리 없이 조용히 빈 결과 200 반환 | `SearchApp.java` | `SearchController.kt`/`SearchServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -251,6 +251,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P2-28**: `WebhookController.newWebhook()`이 `payloadUrl`/`secret`에 대한 사전 검증 없이 바로 `webhookService.createWebhook()`을 호출하던 것을, yona `Webhook.java:74-81`의 `@Required`(payloadUrl 필수)+`@Size(max=2000)`(payloadUrl)+`@Size(max=250)`(secret) 대응으로 정정.
+  - yona는 Play 폼 바인딩 단계에서 이 제약을 위반하면 DB에 닿기도 전에 `badRequest(...)`로 막는데, yuna엔 이 사전 검증이 없어 그대로 저장을 시도하다 엔티티 `@Column(length=2000/250)`(이미 yona와 동일 길이로 맞춰져 있었음) 제약 위반이 처리되지 않은 500으로 노출될 수 있었다.
+  - `payloadUrl.isBlank()`/`payloadUrl.length > 2000`/`secret.length > 250` 세 조건을 `webhookService.createWebhook()` 호출 전에 검사해 위반 시 400 Bad Request로 명확히 응답. 에러 메시지에 대응하는 `project.webhook.payloadUrl.empty`/`.tooLong`/`secret.tooLong` 메시지 키는 `messages*.properties`에 이미 다국어로 존재해(다른 작업에서 이미 이식돼 있었음) 새로 추가할 필요는 없었으나, 이 컨트롤러가 REST 스타일 `ResponseStatusException` 관례(다른 400/403 응답과 동일)를 쓰고 있어 이번엔 그 관례를 그대로 따름.
+  - 테스트: `WebhookControllerSpec.kt` +3(payloadUrl 빈값/payloadUrl 2000자 초과/secret 250자 초과 각각 400 반환 + `createWebhook` 미호출 검증). 전체 9/9 통과.
 
 - **2026-08-21 — P2-27**: yona `FavoriteProject.java:41-50` `updateFavoriteProject(project)`(즐겨찾기한 사용자들의 비정규화된 owner/projectName 갱신, `FavoriteOrganization` 쪽 P2-19와 동일 패턴) 대응을 `ProjectServiceImpl.acceptTransfer()`에 추가.
   - **조사 과정에서 확인한 사실**: yona는 이 동기화를 `ProjectApp.settingProject()`(동일 소유자 내 개명 전용 경로)에서만 호출하고, 소유권 이전 경로인 `acceptTransfer()`에서는 호출하지 않는다 — 이관 후에도 즐겨찾기 화면에 옛 owner/projectName이 남는 yona 자체의 누락으로 보인다.
