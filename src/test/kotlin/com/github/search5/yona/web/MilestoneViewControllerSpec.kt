@@ -225,6 +225,35 @@ class MilestoneViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("milestone/view"))
                     .andExpect(model().attributeExists("project", "milestoneDto"))
             }
+
+            // yona Milestone.java:99-108 sortedByNumberOfIssue()(이슈 번호 내림차순) 대응 (P2-22).
+            // 리포지토리 조회에는 정렬이 없으므로, 컨트롤러가 open/closed 이슈 목록을 번호 내림차순으로
+            // 재정렬해야 한다.
+            it("이슈 목록은 번호 내림차순으로 정렬돼 있어야 한다 (P2-22)") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 904L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { milestoneService.getMilestone(2L) } returns milestone
+                every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.MILESTONE, "2") } returns emptyList()
+
+                every { issueRepository.findByMilestone(milestone) } returns listOf(
+                    Issue(number = 3L, title = "이슈3", project = project, state = State.OPEN),
+                    Issue(number = 7L, title = "이슈7", project = project, state = State.OPEN),
+                    Issue(number = 5L, title = "이슈5", project = project, state = State.OPEN),
+                    Issue(number = 1L, title = "이슈1", project = project, state = State.CLOSED),
+                    Issue(number = 9L, title = "이슈9", project = project, state = State.CLOSED)
+                )
+
+                val result = mockMvc.perform(get("/owner/TestProj/milestone/2").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andReturn()
+
+                val milestoneDto = result.modelAndView!!.model["milestoneDto"] as MilestoneViewController.MilestoneViewDto
+                milestoneDto.openIssues.map { it.number } shouldBe listOf(7L, 5L, 3L)
+                milestoneDto.closedIssues.map { it.number } shouldBe listOf(9L, 1L)
+            }
         }
 
         describe("GET /{owner}/{projectName}/milestone/new") {
