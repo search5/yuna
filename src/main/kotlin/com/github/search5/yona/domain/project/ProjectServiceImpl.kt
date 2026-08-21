@@ -6,6 +6,7 @@ import java.time.Instant
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.FavoriteProjectRepository
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.organization.OrganizationRepository
@@ -55,7 +56,9 @@ class ProjectServiceImpl(
     private val commentThreadRepository: CommentThreadRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val pullRequestEventRepository: PullRequestEventRepository,
-    private val pullRequestCommitRepository: PullRequestCommitRepository
+    private val pullRequestCommitRepository: PullRequestCommitRepository,
+    // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27).
+    private val favoriteProjectRepository: FavoriteProjectRepository
 ) : ProjectService {
 
     // yona Project.findByOwnerAndProjectName()의 예전 위치(previousOwnerLoginId/previousName) 폴백
@@ -321,6 +324,19 @@ class ProjectServiceImpl(
         // (P1-73) — 목적지가 조직이면 그 조직으로, 개인이면 null로 명시적으로 갱신한다.
         project.organization = organizationRepository.findByName(newOwner).orElse(null)
         projectRepository.save(project)
+
+        // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27) — 이 프로젝트를
+        // 즐겨찾기한 모든 사용자의 비정규화된 owner/projectName도 함께 갱신한다. yona는 이 동기화를
+        // 동일 소유자 내 개명(ProjectApp.settingProject())에서만 호출하고 소유권 이전(acceptTransfer())
+        // 에서는 호출하지 않는데, 즐겨찾기 표시가 이관 후에도 옛 owner/projectName으로 남는 yona
+        // 자체의 누락으로 보인다. yuna는 개명 전용 경로 없이 이관(acceptTransfer)이 이름/소유자
+        // 변경의 유일한 경로라, 관심사(즐겨찾기 표시 최신화)와 메커니즘은 yona 원본 그대로 여기서
+        // 수행한다.
+        favoriteProjectRepository.findByProjectId(project.id!!).forEach {
+            it.owner = project.owner ?: ""
+            it.projectName = project.name ?: ""
+            favoriteProjectRepository.save(it)
+        }
 
         // 권한(Role) 변경 처리
         // 1. 보낸 사람이 MANAGER였다면 MEMBER로 강등

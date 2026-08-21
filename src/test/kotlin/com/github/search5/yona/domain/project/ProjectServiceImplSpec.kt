@@ -25,6 +25,8 @@ import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.FavoriteProject
+import com.github.search5.yona.domain.user.FavoriteProjectRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.webhook.Webhook
 import com.github.search5.yona.domain.webhook.WebhookRepository
@@ -62,6 +64,7 @@ class ProjectServiceImplSpec : DescribeSpec({
     val pullRequestRepository = mockk<PullRequestRepository>()
     val pullRequestEventRepository = mockk<PullRequestEventRepository>()
     val pullRequestCommitRepository = mockk<PullRequestCommitRepository>()
+    val favoriteProjectRepository = mockk<FavoriteProjectRepository>(relaxed = true)
 
     val projectService = ProjectServiceImpl(
         projectRepository,
@@ -85,7 +88,8 @@ class ProjectServiceImplSpec : DescribeSpec({
         commentThreadRepository,
         pullRequestRepository,
         pullRequestEventRepository,
-        pullRequestCommitRepository
+        pullRequestCommitRepository,
+        favoriteProjectRepository
     )
 
     describe("ProjectServiceImpl.acceptTransfer") {
@@ -147,6 +151,38 @@ class ProjectServiceImplSpec : DescribeSpec({
             // yona disableProjectTransferLink()가 실제로는 ProjectTransfer 행을 삭제하는 것 대응
             // (P1-74) — accepted=true로 남겨두지 않는다.
             verify(exactly = 1) { projectTransferRepository.delete(pt) }
+        }
+
+        // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27). yona 원본은 이
+        // 동기화를 개명(ProjectApp.settingProject())에서만 호출하지만, yuna는 개명 전용 경로가
+        // 없어 이름/소유자 변경이 실제로 일어나는 유일한 지점인 acceptTransfer에서 수행한다.
+        it("이관이 완료되면 이 프로젝트를 즐겨찾기한 사용자들의 owner/projectName도 갱신해야 한다 (P2-27)") {
+            val pt = pendingTransfer("intended-owner")
+            val destUser = User(id = 2L, loginId = "intended-owner", name = "받는사람")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            val favoriter = User(id = 3L, loginId = "favoriter", name = "즐겨찾기유저")
+            val favorite = FavoriteProject(id = 900L, user = favoriter, project = project, owner = "sender", projectName = "yona-project")
+
+            every {
+                projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(50L, false, any())
+            } returns Optional.of(pt)
+            every { userRepository.findById(2L) } returns Optional.of(destUser)
+            every { projectRepository.save(any()) } returns project
+            every { projectUserRepository.findByProjectIdAndUserId(10L, 1L) } returns Optional.empty()
+            every { userRepository.findByLoginId("intended-owner") } returns Optional.of(destUser)
+            every { organizationRepository.findByName("intended-owner") } returns Optional.empty()
+            every { projectUserRepository.findByProjectIdAndUserId(10L, 2L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+            every { favoriteProjectRepository.findByProjectId(10L) } returns listOf(favorite)
+            every { favoriteProjectRepository.save(any()) } returns favorite
+
+            projectService.acceptTransfer(50L, "correct-key", 2L)
+
+            verify(exactly = 1) {
+                favoriteProjectRepository.save(match { it.owner == "intended-owner" && it.projectName == "yona-project" })
+            }
         }
 
         it("이관 목적지가 조직(Organization) 이름이면 해당 조직의 ORG_ADMIN만 수락할 수 있어야 한다") {
