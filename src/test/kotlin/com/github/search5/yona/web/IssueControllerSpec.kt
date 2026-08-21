@@ -179,6 +179,39 @@ class IssueControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/projects/1/issues/5").principal(otherAuth))
                     .andExpect(status().isForbidden)
             }
+
+            // yona IssueApp.java:267-269 issue()의 draft 전용 게이트 대응 (P1-84). AccessControl.isAllowed()
+            // 호출보다 먼저 실행되는 별도 체크 — 프로젝트 멤버여도 작성자 본인이 아니면 초안은 못 본다.
+            it("초안(draft) 이슈는 작성자 본인이 아닌 프로젝트 멤버가 조회하면 403 Forbidden을 반환해야 한다") {
+                val draftIssue = Issue(
+                    id = 8L, number = 8L, title = "초안 이슈", body = "본문", project = project,
+                    authorId = user.id, authorLoginId = user.loginId, state = State.DRAFT, isDraft = true
+                )
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 8L) } returns draftIssue
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 20L) } returns true
+
+                mockMvc.perform(get("/api/projects/1/issues/8").principal(managerAuth))
+                    .andExpect(status().isForbidden)
+            }
+
+            it("초안(draft) 이슈는 작성자 본인이면 프로젝트 멤버가 아니어도 조회할 수 있어야 한다") {
+                val draftIssue = Issue(
+                    id = 9L, number = 9L, title = "초안 이슈2", body = "본문", project = project,
+                    authorId = user.id, authorLoginId = user.loginId, state = State.DRAFT, isDraft = true
+                )
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 9L) } returns draftIssue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+
+                mockMvc.perform(get("/api/projects/1/issues/9").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.title").value("초안 이슈2"))
+            }
         }
 
         describe("GET /api/projects/{projectId}/issues/{issueId}/timeline") {
