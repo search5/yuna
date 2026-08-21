@@ -1,18 +1,25 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.YonaAuthenticationProvider
 import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.domain.user.Email
+import com.github.search5.yona.domain.user.EmailDomainValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserService
 import com.github.search5.yona.domain.user.UserSetting
 import com.github.search5.yona.domain.user.UserSettingRepository
+import com.github.search5.yona.domain.user.UserState
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.Authentication
+import org.springframework.security.core.AuthenticationException
 import org.springframework.web.bind.annotation.*
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.time.LocalDateTime
 import java.util.Base64
 
@@ -21,7 +28,12 @@ class UserController(
     private val userService: UserService,
     private val userRepository: UserRepository,
     private val recentIssueService: RecentIssueService,
-    private val userSettingRepository: UserSettingRepository
+    private val userSettingRepository: UserSettingRepository,
+    private val yonaAuthenticationProvider: YonaAuthenticationProvider,
+    @Value("\${yuna.signup.allowed-email-domains:}")
+    private val allowedEmailDomains: String,
+    @Value("\${yuna.signup.require-admin-confirm:false}")
+    private val requireAdminConfirm: Boolean
 ) {
 
     private fun getLoginUserId(authentication: Authentication?): Long {
@@ -300,6 +312,142 @@ class UserController(
         val password: String,
         val retypedPassword: String
     )
+
+    // yona UserApi.java:218-241 newUser() 대응 (P1-118). 사이트관리자 전용 벌크 사용자 생성 —
+    // 비로그인 상태에서도 호출 가능한 API이므로 권한 검사는 세션/토큰 인증을 거친 currentUser로 직접
+    // 판단한다(스프링 시큐리티 인가 규칙이 아닌 컨트롤러 내부 판단인 것도 legacy와 동일).
+    @PostMapping("/api/users")
+    fun newUser(
+        @RequestBody request: NewUsersRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val currentUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (currentUser == null || !currentUser.isSiteManager) {
+            return ResponseEntity.badRequest()
+                .body(mapOf("message" to "User creation with api is allowed by Site admin only."))
+        }
+
+        val createdUsers = request.users.map { createUserNode(it) }
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdUsers)
+    }
+
+    // yona UserApi.java:407-434 createUserNode() 대응. yona는 벌크 생성된 사용자의 비밀번호를
+    // SecureRandomNumberGenerator로 생성한 불투명한 값으로 채운 뒤, 그 값을 "평문"으로 취급해 다시
+    // salt+해시하는(UserApp.createNewUser) 절차를 그대로 거친다 — 즉 결과적으로 어떤 실제 비밀번호로도
+    // 로그인할 수 없는 계정이 되며, 별도의 비밀번호 재설정 절차(신규 요청 범위 밖)를 거쳐야 한다.
+    private fun createUserNode(item: NewUserItem): Map<String, Any?> {
+        if (!EmailDomainValidator.isAllowed(item.email, allowedEmailDomains)) {
+            return mapOf(
+                "status" to 403, "reason" to "Forbidden",
+                "message" to "허용되지 않은 이메일 도메인입니다.", "user" to item
+            )
+        }
+        if (userRepository.findByEmail(item.email).isPresent) {
+            return mapOf("status" to 409, "reason" to "Conflict", "message" to "Already exists!", "user" to item)
+        }
+
+        val opaqueRandomPassword = Base64.getEncoder().encodeToString(SecureRandom().generateSeed(20))
+        val salt = java.util.UUID.randomUUID().toString().substring(0, 8)
+        val user = User(
+            loginId = item.loginId,
+            name = item.name,
+            email = item.email,
+            password = hashPassword(opaqueRandomPassword, salt),
+            passwordSalt = salt
+        )
+        if (requireAdminConfirm) {
+            user.state = UserState.LOCKED
+        }
+        val created = userService.createUser(user)
+
+        return mapOf(
+            "status" to 201, "reason" to "Created",
+            "user" to mapOf(
+                "id" to created.id, "loginId" to created.loginId,
+                "name" to created.name, "email" to created.email
+            )
+        )
+    }
+
+    data class NewUsersRequest(val users: List<NewUserItem>)
+    data class NewUserItem(val loginId: String, val name: String, val email: String)
+
+    // yona UserApi.java:244-265 newToken() 대응 (P1-118). 세션 없이 아이디(또는 이메일)+비밀번호로
+    // API 액세스 토큰을 발급한다. 비밀번호 검증 자체는 YonaAuthenticationProvider에 위임해 LDAP
+    // 활성화 여부/계정 잠금 상태 처리를 로그인 폼과 동일하게 재사용한다.
+    @PostMapping("/api/users/token")
+    fun newToken(@RequestBody request: NewTokenRequest): ResponseEntity<Map<String, String>> {
+        val user = userRepository.findByLoginId(request.id).orElse(null)
+            ?: userRepository.findByEmail(request.id).orElse(null)
+
+        if (user == null || user.state == UserState.LOCKED || user.state == UserState.DELETED) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("message" to "No valid user by id"))
+        }
+
+        return try {
+            yonaAuthenticationProvider.authenticate(UsernamePasswordAuthenticationToken(user.loginId, request.password))
+
+            val rawToken = LocalDateTime.now().toString() + user.loginId
+            val digest = MessageDigest.getInstance("SHA-256")
+            val newToken = Base64.getEncoder().encodeToString(digest.digest(rawToken.toByteArray(Charsets.UTF_8)))
+
+            user.token = newToken
+            userRepository.save(user)
+
+            ResponseEntity.ok(mapOf("access_token" to newToken))
+        } catch (e: AuthenticationException) {
+            ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("message" to "No user by id and password"))
+        }
+    }
+
+    data class NewTokenRequest(val id: String, val password: String)
+
+    // yona UserApi.java:320-339 users() 대응 (P1-118). 사이트관리자 전용, ACTIVE 사용자 전체 목록.
+    @GetMapping("/api/admin/users")
+    fun listAllUsersForAdmin(authentication: Authentication?): ResponseEntity<Any> {
+        val currentUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (currentUser == null || !currentUser.isSiteManager) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val users = userRepository.findByState(UserState.ACTIVE)
+        val result = users.map { u ->
+            mapOf(
+                "id" to u.id, "login_id" to u.loginId, "name" to u.name,
+                "email" to u.email, "state" to u.state.name, "is_guest" to u.isGuest
+            )
+        }
+        return ResponseEntity.ok(result)
+    }
+
+    // yona UserApi.java:341-379 updateUserState() 대응 (P1-118). 사이트관리자 전용, 사이트관리자
+    // 상태(SITE_ADMIN)로의 변경은 이 API로 금지한다(별도 절차 필요 — legacy와 동일한 제약).
+    @PatchMapping("/api/admin/users/{loginId}")
+    fun updateUserStateByAdmin(
+        @PathVariable loginId: String,
+        @RequestBody request: UpdateUserStateRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val currentUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (currentUser == null || !currentUser.isSiteManager) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val user = userRepository.findByLoginId(loginId).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+
+        val state = UserState.of(request.state) ?: return ResponseEntity.badRequest().build()
+        if (state == UserState.SITE_ADMIN) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        user.state = state
+        userRepository.save(user)
+
+        return ResponseEntity.ok(mapOf("id" to user.id, "login_id" to user.loginId, "state" to user.state.name))
+    }
+
+    data class UpdateUserStateRequest(val state: String)
 
     // yona UserApp.java:1372-1380 setDefaultLoginPage() 대응 (P2-11). 로그인 후 사이트 루트로
     // 접속했을 때 이동할 "기본 페이지"를 사용자별로 저장한다(리다이렉트 소비는 IndexController).

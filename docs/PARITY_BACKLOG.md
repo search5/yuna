@@ -165,7 +165,7 @@
 | P1-115 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** JPQL 연산자 우선순위 버그로 CLOSED/MERGED PR도 브랜치 삭제 처리 대상에 포함 가능 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `PullRequestRepository.findRelatedPullRequests()` | **완료(아래 완료 로그 참고)** |
 | P1-116 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰/커밋 댓글 삭제 권한이 "작성자 또는 MANAGER"로 과도 제한(P1-90~95와 동일 유형이나 조사 누락) | `AccessControl.java` | `CodeReviewServiceImpl.hasPermission()` | **완료(아래 완료 로그 참고)** |
 | P1-117 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 조직 그룹 기반 담당자 후보(조직 관리자/멤버/사이트매니저) 확장 로직 없음 | `User.java` | `ProjectMemberController.assignableUsers()` | **완료(아래 완료 로그 참고)** |
-| P1-118 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** 사이트관리자 전용 벌크 사용자 생성(`newUser`)/API 전용 토큰 로그인(`newToken`)/사용자 전체 조회·상태변경(`users`/`updateUserState`) API 부재 | `UserApi.java` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-118 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** 사이트관리자 전용 벌크 사용자 생성(`newUser`)/API 전용 토큰 로그인(`newToken`)/사용자 전체 조회·상태변경(`users`/`updateUserState`) API 부재 | `UserApi.java` | `UserController.kt` | **완료(아래 완료 로그 참고)** |
 | P1-119 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** `loginId=="admin"`이면 상태 무관 항상 `isSiteManager=true`로 판정하는 yona에 없는 하드코딩 분기 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `User.kt`, `UserDetailsServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-120 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `HIDE_PROJECT_LISTING` 403 체크 및 `@GuestProhibit` 미이식 | `OrganizationApp.java` | `OrganizationViewController.orgList()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-121 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 게스트 계정 조직 생성 차단(`@GuestProhibit`) 미이식 | `OrganizationApp.java` | `OrganizationViewController.createOrganization()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -243,6 +243,15 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-118**: `UserApi.java`의 site-manager 전용 API 4종(`newUser`/`newToken`/`users`/`updateUserState`)을 `UserController.kt`에 신규 이식.
+  - 착수 전 `newToken`(아이디+비밀번호로 API 토큰 발급)이 로컬 비밀번호 인증을 전제로 하는데 yuna 로그인은 OAuth2 전용으로 재설계된 것처럼 보여(BCrypt/PasswordEncoder 코드 전무) 아키텍처 차이로 판단해 사용자에게 처리 방향을 확인 — 이후 `AuthController.signup()`/`YonaAuthenticationProvider`를 재확인한 결과 **로컬 비밀번호 인증(Shiro Sha256Hash+salt+1024회 반복과 동일한 알고리즘)이 이미 완전히 구현돼 있었음**을 확인(오판이었음, 사용자 승인 후 진행 방향은 동일하게 유지: 전부 이식).
+  - `newUser`(`POST /api/users`): 사이트관리자가 아니면 yona와 동일하게(403이 아닌) 400을 반환. `EmailDomainValidator.isAllowed()`(기존 P1-77/서비스 인프라 재사용) → 이메일 중복 체크(409) 순으로 검증 후 생성. yona `createUserNode`가 `SecureRandomNumberGenerator`로 만든 불투명한 값을 다시 salt+해시하는 2단계 구조를 그대로 재현(결과적으로 어떤 비밀번호로도 로그인 불가능한 계정 — 별도 재설정 절차 전제, legacy와 동일).
+  - `newToken`(`POST /api/users/token`): 아이디 또는 이메일로 사용자 조회(`findByLoginKey` 대응) → LOCKED/DELETED 상태면 401 "No valid user by id" → 비밀번호 검증은 새로 로직을 만들지 않고 `YonaAuthenticationProvider.authenticate()`에 위임(로그인 폼과 동일 경로 재사용, LDAP 활성화 환경도 자동 지원) → 실패 시 401 "No user by id and password" → 성공 시 `resetApiToken()`과 동일한 SHA-256 기반 토큰 발급.
+  - `users`(`GET /api/admin/users`)/`updateUserState`(`PATCH /api/admin/users/{loginId}`): 둘 다 사이트관리자 전용(403), `updateUserState`는 `UserState.SITE_ADMIN`으로의 변경을 명시적으로 금지(legacy와 동일한 제약, 별도 절차 필요).
+  - 라우팅은 yona의 `-_-api/v1/*`(Play 프레임워크 전용 라우팅 우회 접두사, 프레임워크 아티팩트라 이식 대상 아님)를 yuna 기존 컨벤션인 `/api/*`로 적응하되, `/users` vs `/admin/users`라는 legacy의 의미 있는 경로 구분(일반 API vs 관리자 전용)은 그대로 보존.
+  - `UserRepository`에 `findByState(state)` 추가.
+  - 테스트: `UserControllerSpec.kt`에 12건 추가(newUser 3, newToken 4, users 2, updateUserState 3) — 신규 생성자 파라미터(`yonaAuthenticationProvider`/`allowedEmailDomains`/`requireAdminConfirm`) 반영. 25건 전부 통과.
 
 - **2026-08-21 — P1-117**: `ProjectMemberController.assignableUsers()`의 담당자 후보 목록을 yona `Project.getAssignableUsers()`/`User.findUsersByProjectAndOrganization()` 수준으로 확장.
   - yona 원본 알고리즘: 프로젝트 멤버 + (조직 소속 프로젝트라면: PRIVATE는 조직 관리자만, 그 외는 조직 멤버 전체) + (요청자가 사이트관리자면 요청자 자신)을 합쳐 이름순 정렬. yuna는 프로젝트 멤버만 반환하고 있었음 — 조직 관리자/멤버 확장, 사이트관리자 자기 자신 추가가 전부 누락.
