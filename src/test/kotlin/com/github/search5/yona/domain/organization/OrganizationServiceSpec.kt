@@ -8,6 +8,8 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.user.FavoriteOrganization
+import com.github.search5.yona.domain.user.FavoriteOrganizationRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.assertions.throwables.shouldThrow
@@ -26,7 +28,8 @@ class OrganizationServiceSpec @Autowired constructor(
     private val roleRepository: RoleRepository,
     private val projectRepository: ProjectRepository,
     private val notificationEventRepository: NotificationEventRepository,
-    private val entityManager: EntityManager
+    private val entityManager: EntityManager,
+    private val favoriteOrganizationRepository: FavoriteOrganizationRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -37,6 +40,7 @@ class OrganizationServiceSpec @Autowired constructor(
             lateinit var roleMember: Role
 
             beforeEach {
+                favoriteOrganizationRepository.deleteAll()
                 projectRepository.deleteAll()
                 organizationUserRepository.deleteAll()
                 organizationRepository.deleteAll()
@@ -242,6 +246,21 @@ class OrganizationServiceSpec @Autowired constructor(
                     it.resourceId == org.id.toString() && it.eventType == EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST && it.newValue == "CANCEL"
                 }
                 cancelEvents.size shouldBe 1
+            }
+
+            // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19).
+            it("11. 조직명을 변경하면 그 조직을 즐겨찾기한 모든 사용자의 비정규화된 organizationName도 갱신돼야 한다") {
+                val org = organizationService.createOrganization("old-org-name", "설명", admin.id!!)
+                val favoriter = userRepository.save(
+                    User(loginId = "favoriter-user", name = "즐겨찾기유저", email = "favoriter@yona.io")
+                )
+                val favorite = favoriteOrganizationRepository.save(FavoriteOrganization(user = favoriter, organization = org))
+                favorite.organizationName shouldBe "old-org-name"
+
+                organizationService.updateOrganizationSettings(org.id!!, "new-org-name", "설명", admin.id!!)
+
+                val updatedFavorite = favoriteOrganizationRepository.findById(favorite.id!!).orElseThrow()
+                updatedFavorite.organizationName shouldBe "new-org-name"
             }
         }
     }
