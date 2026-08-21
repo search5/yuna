@@ -2,6 +2,7 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -123,7 +124,11 @@ class PullRequestController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        if (!checkWritePermission(project, user)) {
+        // yona PullRequestApp.java:254 @IsCreatable(ResourceType.FORK) 대응 (P1-141) — checkWritePermission
+        // (멤버/그룹멤버 전용)만 쓰면 공개 프로젝트에서도 비멤버 로그인 사용자가 PR을 보낼 수 없어 yona보다
+        // 과도하게 제한됨. AccessControl.isProjectResourceCreatable()이 이미 FORK를 공개 프로젝트
+        // 비멤버 허용 타입에 포함하고 있어 그대로 재사용한다.
+        if (!accessControl.isProjectResourceCreatable(user, project, ResourceType.FORK)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
