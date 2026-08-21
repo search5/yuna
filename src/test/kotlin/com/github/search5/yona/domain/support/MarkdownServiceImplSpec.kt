@@ -39,7 +39,119 @@ class MarkdownServiceImplSpec : DescribeSpec({
         messageSource
     )
 
-    val markdownService = MarkdownServiceImpl(autoLinkRenderer, repositoryService)
+    val issueMarkdownProjectRepository = mockk<ProjectRepository>()
+    val issueMarkdownIssueRepository = mockk<IssueRepository>()
+    val issueMarkdownUserRepository = mockk<UserRepository>()
+    val issueMarkdownAccessControl = mockk<com.github.search5.yona.config.security.AccessControl>()
+
+    val markdownService = MarkdownServiceImpl(
+        autoLinkRenderer, repositoryService,
+        issueMarkdownProjectRepository, issueMarkdownIssueRepository,
+        issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
+        hostname = "yuna.example.com"
+    )
+
+    // yona utils/Markdown.java:132-159 transformIssueLink()/:161-211 extractIssueLink() 대응
+    // (P2-33). 본문에 순수 이슈 URL(예: https://호스트/owner/proj/issue/5)을 그대로 붙여넣으면(사용자가
+    // 직접 [텍스트](url)로 감싸지 않은 raw link만 — commonmark AutolinkExtension이 이런 raw URL을
+    // <a href="...">그대로의 URL 텍스트</a>로 자동 링크화해 두고, 이 함수가 그 앵커의 href==text인
+    // 것만 골라 이슈 링크인지 검사한다) "#번호.제목" + 상태뱃지로 자동 변환한다. 이슈 READ 권한이
+    // 없으면 원본 링크를 그대로 두고 그 시점에서 문서 전체 스캔을 중단한다(legacy 원본의 `break` 그대로
+    // — 이후에 나오는 다른 이슈 링크는 검사되지 않는, 일견 버그처럼 보이지만 원본 그대로 재현해야 하는
+    // 동작).
+    describe("MarkdownServiceImpl 순수 이슈URL 자동 링크화 (P2-33)") {
+        val project = Project(id = 1L, name = "proj", owner = "owner", vcs = "GIT")
+        val openIssue = Issue(
+            id = 10L, title = "버그 수정", project = project, number = 5L,
+            state = State.OPEN, authorId = 1L
+        )
+
+        beforeTest {
+            io.mockk.clearMocks(
+                issueMarkdownProjectRepository, issueMarkdownIssueRepository,
+                issueMarkdownUserRepository, issueMarkdownAccessControl,
+                answers = false
+            )
+            every { issueMarkdownUserRepository.findByLoginId(any()) } returns Optional.empty()
+        }
+
+        it("호스트가 일치하는 순수 이슈 URL은 #번호.제목 + 상태뱃지로 바뀌어야 한다") {
+            every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(project)
+            every { issueMarkdownIssueRepository.findByProjectAndNumber(project, 5L) } returns openIssue
+            every { issueMarkdownAccessControl.isAllowed(null, project, openIssue, com.github.search5.yona.domain.enumeration.Operation.READ) } returns true
+            every { messageSource.getMessage("issue.state.open", null, "open", any()) } returns "열림"
+
+            val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/5")
+
+            rendered shouldContain "#5.버그 수정"
+            rendered shouldContain "issueLink"
+            rendered shouldContain "issue-state"
+        }
+
+        it("이슈 READ 권한이 없으면 원본 링크를 그대로 두어야 한다") {
+            val privateIssue = Issue(id = 11L, title = "비공개 이슈", project = project, number = 6L, state = State.OPEN, authorId = 1L)
+            every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(project)
+            every { issueMarkdownIssueRepository.findByProjectAndNumber(project, 6L) } returns privateIssue
+            every { issueMarkdownAccessControl.isAllowed(null, project, privateIssue, com.github.search5.yona.domain.enumeration.Operation.READ) } returns false
+
+            val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/6")
+
+            rendered shouldNotContain "issueLink"
+        }
+
+        it("[텍스트](url) 형태로 직접 감싼 링크는 링크텍스트==href가 아니라 변환 대상이 아니어야 한다") {
+            val rendered = markdownService.render("[여기 참고](https://yuna.example.com/owner/proj/issue/5-wrapped)")
+
+            rendered shouldNotContain "issueLink"
+        }
+
+        it("이슈 경로가 아닌 일반 프로젝트 URL은 변환하지 않아야 한다") {
+            val rendered = markdownService.render("https://yuna.example.com/owner/proj-nolink")
+
+            rendered shouldNotContain "issueLink"
+        }
+    }
+
+    // yona utils/Markdown.java:103-130 checkReferrer() 대응 (P2-32). application.noreferrer가
+    // 켜져 있으면 이 사이트 호스트명으로 시작하지 않는 외부 링크에 rel="noreferrer"를 붙인다 —
+    // 지금까지는 알림메일 후처리(NotificationMailBodyProcessor, P1-27)에만 있고 일반 마크다운
+    // 렌더링(이슈/댓글/위키 본문 등 전체)엔 없었다.
+    describe("MarkdownServiceImpl noreferrer 처리 (P2-32)") {
+        val noreferrerEnabledService = MarkdownServiceImpl(
+            autoLinkRenderer, repositoryService,
+            issueMarkdownProjectRepository, issueMarkdownIssueRepository,
+            issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
+            noreferrerEnabled = true, hostname = "yuna.example.com"
+        )
+        val noreferrerDisabledService = MarkdownServiceImpl(
+            autoLinkRenderer, repositoryService,
+            issueMarkdownProjectRepository, issueMarkdownIssueRepository,
+            issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
+            noreferrerEnabled = false, hostname = "yuna.example.com"
+        )
+
+        it("application.noreferrer가 켜져 있으면 외부 링크에 rel=noreferrer가 붙어야 한다") {
+            val rendered = noreferrerEnabledService.render("[외부링크](https://evil.example.org/x)")
+            rendered shouldContain "noreferrer"
+        }
+
+        it("이 사이트 호스트명으로 시작하는 링크에는 rel=noreferrer를 붙이지 않아야 한다") {
+            val rendered = noreferrerEnabledService.render("[내부링크](https://yuna.example.com/owner/project)")
+            rendered shouldNotContain "noreferrer"
+        }
+
+        it("application.noreferrer가 꺼져 있으면 외부 링크라도 rel=noreferrer를 붙이지 않아야 한다") {
+            // 렌더 결과 캐시(MarkdownRenderCache, P2-43)가 source.hashCode()만 키로 쓰는 전역
+            // 캐시라 다른 테스트와 같은 본문을 쓰면 캐시 충돌이 나므로 본문 텍스트를 다르게 둔다.
+            val rendered = noreferrerDisabledService.render("[다른외부링크](https://evil.example.org/y)")
+            rendered shouldNotContain "noreferrer"
+        }
+
+        it("상대경로(호스트 없는) 링크에는 rel=noreferrer를 붙이지 않아야 한다") {
+            val rendered = noreferrerEnabledService.render("[상대경로](/owner/project/issue/1)")
+            rendered shouldNotContain "noreferrer"
+        }
+    }
 
     describe("MarkdownServiceImpl & AutoLinkRenderer TDD 단축 링크 변환 검증") {
         val project = Project(id = 1L, name = "yobi", owner = "yobi", vcs = "GIT")

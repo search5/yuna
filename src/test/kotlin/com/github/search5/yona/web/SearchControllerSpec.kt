@@ -85,6 +85,15 @@ class SearchControllerSpec : DescribeSpec({
                 .andExpect(status().isBadRequest)
         }
 
+        it("GET /search - searchType이 인식 불가(NA로 폴백)이면 400 Bad Request를 반환해야 한다 (P2-31, yona SearchApp.java:56-58)") {
+            mockMvc.perform(
+                get("/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "not-a-real-type")
+            )
+                .andExpect(status().isBadRequest)
+        }
+
         it("GET /org/{organizationName}/search - 조직 검색 시 200 OK와 search/list 뷰를 반환해야 한다") {
             val org = Organization(id = 5L, name = "testorg")
             every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
@@ -119,6 +128,18 @@ class SearchControllerSpec : DescribeSpec({
                 .andExpect(model().attributeExists("keyword", "searchResult", "currentUser", "org"))
         }
 
+        it("GET /org/{organizationName}/search - searchType이 인식 불가(NA로 폴백)이면 400 Bad Request를 반환해야 한다 (P2-31, yona SearchApp.java:134-136)") {
+            val org = Organization(id = 5L, name = "testorg")
+            every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+
+            mockMvc.perform(
+                get("/org/testorg/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "not-a-real-type")
+            )
+                .andExpect(status().isBadRequest)
+        }
+
         it("GET /{owner}/{projectName}/search - 프로젝트 검색 시 200 OK와 search/list 뷰를 반환해야 한다") {
             val project = Project(id = 1L, name = "TestProj", owner = "owner")
             every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
@@ -134,6 +155,30 @@ class SearchControllerSpec : DescribeSpec({
                 .andExpect(status().isOk)
                 .andExpect(view().name("search/list"))
                 .andExpect(model().attributeExists("keyword", "searchResult", "currentUser", "project"))
+        }
+
+        it("GET /{owner}/{projectName}/search - searchType이 인식 불가(NA로 폴백)이면 400 Bad Request를 반환해야 한다 (P2-31, yona SearchApp.java:209-211)") {
+            val project = Project(id = 1L, name = "TestProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+
+            mockMvc.perform(
+                get("/owner/TestProj/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "not-a-real-type")
+            )
+                .andExpect(status().isBadRequest)
+        }
+
+        it("GET /{owner}/{projectName}/search - searchType=project는 프로젝트 범위 검색에서 무의미해 400 Bad Request를 반환해야 한다 (P2-31, yona SearchApp.java:209-211)") {
+            val project = Project(id = 1L, name = "TestProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+
+            mockMvc.perform(
+                get("/owner/TestProj/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "project")
+            )
+                .andExpect(status().isBadRequest)
         }
     }
 
