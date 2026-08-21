@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.user.FavoriteOrganizationRepository
 import com.github.search5.yona.domain.user.LoginIdFormatValidator
 import com.github.search5.yona.domain.user.ReservedWordsValidator
 import com.github.search5.yona.domain.user.User
@@ -21,7 +22,9 @@ class OrganizationServiceImpl(
     private val organizationUserRepository: OrganizationUserRepository,
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
-    private val notificationEventRecorder: NotificationEventRecorder
+    private val notificationEventRecorder: NotificationEventRecorder,
+    // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19).
+    private val favoriteOrganizationRepository: FavoriteOrganizationRepository
 ) : OrganizationService {
 
     override fun findByName(name: String): Organization? {
@@ -91,6 +94,14 @@ class OrganizationServiceImpl(
         }
         organization.descr = descr
         organizationRepository.save(organization)
+
+        // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19) — 조직명이
+        // 바뀌면 즐겨찾기 목록에 저장된 비정규화 organizationName도 함께 갱신한다(그대로 두면 즐겨찾기
+        // 화면에 옛 조직명이 남는다).
+        favoriteOrganizationRepository.findByOrganizationId(orgId).forEach {
+            it.organizationName = organization.name
+            favoriteOrganizationRepository.save(it)
+        }
     }
 
     @Transactional
