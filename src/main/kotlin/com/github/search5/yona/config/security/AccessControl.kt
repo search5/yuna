@@ -56,7 +56,11 @@ class AccessControl(
     // 기동 시 한 번 읽어 static 필드에 캐싱하던 legacy와 달리, Spring 표준 프로퍼티 주입으로 대체한다
     // (기본값 true로 legacy 기본값과 동일). yona conf/application.conf.default:21에 명시적으로 true.
     @Value("\${yuna.access.allows-anonymous-access:true}")
-    private val allowsAnonymousAccess: Boolean = true
+    private val allowsAnonymousAccess: Boolean = true,
+    // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-17/P0-20/P0-23). 비로그인·조직
+    // 비회원에게 조직 프로젝트 목록 자체를 숨기는 사이트 전역 플래그. legacy 기본값 false와 동일.
+    @Value("\${yuna.application.hide-project-listing:false}")
+    private val hideProjectListing: Boolean = false
 ) {
 
     // yona AccessControl.java:95-97 isAnonymousNotAllowed() 대응 (P1-99).
@@ -196,6 +200,29 @@ class AccessControl(
             }
         }
         return false
+    }
+
+
+    // yona Organization.getVisibleProjects(User) 대응 (P0-17/P0-20). 조직 소속 프로젝트 목록을 노출하는
+    // 화면(조직 게시판/조직 홈)에서 로그인 사용자의 조직관리자/조직멤버/비회원 여부에 따라 비공개 프로젝트를
+    // 걸러낸다. user가 null(비로그인)이면 yona의 익명 NullUser(isGuest=false, 조직/프로젝트 비회원)와
+    // 동일하게 동작한다.
+    fun getVisibleProjects(organization: Organization, user: User?): List<Project> {
+        val result = when {
+            isOrganizationAdmin(organization, user) || user?.isSiteManager == true ->
+                organization.projects.toList()
+            isOrganizationMember(organization, user) ->
+                organization.projects.filter { !it.isPrivate || user?.isMemberOf(it) == true }
+            else ->
+                if (!hideProjectListing) {
+                    organization.projects.filter {
+                        (it.isPublic && user?.isGuest != true) || user?.isMemberOf(it) == true
+                    }
+                } else {
+                    emptyList()
+                }
+        }
+        return result.sortedBy { it.name }
     }
 
     // yona AccessControl.java:250-259,274-279,368-383 isAllowedIfSharer() 대응 (P1-82). ISSUE_POST의

@@ -383,4 +383,54 @@ class AccessControlSpec : DescribeSpec({
             accessControl.isAllowed(null, publicProject, Operation.READ) shouldBe true
         }
     }
+
+    // yona Organization.getVisibleProjects(User) 대응 (P0-17/P0-20). 조직 소속 프로젝트 목록을 노출하는
+    // 화면(조직 게시판/조직 홈)에서 사용자의 조직관리자/조직멤버/비회원 여부에 따라 비공개 프로젝트를 걸러낸다.
+    describe("getVisibleProjects(organization, user)") {
+        val visibilityOrg = Organization(id = 500L, name = "visOrg")
+        val vPublic = Project(id = 501L, name = "b-public", projectScope = ProjectScope.PUBLIC, organization = visibilityOrg)
+        val vProtected = Project(id = 502L, name = "a-protected", projectScope = ProjectScope.PROTECTED, organization = visibilityOrg)
+        val vPrivate = Project(id = 503L, name = "c-private", projectScope = ProjectScope.PRIVATE, organization = visibilityOrg)
+        visibilityOrg.projects = mutableListOf(vPublic, vProtected, vPrivate)
+
+        it("조직관리자는 비공개 포함 전체 프로젝트를 이름순으로 본다") {
+            stubOrgRole(visibilityOrg, orgAdminUser, RoleType.ORG_ADMIN)
+            val result = accessControl.getVisibleProjects(visibilityOrg, orgAdminUser)
+            result.map { it.id } shouldBe listOf(vProtected.id, vPublic.id, vPrivate.id)
+        }
+        it("사이트매니저는 조직관리자가 아니어도 전체 프로젝트를 본다") {
+            val result = accessControl.getVisibleProjects(visibilityOrg, siteManager)
+            result.map { it.id }.toSet() shouldBe setOf(vPublic.id, vProtected.id, vPrivate.id)
+        }
+        it("조직멤버(관리자 아님)는 비공개 프로젝트 중 자신이 프로젝트 멤버가 아닌 것은 제외한다") {
+            stubOrgRole(visibilityOrg, orgMemberUser, RoleType.ORG_MEMBER)
+            val result = accessControl.getVisibleProjects(visibilityOrg, orgMemberUser)
+            result.map { it.id } shouldBe listOf(vProtected.id, vPublic.id)
+        }
+        it("조직멤버가 비공개 프로젝트의 멤버이기도 하면 그 프로젝트도 포함한다") {
+            val memberWithPrivateAccess = User(id = 801L, loginId = "orgMemberPriv", name = "orgMemberPriv")
+            memberWithPrivateAccess.projectUsers.add(ProjectUser(id = 900L, user = memberWithPrivateAccess, project = vPrivate, role = Role(id = RoleType.MEMBER.roleType)))
+            stubOrgRole(visibilityOrg, memberWithPrivateAccess, RoleType.ORG_MEMBER)
+            val result = accessControl.getVisibleProjects(visibilityOrg, memberWithPrivateAccess)
+            result.map { it.id }.toSet() shouldBe setOf(vPublic.id, vProtected.id, vPrivate.id)
+        }
+        it("조직에 속하지 않은 로그인 사용자는 공개 프로젝트만 본다(비공개/보호 제외)") {
+            val result = accessControl.getVisibleProjects(visibilityOrg, stranger)
+            result.map { it.id } shouldBe listOf(vPublic.id)
+        }
+        it("비회원이라도 해당 프로젝트의 멤버라면 포함한다") {
+            val visitor = User(id = 802L, loginId = "visitor", name = "visitor")
+            visitor.projectUsers.add(ProjectUser(id = 901L, user = visitor, project = vProtected, role = Role(id = RoleType.MEMBER.roleType)))
+            val result = accessControl.getVisibleProjects(visibilityOrg, visitor)
+            result.map { it.id }.toSet() shouldBe setOf(vPublic.id, vProtected.id)
+        }
+        it("비로그인(익명) 사용자는 공개 프로젝트만 본다") {
+            val result = accessControl.getVisibleProjects(visibilityOrg, null)
+            result.map { it.id } shouldBe listOf(vPublic.id)
+        }
+        it("게스트 계정(isGuest=true)은 프로젝트 멤버가 아닌 한 공개 프로젝트도 보지 못한다") {
+            val result = accessControl.getVisibleProjects(visibilityOrg, guest)
+            result shouldBe emptyList()
+        }
+    }
 })
