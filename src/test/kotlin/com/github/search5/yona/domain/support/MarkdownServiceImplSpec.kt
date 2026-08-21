@@ -38,7 +38,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
         messageSource
     )
 
-    val markdownService = MarkdownServiceImpl(autoLinkRenderer)
+    val markdownService = MarkdownServiceImpl(autoLinkRenderer, repositoryService)
 
     describe("MarkdownServiceImpl & AutoLinkRenderer TDD 단축 링크 변환 검증") {
         val project = Project(id = 1L, name = "yobi", owner = "yobi", vcs = "GIT")
@@ -183,6 +183,41 @@ class MarkdownServiceImplSpec : DescribeSpec({
             val output = markdownService.render("```\nval x = 1\n```")
             output.shouldContain("<pre")
             output.shouldContain("val x = 1")
+        }
+    }
+
+    // yona Markdown.java:346-356 renderFileInCodeBrowser()/renderFileInReadme() 대응 (P1-139).
+    describe("renderFileInCodeBrowser / renderFileInReadme - 상대경로 링크 치환") {
+        val project = Project(id = 1L, name = "yobi", owner = "yobi", vcs = "GIT")
+        val playRepoWithMain = object : PlayRepository by mockk<PlayRepository>(relaxed = true) {
+            override fun getDefaultBranch(): String = "refs/heads/main"
+        }
+
+        it("renderFileInCodeBrowser는 상대 이미지 링크를 files 경로 절대링크로 바꿔 렌더링해야 한다") {
+            every { repositoryService.getRepository(project) } returns playRepoWithMain
+
+            val output = markdownService.renderFileInCodeBrowser("![스크린샷](./images/shot.png)", project)
+
+            output.shouldContain("/yobi/yobi/files/main/images/shot.png")
+        }
+
+        it("renderFileInCodeBrowser는 절대/외부 링크는 건드리지 않아야 한다") {
+            every { repositoryService.getRepository(project) } returns playRepoWithMain
+
+            val output = markdownService.renderFileInCodeBrowser("![로고](https://example.com/logo.png)", project)
+
+            output.shouldContain("https://example.com/logo.png")
+        }
+
+        it("renderFileInReadme는 상대 일반 링크를 code 경로 절대링크로, 이미지 링크는 files 경로로 바꿔야 한다") {
+            every { repositoryService.getRepository(project) } returns playRepoWithMain
+
+            val output = markdownService.renderFileInReadme(
+                "See [docs](./docs/guide.md) and ![logo](./images/logo.png)", project
+            )
+
+            output.shouldContain("/yobi/yobi/code/main/docs/guide.md")
+            output.shouldContain("/yobi/yobi/files/main/images/logo.png")
         }
     }
 })

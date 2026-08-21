@@ -110,9 +110,11 @@ class ProjectViewController(
         }
 
         val readmeFileName = getReadmeFileName(project)
+        // yona partial_readme.scala.html:41 Markdown.renderFileInReadme() 대응 (P1-139) —
+        // README 원문 안의 상대경로 링크를 코드브라우저/파일 경로 절대링크로 치환한 뒤 렌더링한다.
         val readmeHtml = if (tabId == "readme" && readmeFileName != null) {
             val content = getReadmeContent(project, readmeFileName)
-            if (content != null) markdownService.render(content, true, project) else null
+            if (content != null) markdownService.renderFileInReadme(content, project) else null
         } else {
             null
         }

@@ -16,6 +16,7 @@ import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.verify
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
@@ -144,6 +145,30 @@ class ProjectViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("project/home"))
                     .andExpect(model().attributeExists("project", "projectUsers"))
+            }
+
+            // yona partial_readme.scala.html:41 Markdown.renderFileInReadme() 대응 (P1-139) —
+            // README 렌더링에 상대경로 링크 치환이 포함된 renderFileInReadme()를 써야 한다(일반 render() 아님).
+            it("readme 탭이면 README.md를 renderFileInReadme로 렌더링해 markdownHtml에 담아야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 901L, user = memberUser, project = project, role = managerRole))
+                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { projectUserRepository.findByProjectId(1L) } returns listOf(projectUser)
+                every { watchService.isWatching(any(), any(), any()) } returns false
+                every { watchService.findWatchers(any(), any()) } returns emptySet()
+                every { repositoryService.getRepository(project) } returns playRepo
+                every { playRepo.isFile("README.md") } returns true
+                every { playRepo.getRawFile("HEAD", "README.md") } returns "# 안내".toByteArray(Charsets.UTF_8)
+                every { markdownService.renderFileInReadme("# 안내", project) } returns "<h1>안내</h1>"
+
+                mockMvc.perform(get("/owner/TestProj").param("tabId", "readme").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("project/home"))
+                    .andExpect(model().attribute("readmeHtml", "<h1>안내</h1>"))
+                verify(exactly = 0) { markdownService.render("# 안내", true, project) }
             }
 
             it("프로젝트 멤버가 아닐 경우 403 Forbidden 뷰를 반환해야 한다") {

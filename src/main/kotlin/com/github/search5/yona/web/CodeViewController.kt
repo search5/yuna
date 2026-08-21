@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
+import com.github.search5.yona.domain.support.MarkdownService
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import org.springframework.http.HttpStatus
@@ -31,7 +32,8 @@ class CodeViewController(
     private val repositoryService: RepositoryService,
     private val commentThreadRepository: CommentThreadRepository,
     private val commitCommentRepository: CommitCommentRepository,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val markdownService: MarkdownService
 ) {
 
     @GetMapping("/{owner}/{projectName}/code")
@@ -113,7 +115,23 @@ class CodeViewController(
         model.addAttribute("path", normalizedPath)
         model.addAttribute("currentUser", loginUser)
 
+        // yona views/code/partial_view_file.scala.html:109-114 "if(isMarkdownExtension(path))" 대응
+        // (P1-139) — 코드브라우저에서 .md류 파일은 원문 대신 렌더링된 HTML로 보여준다.
+        val lastEntry = recursiveData.lastOrNull()
+        if (lastEntry?.get("type")?.asText() == "file" && isMarkdownExtension(normalizedPath)) {
+            val data = lastEntry.get("data")?.asText()
+            if (data != null) {
+                model.addAttribute("markdownHtml", markdownService.renderFileInCodeBrowser(data, project))
+            }
+        }
+
         return "code/view"
+    }
+
+    // yona utils/TemplateHelper.scala:594-600 isMarkdownExtension() 대응 (P1-139).
+    private fun isMarkdownExtension(path: String): Boolean {
+        val ext = path.substringAfterLast('.', "").lowercase()
+        return ext in setOf("markdown", "mdown", "mkdn", "mkd", "md", "mdwn")
     }
 
     @GetMapping("/{owner}/{projectName}/rawcode/{rev}/{*path}")
