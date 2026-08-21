@@ -211,7 +211,7 @@
 | P2-17 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** 새 댓글 알림의 "인용 이전 내용"(oldValue) 미채움 — `NotificationMessageResolver.kt:58-60`에 이미 인지된 상태로 null-safe 우회 처리가 돼 있음이 확인됨. 단순 누락이 아니라 "알고도 방치"임. | `BoardApp.java` | `CommentServiceImpl.createPostingComment/createIssueComment` | **완료(아래 완료 로그 참고)** |
 | P2-18 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** `getCommitComments()`(SVN 커밋코멘트 ↔ PR 매핑) 대응 부재 | `PullRequest.java` | (대응 없음) | **완료(조사 결과 이식 불필요로 판정, 아래 완료 로그 참고)** |
 | P2-19 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 조직명 변경 시 `FavoriteOrganization.organizationName` 비정규화 필드 동기화 누락 | `FavoriteOrganization.java` | `OrganizationServiceImpl.updateOrganizationSettings()` | **완료(아래 완료 로그 참고)** |
-| P2-20 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 가입요청/취소 알림 수신자 계산이 Watch 여부를 무시 | `NotificationEvent.getReceivers(Project)` | `ProjectUserServiceImpl.getProjectManagers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P2-20 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 가입요청/취소 알림 수신자 계산이 Watch 여부를 무시 | `NotificationEvent.getReceivers(Project)` | `ProjectUserServiceImpl.getProjectManagers()` | **완료(아래 완료 로그 참고)** |
 | P2-21 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직 가입 신청 oldValue/newValue 페어링이 비대칭이라 드래프트 상쇄 최적화 미작동 | `NotificationEvent.java` | `OrganizationServiceImpl.enroll/cancelEnroll` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-22 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 마일스톤 상세의 이슈 목록 정렬(번호 내림차순) 없음, 쿼리에도 ORDER BY 없음 | `Milestone.java` | `MilestoneViewController.toViewDto()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-23 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** dueDate 파싱 실패 시 조용히 null로 저장(에러 알림 없음) | `MilestoneApp.validateDueDate()` | `MilestoneViewController.createMilestone/editMilestone` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -250,6 +250,10 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P2-20**: `ProjectUserServiceImpl.getProjectManagers()`가 프로젝트 매니저 전원을 무조건 가입요청/취소 알림 수신자로 넣던 것을, yona `NotificationEvent.java:1468-1477` `getReceivers(Project)` 대응으로 실제 그 프로젝트를 감시(Watch) 중인 매니저만 받도록 수정. `WatchService.isWatching()`(이미 존재)을 재사용.
+  - 기존 `ProjectUserServiceSpec.kt`의 다른 테스트들이 "매니저가 알림을 받는다"는 걸 암묵적으로 가정하고 있어(감시 여부 설정이 아예 없었음), `beforeEach`에 `watchService.watch(manager, PROJECT, ...)`를 추가해 매니저가 기본으로 감시 중인 상태로 맞춤(현실적인 기본 시나리오) — 감시하지 않는 매니저가 실제로 알림을 못 받는지는 별도 신규 테스트로 검증.
+  - 테스트: `ProjectUserServiceSpec.kt` +1(감시하지 않는 매니저는 가입요청 알림을 받지 않아야 함). 전체 통과.
 
 - **2026-08-21 — P2-19**: `OrganizationServiceImpl.updateOrganizationSettings()`에 yona `FavoriteOrganization.java:38-46` `updateFavoriteOrganization()` 대응 — 조직명이 바뀌면 그 조직을 즐겨찾기한 모든 `FavoriteOrganization` 행의 비정규화된 `organizationName`도 함께 갱신(안 하면 즐겨찾기 화면에 옛 조직명이 남는다). `FavoriteOrganizationRepository`(이미 존재하는 `findByOrganizationId`) 주입 추가.
   - 테스트: `OrganizationServiceSpec.kt` +1(조직명 변경 시 즐겨찾기한 사용자의 organizationName도 갱신). 전체 통과.

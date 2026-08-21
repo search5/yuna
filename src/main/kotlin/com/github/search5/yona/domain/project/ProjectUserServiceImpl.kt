@@ -8,6 +8,7 @@ import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.watch.WatchService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -19,7 +20,8 @@ class ProjectUserServiceImpl(
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
-    private val notificationEventRecorder: NotificationEventRecorder
+    private val notificationEventRecorder: NotificationEventRecorder,
+    private val watchService: WatchService
 ) : ProjectUserService {
 
     override fun getProjectMembers(projectId: Long): List<ProjectUser> {
@@ -233,9 +235,12 @@ class ProjectUserServiceImpl(
         projectUserRepository.deleteByProjectIdAndUserId(projectId, userId)
     }
 
+    // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 프로젝트 매니저
+    // 전원이 아니라 그중 실제로 이 프로젝트를 감시(Watch) 중인 매니저만 가입요청/취소 알림을 받는다.
     private fun getProjectManagers(projectId: Long): List<User> {
         return projectUserRepository.findByProjectId(projectId)
             .filter { it.role.id == RoleType.MANAGER.roleType }
             .map { it.user }
+            .filter { watchService.isWatching(it, ResourceType.PROJECT, projectId.toString()) }
     }
 }
