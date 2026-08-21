@@ -2,6 +2,8 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.mention.MentionService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -20,6 +22,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
@@ -43,6 +46,7 @@ class UserViewControllerSpec : DescribeSpec({
     val organizationRepository = mockk<OrganizationRepository>()
     val userService = mockk<UserService>()
     val accessControl = mockk<AccessControl>()
+    val mentionService = mockk<MentionService>(relaxed = true)
 
     val userViewController = UserViewController(
         userRepository,
@@ -59,7 +63,8 @@ class UserViewControllerSpec : DescribeSpec({
         organizationUserRepository,
         organizationRepository,
         userService,
-        accessControl
+        accessControl,
+        mentionService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(userViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -81,7 +86,8 @@ class UserViewControllerSpec : DescribeSpec({
             favoriteOrganizationRepository,
             organizationUserRepository,
             organizationRepository,
-            accessControl
+            accessControl,
+            mentionService
         )
         every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
         every { accessControl.isAllowedToReadProject(any(), any()) } returns true
@@ -102,6 +108,41 @@ class UserViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("user/view"))
                     .andExpect(model().attributeExists("user", "projects", "issues", "pullRequests"))
+            }
+        }
+
+        // yona Mention.getMentioningIssueIds() 대응 (P2-41) — LIKE 텍스트 검색 대신 멘션 인덱스
+        // 테이블 조회 결과(이슈 id 목록)를 그대로 이슈 조회에 사용해야 한다.
+        describe("GET /user/issues?mentionId=... (P2-41)") {
+            it("멘션 인덱스 조회 결과 이슈 id 목록을 findMentionedByState에 그대로 전달해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { mentionService.getMentioningIssueIds(10L) } returns listOf(100L, 200L)
+                every {
+                    issueRepository.findMentionedByState(listOf(100L, 200L), State.OPEN, null, any())
+                } returns org.springframework.data.domain.PageImpl(emptyList())
+                every { issueRepository.countMentionedByState(listOf(100L, 200L), State.OPEN) } returns 2L
+                every { issueRepository.countMentionedByState(listOf(100L, 200L), State.CLOSED) } returns 0L
+                every { issueRepository.countSharedByState(10L, State.OPEN) } returns 0L
+                every { issueRepository.countFavoriteByState(10L, State.OPEN) } returns 0L
+
+                mockMvc.perform(get("/user/issues").param("mentionId", "1").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { issueRepository.findMentionedByState(listOf(100L, 200L), State.OPEN, null, any()) }
+            }
+
+            it("멘션된 이슈가 하나도 없으면 repository를 호출하지 않고 빈 결과를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { mentionService.getMentioningIssueIds(10L) } returns emptyList()
+                every { issueRepository.countSharedByState(10L, State.OPEN) } returns 0L
+                every { issueRepository.countFavoriteByState(10L, State.OPEN) } returns 0L
+
+                mockMvc.perform(get("/user/issues").param("mentionId", "1").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("mentionCount", 0L))
+
+                verify(exactly = 0) { issueRepository.findMentionedByState(any(), any(), any(), any()) }
+                verify(exactly = 0) { issueRepository.countMentionedByState(any(), any()) }
             }
         }
 
@@ -146,7 +187,7 @@ class UserViewControllerSpec : DescribeSpec({
             userRepository, projectUserRepository, issueRepository, pullRequestRepository, watchRepository,
             projectRepository, userProjectNotificationRepository, attachmentRepository, postingRepository,
             favoriteProjectRepository, favoriteOrganizationRepository, organizationUserRepository,
-            organizationRepository, userService, accessControl, hideProjectListing = true
+            organizationRepository, userService, accessControl, mentionService, hideProjectListing = true
         )
         val model = org.springframework.ui.ExtendedModelMap()
 

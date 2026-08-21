@@ -179,33 +179,28 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
         @Param("state") state: State
     ): Long
 
-    // 4. 나를 언급한 이슈 (제목/본문에 @username 또는 댓글에 @username 언급)
+    // 4. 나를 언급한 이슈 (yona Mention.getMentioningIssueIds() 대응, P2-41 — 조직/프로젝트 그룹
+    // 멘션까지 포함한 실제 멘션 인덱스 테이블 기반. 이전에는 title/body/댓글 LIKE 텍스트 검색으로만
+    // 근사해 그룹 멘션(@orgname, @owner/project)으로 간접 멘션된 이슈를 놓쳤다.)
     @Query("""
-        SELECT DISTINCT i FROM Issue i
-        LEFT JOIN IssueComment c ON c.issue = i
-        WHERE i.state = :state
-          AND (i.title LIKE :mentionKeyword 
-               OR i.body LIKE :mentionKeyword 
-               OR c.contents LIKE :mentionKeyword)
+        SELECT i FROM Issue i
+        WHERE i.id IN :mentionedIssueIds
+          AND i.state = :state
           AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
     """)
     fun findMentionedByState(
-        @Param("mentionKeyword") mentionKeyword: String,
+        @Param("mentionedIssueIds") mentionedIssueIds: List<Long>,
         @Param("state") state: State,
         @Param("keyword") keyword: String?,
         pageable: Pageable
     ): Page<Issue>
 
     @Query("""
-        SELECT COUNT(DISTINCT i) FROM Issue i
-        LEFT JOIN IssueComment c ON c.issue = i
-        WHERE i.state = :state
-          AND (i.title LIKE :mentionKeyword 
-               OR i.body LIKE :mentionKeyword 
-               OR c.contents LIKE :mentionKeyword)
+        SELECT COUNT(i) FROM Issue i
+        WHERE i.id IN :mentionedIssueIds AND i.state = :state
     """)
     fun countMentionedByState(
-        @Param("mentionKeyword") mentionKeyword: String,
+        @Param("mentionedIssueIds") mentionedIssueIds: List<Long>,
         @Param("state") state: State
     ): Long
 

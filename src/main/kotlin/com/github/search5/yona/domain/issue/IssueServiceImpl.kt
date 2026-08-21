@@ -2,6 +2,7 @@ package com.github.search5.yona.domain.issue
 
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.comment.CommentService
+import com.github.search5.yona.domain.mention.MentionService
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
@@ -38,7 +39,9 @@ class IssueServiceImpl(
     private val titleHeadService: TitleHeadService,
     private val attachmentService: AttachmentService,
     private val favoriteIssueRepository: FavoriteIssueRepository,
-    private val commentService: CommentService
+    private val commentService: CommentService,
+    // yona AbstractPosting.updateMention() 대응 (P2-41).
+    private val mentionService: MentionService
 ) : IssueService {
 
     override fun createIssue(
@@ -79,6 +82,10 @@ class IssueServiceImpl(
         }
 
         val savedIssue = issueRepository.save(issue)
+
+        // yona AbstractPosting.save()의 updateMention() 대응 (P2-41) — 초안 여부와 무관하게 저장할
+        // 때마다 항상 멘션 인덱스를 동기화한다(알림 발송 여부와는 별개).
+        mentionService.update(ResourceType.ISSUE_POST, savedIssue.id.toString(), commentService.extractMentionedUsers(savedIssue.body ?: ""))
 
         // yona AbstractPosting.save()의 TitleHead.saveTitleHeadKeyword() 대응 (P1-103).
         titleHeadService.saveTitleHeadKeyword(project, savedIssue.title)
@@ -207,6 +214,10 @@ class IssueServiceImpl(
         checkExclusiveLabelCategories(issue.labels)
 
         val savedIssue = issueRepository.save(issue)
+
+        // yona AbstractPosting.update()의 updateMention() 대응 (P2-41) — 본문이 안 바뀌었어도
+        // legacy와 동일하게 매 수정마다 무조건 재동기화한다(변화 없으면 diff-sync가 no-op).
+        mentionService.update(ResourceType.ISSUE_POST, savedIssue.id.toString(), commentService.extractMentionedUsers(savedIssue.body ?: ""))
 
         // yona AbstractPostingApp.editPosting()의 "TitleHead.saveTitleHeadKeyword(posting.project,
         // posting.title); TitleHead.deleteTitleHeadKeyword(original.project, original.title);" 대응

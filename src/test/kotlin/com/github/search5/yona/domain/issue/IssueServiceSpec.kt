@@ -20,6 +20,12 @@ import com.github.search5.yona.domain.user.FavoriteIssue
 import com.github.search5.yona.domain.user.FavoriteIssueRepository
 import com.github.search5.yona.domain.watch.Watch
 import com.github.search5.yona.domain.watch.WatchRepository
+import com.github.search5.yona.domain.mention.MentionService
+import com.github.search5.yona.domain.mention.MentionRepository
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -43,12 +49,19 @@ class IssueServiceSpec @Autowired constructor(
     private val watchRepository: WatchRepository,
     private val projectUserRepository: ProjectUserRepository,
     private val titleHeadRepository: TitleHeadRepository,
-    private val favoriteIssueRepository: FavoriteIssueRepository
+    private val favoriteIssueRepository: FavoriteIssueRepository,
+    private val mentionService: MentionService,
+    private val mentionRepository: MentionRepository,
+    private val organizationRepository: OrganizationRepository,
+    private val organizationUserRepository: OrganizationUserRepository
 ) : AbstractIntegrationTest() {
 
     init {
         describe("IssueService 비즈니스 테스트") {
             beforeEach {
+                mentionRepository.deleteAll()
+                organizationUserRepository.deleteAll()
+                organizationRepository.deleteAll()
                 favoriteIssueRepository.deleteAll()
                 watchRepository.deleteAll()
                 issueEventRepository.deleteAll()
@@ -977,6 +990,59 @@ class IssueServiceSpec @Autowired constructor(
                     issueEventRepository.findByIssueOrderByCreatedAsc(issue).shouldBeEmpty()
                     favoriteIssueRepository.findByIssueId(issue.id!!).shouldBeEmpty()
                     titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "Bug") shouldBe null
+                }
+            }
+
+            // yona AbstractPosting.save()의 updateMention() 대응 (P2-41, 사용자 지시로 yona의 로직·구조·
+            // 한계를 그대로 포팅). 조직 이름으로 그룹 멘션하면 직접 이름이 언급되지 않은 조직원도
+            // "나를 멘션한 이슈" 검색에 잡혀야 한다(LIKE 텍스트 검색으로는 놓치던 것).
+            describe("createIssue의 멘션 인덱스 동기화 (P2-41)") {
+                it("조직 이름으로 그룹 멘션한 이슈는 직접 언급되지 않은 조직원도 멘션 인덱스에서 찾을 수 있어야 한다") {
+                    val author = userRepository.save(User(loginId = "mention-author", name = "작성자"))
+                    val orgMember = userRepository.save(User(loginId = "mention-org-member", name = "조직원"))
+                    val project = projectRepository.save(Project(name = "mention-org-project", owner = "mention-author"))
+                    val org = organizationRepository.save(Organization(name = "mention-target-org"))
+                    val memberRole = Role(id = RoleType.ORG_MEMBER.roleType)
+                    organizationUserRepository.save(OrganizationUser(user = orgMember, organization = org, role = memberRole))
+
+                    val issue = Issue(
+                        title = "그룹 멘션 이슈",
+                        body = "@mention-target-org 확인 부탁드립니다.",
+                        project = project,
+                        authorId = author.id,
+                        authorLoginId = author.loginId,
+                        authorName = author.name
+                    )
+
+                    val savedIssue = issueService.createIssue(issue, author)
+
+                    mentionService.getMentioningIssueIds(orgMember.id!!) shouldBe listOf(savedIssue.id)
+                }
+
+                it("이슈 본문을 수정하면 멘션 인덱스도 새 본문 기준으로 갱신돼야 한다") {
+                    val author = userRepository.save(User(loginId = "mention-editor", name = "수정자"))
+                    val mentioned = userRepository.save(User(loginId = "mention-edited-target", name = "새로멘션됨"))
+                    val project = projectRepository.save(Project(name = "mention-edit-project", owner = "mention-editor"))
+
+                    val issue = Issue(
+                        title = "멘션 없는 이슈",
+                        body = "아무도 멘션하지 않음",
+                        project = project,
+                        authorId = author.id,
+                        authorLoginId = author.loginId,
+                        authorName = author.name
+                    )
+                    val savedIssue = issueService.createIssue(issue, author)
+                    mentionService.getMentioningIssueIds(mentioned.id!!) shouldBe emptyList()
+
+                    issueService.updateIssue(
+                        issueId = savedIssue.id!!,
+                        title = savedIssue.title,
+                        body = "@mention-edited-target 이제 멘션합니다.",
+                        updater = author
+                    )
+
+                    mentionService.getMentioningIssueIds(mentioned.id!!) shouldBe listOf(savedIssue.id)
                 }
             }
         }

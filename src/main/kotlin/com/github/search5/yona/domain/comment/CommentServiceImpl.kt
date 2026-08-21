@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.mention.MentionService
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.board.PostingComment
@@ -43,7 +44,9 @@ class CommentServiceImpl(
     private val organizationRepository: OrganizationRepository,
     private val organizationUserRepository: OrganizationUserRepository,
     private val projectRepository: ProjectRepository,
-    private val projectUserRepository: ProjectUserRepository
+    private val projectUserRepository: ProjectUserRepository,
+    // yona Comment.updateMention() 대응 (P2-41).
+    private val mentionService: MentionService
 ) : CommentService {
 
     // yona models/User.java:66 LOGIN_ID_PATTERN_ALLOW_FORWARD_SLASH(문자 클래스 내 "-"의 range
@@ -130,6 +133,8 @@ class CommentServiceImpl(
         val savedComment = issueCommentRepository.save(comment)
 
         val mentionedUsers = extractMentionedUsers(contents)
+        // yona Comment.save()의 updateMention() 대응 (P2-41).
+        mentionService.update(ResourceType.ISSUE_COMMENT, savedComment.id.toString(), mentionedUsers)
         val title = "[${issue.project.name}] 이슈 #${issue.number}에 새 댓글이 등록되었습니다."
         val notificationEvent = NotificationEvent(
             title = title,
@@ -196,6 +201,8 @@ class CommentServiceImpl(
         postingRepository.save(posting)
 
         val mentionedUsers = extractMentionedUsers(contents)
+        // yona Comment.save()의 updateMention() 대응 (P2-41).
+        mentionService.update(ResourceType.NONISSUE_COMMENT, savedComment.id.toString(), mentionedUsers)
         val title = "[${posting.project.name}] 게시글 #${posting.number}에 새 댓글이 등록되었습니다."
         val notificationEvent = NotificationEvent(
             title = title,
@@ -269,7 +276,10 @@ class CommentServiceImpl(
             throw IllegalArgumentException("Permission denied")
         }
         comment.contents = contents
-        return issueCommentRepository.save(comment)
+        val saved = issueCommentRepository.save(comment)
+        // yona Comment.update()의 updateMention() 대응 (P2-41).
+        mentionService.update(ResourceType.ISSUE_COMMENT, saved.id.toString(), extractMentionedUsers(contents))
+        return saved
     }
 
     override fun deleteIssueComment(commentId: Long, author: User) {
@@ -288,7 +298,10 @@ class CommentServiceImpl(
             throw IllegalArgumentException("Permission denied")
         }
         comment.contents = contents
-        return postingCommentRepository.save(comment)
+        val saved = postingCommentRepository.save(comment)
+        // yona Comment.update()의 updateMention() 대응 (P2-41).
+        mentionService.update(ResourceType.NONISSUE_COMMENT, saved.id.toString(), extractMentionedUsers(contents))
+        return saved
     }
 
     override fun deletePostingComment(commentId: Long, author: User) {
