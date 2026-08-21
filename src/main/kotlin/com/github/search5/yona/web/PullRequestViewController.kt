@@ -179,14 +179,14 @@ class PullRequestViewController(
             val commentThreads = buildCommentThreadsForChanges(pullRequest, null)
             model.addAttribute("commentThreads", commentThreads)
         } else if (tab == "conversation") {
-            val commentThreads = commentThreadRepository.findByPullRequest(pullRequest)
-                .sortedBy { it.createdDate }
-            model.addAttribute("commentThreads", commentThreads)
-
-            // yona git/partial_pull_request_event.scala.html 대응 (P1-106) — PR 대화 탭에 상태변경/
-            // 병합/리뷰완료 이력을 댓글과 함께 시간순으로 보여준다. legacy 파샬이 실제로 렌더링하는
-            // 이벤트 타입(STATE_CHANGED/MERGED/REVIEW_STATE_CHANGED)만 다루고, 그 외(NEW_PULL_REQUEST/
-            // COMMIT_CHANGED)는 legacy의 "case _ => {}"와 동일하게 화면에서 제외한다.
+            // yona git/view.scala.html의 conversation 탭 + partial_pull_request_event.scala.html
+            // 대응 (P2-39, P1-106 범위 정정) — legacy conversation 탭은 pullRequestEvents만
+            // 시간순으로 표시하고 댓글 스레드는 전혀 렌더링하지 않는다(댓글은 오직 "changes" 탭의
+            // diff 인라인에서만 노출). P1-106에서 댓글 스레드를 함께 타임라인에 넣었던 것은 legacy
+            // 원본 범위를 넘어선 yuna 자체 확장이었음을 확인해(P2-39) 되돌린다 — 사용자 확인 완료.
+            // legacy 파샬이 실제로 렌더링하는 이벤트 타입(STATE_CHANGED/MERGED/REVIEW_STATE_CHANGED)만
+            // 다루고, 그 외(NEW_PULL_REQUEST/COMMIT_CHANGED)는 legacy의 "case _ => {}"와 동일하게
+            // 화면에서 제외한다.
             val renderedEventTypes = setOf(
                 com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED,
                 com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED,
@@ -194,14 +194,9 @@ class PullRequestViewController(
             )
             val events = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
                 .filter { it.eventType in renderedEventTypes }
-            val timeline = (
-                commentThreads.map {
-                    com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem(kind = "THREAD", date = it.createdDate, thread = it)
-                } +
-                    events.map {
-                        com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem(kind = "EVENT", date = it.created, event = it)
-                    }
-                ).sortedBy { it.date }
+            val timeline = events.map {
+                com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem(date = it.created, event = it)
+            }.sortedBy { it.date }
             model.addAttribute("timeline", timeline)
         }
 

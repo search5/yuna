@@ -147,70 +147,14 @@
 
             <!-- Tabs Contents -->
             <div class="tab-content" style="margin-top: 20px;">
-                <!-- 1. Conversation Tab -->
+                <!-- 1. Conversation Tab: yona git/view.scala.html 대응 (P2-39) — 이벤트(상태변경/
+                     병합/리뷰완료)만 시간순으로 보여준다. 댓글은 legacy와 동일하게 이 탭에는 없고
+                     "파일 변경 내역(Changes)" 탭의 diff 인라인에서만 노출된다(댓글 스레드를 이
+                     탭에 함께 병합해 보여주던 P1-106 확장은 legacy 범위를 넘어서 되돌렸다). -->
                 <div th:if="${tab == 'conversation'}">
-                    <!-- Timeline of comments -->
                     <div th:if="${timeline != null && !timeline.isEmpty()}" style="margin-bottom: 30px;">
                         <th:block th:each="item : ${timeline}">
-                        <div th:if="${item.kind == 'THREAD'}" th:with="thread=${item.thread}" class="timeline-comment" style="border: 1px solid #d1d5da; border-radius: 3px; margin-bottom: 15px; background: #fff;">
-                            <div class="timeline-comment-header" style="background-color: #f6f8fa; border-bottom: 1px solid #d1d5da; padding: 8px 12px; font-size: 12px; color: #586069;">
-                                <strong style="color: #24292e;" th:text="${thread.author?.loginId}">작성자</strong>
-                                <span th:title="${@templateHelper.getDateString(thread.createdDate)}" th:text="${@templateHelper.agoOrDateString(thread.createdDate)}">작성일</span>
-                                
-                                <span th:if="${thread.isOnPullRequest() && thread.id != null}" class="pull-right">
-                                    <span th:class="'badge state ' + ${thread.state.toString().toLowerCase()}" 
-                                          th:text="${thread.state == T(com.github.search5.yona.domain.pullrequest.CommentThread.ThreadState).OPEN ? '열림' : '닫힘'}">상태</span>
-                                </span>
-                            </div>
-                            
-                            <div class="timeline-comment-body" style="padding: 15px; font-size: 14px; white-space: pre-wrap;">
-                                <!-- 만약 코드 리뷰 스레드(CodeCommentThread)인 경우 코드 범위 출력 -->
-                                <div th:if="${thread instanceof T(com.github.search5.yona.domain.pullrequest.CodeCommentThread)}" 
-                                     style="background-color: #fafbfc; border: 1px solid #e1e4e8; border-radius: 3px; padding: 8px 12px; margin-bottom: 10px; font-family: monospace; font-size: 12px;">
-                                    <i class="yobicon-post2"></i> 파일: <span th:text="${thread.codeRange.path}">App.kt</span>, 
-                                    라인: <span th:text="${thread.codeRange.endLine != null ? thread.codeRange.endLine + 1 : ''}">10</span>
-                                </div>
-                                
-                                <!-- 댓글들 리스트 -->
-                                <div th:each="comment : ${thread.reviewComments}" style="border-bottom: 1px solid #f6f8fa; padding-bottom: 8px; margin-bottom: 8px;">
-                                    <div style="font-size: 11px; color: #586069; margin-bottom: 2px;">
-                                        <strong th:text="${comment.author?.loginId}">댓글작성자</strong>
-                                        <span th:title="${@templateHelper.getDateString(comment.createdDate)}" th:text="${@templateHelper.agoOrDateString(comment.createdDate)}">시간</span>
-                                        
-                                        <span class="edit pull-right" th:if="${currentUser != null && comment.author?.id == currentUser.id}">
-                                            <button type="button" class="btn-transparent btn-comment-delete" 
-                                                    th:data-comment-id="${comment.id}" 
-                                                    style="background: none; border: none; font-size: 12px; cursor: pointer; color: #cb2431; padding: 0 4px;">
-                                                <i class="yobicon-trash"></i>
-                                            </button>
-                                        </span>
-                                    </div>
-                                    <div style="font-size: 13px; color: #24292e; white-space: pre-wrap;" th:text="${comment.contents}">댓글 내용</div>
-                                </div>
-                                
-                                <!-- 대댓글 폼 -->
-                                <div class="write-comment-form" th:if="${currentUser != null}" style="margin-top: 15px;">
-                                    <form th:action="@{/{owner}/{projectName}/pullRequest/{pullRequestId}/comments(owner=${project.owner}, projectName=${project.name}, pullRequestId=${pr.id})}" 
-                                          method="post" class="review-form">
-                                        <input type="hidden" name="thread.id" th:value="${thread.id}">
-                                        <div class="write-comment-box" style="display: flex; align-items: flex-start;">
-                                            <textarea name="contents" placeholder="답변을 입력하세요..." style="width: 100%; height: 40px; padding: 4px 6px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical; margin-right: 8px; font-size: 12px;" required></textarea>
-                                            <div style="display: flex; flex-direction: column; gap: 4px;">
-                                                <button type="submit" class="ybtn ybtn-success ybtn-small" style="font-size: 11px; padding: 2px 6px;">댓글달기</button>
-                                                <button type="button" class="ybtn ybtn-default ybtn-small btn-thread-state-toggle" 
-                                                        th:data-thread-id="${thread.id}" 
-                                                        th:data-current-state="${thread.state}" 
-                                                        style="font-size: 11px; padding: 2px 6px;"
-                                                        th:text="${thread.state == T(com.github.search5.yona.domain.pullrequest.CommentThread.ThreadState).OPEN ? '닫기' : '열기'}">닫기</button>
-                                            </div>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 이벤트 영역: yona partial_pull_request_event.scala.html 대응 (P1-106) -->
-                        <div th:if="${item.kind == 'EVENT'}" th:with="event=${item.event}, eventTypeName=${event.eventType.name()}" class="timeline-comment" style="border: 1px solid #d1d5da; border-radius: 3px; margin-bottom: 15px; background: #fff;">
+                        <div th:with="event=${item.event}, eventTypeName=${event.eventType.name()}" class="timeline-comment" style="border: 1px solid #d1d5da; border-radius: 3px; margin-bottom: 15px; background: #fff;">
                             <div class="timeline-comment-header" style="background-color: #f6f8fa; border-bottom: 1px solid #d1d5da; padding: 8px 12px; font-size: 12px; color: #586069;">
                                 <strong style="color: #24292e;" th:text="${event.senderLoginId}">발신자</strong>
                                 <span th:text="${@templateHelper.agoOrDateString(event.created)}">작성일</span>
@@ -239,24 +183,6 @@
                             </div>
                         </div>
                         </th:block>
-                    </div>
-
-                    <!-- Global Conversation Comment Form -->
-                    <div class="timeline-comment" th:if="${currentUser != null}" style="border: 1px solid #28a745; border-radius: 3px; margin-bottom: 15px; background: #fff;">
-                        <div class="timeline-comment-header" style="background-color: #dcffe4; border-bottom: 1px solid #28a745; color: #24292e; font-weight: bold; padding: 8px 12px; font-size: 12px;">
-                            PR 대화에 새 의견 남기기
-                        </div>
-                        <div class="timeline-comment-body" style="padding: 15px; font-size: 14px; white-space: pre-wrap;">
-                            <form th:action="@{/{owner}/{projectName}/pullRequest/{pullRequestId}/comments(owner=${project.owner}, projectName=${project.name}, pullRequestId=${pr.id})}" 
-                                  method="post">
-                                <div class="write-comment-box">
-                                    <textarea name="contents" placeholder="풀 리퀘스트에 대화 댓글을 남기세요..." style="width: 100%; height: 80px; padding: 8px; border: 1px solid #d1d5da; border-radius: 3px; font-family: sans-serif; resize: vertical; margin-bottom: 10px; font-size: 13px;" required></textarea>
-                                    <div class="right-txt" style="text-align: right;">
-                                        <button type="submit" class="ybtn ybtn-success ybtn-small">댓글 등록</button>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
                     </div>
                 </div>
 

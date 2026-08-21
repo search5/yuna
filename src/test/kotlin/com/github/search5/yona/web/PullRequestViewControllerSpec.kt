@@ -256,9 +256,11 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("project", "pr", "mergeResult"))
             }
 
-            // yona git/partial_pull_request_event.scala.html 대응 (P1-106) — 대화 탭에 댓글스레드와
-            // PullRequestEvent가 시간순으로 병합되고, 렌더링 대상이 아닌 이벤트 타입은 제외된다.
-            it("timeline 모델 속성에 댓글스레드와 이벤트가 시간순으로 병합되고 NEW_PULL_REQUEST는 제외되어야 한다") {
+            // yona git/view.scala.html conversation 탭 + partial_pull_request_event.scala.html 대응
+            // (P2-39, P1-106 범위 정정) — 대화 탭은 PullRequestEvent만 시간순으로 보여주고 댓글
+            // 스레드는 렌더링하지 않는다(legacy 원본 범위, 사용자 확인 완료로 되돌림). 렌더링 대상이
+            // 아닌 이벤트 타입(NEW_PULL_REQUEST)은 제외된다.
+            it("timeline 모델 속성에 이벤트만 시간순으로 담기고 댓글스레드/NEW_PULL_REQUEST는 제외되어야 한다") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 905L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
@@ -266,12 +268,6 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
                 every { pullRequestService.attemptMerge(50L) } returns PullRequestMergeResult(pullRequest = pullRequest)
-
-                val thread = com.github.search5.yona.domain.pullrequest.SimpleCommentThread(
-                    id = 700L, pullRequest = pullRequest,
-                    createdDate = java.time.Instant.parse("2026-01-01T00:00:00Z")
-                )
-                every { commentThreadRepository.findByPullRequest(pullRequest) } returns listOf(thread)
                 every { pullRequestCommitRepository.findByPullRequest(pullRequest) } returns emptyList()
 
                 val stateEvent = com.github.search5.yona.domain.pullrequest.PullRequestEvent(
@@ -293,9 +289,11 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andReturn()
 
                 val timeline = result.modelAndView!!.model["timeline"] as List<*>
-                timeline.size shouldBe 2
-                val kinds = timeline.map { (it as com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem).kind }
-                kinds shouldBe listOf("THREAD", "EVENT")
+                timeline.size shouldBe 1
+                val eventIds = timeline.map { (it as com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem).event.id }
+                eventIds shouldBe listOf(1L)
+                result.modelAndView!!.model.containsKey("commentThreads") shouldBe false
+                io.mockk.verify(exactly = 0) { commentThreadRepository.findByPullRequest(pullRequest) }
             }
         }
 
