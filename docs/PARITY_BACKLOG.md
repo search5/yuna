@@ -222,7 +222,7 @@
 | P2-27 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 감시/즐겨찾기 도메인)** 프로젝트 개명/이전 시 `FavoriteProject.owner/projectName` 동기화 코드 없음 | `FavoriteProject.updateFavoriteProject()` | `ProjectServiceImpl.acceptTransfer()` | **완료(아래 완료 로그 참고, P1-144 별도 등록)** |
 | P2-28 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** payloadUrl/secret 길이·필수 검증 미이식, DB 제약 위반 500 노출 가능 | `Webhook.java`(@Size 검증) | `WebhookController.newWebhook()` | **완료(아래 완료 로그 참고)** |
 | P2-29 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 코드/Git/SVN 도메인)** Git 전용 가드 누락, SVN 프로젝트에 호출 시 no-op이나 성공 신호 반환 | `BranchApp.java`(`@IsOnlyGitAvailable`) | `BranchApiController.setAsDefault/deleteBranch` | **완료(아래 완료 로그 참고)** |
-| P2-30 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 코드/Git/SVN 도메인)** zip 다운로드 시 경로 사전 존재 검증 및 path 파라미터 자체 소실 | `CodeApp.download` | `ProjectViewController.downloadCode` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P2-30 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 코드/Git/SVN 도메인)** zip 다운로드 시 경로 사전 존재 검증 및 path 파라미터 자체 소실 | `CodeApp.download` | `ProjectViewController.downloadCode` | **완료(아래 완료 로그 참고)** |
 | P2-31 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** SearchType.NA/PROJECT 400 처리 없이 조용히 빈 결과 200 반환 | `SearchApp.java` | `SearchController.kt`/`SearchServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-32 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** noreferrer 로직이 알림메일 경로에만 있고 일반 마크다운 렌더링엔 미적용 | `Markdown.java`(checkReferrer) | `MarkdownServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-33 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** 본문 순수 이슈URL 자동 링크화(+권한체크) 미이식 | `Markdown.java`(transformIssueLink) | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -251,6 +251,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P2-30**: `ProjectViewController.downloadCode()`가 응답 헤더를 먼저 쓰고 곧바로 `repository.getArchive()`를 스트리밍하던 것을, yona `CodeApp.java:135-164` `download()`의 `RepositoryService.getMetaDataFromAncestorDirectories(repository, targetBranch, targetPath)` 존재 검증(결과가 `null`이면 스트리밍 전에 404) 대응으로 정정.
+  - **`path` 파라미터 조사**: yona 라우트(`conf/routes:338`)는 `path`를 쿼리파라미터로 선언하지만(기본값 `""`), 실제 UI(`code/view.scala.html:92` "Download ZIP" 버튼)는 `path`를 절대 넘기지 않아 실사용에서는 항상 빈 문자열이다. 게다가 `getArchive(out, targetBranch)` 호출 자체가 `targetPath`를 받지 않아, 설령 `path`를 넘겨도 아카이브 범위(브랜치 전체 vs 하위 디렉터리)에는 아무 영향이 없다 — yona 자체가 "선언은 됐지만 실질적으로 미완성/미사용인 파라미터"로 보인다. yuna에는 `path` 파라미터 자체가 없어(라우트에 선언조차 안 됨) 직접 URL로 특정 경로를 지정해도 무시되는 것이 아니라 애초에 받아지지도 않았다.
+  - **적용 범위**: yona의 실제 동작(선언은 하되 아카이브 범위에는 반영 안 함)을 그대로 재현 — `path` 쿼리파라미터를 `downloadCode()`에 추가하고 `getMetaDataFromAncestorDirectories()`의 존재 검증에는 쓰되, `getArchive()`에는 여전히 전달하지 않는다(yona와 동일하게 항상 브랜치 전체를 아카이브). **⚠️ TODO**: 이게 "의도된 제약"인지 yona 자체의 미완성 기능인지는 불명확 — 향후 하위 디렉터리 한정 다운로드가 실제로 필요해지면 `getArchive()`를 경로 스코프 지원하도록 확장하는 아키텍처 결정이 별도로 필요하다.
+  - 테스트: `ProjectViewControllerSpec.kt` +1(존재하지 않는 브랜치로 다운로드를 요청하면 아카이브 스트리밍 없이 404를 반환하는지 검증) + 기존 성공 테스트에 새 검증 호출 스텁 보강. 전체 15/15 통과.
 
 - **2026-08-21 — P2-29**: `BranchApiController.setAsDefault()`/`deleteBranch()`에 yona `BranchApp.java:47` `@IsOnlyGitAvailable`(`IsOnlyGitAvailableAction`, `!project.isGit()`이면 `badRequest`) 클래스 레벨 가드 대응 추가 — 두 메서드 모두 프로젝트-조회 직후, 권한 체크보다 먼저(yona의 액션 컴포지션 순서상 `@IsOnlyGitAvailable`이 `@AnonymousCheck`/메서드 레벨 `@IsAllowed`보다 먼저 실행됨) `project.vcs?.uppercase() != "GIT"`이면 `"error/400"`을 반환하도록 정정.
   - 가드가 없던 이전 상태에서는 SVN 프로젝트에 브랜치 기본값 지정/삭제를 요청해도 `repositoryService.getRepository()`가 반환한 리포지토리 구현체가 실질적으로 아무 일도 하지 않으면서(no-op) 302 리다이렉트로 성공 신호를 돌려줘, 사용자가 "적용됐다"고 오인할 수 있었다.

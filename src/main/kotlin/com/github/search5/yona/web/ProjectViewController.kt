@@ -385,6 +385,7 @@ class ProjectViewController(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @PathVariable branch: String,
+        @RequestParam(value = "path", required = false, defaultValue = "") path: String,
         authentication: Authentication?,
         response: jakarta.servlet.http.HttpServletResponse
     ) {
@@ -402,6 +403,16 @@ class ProjectViewController(
 
         val repository = repositoryService.getRepository(project)
         val decodedBranch = java.net.URLDecoder.decode(branch, "UTF-8")
+        val decodedPath = java.net.URLDecoder.decode(path, "UTF-8")
+
+        // yona CodeApp.java:135-164 download()의 getMetaDataFromAncestorDirectories() 존재 검증
+        // 대응 (P2-30) — 응답 헤더를 쓰고 스트리밍을 시작하기 전에 브랜치/경로가 실제로 존재하는지
+        // 먼저 확인해, 존재하지 않는 브랜치를 요청했을 때 스트리밍 도중 예외가 나는 대신 깔끔한
+        // 404를 반환한다. yona 원본도 이 조회 결과의 path는 getArchive()에 전달하지 않고 항상
+        // 브랜치 전체를 아카이브한다(UI의 "Download ZIP" 버튼도 path를 절대 넘기지 않는다) — 그
+        // 동작을 그대로 재현했다.
+        repositoryService.getMetaDataFromAncestorDirectories(repository, decodedBranch, decodedPath)
+            ?: throw org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Path not found")
 
         response.contentType = "application/zip"
         response.setHeader("Content-Disposition", "attachment; filename=\"$projectName-$branch.zip\"")
