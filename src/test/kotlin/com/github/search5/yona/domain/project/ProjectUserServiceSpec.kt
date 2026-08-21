@@ -161,6 +161,51 @@ class ProjectUserServiceSpec @Autowired constructor(
                 }
                 requestEvents.size shouldBe 1
             }
+
+            // yona EnrollProjectApp.java:55-71 대응 (P1-142, P1-123과 대칭인 신규 발견). 대기 중인
+            // 가입 신청이 실제로 없으면 취소 알림을 발행하지 않고, 이미 정식 멤버라면 취소 자체를
+            // 거부해야 한다.
+            it("7. 대기 중인 가입 신청이 없는 상태에서 취소를 호출하면 알림을 발행하지 않아야 한다") {
+                val bystander = userRepository.save(User(loginId = "bystander-user", name = "구경꾼", email = "bystander@yona.io"))
+
+                projectUserService.cancelEnroll(project.id!!, bystander.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                val cancelEvents = notificationEventRepository.findAll().filter {
+                    it.resourceId == project.id.toString() && it.eventType == EventType.MEMBER_ENROLL_REQUEST && it.newValue == "CANCEL"
+                }
+                cancelEvents.size shouldBe 0
+            }
+
+            it("8. 이미 정식 멤버인 유저가 가입 신청 취소를 호출하면 예외가 발생해야 한다") {
+                projectUserRepository.save(ProjectUser(project = project, user = member1, role = roleMember))
+
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.cancelEnroll(project.id!!, member1.id!!)
+                }
+            }
+
+            it("9. 대기 중인 가입 신청을 취소하면 목록에서 제거되어야 한다") {
+                projectUserService.enroll(project.id!!, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                projectUserService.cancelEnroll(project.id!!, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
+                updatedApplicant.enrolledProjects.count { it.id == project.id } shouldBe 0
+
+                // NotificationEventRecorder의 30초 draft-window 병합(A→B→A 상쇄, P1-27)에 따라
+                // 즉시 신청→취소는 REQUEST/CANCEL 알림이 서로 상쇄되어 0건이 되는 게 legacy와
+                // 일치하는 정상 동작이다(신청 직후 취소했는데 관리자에게 메일이 가는 게 오히려 결함).
+                val events = notificationEventRepository.findAll().filter {
+                    it.resourceId == project.id.toString() && it.eventType == EventType.MEMBER_ENROLL_REQUEST
+                }
+                events.size shouldBe 0
+            }
         }
     }
 }

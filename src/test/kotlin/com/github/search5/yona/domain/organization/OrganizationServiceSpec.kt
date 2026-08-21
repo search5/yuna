@@ -194,6 +194,55 @@ class OrganizationServiceSpec @Autowired constructor(
                 }
                 requestEvents.size shouldBe 1
             }
+
+            // yona EnrollOrganizationApp.java:82,101-104 대응 (P1-123). 대기 중인 가입 신청이
+            // 실제로 없으면 취소 알림을 발행하지 않고, 이미 정식 멤버라면 취소 자체를 거부해야 한다.
+            it("8. 대기 중인 가입 신청이 없는 상태에서 취소를 호출하면 알림을 발행하지 않아야 한다") {
+                val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
+                val bystander = userRepository.save(
+                    User(loginId = "bystander-user", name = "구경꾼", email = "bystander@yona.io")
+                )
+
+                organizationService.cancelEnroll(org.name, bystander.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                val cancelEvents = notificationEventRepository.findAll().filter {
+                    it.resourceId == org.id.toString() && it.eventType == EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST && it.newValue == "CANCEL"
+                }
+                cancelEvents.size shouldBe 0
+            }
+
+            it("9. 이미 정식 멤버인 유저가 가입 신청 취소를 호출하면 예외가 발생해야 한다") {
+                val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
+                organizationService.addOrganizationMember(org.id!!, member.loginId, RoleType.ORG_MEMBER.roleType, admin.id!!)
+
+                shouldThrow<IllegalArgumentException> {
+                    organizationService.cancelEnroll(org.name, member.id!!)
+                }
+            }
+
+            it("10. 대기 중인 가입 신청을 취소하면 목록에서 제거되고 취소 알림이 1건 발행돼야 한다") {
+                val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
+                val applicant = userRepository.save(
+                    User(loginId = "applicant-user2", name = "신청자2", email = "applicant2@yona.io")
+                )
+                organizationService.enroll(org.name, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                organizationService.cancelEnroll(org.name, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
+                updatedApplicant.enrolledOrganizations.count { it.id == org.id } shouldBe 0
+
+                val cancelEvents = notificationEventRepository.findAll().filter {
+                    it.resourceId == org.id.toString() && it.eventType == EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST && it.newValue == "CANCEL"
+                }
+                cancelEvents.size shouldBe 1
+            }
         }
     }
 }

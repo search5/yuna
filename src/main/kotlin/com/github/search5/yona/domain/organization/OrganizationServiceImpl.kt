@@ -246,6 +246,19 @@ class OrganizationServiceImpl(
         val user = userRepository.findById(userId)
             .orElseThrow { IllegalArgumentException("User not found: $userId") }
 
+        // yona EnrollOrganizationApp.java:101-104 validateForCancelEnroll()의 OrganizationUser.isGuest()
+        // 가드 대응 (P1-123). 이미 조직의 정식 멤버(ORG_ADMIN/ORG_MEMBER)라면 가입 신청 취소 자체가
+        // 성립하지 않는다.
+        if (organizationUserRepository.existsByOrganizationIdAndUserId(organization.id!!, user.id!!)) {
+            throw IllegalArgumentException("User is already a member of this organization")
+        }
+
+        // yona EnrollOrganizationApp.java:82 User.enrolled(organization) 가드 대응. 실제 대기 중인
+        // 가입 신청이 없으면 취소할 것도, 알릴 것도 없다(조용히 무시).
+        if (user.enrolledOrganizations.none { it.id == organization.id }) {
+            return
+        }
+
         user.cancelEnroll(organization)
         userRepository.save(user)
 
