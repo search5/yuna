@@ -108,9 +108,14 @@ class WebhookServiceImpl(
                 val root = objectMapper.createObjectNode()
                 root.put("text", textMessage)
 
-                val attachments = objectMapper.createArrayNode()
-                attachments.add(buildAttachmentJSON(objectMapper, resource))
-                root.set("attachments", attachments)
+                // yona Webhook.java:299-317 Posting 오버로드 대응 (P2-36) — 다른 리소스 타입과
+                // 달리 Posting(게시글) 오버로드에는 DETAIL_SLACK 전용 분기 자체가 없어, SLACK
+                // 웹훅이어도 attachments 없이 텍스트만 보낸다(buildTextPropertyOnlyJSON로 귀결).
+                if (resource !is com.github.search5.yona.domain.board.Posting) {
+                    val attachments = objectMapper.createArrayNode()
+                    attachments.add(buildAttachmentJSON(objectMapper, resource))
+                    root.set("attachments", attachments)
+                }
 
                 objectMapper.writeValueAsString(root)
             }
@@ -188,7 +193,8 @@ class WebhookServiceImpl(
                 fields.add(buildTitleValueJSON(objectMapper, "", resource.assignee?.user?.name ?: "", true))
                 fields.add(buildTitleValueJSON(objectMapper, "상태", resource.state.toString(), true))
             }
-            is com.github.search5.yona.domain.board.Posting -> text = resource.body ?: ""
+            // Posting은 위 buildPayload()의 DETAIL_SLACK 분기에서 이 함수 자체를 호출하지 않으므로
+            // (P2-36) 이 when에는 도달하지 않는다 — legacy에도 Posting용 buildXxxDetails()가 없다.
             is com.github.search5.yona.domain.pullrequest.PullRequest -> {
                 text = resource.body ?: ""
                 fields.add(buildTitleValueJSON(objectMapper, "보낸 사람", resource.contributor.name, false))
