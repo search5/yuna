@@ -171,6 +171,24 @@ class CodeViewControllerSpec : DescribeSpec({
             }
         }
 
+        // yona CodeHistoryApp.history()의 "catch (NoHeadException e) { return notFound(nohead.render(project)); }"
+        // 대응 (P1-136) — 빈 저장소(커밋이 하나도 없는 상태)에서 커밋 히스토리를 조회하면 JGit이
+        // NoHeadException을 던지는데, yuna는 이를 잡지 않아 500으로 전파되고 있었다.
+        describe("GET /{owner}/{projectName}/commits/{branch} — 빈 저장소 NoHeadException (P1-136)") {
+            it("빈 저장소면 500 대신 code/nohead 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
+                every { repositoryService.getRepository(project) } returns playRepo
+                every { playRepo.getRefNames() } returns emptyList()
+                every { playRepo.getHistory(0, 25, "HEAD", null) } throws
+                    org.eclipse.jgit.api.errors.NoHeadException("no HEAD")
+
+                mockMvc.perform(get("/testowner/testproject/commits/HEAD"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/nohead"))
+                    .andExpect(model().attribute("project", project))
+            }
+        }
+
         describe("GET /{owner}/{projectName}/rawcode/{rev}/{*path}") {
             it("바이너리/텍스트 데이터를 응답 헤더와 함께 올바르게 스트리밍해야 한다") {
                 val rawBytes = "println('Hello')".toByteArray()
