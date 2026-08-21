@@ -119,11 +119,12 @@ class AttachmentServiceImpl(
         fromId: String,
         toType: ResourceType,
         toId: String,
-        selectedIds: List<Long>
+        selectedIds: List<Long>,
+        moverLoginId: String
     ): Int {
         val attachments = attachmentRepository.findAllById(selectedIds)
-        val validAttachments = attachments.filter { 
-            it.containerType == fromType && it.containerId == fromId 
+        val validAttachments = attachments.filter {
+            it.containerType == fromType && it.containerId == fromId && it.ownerLoginId == moverLoginId
         }
         for (attachment in validAttachments) {
             attachment.containerType = toType

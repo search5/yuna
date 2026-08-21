@@ -17,6 +17,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.attachment.Attachment
 import io.kotest.core.spec.style.DescribeSpec
@@ -70,6 +71,7 @@ class BoardViewControllerSpec : DescribeSpec({
         milestoneRepositoryForAccessControl
     )
 
+    val attachmentService = mockk<AttachmentService>()
     val boardViewController = BoardViewController(
         projectRepository,
         postingService,
@@ -83,7 +85,8 @@ class BoardViewControllerSpec : DescribeSpec({
         repositoryService,
         "/tmp/yuna/git",
         recentIssueService,
-        accessControl
+        accessControl,
+        attachmentService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(boardViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -265,26 +268,36 @@ class BoardViewControllerSpec : DescribeSpec({
             }
         }
 
+        // yona Attachment.moveOnlySelected() 대응 (P0-22) — 요청받은 첨부파일 ID를 검증 없이 그대로
+        // 재배선하지 않고, 실제로 이 로그인 사용자가 업로드한 임시 첨부만 옮기는지 검증한다.
         describe("POST /{owner}/{projectName}/posts - 임시 업로드 첨부파일 연결") {
-            it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 생성된 게시글에 연결되어야 한다") {
+            it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 moveOnlySelected를 통해 생성된 게시글로 옮겨져야 한다") {
                 val savedPosting = Posting(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { postingService.createPosting(1L, any(), 10L) } returns savedPosting
-
-                val attachment = Attachment(id = 900L, containerType = ResourceType.NOT_A_RESOURCE, containerId = "")
-                every { attachmentRepository.findById(900L) } returns Optional.of(attachment)
-                every { attachmentRepository.save(any()) } returns attachment
+                every {
+                    attachmentService.moveOnlySelected(
+                        ResourceType.NOT_A_RESOURCE, "",
+                        ResourceType.BOARD_POST, "100",
+                        listOf(900L), "testuser"
+                    )
+                } returns 1
 
                 val request = PostingForm(title = "제목", body = "본문", temporaryUploadFiles = "900")
 
                 val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
 
                 result shouldBe "redirect:/owner/TestProj/post/5"
-                attachment.containerType shouldBe ResourceType.BOARD_POST
-                attachment.containerId shouldBe "100"
+                verify(exactly = 1) {
+                    attachmentService.moveOnlySelected(
+                        ResourceType.NOT_A_RESOURCE, "",
+                        ResourceType.BOARD_POST, "100",
+                        listOf(900L), "testuser"
+                    )
+                }
             }
         }
     }

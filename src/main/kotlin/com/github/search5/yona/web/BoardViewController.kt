@@ -22,6 +22,7 @@ import org.springframework.beans.factory.annotation.Value
 import com.github.search5.yona.domain.vcs.BareCommit
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.issue.RecentIssueService
 import tools.jackson.databind.ObjectMapper
 
@@ -40,7 +41,8 @@ class BoardViewController(
     @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
     private val gitBaseDir: String,
     private val recentIssueService: RecentIssueService,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val attachmentService: AttachmentService
 ) {
 
     @GetMapping("/{owner}/{projectName}/posts")
@@ -338,13 +340,16 @@ class BoardViewController(
 
         if (!request.temporaryUploadFiles.isNullOrBlank()) {
             val fileIds = request.temporaryUploadFiles!!.split(",").mapNotNull { it.trim().toLongOrNull() }
-            fileIds.forEach { fileId ->
-                attachmentRepository.findById(fileId).ifPresent { attachment ->
-                    attachment.containerType = ResourceType.BOARD_POST
-                    attachment.containerId = saved.id.toString()
-                    attachmentRepository.save(attachment)
-                }
-            }
+            // yona Attachment.moveOnlySelected() 대응 (P0-22) — 소유권 검증 없이 요청받은 ID를
+            // 그대로 재배선하지 않고, 실제로 이 로그인 사용자가 업로드한 임시 첨부만 옮긴다.
+            attachmentService.moveOnlySelected(
+                fromType = ResourceType.NOT_A_RESOURCE,
+                fromId = "",
+                toType = ResourceType.BOARD_POST,
+                toId = saved.id.toString(),
+                selectedIds = fileIds,
+                moverLoginId = loginUser.loginId ?: ""
+            )
         }
 
         if (saved.readme) {

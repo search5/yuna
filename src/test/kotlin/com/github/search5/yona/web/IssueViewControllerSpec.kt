@@ -34,6 +34,7 @@ import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.user.FavoriteIssueRepository
 import com.github.search5.yona.domain.attachment.Attachment
 import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.attachment.AttachmentService
 
 import com.github.search5.yona.domain.project.RecentProjectRepository
 import com.github.search5.yona.domain.project.ProjectService
@@ -65,6 +66,7 @@ class IssueViewControllerSpec : DescribeSpec({
     val recentIssueService = mockk<com.github.search5.yona.domain.issue.RecentIssueService>(relaxed = true)
     val titleHeadService = mockk<com.github.search5.yona.domain.project.TitleHeadService>()
     val issueEventRepository = mockk<IssueEventRepository>()
+    val attachmentService = mockk<AttachmentService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -103,7 +105,8 @@ class IssueViewControllerSpec : DescribeSpec({
         recentIssueService,
         accessControl,
         titleHeadService,
-        issueEventRepository
+        issueEventRepository,
+        attachmentService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -114,7 +117,7 @@ class IssueViewControllerSpec : DescribeSpec({
             projectRepository, projectService, issueRepository, projectUserRepository, userRepository, issueCommentRepository,
             watchService, milestoneService, issueLabelRepository, favoriteIssueRepository, attachmentRepository,
             messageSource, recentProjectRepository, issueService, templateHelper, issueExcelService, repositoryService,
-            recentIssueService, titleHeadService, issueEventRepository
+            recentIssueService, titleHeadService, issueEventRepository, attachmentService
         )
         every { titleHeadService.deleteTitleHeadKeyword(any(), any()) } returns Unit
         every { issueEventRepository.findByIssueOrderByCreatedAsc(any()) } returns emptyList()
@@ -288,8 +291,10 @@ class IssueViewControllerSpec : DescribeSpec({
             }
         }
 
+        // yona Attachment.moveOnlySelected() 대응 (P0-22) — 요청받은 첨부파일 ID를 검증 없이 그대로
+        // 재배선하지 않고, 실제로 이 로그인 사용자가 업로드한 임시 첨부만 옮기는지 검증한다.
         describe("POST /{owner}/{projectName}/issues - 임시 업로드 첨부파일 연결") {
-            it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 생성된 이슈에 연결되어야 한다") {
+            it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 moveOnlySelected를 통해 생성된 이슈로 옮겨져야 한다") {
                 val user = User(id = 10L, loginId = "testuser", name = "테스터")
                 val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
                 val savedIssue = Issue(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
@@ -299,12 +304,13 @@ class IssueViewControllerSpec : DescribeSpec({
                 every {
                     issueService.createIssue(any(), any(), any(), any(), any())
                 } returns savedIssue
-
-                val attachment1 = Attachment(id = 900L, containerType = com.github.search5.yona.domain.enumeration.ResourceType.NOT_A_RESOURCE, containerId = "")
-                val attachment2 = Attachment(id = 901L, containerType = com.github.search5.yona.domain.enumeration.ResourceType.NOT_A_RESOURCE, containerId = "")
-                every { attachmentRepository.findById(900L) } returns Optional.of(attachment1)
-                every { attachmentRepository.findById(901L) } returns Optional.of(attachment2)
-                every { attachmentRepository.save(any()) } returns attachment1
+                every {
+                    attachmentService.moveOnlySelected(
+                        com.github.search5.yona.domain.enumeration.ResourceType.NOT_A_RESOURCE, "",
+                        com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "100",
+                        listOf(900L, 901L), "testuser"
+                    )
+                } returns 2
 
                 val auth = UsernamePasswordAuthenticationToken("testuser", "pass")
 
@@ -325,10 +331,13 @@ class IssueViewControllerSpec : DescribeSpec({
                 )
 
                 result shouldBe "redirect:/owner/TestProj/issue/5"
-                attachment1.containerType shouldBe com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST
-                attachment1.containerId shouldBe "100"
-                attachment2.containerType shouldBe com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST
-                attachment2.containerId shouldBe "100"
+                verify(exactly = 1) {
+                    attachmentService.moveOnlySelected(
+                        com.github.search5.yona.domain.enumeration.ResourceType.NOT_A_RESOURCE, "",
+                        com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "100",
+                        listOf(900L, 901L), "testuser"
+                    )
+                }
             }
 
             it("temporaryUploadFiles가 없으면 첨부파일 연결 로직 없이도 정상 생성되어야 한다") {

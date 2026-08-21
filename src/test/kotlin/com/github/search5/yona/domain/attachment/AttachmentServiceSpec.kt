@@ -134,6 +134,63 @@ class AttachmentServiceSpec @Autowired constructor(
                 attachmentRepository.existsById(attachment.id!!) shouldBe false
                 file.exists() shouldBe false
             }
+
+            // yona Attachment.moveOnlySelected() 대응 (P0-22). 원컨테이너/업로더 검증 없이 요청받은
+            // ID를 그대로 재배선하면, 다른 사람이 업로드했거나 이미 다른 리소스에 붙은 첨부파일을
+            // 임의로 자기 새 이슈/게시글/마일스톤에 강제 재배선할 수 있었다.
+            it("5. 본인이 업로드한 임시 첨부만 moveOnlySelected로 옮겨져야 한다") {
+                val attachment = attachmentService.store(
+                    ByteArrayInputStream("mine".toByteArray()), "mine.txt",
+                    ResourceType.NOT_A_RESOURCE, "", "chulsoo"
+                )
+
+                val movedCount = attachmentService.moveOnlySelected(
+                    ResourceType.NOT_A_RESOURCE, "",
+                    ResourceType.ISSUE_POST, "99",
+                    listOf(attachment.id!!), "chulsoo"
+                )
+
+                movedCount shouldBe 1
+                val moved = attachmentRepository.findById(attachment.id!!).get()
+                moved.containerType shouldBe ResourceType.ISSUE_POST
+                moved.containerId shouldBe "99"
+            }
+
+            it("6. 다른 사용자가 업로드한 첨부는 ownerLoginId가 일치하지 않으면 옮기지 않아야 한다") {
+                val attachment = attachmentService.store(
+                    ByteArrayInputStream("victim".toByteArray()), "victim.txt",
+                    ResourceType.NOT_A_RESOURCE, "", "victim-user"
+                )
+
+                val movedCount = attachmentService.moveOnlySelected(
+                    ResourceType.NOT_A_RESOURCE, "",
+                    ResourceType.ISSUE_POST, "99",
+                    listOf(attachment.id!!), "attacker"
+                )
+
+                movedCount shouldBe 0
+                val unchanged = attachmentRepository.findById(attachment.id!!).get()
+                unchanged.containerType shouldBe ResourceType.NOT_A_RESOURCE
+                unchanged.containerId shouldBe ""
+            }
+
+            it("7. 이미 다른 컨테이너에 붙어있는 첨부는 from 컨테이너가 일치하지 않으면 옮기지 않아야 한다") {
+                val attachment = attachmentService.store(
+                    ByteArrayInputStream("already-attached".toByteArray()), "already.txt",
+                    ResourceType.ISSUE_POST, "1", "chulsoo"
+                )
+
+                val movedCount = attachmentService.moveOnlySelected(
+                    ResourceType.NOT_A_RESOURCE, "",
+                    ResourceType.ISSUE_POST, "99",
+                    listOf(attachment.id!!), "chulsoo"
+                )
+
+                movedCount shouldBe 0
+                val unchanged = attachmentRepository.findById(attachment.id!!).get()
+                unchanged.containerType shouldBe ResourceType.ISSUE_POST
+                unchanged.containerId shouldBe "1"
+            }
         }
     }
 }
