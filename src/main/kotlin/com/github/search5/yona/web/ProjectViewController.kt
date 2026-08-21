@@ -110,11 +110,22 @@ class ProjectViewController(
         }
 
         val readmeFileName = getReadmeFileName(project)
-        // yona partial_readme.scala.html:41 Markdown.renderFileInReadme() 대응 (P1-139) —
-        // README 원문 안의 상대경로 링크를 코드브라우저/파일 경로 절대링크로 치환한 뒤 렌더링한다.
+        // yona partial_readme.scala.html:38-42 대응 (P2-42). 코드브라우저 메뉴가 꺼진
+        // (!project.menuSetting.code, yuna project.isCodeEnabled) 프로젝트는 게시판에서 작성한
+        // README 글(Posting.findREADMEPosting, readme=true)의 본문을 우선 사용하고, 그 외에는
+        // 기존처럼 git 저장소 파일을 renderFileInReadme()로 렌더링한다(P1-139).
         val readmeHtml = if (tabId == "readme" && readmeFileName != null) {
-            val content = getReadmeContent(project, readmeFileName)
-            if (content != null) markdownService.renderFileInReadme(content, project) else null
+            val readmePosting = if (!project.isCodeEnabled) {
+                postingRepository.findByProjectAndReadme(project, true).firstOrNull()
+            } else {
+                null
+            }
+            if (readmePosting != null) {
+                markdownService.render(readmePosting.body ?: "", true, project)
+            } else {
+                val content = getReadmeContent(project, readmeFileName)
+                if (content != null) markdownService.renderFileInReadme(content, project) else null
+            }
         } else {
             null
         }

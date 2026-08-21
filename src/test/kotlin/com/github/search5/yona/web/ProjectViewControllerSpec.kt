@@ -172,6 +172,55 @@ class ProjectViewControllerSpec : DescribeSpec({
                 verify(exactly = 0) { markdownService.render("# 안내", true, project) }
             }
 
+            // yona partial_readme.scala.html:38-42 대응 (P2-42) — 코드브라우저 메뉴가 꺼진
+            // 프로젝트는 게시판 README 글(readme=true) 본문을 git 파일 대신 우선 사용한다.
+            it("코드브라우저가 꺼진 프로젝트는 게시판 README 글의 본문을 렌더링해야 한다") {
+                val noCodeProject = Project(id = 5L, name = "NoCodeProj", owner = "owner", projectScope = ProjectScope.PRIVATE, isCodeEnabled = false)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 902L, user = memberUser, project = noCodeProject, role = managerRole))
+                val readmePosting = com.github.search5.yona.domain.board.Posting(
+                    id = 700L, title = "README", body = "게시판 README 본문", project = noCodeProject, number = 1L, readme = true
+                )
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoCodeProj") } returns Optional.of(noCodeProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(5L, 10L) } returns true
+                every { projectUserRepository.findByProjectId(5L) } returns emptyList()
+                every { watchService.isWatching(any(), any(), any()) } returns false
+                every { watchService.findWatchers(any(), any()) } returns emptySet()
+                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                every { repositoryService.getRepository(noCodeProject) } returns playRepo
+                every { playRepo.isFile("README.md") } returns true
+                every { postingRepository.findByProjectAndReadme(noCodeProject, true) } returns listOf(readmePosting)
+                every { markdownService.render("게시판 README 본문", true, noCodeProject) } returns "<p>게시판 README 본문</p>"
+
+                mockMvc.perform(get("/owner/NoCodeProj").param("tabId", "readme").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("readmeHtml", "<p>게시판 README 본문</p>"))
+                verify(exactly = 0) { markdownService.renderFileInReadme(any(), any()) }
+            }
+
+            it("코드브라우저가 꺼져도 게시판 README 글이 없으면 기존처럼 git 파일을 렌더링해야 한다") {
+                val noCodeProject = Project(id = 6L, name = "NoCodeProj2", owner = "owner", projectScope = ProjectScope.PRIVATE, isCodeEnabled = false)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 903L, user = memberUser, project = noCodeProject, role = managerRole))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoCodeProj2") } returns Optional.of(noCodeProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(6L, 10L) } returns true
+                every { projectUserRepository.findByProjectId(6L) } returns emptyList()
+                every { watchService.isWatching(any(), any(), any()) } returns false
+                every { watchService.findWatchers(any(), any()) } returns emptySet()
+                val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+                every { repositoryService.getRepository(noCodeProject) } returns playRepo
+                every { playRepo.isFile("README.md") } returns true
+                every { playRepo.getRawFile("HEAD", "README.md") } returns "# git readme".toByteArray(Charsets.UTF_8)
+                every { postingRepository.findByProjectAndReadme(noCodeProject, true) } returns emptyList()
+                every { markdownService.renderFileInReadme("# git readme", noCodeProject) } returns "<h1>git readme</h1>"
+
+                mockMvc.perform(get("/owner/NoCodeProj2").param("tabId", "readme").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("readmeHtml", "<h1>git readme</h1>"))
+            }
+
             it("프로젝트 멤버가 아닐 경우 403 Forbidden 뷰를 반환해야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
