@@ -11,6 +11,7 @@ interface UserRepository : JpaRepository<User, Long> {
     fun findByLoginId(loginId: String): Optional<User>
     fun findByEmail(email: String): Optional<User>
     fun findByToken(token: String): Optional<User>
+    fun findByState(state: UserState): List<User>
 
     @Query("""
         SELECT u FROM User u 
