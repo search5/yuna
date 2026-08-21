@@ -361,4 +361,26 @@ class AccessControlSpec : DescribeSpec({
             accessControl.isAllowedAttachment(managerUser, attachment, Operation.READ) shouldBe false
         }
     }
+
+    // yona AccessControl.java:21,95-97,336-337 allowsAnonymousAccess/isAnonymousNotAllowed() 대응 (P1-99).
+    describe("allowsAnonymousAccess=false (사이트 전역 익명 접근 차단) 설정 시") {
+        val restrictedAccessControl = AccessControl(
+            projectUserRepository, organizationUserRepository,
+            userRepository, organizationRepository,
+            issueRepository, postingRepository,
+            reviewCommentRepository, commitCommentRepository,
+            milestoneRepository,
+            allowsAnonymousAccess = false
+        )
+
+        it("PUBLIC 프로젝트라도 비로그인(익명) 사용자의 READ를 거부해야 한다") {
+            restrictedAccessControl.isAllowed(null, publicProject, Operation.READ) shouldBe false
+        }
+        it("로그인 사용자에게는 영향이 없어야 한다") {
+            restrictedAccessControl.isAllowed(member, privateProject, Operation.READ) shouldBe true
+        }
+        it("기본값(allowsAnonymousAccess=true)에서는 여전히 PUBLIC 프로젝트를 비로그인 사용자가 READ 가능해야 한다") {
+            accessControl.isAllowed(null, publicProject, Operation.READ) shouldBe true
+        }
+    }
 })
