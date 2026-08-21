@@ -177,7 +177,7 @@
 | P1-127 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 신규 이슈/게시글/PR 생성 시 본문 `@멘션` 알림 수신자 계산 자체가 없음 | `NotificationEvent.java` | `IssueServiceImpl/PostingServiceImpl/PullRequestServiceImpl` 생성 로직 | **완료(아래 완료 로그 참고)** |
 | P1-128 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** orderBy/orderDir 정렬 파라미터 및 완료율 정렬 로직 전체 없음 | `MilestoneApp.java` | `MilestoneViewController.listMilestones()` | **완료(아래 완료 로그 참고)** |
 | P1-129 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 벌크 마일스톤 임포트 API 전체 미이식(단건 생성만 지원) | `MilestoneApi.java` | `MilestoneController.kt` | **완료(아래 완료 로그 참고)** |
-| P1-130 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** ORGANIZATION/COMMIT_COMMENT/REVIEW_COMMENT/USER_AVATAR에서 `isAllowedAttachment()` 미재사용, 원본 업로더 전용으로 과잉 제한 — 단, 원 서술의 예시 시나리오는 재확인 결과 부정확했음: yona도 ORGANIZATION/USER_AVATAR는 사이트매니저가 아니면 삭제 불가(조직 관리자도 불가)라 이 두 타입은 yuna와 결과가 같음. 실제 과잉 제한이 재현되는 지점은 COMMIT_COMMENT/REVIEW_COMMENT — yona는 이 두 타입을 project-scoped ATTACHMENT로 취급해 프로젝트 멤버 누구나 UPDATE 가능하지만, yuna `deleteFile()`은 이 두 타입도 명시 케이스 없이 catch-all(업로더 전용)로 처리해 일반 멤버가 차단됨. | `AccessControl.java` | `AttachmentController.deleteFile()` | 2026-08-21 백엔드 전수 감사에서 발견, Serena 재검증 과정에서 서술 정정·보강됨. 착수 여부는 사용자 결정 대기 |
+| P1-130 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** ORGANIZATION/COMMIT_COMMENT/REVIEW_COMMENT/USER_AVATAR에서 `isAllowedAttachment()` 미재사용, 원본 업로더 전용으로 과잉 제한 — 단, 원 서술의 예시 시나리오는 재확인 결과 부정확했음: yona도 ORGANIZATION/USER_AVATAR는 사이트매니저가 아니면 삭제 불가(조직 관리자도 불가)라 이 두 타입은 yuna와 결과가 같음. 실제 과잉 제한이 재현되는 지점은 COMMIT_COMMENT/REVIEW_COMMENT — yona는 이 두 타입을 project-scoped ATTACHMENT로 취급해 프로젝트 멤버 누구나 UPDATE 가능하지만, yuna `deleteFile()`은 이 두 타입도 명시 케이스 없이 catch-all(업로더 전용)로 처리해 일반 멤버가 차단됨. | `AccessControl.java` | `AttachmentController.deleteFile()` | **완료(아래 완료 로그 참고)** |
 | P1-131 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 감시/즐겨찾기 도메인)** 감시자 목록이 명시적 Watch row만 반환, 작성자/담당자/투표자/프로젝트감시자 합산 및 권한 필터 없음 | `WatcherApi.getWatchers()` | `WatchController.getWatchers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-132 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** 모든 이벤트 텍스트 메시지에 리소스 링크 전혀 없음 | `Webhook.buildRequestMessage()` | `WebhookServiceImpl.buildTextMessage()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-133 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 웹훅 도메인)** DETAIL_SLACK attachment의 이슈 필드 축소, PR attachment는 완전 미지원 | `Webhook.buildIssueDetails/buildJsonWithPullReqtuestDetails` | `WebhookServiceImpl.buildPayload()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -246,6 +246,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-130**: `AttachmentController.deleteFile()`의 `COMMIT_COMMENT`/`REVIEW_COMMENT` 첨부파일 삭제 권한을 컨테이너(커밋/리뷰 댓글)의 UPDATE 권한으로 위임하도록 수정.
+  - `deleteFile()`은 ISSUE_POST/BOARD_POST/MILESTONE는 각각 전용 헬퍼(`isAllowedToUpdateIssue` 등)로 컨테이너에 위임하면서, COMMIT_COMMENT/REVIEW_COMMENT는 명시 케이스가 없어 catch-all(업로더 본인 또는 사이트매니저만)로 떨어져 일반 프로젝트 멤버가 차단되고 있었음.
+  - **더 나은 해법 발견**: 직접 `CommitCommentRepository`/`ReviewCommentRepository`를 새로 주입해 로직을 손으로 다시 짜려다, `AccessControl.isAllowedAttachment()`가 이미 COMMIT_COMMENT/REVIEW_COMMENT를 포함한 전체 컨테이너 위임 로직을 완비하고 있고(`getFile()`의 READ 체크가 이미 이걸 재사용 중) 단지 `deleteFile()`만 이 메서드를 안 쓰고 있었다는 걸 확인 — 새 의존성 추가 없이 `accessControl.isAllowedAttachment(loginUser, attachment, Operation.UPDATE)` 한 줄로 교체(ISSUE_POST/BOARD_POST/MILESTONE 기존 분기는 이미 정확히 동작 중이라 그대로 유지, COMMIT_COMMENT/REVIEW_COMMENT 두 케이스만 추가).
+  - 테스트: `AttachmentControllerSpec.kt` +1(업로더 본인이 아니어도 컨테이너 UPDATE 권한이 있으면 커밋 댓글 첨부파일 삭제 가능). 전체 통과.
 
 - **2026-08-21 — P1-129**: `MilestoneController`에 `POST /api/projects/{projectId}/milestones/bulk` 신규 추가 — yona `controllers/api/MilestoneApi.java newMilestone()`(GitHub 이슈 임포트 등에서 쓰는 벌크 마일스톤 생성) 대응.
   - 권한은 기존 단건 생성과 동일하게 `accessControl.isProjectResourceCreatable(user, project, ResourceType.MILESTONE)` 재사용(yona `@IsCreatable(ResourceType.MILESTONE)` 대응 — `MILESTONE`은 `AccessControl.isProjectResourceCreatable()`의 공개 프로젝트 비멤버 허용 목록에 없어 site manager/조직관리자/멤버/그룹멤버만 가능).

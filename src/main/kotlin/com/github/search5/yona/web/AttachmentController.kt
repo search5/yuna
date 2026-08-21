@@ -196,6 +196,14 @@ class AttachmentController(
                     }
                 } ?: false
             }
+            // yona AccessControl.java:250-263 isProjectResourceAllowed()의 ATTACHMENT 케이스
+            // (컨테이너의 UPDATE 권한으로 위임) 대응 (P1-130). 업로더 본인 전용으로 과잉 제한하던
+            // catch-all에서 COMMIT_COMMENT/REVIEW_COMMENT를 분리 — AccessControl.isAllowedAttachment()가
+            // 이미 이 두 타입을 정확히 컨테이너(커밋/리뷰 댓글)의 UPDATE 권한(프로젝트 멤버 누구나)으로
+            // 위임하도록 구현돼 있어(getFile()의 READ 체크가 이미 재사용 중) 그대로 재사용한다.
+            ResourceType.COMMIT_COMMENT, ResourceType.REVIEW_COMMENT -> {
+                accessControl.isAllowedAttachment(loginUser, attachment, Operation.UPDATE)
+            }
             else -> {
                 attachment.ownerLoginId == loginUser.loginId || loginUser.isSiteManager
             }
