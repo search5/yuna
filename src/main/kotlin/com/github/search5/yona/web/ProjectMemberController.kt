@@ -1,6 +1,8 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserService
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -21,7 +23,8 @@ class ProjectMemberController(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val messageSource: MessageSource,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val organizationUserRepository: OrganizationUserRepository
 ) {
 
     private fun isProjectManager(projectId: Long, userId: Long): Boolean {
@@ -173,15 +176,34 @@ class ProjectMemberController(
             ?: return ResponseEntity.notFound().build()
         val currentUser = userRepository.findById(currentUserId).orElse(null)
 
-        // 권한 확인 (프로젝트 멤버인지 확인)
-        if (!projectUserRepository.existsByProjectIdAndUserId(projectId, currentUserId) &&
-            (currentUser == null || !accessControl.isAllowedIfGroupMember(project, currentUser))
-        ) {
+        // yona IssueApi.java:738 @IsAllowed(Operation.READ) 대응 (P1-117 부수 발견). 프로젝트
+        // 멤버/그룹멤버로만 좁게 검사하던 것을, 사이트매니저/조직관리자 우회와 공개 프로젝트 비멤버
+        // 열람까지 포함하는 AccessControl.isAllowed(user, project, Operation.READ)로 교체.
+        if (!accessControl.isAllowed(currentUser, project, Operation.READ)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val projectUsers = projectUserRepository.findByProjectId(projectId)
-        val members = projectUsers.map { it.user }
+        // yona Project.java:566-568 getAssignableUsers() → User.java:446-478
+        // findUsersByProjectAndOrganization() 대응 (P1-117). 프로젝트 멤버뿐 아니라, 조직 소속
+        // 프로젝트라면(PRIVATE인 경우 조직 관리자만, 그 외에는 조직 멤버 전체를) 후보에 포함하고,
+        // 사이트관리자 본인도 항상 후보에 포함한다.
+        val memberIds = mutableSetOf<Long>()
+        projectUserRepository.findByProjectId(projectId).forEach { pu -> pu.user.id?.let { memberIds.add(it) } }
+
+        project.organization?.let { organization ->
+            val orgUsers = if (project.isPrivate) {
+                organizationUserRepository.findByOrganizationIdAndRoleId(organization.id!!, RoleType.ORG_ADMIN.roleType)
+            } else {
+                organizationUserRepository.findByOrganizationId(organization.id!!)
+            }
+            orgUsers.forEach { ou -> ou.user.id?.let { memberIds.add(it) } }
+        }
+
+        if (currentUser?.isSiteManager == true) {
+            currentUser.id?.let { memberIds.add(it) }
+        }
+
+        val members = userRepository.findAllById(memberIds).sortedBy { it.name }
 
         val result = mutableListOf<Map<String, Any>>()
 
