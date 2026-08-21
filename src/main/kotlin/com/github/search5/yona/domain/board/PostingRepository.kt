@@ -20,19 +20,23 @@ interface PostingRepository : JpaRepository<Posting, Long> {
 
     @Query("""
         SELECT p FROM Posting p 
-        WHERE p.project.id IN :projectIds 
-          AND (p.title LIKE :keyword 
-               OR p.body LIKE :keyword)
+        WHERE (p.project.id IN :projectIds
+               AND (p.title LIKE :keyword 
+                    OR p.body LIKE :keyword))
+           OR (:userId IS NOT NULL AND p.authorId = :userId
+               AND (p.title LIKE :keyword OR p.body LIKE :keyword))
     """)
-    fun searchPostings(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Posting>
+    fun searchPostings(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?, pageable: Pageable): Page<Posting>
 
     @Query("""
         SELECT COUNT(p) FROM Posting p 
-        WHERE p.project.id IN :projectIds 
-          AND (p.title LIKE :keyword 
-               OR p.body LIKE :keyword)
+        WHERE (p.project.id IN :projectIds
+               AND (p.title LIKE :keyword 
+                    OR p.body LIKE :keyword))
+           OR (:userId IS NOT NULL AND p.authorId = :userId
+               AND (p.title LIKE :keyword OR p.body LIKE :keyword))
     """)
-    fun countSearchPostings(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
+    fun countSearchPostings(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?): Int
 
     @Query("""
         SELECT p FROM Posting p 

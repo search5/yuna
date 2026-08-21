@@ -14,17 +14,21 @@ interface IssueCommentRepository : JpaRepository<IssueComment, Long> {
 
     @Query("""
         SELECT ic FROM IssueComment ic 
-        WHERE ic.issue.project.id IN :projectIds 
-          AND ic.contents LIKE :keyword
+        WHERE (ic.issue.project.id IN :projectIds
+               AND ic.contents LIKE :keyword)
+           OR (:userId IS NOT NULL AND ic.authorId = :userId
+               AND ic.contents LIKE :keyword)
     """)
-    fun searchIssueComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<IssueComment>
+    fun searchIssueComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?, pageable: Pageable): Page<IssueComment>
 
     @Query("""
         SELECT COUNT(ic) FROM IssueComment ic 
-        WHERE ic.issue.project.id IN :projectIds 
-          AND ic.contents LIKE :keyword
+        WHERE (ic.issue.project.id IN :projectIds
+               AND ic.contents LIKE :keyword)
+           OR (:userId IS NOT NULL AND ic.authorId = :userId
+               AND ic.contents LIKE :keyword)
     """)
-    fun countSearchIssueComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
+    fun countSearchIssueComments(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?): Int
 
     @Query("""
         SELECT ic FROM IssueComment ic 
