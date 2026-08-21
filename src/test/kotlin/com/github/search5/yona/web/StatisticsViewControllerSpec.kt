@@ -85,10 +85,20 @@ class StatisticsViewControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("project", "currentUser"))
             }
 
-            it("로그인하지 않은 익명 사용자일 때 403 Forbidden 뷰를 반환해야 한다") {
+            // yona StatisticsApp.java:30 @AnonymousCheck(기본값 requiresLogin=false) 대응 (P1-138) —
+            // 프로젝트 스코프 확인 전에 익명 사용자를 무조건 막던 회귀를 수정. 공개 프로젝트는 익명도 볼 수 있다.
+            it("공개 프로젝트는 로그인하지 않은 익명 사용자도 200 OK와 project/statistics 뷰를 반환해야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PublicProj") } returns Optional.of(publicProject)
 
                 mockMvc.perform(get("/owner/PublicProj/statistics"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("project/statistics"))
+            }
+
+            it("비공개 프로젝트는 로그인하지 않은 익명 사용자면 403 Forbidden 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProj") } returns Optional.of(privateProject)
+
+                mockMvc.perform(get("/owner/PrivateProj/statistics"))
                     .andExpect(view().name("error/403"))
             }
 
