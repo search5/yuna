@@ -288,7 +288,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 )
                 every {
                     attachmentService.store(any(), "photo.png", ResourceType.ISSUE_POST, "100", "gildong")
-                } returns savedAttachment
+                } returns (savedAttachment to true)
 
                 val attachment = InboundAttachment(
                     fileName = "photo.png", contentType = "image/png", bytes = byteArrayOf(1, 2, 3), contentId = "image1"
@@ -476,7 +476,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 )
                 every {
                     attachmentService.store(any(), "shot.png", ResourceType.REVIEW_COMMENT, "401", "gildong")
-                } returns savedAttachment
+                } returns (savedAttachment to true)
 
                 val attachment = InboundAttachment(
                     fileName = "shot.png", contentType = "image/png", bytes = byteArrayOf(1, 2, 3), contentId = "shot1"

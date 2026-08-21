@@ -19,5 +19,14 @@ interface AttachmentRepository : JpaRepository<Attachment, Long> {
         pageable: Pageable
     ): Page<Attachment>
     fun findByContainerTypeAndCreatedDateBefore(containerType: ResourceType, createdDate: Instant): List<Attachment>
+
+    // yona Attachment.java:75-85 findBy(Attachment) 대응 (P2-24) — 동일 컨테이너에 동일 이름·내용으로
+    // 재업로드된 첨부는 새 행을 만들지 않고 기존 행을 재사용(dedup)하기 위한 조회.
+    fun findFirstByNameAndHashAndContainerTypeAndContainerId(
+        name: String,
+        hash: String,
+        containerType: ResourceType,
+        containerId: String
+    ): Attachment?
 }
 

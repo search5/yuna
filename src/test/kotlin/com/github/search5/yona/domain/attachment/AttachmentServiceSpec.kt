@@ -35,7 +35,7 @@ class AttachmentServiceSpec @Autowired constructor(
                 val content = "Yona Project Attachment Test Data"
                 val stream = ByteArrayInputStream(content.toByteArray())
 
-                val attachment = attachmentService.store(
+                val (attachment, isNew) = attachmentService.store(
                     stream,
                     "test.txt",
                     ResourceType.USER,
@@ -43,6 +43,7 @@ class AttachmentServiceSpec @Autowired constructor(
                     "chulsoo"
                 )
 
+                isNew shouldBe true
                 attachment.id shouldNotBe null
                 attachment.name shouldBe "test.txt"
                 attachment.containerType shouldBe ResourceType.USER
@@ -60,7 +61,7 @@ class AttachmentServiceSpec @Autowired constructor(
                 val stream1 = ByteArrayInputStream(content.toByteArray())
                 val stream2 = ByteArrayInputStream(content.toByteArray())
 
-                val attach1 = attachmentService.store(
+                val (attach1, isNew1) = attachmentService.store(
                     stream1,
                     "first.txt",
                     ResourceType.USER,
@@ -68,7 +69,7 @@ class AttachmentServiceSpec @Autowired constructor(
                     "chulsoo"
                 )
 
-                val attach2 = attachmentService.store(
+                val (attach2, isNew2) = attachmentService.store(
                     stream2,
                     "second.txt",
                     ResourceType.USER,
@@ -76,6 +77,10 @@ class AttachmentServiceSpec @Autowired constructor(
                     "chulsoo"
                 )
 
+                // 이름이 서로 다르므로(first.txt vs second.txt) yona 대응 dedup 키
+                // (name+hash+containerType+containerId)에 걸리지 않아 둘 다 새 행이어야 한다.
+                isNew1 shouldBe true
+                isNew2 shouldBe true
                 attach1.hash shouldBe attach2.hash
                 attachmentRepository.count() shouldBe 2
 
@@ -115,7 +120,7 @@ class AttachmentServiceSpec @Autowired constructor(
 
             it("4. 임시 업로드 파일 자동 클린업 스케줄러 기능 검증") {
                 val stream = ByteArrayInputStream("Old Temp File".toByteArray())
-                val attachment = attachmentService.store(
+                val (attachment, _) = attachmentService.store(
                     stream,
                     "old_temp.txt",
                     ResourceType.USER,
@@ -139,7 +144,7 @@ class AttachmentServiceSpec @Autowired constructor(
             // ID를 그대로 재배선하면, 다른 사람이 업로드했거나 이미 다른 리소스에 붙은 첨부파일을
             // 임의로 자기 새 이슈/게시글/마일스톤에 강제 재배선할 수 있었다.
             it("5. 본인이 업로드한 임시 첨부만 moveOnlySelected로 옮겨져야 한다") {
-                val attachment = attachmentService.store(
+                val (attachment, _) = attachmentService.store(
                     ByteArrayInputStream("mine".toByteArray()), "mine.txt",
                     ResourceType.NOT_A_RESOURCE, "", "chulsoo"
                 )
@@ -157,7 +162,7 @@ class AttachmentServiceSpec @Autowired constructor(
             }
 
             it("6. 다른 사용자가 업로드한 첨부는 ownerLoginId가 일치하지 않으면 옮기지 않아야 한다") {
-                val attachment = attachmentService.store(
+                val (attachment, _) = attachmentService.store(
                     ByteArrayInputStream("victim".toByteArray()), "victim.txt",
                     ResourceType.NOT_A_RESOURCE, "", "victim-user"
                 )
@@ -175,7 +180,7 @@ class AttachmentServiceSpec @Autowired constructor(
             }
 
             it("7. 이미 다른 컨테이너에 붙어있는 첨부는 from 컨테이너가 일치하지 않으면 옮기지 않아야 한다") {
-                val attachment = attachmentService.store(
+                val (attachment, _) = attachmentService.store(
                     ByteArrayInputStream("already-attached".toByteArray()), "already.txt",
                     ResourceType.ISSUE_POST, "1", "chulsoo"
                 )
@@ -190,6 +195,27 @@ class AttachmentServiceSpec @Autowired constructor(
                 val unchanged = attachmentRepository.findById(attachment.id!!).get()
                 unchanged.containerType shouldBe ResourceType.ISSUE_POST
                 unchanged.containerId shouldBe "1"
+            }
+
+            // yona Attachment.java:75-85 findBy(Attachment) 대응 (P2-24). 이전에는 매번 새 행을
+            // 저장해 재업로드마다 DB에 중복 행이 쌓였다 — 동일 컨테이너에 동일 이름·내용으로
+            // 재업로드하면 새 행을 만들지 않고 기존 행을 재사용해야 한다.
+            it("8. 동일 이름·내용·컨테이너로 재업로드하면 새 행을 만들지 않고 기존 첨부를 재사용해야 한다 (P2-24)") {
+                val content = "Exactly The Same Content"
+
+                val (first, isNew1) = attachmentService.store(
+                    ByteArrayInputStream(content.toByteArray()), "dup.txt",
+                    ResourceType.ISSUE_POST, "7", "chulsoo"
+                )
+                val (second, isNew2) = attachmentService.store(
+                    ByteArrayInputStream(content.toByteArray()), "dup.txt",
+                    ResourceType.ISSUE_POST, "7", "chulsoo"
+                )
+
+                isNew1 shouldBe true
+                isNew2 shouldBe false
+                second.id shouldBe first.id
+                attachmentRepository.count() shouldBe 1
             }
         }
     }

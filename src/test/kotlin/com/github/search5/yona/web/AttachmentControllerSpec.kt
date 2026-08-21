@@ -89,8 +89,7 @@ class AttachmentControllerSpec : DescribeSpec({
                         "",
                         "tester"
                     )
-                } returns attachment
-                every { attachmentRepository.existsByHash("somehash123") } returns false
+                } returns (attachment to true)
 
                 val multipartFile = MockMultipartFile(
                     "filePath",
@@ -109,6 +108,38 @@ class AttachmentControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.id").value("100"))
                     .andExpect(jsonPath("$.name").value("test-file.txt"))
                     .andExpect(jsonPath("$.url").value("/files/100"))
+            }
+
+            // yona AttachmentApp.java:119-128 uploadFile()의 isCreated 분기(dedup 시 200, 신규 시
+            // 201) 대응 (P2-24). AttachmentService.store()가 dedup으로 기존 첨부를 재사용하면
+            // isNew=false를 반환하므로, 컨트롤러는 이를 그대로 응답 코드에 반영해야 한다.
+            it("동일 첨부가 이미 존재해 dedup되면 200 OK를 반환한다 (P2-24)") {
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every {
+                    attachmentService.store(
+                        any(),
+                        "test-file.txt",
+                        ResourceType.NOT_A_RESOURCE,
+                        "",
+                        "tester"
+                    )
+                } returns (attachment to false)
+
+                val multipartFile = MockMultipartFile(
+                    "filePath",
+                    "test-file.txt",
+                    "text/plain",
+                    "Hello World".toByteArray()
+                )
+
+                mockMvc.perform(
+                    multipart("/files")
+                        .file(multipartFile)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Location", "/files/100"))
+                    .andExpect(jsonPath("$.id").value("100"))
             }
         }
 

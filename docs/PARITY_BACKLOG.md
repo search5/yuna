@@ -215,7 +215,7 @@
 | P2-21 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직 가입 신청 oldValue/newValue 페어링이 비대칭이라 드래프트 상쇄 최적화 미작동 | `NotificationEvent.java` | `OrganizationServiceImpl.enroll/cancelEnroll` | **완료(아래 완료 로그 참고)** |
 | P2-22 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 마일스톤 상세의 이슈 목록 정렬(번호 내림차순) 없음, 쿼리에도 ORDER BY 없음 | `Milestone.java` | `MilestoneViewController.toViewDto()` | **완료(아래 완료 로그 참고)** |
 | P2-23 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** dueDate 파싱 실패 시 조용히 null로 저장(에러 알림 없음) | `MilestoneApp.validateDueDate()` | `MilestoneViewController.createMilestone/editMilestone` | **완료(아래 완료 로그 참고)** |
-| P2-24 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** DB dedup 미이식 + isNew 판정 오류로 201 응답 도달 불가, 재업로드마다 중복 행 생성 | `Attachment.save()` | `AttachmentServiceImpl.store()`/`AttachmentController.uploadFile()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P2-24 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** DB dedup 미이식 + isNew 판정 오류로 201 응답 도달 불가, 재업로드마다 중복 행 생성 | `Attachment.save()` | `AttachmentServiceImpl.store()`/`AttachmentController.uploadFile()` | **완료(아래 완료 로그 참고)** |
 | P2-25 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** MIME 감지가 Tika(콘텐츠기반)→JDK probeContentType(확장자기반)으로 바뀌어 해시 파일명에서 오탐 가능 | `FileUtil.detectMediaType` | `AttachmentServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-26 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** 임시 첨부 정리 스케줄러의 createdDate 비교 방향이 yona와 반대(사실만 기록) | `Attachment.java` | `AttachmentCleanupScheduler.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-27 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 감시/즐겨찾기 도메인)** 프로젝트 개명/이전 시 `FavoriteProject.owner/projectName` 동기화 코드 없음 | `FavoriteProject.updateFavoriteProject()` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -250,6 +250,12 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P2-24**: `AttachmentServiceImpl.store()`가 매 호출마다 물리 파일만 해시로 중복 방지하고 DB 행은 조건 없이 새로 저장하던 것을, yona `Attachment.java:75-85` `findBy(Attachment)`(name+hash+containerType+containerId 4개 키로 기존 행 검색) + `:537-582` `save()`(있으면 기존 id 재사용·없으면 신규 저장, `boolean`으로 신규 생성 여부 반환) 대응으로 정정.
+  - `AttachmentRepository`에 `findFirstByNameAndHashAndContainerTypeAndContainerId()` 추가. `AttachmentService.store()`의 반환 타입을 `Attachment`에서 `Pair<Attachment, Boolean>`(두 번째 값이 신규 생성 여부)으로 변경 — yona의 엔티티+`boolean` 이중 반환과 동일한 신호를 코틀린답게 표현.
+  - `AttachmentController.uploadFile()`이 `store()` 호출 **이후에** `attachmentRepository.existsByHash(attach.hash)`로 isNew를 사후 추정하던 코드(스스로도 주석으로 "다만 임시 해시를 획득하기 어려워..."라 인정한 임시방편)를 제거 — store()가 항상 새 행을 저장하는 한 이 사후 체크는 저장 직후 무조건 true가 되어 `isNew`가 항상 false로 고정되고, 그 결과 201 Created 분기(`yona AttachmentApp.java:119-128`)에 절대 도달하지 못했다(P2-24 제목의 "201 응답 도달 불가"). 이제 `store()`가 직접 반환하는 `isNew`를 그대로 쓴다.
+  - `OrganizationViewController`(조직 로고 업로드, 반환값 미사용)/`IncomingMailProcessingService.attachAttachments()`(메일 첨부 저장, `Attachment`만 필요) 두 호출부도 새 반환 타입에 맞춰 갱신.
+  - 테스트: `AttachmentServiceSpec.kt` +1(동일 이름·내용·컨테이너로 재업로드하면 새 행 없이 기존 첨부 재사용, `count()`는 1 유지) + 기존 테스트에 `isNew` 검증 보강. `AttachmentControllerSpec.kt` +1(dedup되면 200 OK). 전체 통과(`AttachmentServiceSpec` 8/8, `AttachmentControllerSpec` 9/9, `IncomingMailProcessingServiceSpec` 29/29, `OrganizationViewControllerSpec` 16/16).
 
 - **2026-08-21 — P2-23**: `MilestoneViewController.createMilestone()`/`editMilestone()`가 `dueDate` 문자열 파싱 실패 시 `catch (e: Exception) { null }`로 조용히 `null` 처리하고 그대로 저장하던 것을, yona `MilestoneApp.java:100-125` `validateDueDate()`(Play 폼 바인딩이 `dueDate` 파싱에 실패하면 `hasErrors()`가 true가 되어 경고 플래시 후 폼을 다시 렌더링, 저장 자체를 막음) 대응으로 정정.
   - 기존에 제목 중복 검증만 있던 "오류면 폼 재렌더링" 게이트를 dueDate 파싱 실패도 함께 판단하도록 확장 — `isDuplicateTitle`/`dueDateError` 둘 다 계산한 뒤 어느 하나라도 있으면 저장하지 않고 `milestone/create`(또는 `milestone/edit`)를 두 오류를 동시에 보여줄 수 있는 형태로 재렌더링(yona가 두 검증을 한 번의 `hasErrors()` 체크로 함께 반영하는 것과 동일한 구조).
