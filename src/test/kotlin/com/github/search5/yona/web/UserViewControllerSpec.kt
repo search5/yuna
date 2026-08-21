@@ -101,8 +101,8 @@ class UserViewControllerSpec : DescribeSpec({
             it("200 OK와 user/view 뷰를 반환해야 한다") {
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.findByUserId(10L) } returns emptyList()
-                every { issueRepository.findByAuthorId(10L) } returns emptyList()
-                every { pullRequestRepository.findByContributor(user) } returns emptyList()
+                every { issueRepository.findRecentlyByUser(10L, any()) } returns emptyList()
+                every { pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(user, any()) } returns emptyList()
 
                 mockMvc.perform(get("/user/testuser").principal(userAuth))
                     .andExpect(status().isOk)
@@ -209,8 +209,8 @@ class UserViewControllerSpec : DescribeSpec({
             every { userRepository.findByLoginId("viewed") } returns Optional.of(viewedUser)
             every { userRepository.findByLoginId("viewer") } returns Optional.of(viewer)
             every { projectUserRepository.findByUserId(20L) } returns emptyList()
-            every { issueRepository.findByAuthorId(20L) } returns emptyList()
-            every { pullRequestRepository.findByContributor(viewedUser) } returns emptyList()
+            every { issueRepository.findRecentlyByUser(20L, any()) } returns emptyList()
+            every { pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(viewedUser, any()) } returns emptyList()
 
             val viewerModel = org.springframework.ui.ExtendedModelMap()
             hiddenController.userProfile(loginId = "viewed", daysAgo = 14, selected = "issues", authentication = viewerAuth, model = viewerModel)
@@ -241,8 +241,8 @@ class UserViewControllerSpec : DescribeSpec({
 
             every { userRepository.findByLoginId("viewed") } returns Optional.of(viewedUser)
             every { projectUserRepository.findByUserId(20L) } returns listOf(readableProjectUser, hiddenProjectUser)
-            every { issueRepository.findByAuthorId(20L) } returns listOf(readableIssue, hiddenIssue)
-            every { pullRequestRepository.findByContributor(viewedUser) } returns listOf(readablePr, hiddenPr)
+            every { issueRepository.findRecentlyByUser(20L, any()) } returns listOf(readableIssue, hiddenIssue)
+            every { pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(viewedUser, any()) } returns listOf(readablePr, hiddenPr)
             every { accessControl.isAllowedToReadProject(null, readableProject) } returns true
             every { accessControl.isAllowedToReadProject(null, hiddenProject) } returns false
 
@@ -251,6 +251,43 @@ class UserViewControllerSpec : DescribeSpec({
                 .andExpect(model().attribute("projects", listOf(readableProject)))
                 .andExpect(model().attribute("issues", listOf(readableIssue)))
                 .andExpect(model().attribute("pullRequests", listOf(readablePr)))
+        }
+    }
+
+    // yona UserApp.java:754-759 Issue.findRecentlyIssuesByDaysAgo/PullRequest.findOpendPullRequestsByDaysAgo
+    // 대응 (P2-38) — daysAgo 파라미터가 실제 쿼리에 반영되어야 한다.
+    describe("GET /user/{loginId}?daysAgo=... (P2-38)") {
+        it("daysAgo 파라미터로 지정한 기간을 findRecentlyByUser/findByContributorAndUpdatedGreaterThanEqual...에 전달해야 한다") {
+            val viewedUser = User(id = 20L, loginId = "viewed", name = "대상유저")
+            every { userRepository.findByLoginId("viewed") } returns Optional.of(viewedUser)
+            every { projectUserRepository.findByUserId(20L) } returns emptyList()
+            val sinceSlot = io.mockk.slot<java.time.Instant>()
+            every { issueRepository.findRecentlyByUser(20L, capture(sinceSlot)) } returns emptyList()
+            every {
+                pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(viewedUser, any())
+            } returns emptyList()
+
+            val before = java.time.Instant.now().minus(7, java.time.temporal.ChronoUnit.DAYS)
+            mockMvc.perform(get("/user/viewed").param("daysAgo", "7"))
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("daysAgo", 7))
+            val after = java.time.Instant.now().minus(7, java.time.temporal.ChronoUnit.DAYS)
+
+            (sinceSlot.captured >= before && sinceSlot.captured <= after) shouldBe true
+        }
+
+        it("daysAgo가 음수면 1로 보정해야 한다") {
+            val viewedUser = User(id = 21L, loginId = "viewedneg", name = "대상유저2")
+            every { userRepository.findByLoginId("viewedneg") } returns Optional.of(viewedUser)
+            every { projectUserRepository.findByUserId(21L) } returns emptyList()
+            every { issueRepository.findRecentlyByUser(21L, any()) } returns emptyList()
+            every {
+                pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(viewedUser, any())
+            } returns emptyList()
+
+            mockMvc.perform(get("/user/viewedneg").param("daysAgo", "-5"))
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("daysAgo", 1))
         }
     }
 })

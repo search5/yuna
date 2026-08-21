@@ -424,6 +424,24 @@ class WebhookServiceSpec : DescribeSpec({
                 json.get("attachments").get(0).get("text").asText() shouldBe ""
                 json.get("attachments").get(0).get("fields").size() shouldBe 0
             }
+
+            // yona Webhook.java:299-317 Posting 오버로드에는 DETAIL_SLACK 전용 분기가 없어(다른
+            // 타입과 달리) SLACK 웹훅이어도 attachments 없이 텍스트만 보낸다 (P2-36).
+            it("Posting(게시글)은 SLACK 웹훅이어도 attachments 없이 텍스트만 보내야 한다") {
+                val slackWebhook = Webhook(
+                    id = 54L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.DETAIL_SLACK
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val posting = com.github.search5.yona.domain.board.Posting(
+                    id = 80L, title = "게시글 제목", body = "게시글 본문", project = project, number = 4
+                )
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_POSTING, sender, posting)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.has("attachments") shouldBe false
+            }
         }
 
         // yona Webhook.java:643-648 — Hangout Chat 응답의 thread.name을 파싱해 WebhookThread로

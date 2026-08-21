@@ -39,7 +39,9 @@ import org.springframework.web.bind.annotation.RequestMethod
 import org.springframework.web.bind.annotation.ResponseBody
 import org.springframework.http.ResponseEntity
 import java.security.MessageDigest
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.util.Base64
 
 @Controller
@@ -223,10 +225,16 @@ class UserViewController(
                 .filter { accessControl.isAllowedToReadProject(loginUser, it) }
         }
 
+        // yona UserApp.java:740-743 "daysAgo < 0이면 1로 보정" 대응 (P2-38).
+        val effectiveDaysAgo = if (daysAgo < 0) 1 else daysAgo
+        val since = Instant.now().minus(effectiveDaysAgo.toLong(), ChronoUnit.DAYS)
+
         val issues = if (hideFromThisViewer) {
             emptyList()
         } else {
-            issueRepository.findByAuthorId(user.id!!)
+            // yona UserApp.java:754-755 Issue.findRecentlyIssuesByDaysAgo(user, daysAgo) 대응
+            // (P2-38) — 작성자 또는 담당자인 이슈 중 daysAgo일 이내에 갱신된 것만 노출한다.
+            issueRepository.findRecentlyByUser(user.id!!, since)
                 .filter { accessControl.isAllowedToReadProject(loginUser, it.project) }
         }
         val openIssuesCount = issues.count { it.state == State.OPEN }
@@ -235,7 +243,9 @@ class UserViewController(
         val pullRequests = if (hideFromThisViewer) {
             emptyList()
         } else {
-            pullRequestRepository.findByContributor(user)
+            // yona UserApp.java:757-759 PullRequest.findOpendPullRequestsByDaysAgo(user, daysAgo)
+            // 대응 (P2-38).
+            pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(user, since)
                 .filter { accessControl.isAllowedToReadProject(loginUser, it.toProject) }
         }
 
@@ -246,7 +256,7 @@ class UserViewController(
         model.addAttribute("closedIssuesCount", closedIssuesCount)
         model.addAttribute("pullRequests", pullRequests)
         model.addAttribute("currentUser", loginUser)
-        model.addAttribute("daysAgo", daysAgo)
+        model.addAttribute("daysAgo", effectiveDaysAgo)
         model.addAttribute("selected", selected)
 
         return "user/view"
