@@ -213,7 +213,7 @@
 | P2-19 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 조직명 변경 시 `FavoriteOrganization.organizationName` 비정규화 필드 동기화 누락 | `FavoriteOrganization.java` | `OrganizationServiceImpl.updateOrganizationSettings()` | **완료(아래 완료 로그 참고)** |
 | P2-20 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 가입요청/취소 알림 수신자 계산이 Watch 여부를 무시 | `NotificationEvent.getReceivers(Project)` | `ProjectUserServiceImpl.getProjectManagers()` | **완료(아래 완료 로그 참고)** |
 | P2-21 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직 가입 신청 oldValue/newValue 페어링이 비대칭이라 드래프트 상쇄 최적화 미작동 | `NotificationEvent.java` | `OrganizationServiceImpl.enroll/cancelEnroll` | **완료(아래 완료 로그 참고)** |
-| P2-22 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 마일스톤 상세의 이슈 목록 정렬(번호 내림차순) 없음, 쿼리에도 ORDER BY 없음 | `Milestone.java` | `MilestoneViewController.toViewDto()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P2-22 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 마일스톤 상세의 이슈 목록 정렬(번호 내림차순) 없음, 쿼리에도 ORDER BY 없음 | `Milestone.java` | `MilestoneViewController.toViewDto()` | **완료(아래 완료 로그 참고)** |
 | P2-23 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** dueDate 파싱 실패 시 조용히 null로 저장(에러 알림 없음) | `MilestoneApp.validateDueDate()` | `MilestoneViewController.createMilestone/editMilestone` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-24 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** DB dedup 미이식 + isNew 판정 오류로 201 응답 도달 불가, 재업로드마다 중복 행 생성 | `Attachment.save()` | `AttachmentServiceImpl.store()`/`AttachmentController.uploadFile()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-25 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** MIME 감지가 Tika(콘텐츠기반)→JDK probeContentType(확장자기반)으로 바뀌어 해시 파일명에서 오탐 가능 | `FileUtil.detectMediaType` | `AttachmentServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -250,6 +250,10 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P2-22**: `MilestoneViewController.toViewDto()`가 `issueRepository.findByMilestone()` 조회 결과(정렬 없음, DB 반환 순서 그대로)를 open/closed로만 나누고 별도 정렬 없이 그대로 내려주던 것을, yona `Milestone.java:99-128` `sortedByNumberOfIssue()`/`sortedByNumberOfOpenIssue()`/`sortedByNumberOfClosedIssue()`(이슈 번호 내림차순) 대응으로 정정 — `openIssues`/`closedIssues` 각각에 `.sortedByDescending { it.number }` 추가.
+  - `toViewDto()`는 `viewMilestone`(마일스톤 상세)과 `listMilestones`(마일스톤 목록의 completionRate 계산용) 양쪽에서 공유되는 헬퍼라 두 경로 모두 자동으로 정렬이 적용됨.
+  - 테스트: `MilestoneViewControllerSpec.kt` +1(번호가 뒤섞인 이슈 목록을 주면 open/closed 각각 번호 내림차순으로 반환되는지 검증) — 수정 전 실패(레드) 확인 후 수정 후 통과(그린) 확인. 전체 9/9 통과.
 
 - **2026-08-21 — P2-21**: `OrganizationServiceImpl.enroll()`/`cancelEnroll()`/`addOrganizationMember()`가 `NotificationEvent`의 `oldValue`를 전부 `"NONE"`으로 채우고 있던 것을, yona `NotificationEvent.java:1257-1286` `afterOrganizationMemberRequest()`(REQUEST→`oldValue="CANCEL"`, CANCEL→`oldValue="REQUEST"`, ACCEPT→`oldValue="REQUEST"`) 대응으로 정정.
   - 원인 분석: `NotificationEventRecorder.record()`(30초 draft window 병합, P1-27)는 같은 리소스·같은 이벤트타입·같은 발신자의 직전 이벤트가 있으면 `event.oldValue = lastEvent.oldValue`로 병합한 뒤 `event.oldValue == event.newValue`면 두 이벤트를 모두 삭제하고 알림을 발행하지 않는다. 이 상쇄가 성립하려면 REQUEST/CANCEL의 oldValue/newValue가 서로 반대값으로 대칭 페어링돼 있어야 하는데(`ProjectUserServiceImpl.enroll/cancelEnroll`은 P1-16에서 이미 이 페어링을 정확히 갖고 있었음 — 조직 쪽만 예외였음), 조직 쪽은 항상 `oldValue="NONE"`이라 병합 후에도 `oldValue(NONE) != newValue(CANCEL/REQUEST)`가 되어 상쇄 조건이 절대 만족되지 않았다. 즉 신청 직후 바로 취소해도(30초 안) 관리자에게 신청+취소 알림이 각각 발행돼, "아무 일도 없었던 것"이 되어야 할 상황에 불필요한 알림 잡음이 생겼다.

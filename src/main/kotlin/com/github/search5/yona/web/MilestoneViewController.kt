@@ -54,8 +54,10 @@ class MilestoneViewController(
 
     private fun toViewDto(milestone: Milestone): MilestoneViewDto {
         val allIssues = issueRepository.findByMilestone(milestone)
-        val openIssues = allIssues.filter { it.state == State.OPEN }
-        val closedIssues = allIssues.filter { it.state == State.CLOSED }
+        // yona Milestone.java:99-108 sortedByNumberOfIssue()/sortedByNumberOfOpenIssue()/
+        // sortedByNumberOfClosedIssue() 대응 (P2-22) — 이슈 번호 내림차순.
+        val openIssues = allIssues.filter { it.state == State.OPEN }.sortedByDescending { it.number }
+        val closedIssues = allIssues.filter { it.state == State.CLOSED }.sortedByDescending { it.number }
         
         val total = openIssues.size + closedIssues.size
         val completionRate = if (total > 0) {
