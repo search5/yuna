@@ -228,6 +228,11 @@ class OrganizationViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
 
+        // yona OrganizationApp.java:90-91 @GuestProhibit 대응 (P1-121).
+        if (loginUser.isGuest) {
+            return "redirect:/"
+        }
+
         return try {
             val org = organizationService.createOrganization(name, descr, loginUser.id!!)
             "redirect:/organizations/${org.name}"
