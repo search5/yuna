@@ -8,6 +8,7 @@ import com.github.search5.yona.domain.notification.NotificationMailRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.TitleHeadRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.Watch
@@ -26,7 +27,8 @@ class PostingServiceSpec @Autowired constructor(
     private val userRepository: UserRepository,
     private val notificationEventRepository: NotificationEventRepository,
     private val notificationMailRepository: NotificationMailRepository,
-    private val watchRepository: WatchRepository
+    private val watchRepository: WatchRepository,
+    private val titleHeadRepository: TitleHeadRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -43,6 +45,7 @@ class PostingServiceSpec @Autowired constructor(
                 watchRepository.deleteAll()
                 resetNotifications()
                 postingRepository.deleteAll()
+                titleHeadRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
             }
@@ -182,6 +185,46 @@ class PostingServiceSpec @Autowired constructor(
                 event.resourceType shouldBe ResourceType.BOARD_POST
                 event.resourceId shouldBe saved.id.toString()
                 event.senderId shouldBe author.id
+            }
+
+            // yona AbstractPosting.save()/AbstractPostingApp.editPosting()/AbstractPosting.delete()의
+            // TitleHead 연동 대응 (P1-103).
+            describe("createPosting/updatePosting/deletePosting의 TitleHead(제목 머리말 자동완성) 연동") {
+                it("createPosting으로 대괄호 머리말이 있는 제목을 만들면 TitleHead가 빈도 1로 저장되어야 한다") {
+                    val author = userRepository.save(User(loginId = "th-writer1", name = "작성자", email = "th-w1@yona.io"))
+                    val project = projectRepository.save(Project(name = "th-board1", owner = "th-writer1", projectScope = ProjectScope.PUBLIC))
+
+                    postingService.createPosting(project.id!!, Posting(title = "[공지] 점검 안내", body = "본문", project = project), author.id!!)
+
+                    val found = titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "공지")
+                    found shouldNotBe null
+                    found!!.frequency shouldBe 1
+                }
+
+                it("updatePosting으로 제목을 바꾸면 새 머리말은 생기고 예전 머리말은 사라져야 한다") {
+                    val author = userRepository.save(User(loginId = "th-writer2", name = "작성자2", email = "th-w2@yona.io"))
+                    val project = projectRepository.save(Project(name = "th-board2", owner = "th-writer2", projectScope = ProjectScope.PUBLIC))
+                    val saved = postingService.createPosting(project.id!!, Posting(title = "[공지] 점검 안내", body = "본문", project = project), author.id!!)
+
+                    postingService.updatePosting(
+                        projectId = project.id!!, number = saved.number!!,
+                        title = "[안내] 새 소식", body = "본문", notice = false, readme = false,
+                        authorId = author.id!!, sendNotificationMail = false
+                    )
+
+                    titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "공지") shouldBe null
+                    titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "안내")!!.frequency shouldBe 1
+                }
+
+                it("deletePosting으로 게시글을 지우면 TitleHead 빈도가 0이 되어 행이 삭제되어야 한다") {
+                    val author = userRepository.save(User(loginId = "th-writer3", name = "작성자3", email = "th-w3@yona.io"))
+                    val project = projectRepository.save(Project(name = "th-board3", owner = "th-writer3", projectScope = ProjectScope.PUBLIC))
+                    val saved = postingService.createPosting(project.id!!, Posting(title = "[공지] 삭제될 글", body = "본문", project = project), author.id!!)
+
+                    postingService.deletePosting(project.id!!, saved.number!!, author.id!!)
+
+                    titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "공지") shouldBe null
+                }
             }
         }
     }

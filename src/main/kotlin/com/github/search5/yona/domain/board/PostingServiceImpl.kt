@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.board
 
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.TitleHeadService
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
@@ -27,7 +28,8 @@ class PostingServiceImpl(
     private val postingCommentRepository: PostingCommentRepository,
     private val watchService: WatchService,
     private val notificationEventRecorder: NotificationEventRecorder,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    private val titleHeadService: TitleHeadService
 ) : PostingService {
 
     // yona NotificationEvent.afterNewPost/afterResourceDeleted 대응 (P1-18)
@@ -99,6 +101,9 @@ class PostingServiceImpl(
 
         val saved = postingRepository.save(posting)
 
+        // yona AbstractPosting.save()의 TitleHead.saveTitleHeadKeyword() 대응 (P1-103).
+        titleHeadService.saveTitleHeadKeyword(project, saved.title)
+
         val title = "[${project.name}] 새 게시글: ${saved.title}"
         publishNotification(saved, author, EventType.NEW_POSTING, title)
 
@@ -120,6 +125,7 @@ class PostingServiceImpl(
             ?: throw IllegalArgumentException("포스팅을 찾을 수 없습니다.")
 
         val originalBody = posting.body
+        val originalTitle = posting.title
         val isAuthoredByUpdater = posting.authorId == authorId
         val updater = userRepository.findById(authorId).orElse(null)
 
@@ -142,6 +148,11 @@ class PostingServiceImpl(
         }
 
         val saved = postingRepository.save(posting)
+
+        // yona AbstractPostingApp.editPosting()의 TitleHead.saveTitleHeadKeyword()/deleteTitleHeadKeyword()
+        // 대응 (P1-103). 제목이 안 바뀌었어도 legacy와 동일하게 매 수정마다 무조건 두 호출을 모두 실행한다.
+        titleHeadService.saveTitleHeadKeyword(saved.project, saved.title)
+        titleHeadService.deleteTitleHeadKeyword(saved.project, originalTitle)
 
         // yona BoardApp.editPost의 isSelectedToSendNotificationMail() 대응 (P1-44).
         // 본인 글이 아니면 옵션과 무관하게 항상 발송하고, 본인 글이면 체크박스를 선택했을 때만 발송한다.
@@ -193,6 +204,8 @@ class PostingServiceImpl(
         }
 
         attachmentService.deleteAll(ResourceType.BOARD_POST, posting.id.toString())
+        // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
+        titleHeadService.deleteTitleHeadKeyword(posting.project, posting.title)
         postingRepository.delete(posting)
     }
 }

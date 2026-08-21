@@ -16,6 +16,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
@@ -61,6 +62,7 @@ class IssueViewControllerSpec : DescribeSpec({
     val issueExcelService = mockk<com.github.search5.yona.domain.issue.IssueExcelService>()
     val repositoryService = mockk<RepositoryService>()
     val recentIssueService = mockk<com.github.search5.yona.domain.issue.RecentIssueService>(relaxed = true)
+    val titleHeadService = mockk<com.github.search5.yona.domain.project.TitleHeadService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -97,7 +99,8 @@ class IssueViewControllerSpec : DescribeSpec({
         issueExcelService,
         repositoryService,
         recentIssueService,
-        accessControl
+        accessControl,
+        titleHeadService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -108,8 +111,9 @@ class IssueViewControllerSpec : DescribeSpec({
             projectRepository, projectService, issueRepository, projectUserRepository, userRepository, issueCommentRepository,
             watchService, milestoneService, issueLabelRepository, favoriteIssueRepository, attachmentRepository,
             messageSource, recentProjectRepository, issueService, templateHelper, issueExcelService, repositoryService,
-            recentIssueService
+            recentIssueService, titleHeadService
         )
+        every { titleHeadService.deleteTitleHeadKeyword(any(), any()) } returns Unit
     }
 
     describe("IssueViewController 템플릿 연동 테스트") {
@@ -313,6 +317,35 @@ class IssueViewControllerSpec : DescribeSpec({
                 )
 
                 result shouldBe "redirect:/owner/GroupProj/issue/3"
+            }
+        }
+
+        // yona IssueApp.massUpdate()의 delete 분기(AbstractPosting.delete()) 대응 (P1-103).
+        describe("POST /{owner}/{projectName}/issues/massupdate (delete=true)") {
+            it("일괄삭제 대상 이슈마다 TitleHead 머리말 정리가 호출되어야 한다") {
+                val toDelete = Issue(id = 7L, number = 7L, title = "[Bug] 지울 이슈", body = "본문", project = project, authorId = memberUser.id, state = State.OPEN)
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { issueRepository.findAllById(listOf(7L)) } returns listOf(toDelete)
+                every { issueRepository.delete(toDelete) } returns Unit
+
+                val form = IssueMassUpdateForm()
+                form.issues = listOf(IssueIdForm().apply { id = 7L })
+
+                issueViewController.massUpdate(
+                    owner = "owner",
+                    projectName = "TestProj",
+                    form = form,
+                    authentication = userAuth,
+                    delete = true,
+                    isDueDateChanged = false,
+                    dueDate = null,
+                    model = org.springframework.ui.ExtendedModelMap()
+                )
+
+                verify(exactly = 1) { titleHeadService.deleteTitleHeadKeyword(project, toDelete.title) }
+                verify(exactly = 1) { issueRepository.delete(toDelete) }
             }
         }
     }

@@ -13,6 +13,7 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.project.ProjectService
+import com.github.search5.yona.domain.project.TitleHeadService
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
 import org.springframework.data.domain.PageRequest
@@ -60,7 +61,8 @@ class IssueViewController(
     private val issueExcelService: IssueExcelService,
     private val repositoryService: RepositoryService,
     private val recentIssueService: RecentIssueService,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val titleHeadService: TitleHeadService
 ) {
 
     @GetMapping("/{owner}/{projectName}/issues")
@@ -602,6 +604,8 @@ class IssueViewController(
                 // 1. 삭제
                 if (delete) {
                     if (accessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)) {
+                        // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
+                        titleHeadService.deleteTitleHeadKeyword(issue.project, issue.title)
                         issueRepository.delete(issue)
                     }
                     continue
