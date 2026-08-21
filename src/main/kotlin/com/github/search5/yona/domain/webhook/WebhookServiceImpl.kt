@@ -23,7 +23,11 @@ class WebhookServiceImpl(
     private val baseUrl: String,
     // yona Webhook.java:182-192 buildRequestMessage()(리소스 링크) 대응 (P1-132) — 이슈/게시글/PR/댓글
     // URL 계산 로직을 새로 만들지 않고, 알림메일 경로에서 이미 쓰는 것과 동일한 리졸버를 재사용한다.
-    private val notificationUrlResolver: NotificationUrlResolver
+    private val notificationUrlResolver: NotificationUrlResolver,
+    // yona Webhook.java:622-658 sendRequest(payload, webhookId, resource) 대응 (P1-143) — Hangout Chat
+    // 응답의 thread.name을 저장하는 쓰기 경로. 비동기 HTTP 콜백 스레드에서도 트랜잭션이 걸리도록 별도
+    // Spring 빈으로 분리했다(자세한 이유는 WebhookThreadRecorder 주석 참고).
+    private val webhookThreadRecorder: WebhookThreadRecorder
 ) : WebhookService {
 
     @Transactional(readOnly = true)
@@ -71,7 +75,7 @@ class WebhookServiceImpl(
             }
 
             val payload = buildPayload(webhook, eventType, sender, resource)
-            sendRequestAsync(webhook.payloadUrl, webhook.secret, payload)
+            sendRequestAsync(webhook, resource, payload)
         }
     }
 
@@ -385,17 +389,17 @@ class WebhookServiceImpl(
         }
     }
 
-    private fun sendRequestAsync(payloadUrl: String, secret: String?, payload: String) {
+    private fun sendRequestAsync(webhook: Webhook, resource: Any, payload: String) {
         try {
             val httpClient = java.net.http.HttpClient.newBuilder().build()
             val requestBuilder = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(payloadUrl))
+                .uri(java.net.URI.create(webhook.payloadUrl))
                 .header("Content-Type", "application/json")
                 .header("User-Agent", "Yobi-Hookshot")
                 .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload))
 
-            if (!secret.isNullOrBlank()) {
-                requestBuilder.header("Authorization", "token $secret")
+            if (!webhook.secret.isNullOrBlank()) {
+                requestBuilder.header("Authorization", "token ${webhook.secret}")
             }
 
             val request = requestBuilder.build()
@@ -404,6 +408,8 @@ class WebhookServiceImpl(
                     val statusCode = response.statusCode()
                     if (statusCode < 200 || statusCode >= 300) {
                         println("[Webhook] HTTP 전송 실패: $statusCode - ${response.body()}")
+                    } else {
+                        recordHangoutThreadIfNeeded(webhook, resource, response.body())
                     }
                 }
                 .exceptionally { ex ->
@@ -413,5 +419,21 @@ class WebhookServiceImpl(
         } catch (e: Exception) {
             println("[Webhook] HTTP 클라이언트 생성 중 오류: ${e.message}")
         }
+    }
+
+    // yona Webhook.java:643-648 — 응답 본문의 thread.name을 파싱해 WebhookThread로 저장한다.
+    // DETAIL_HANGOUT_CHAT이 아닌 웹훅이거나 응답에 thread.name이 없으면(threadId가 빈 문자열이면
+    // WebhookThreadRecorder가 스스로 걸러낸다) 아무 일도 하지 않는다.
+    internal fun recordHangoutThreadIfNeeded(webhook: Webhook, resource: Any, responseBody: String) {
+        if (webhook.webhookType != WebhookType.DETAIL_HANGOUT_CHAT) return
+        val webhookId = webhook.id ?: return
+
+        val threadId = try {
+            tools.jackson.databind.ObjectMapper().readTree(responseBody).path("thread").path("name").asText()
+        } catch (e: Exception) {
+            return
+        }
+
+        webhookThreadRecorder.recordThreadIfAbsent(webhookId, getResourceType(resource), getResourceId(resource), threadId)
     }
 }
