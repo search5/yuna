@@ -106,6 +106,21 @@ class BoardControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.content[0].title").value("포스트 제목"))
             }
+
+            // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE(15) 대응 (P1-105). 게시글 목록은 클라이언트가
+            // size를 요청해도 항상 고정 15로 무시되어야 한다(이슈와 다름).
+            it("size 파라미터를 크게 요청해도 항상 15로 고정되어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                val pageableSlot = io.mockk.slot<org.springframework.data.domain.Pageable>()
+                every { postingService.getPostings(1L, capture(pageableSlot)) } returns PageImpl(listOf(posting), pageRequest, 1)
+
+                mockMvc.perform(get("/api/projects/1/posts").param("size", "999").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                pageableSlot.captured.pageSize shouldBe 15
+            }
         }
 
         describe("GET /api/projects/{projectId}/posts/{postId}") {

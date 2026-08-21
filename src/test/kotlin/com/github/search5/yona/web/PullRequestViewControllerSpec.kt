@@ -22,6 +22,7 @@ import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.project.ProjectUser
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.data.domain.PageImpl
@@ -137,6 +138,22 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/owner/TestProj/pulls").principal(userAuth))
                     .andExpect(view().name("error/403"))
+            }
+
+            // yona models/PullRequest.java:66 ITEMS_PER_PAGE 대응 (P1-105) — PR 목록은 항상 고정 15.
+            it("페이지 크기는 항상 15로 고정되어야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                val pageableSlot = io.mockk.slot<Pageable>()
+                every { pullRequestRepository.findByToProjectAndState(project, State.OPEN, capture(pageableSlot)) } returns PageImpl(listOf(pullRequest), pageRequest, 1)
+
+                mockMvc.perform(get("/owner/TestProj/pulls").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                pageableSlot.captured.pageSize shouldBe 15
             }
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57) — checkMemberAccess() 공용 헬퍼

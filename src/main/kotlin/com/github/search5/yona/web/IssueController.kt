@@ -81,11 +81,14 @@ class IssueController(
             .orElse(false)
     }
 
+    // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE(15)/IssueApp.java:46,166-177
+    // ITEMS_PER_PAGE_MAX(45) 대응 (P1-105). 이슈 목록은 클라이언트가 페이지 크기를 요청할 수 있되
+    // 45를 넘기지 못하도록 상한을 건다 — Spring Pageable은 이 상한을 기본 제공하지 않아 직접 clamp.
     @GetMapping
     fun getIssues(
         @PathVariable projectId: Long,
         @RequestParam(required = false) state: State?,
-        @PageableDefault(size = 25) pageable: Pageable,
+        @PageableDefault(size = ITEMS_PER_PAGE) pageable: Pageable,
         authentication: Authentication?
     ): ResponseEntity<Page<Issue>> {
         val project = projectRepository.findById(projectId).orElse(null)
@@ -96,10 +99,15 @@ class IssueController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
+        val clampedPageable = org.springframework.data.domain.PageRequest.of(
+            pageable.pageNumber,
+            minOf(pageable.pageSize, ITEMS_PER_PAGE_MAX),
+            pageable.sort
+        )
         val page = if (state != null) {
-            issueRepository.findByProjectAndState(project, state, pageable)
+            issueRepository.findByProjectAndState(project, state, clampedPageable)
         } else {
-            issueRepository.findByProject(project, pageable)
+            issueRepository.findByProject(project, clampedPageable)
         }
         return ResponseEntity.ok(page)
     }
@@ -480,4 +488,10 @@ class IssueController(
         val content: String,
         val original: String
     )
+
+    companion object {
+        // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE / IssueApp.java:46 ITEMS_PER_PAGE_MAX 대응 (P1-105).
+        const val ITEMS_PER_PAGE = 15
+        const val ITEMS_PER_PAGE_MAX = 45
+    }
 }

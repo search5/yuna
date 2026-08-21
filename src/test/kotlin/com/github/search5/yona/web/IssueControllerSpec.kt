@@ -18,6 +18,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -136,6 +137,33 @@ class IssueControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/api/projects/1/issues").principal(userAuth))
                     .andExpect(status().isOk)
+            }
+
+            // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE(15)/IssueApp.java:46 ITEMS_PER_PAGE_MAX(45) 대응 (P1-105).
+            it("size 파라미터를 지정하지 않으면 기본 페이지 크기는 15여야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                val pageableSlot = io.mockk.slot<Pageable>()
+                every { issueRepository.findByProject(project, capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
+
+                mockMvc.perform(get("/api/projects/1/issues").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                pageableSlot.captured.pageSize shouldBe 15
+            }
+
+            it("size 파라미터가 45를 넘게 요청해도 45로 clamp되어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                val pageableSlot = io.mockk.slot<Pageable>()
+                every { issueRepository.findByProject(project, capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
+
+                mockMvc.perform(get("/api/projects/1/issues").param("size", "999").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                pageableSlot.captured.pageSize shouldBe 45
             }
         }
 
