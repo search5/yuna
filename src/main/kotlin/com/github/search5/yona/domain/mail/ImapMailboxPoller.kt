@@ -95,6 +95,19 @@ class ImapMailboxPoller(
         }
     }
 
+    // yona MailboxService.java:177-188 Diagnostic.register(new SimpleDiagnostic() { checkOne() })
+    // 대응 (P1-137). idleThread가 null이면 아직 초기화되지 않은 것, isAlive가 false면 죽은 것.
+    // (폴링 모드로 폴백한 경우 idleThread가 계속 null이라 이 체크는 IDLE 지원 서버에서만 유효 —
+    // yona 원본도 동일한 한계를 가진다.)
+    fun healthCheckMessage(): String? {
+        val thread = idleThread
+        return when {
+            thread == null -> "The Email Receiver is not initialized"
+            !thread.isAlive -> "The Email Receiver is not running"
+            else -> null
+        }
+    }
+
     private fun connect(): IMAPStore {
         val protocol = if (useSsl) "imaps" else "imap"
         val props = Properties()

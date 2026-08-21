@@ -27,6 +27,13 @@ class ImapMailboxPollerSpec : DescribeSpec({
     )
     val session = Session.getDefaultInstance(Properties())
 
+    // yona MailboxService.java:176-188 Diagnostic checkOne() 대응 (P1-137).
+    describe("ImapMailboxPoller.healthCheckMessage") {
+        it("start()가 호출되지 않아 idleThread가 초기화되지 않았으면 미초기화 메시지를 반환해야 한다") {
+            poller.healthCheckMessage() shouldBe "The Email Receiver is not initialized"
+        }
+    }
+
     describe("ImapMailboxPoller.toInboundEmailMessage") {
         it("text/plain 단일 파트 메일은 본문을 그대로 추출하고 첨부파일은 없어야 한다") {
             val message = MimeMessage(session)
