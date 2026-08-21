@@ -169,7 +169,7 @@
 | P1-119 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** `loginId=="admin"`이면 상태 무관 항상 `isSiteManager=true`로 판정하는 yona에 없는 하드코딩 분기 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `User.kt`, `UserDetailsServiceImpl.kt` | **완료(아래 완료 로그 참고)** |
 | P1-120 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `HIDE_PROJECT_LISTING` 403 체크 및 `@GuestProhibit` 미이식 | `OrganizationApp.java` | `OrganizationViewController.orgList()` | **완료(아래 완료 로그 참고)** |
 | P1-121 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 게스트 계정 조직 생성 차단(`@GuestProhibit`) 미이식 | `OrganizationApp.java` | `OrganizationViewController.createOrganization()` | **완료(아래 완료 로그 참고)** |
-| P1-122 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 중복 가입 신청 가드 없어 재신청 시 알림 중복 발행(Project P1-16과 동일 유형, 대칭 미적용) | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.enroll()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-122 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 중복 가입 신청 가드 없어 재신청 시 알림 중복 발행(Project P1-16과 동일 유형, 대칭 미적용) | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.enroll()` | **완료(아래 완료 로그 참고)** |
 | P1-123 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 대기 신청 여부 확인 없이 무조건 취소 알림 발행, isGuest 가드도 없음 | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.cancelEnroll()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-124 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 조직 로고 업로드 시 이미지 타입/크기(`LOGO_FILE_LIMIT_SIZE`) 검증 미이식 | `OrganizationApp.java` | `OrganizationViewController.updateOrganization()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-125 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 멘션 인덱스 엔티티 자체가 yuna에 없음(2, 3번의 근본 원인) | `Mention.java` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -243,6 +243,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-122**: `OrganizationServiceImpl.enroll()`에 P1-16(`ProjectUserServiceImpl.enroll()`)과 대칭인 "이미 대기 중인 가입 신청" 가드 추가.
+  - 이미 멤버인 유저의 중복 신청 차단 가드는 기존에 이미 있었으나(`existsByOrganizationIdAndUserId`), "이미 대기 중인(아직 승인 전) 가입 신청"에 대한 가드가 빠져 있어 재신청할 때마다 무조건 알림 발행 로직까지 진행하던 문제 — P1-16과 동일하게 `user.enrolledOrganizations.any { it.id == organization.id }`(참조 동등성 대신 ID 비교, P1-16에서 확립한 이유와 동일)면 조용히 반환하도록 수정.
+  - `NotificationEventRecorder.record()`의 30초 draft-window 병합 메커니즘이 즉시 재호출 시나리오에서는 이 가드 없이도 우연히 알림 건수를 1건으로 맞춰버려(같은 트랜잭션 내 즉시 재호출 테스트로는 결함을 완전히 드러내지 못함) — 실제 결함은 두 번째 신청이 draft-window(30초)를 벗어나 발생하는 프로덕션 시나리오(사용자가 시간을 두고 재신청)에서 나타남. 다만 P1-16 자체도 동일한 테스트 구조를 쓰고 있어(단일 트랜잭션 내 즉시 재호출), 이번 수정은 그 확립된 패턴과의 대칭성으로 정당화하고 동일한 형태의 회귀 테스트를 추가.
+  - 테스트: `OrganizationServiceSpec.kt` +1("이미 대기 중인 가입 신청이 있는 유저가 재신청해도 알림이 중복 발행되지 않아야 한다") — `entityManager`/`NotificationEventRepository` 신규 주입, 전체 7건 통과.
 
 - **2026-08-21 — P1-121**: `OrganizationViewController.createOrganization()`에 yona `@GuestProhibit`(`OrganizationApp.java:90-91`) 대응 추가 — P1-120과 동일한 패턴, 게스트 계정(`isGuest`)이면 조직을 생성하지 않고 인덱스로 리다이렉트.
   - 비로그인 사용자는 기존 로직(`error/403`, yona `@AnonymousCheck(requiresLogin=true)` 대응)이 이미 담당하므로 그대로 두고, 로그인된 게스트 계정에 대한 차단만 추가.

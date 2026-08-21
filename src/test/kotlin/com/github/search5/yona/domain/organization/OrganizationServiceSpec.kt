@@ -1,6 +1,8 @@
 package com.github.search5.yona.domain.organization
 
 import com.github.search5.yona.AbstractIntegrationTest
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.role.Role
@@ -11,6 +13,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import jakarta.persistence.EntityManager
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 
@@ -21,7 +24,9 @@ class OrganizationServiceSpec @Autowired constructor(
     private val organizationUserRepository: OrganizationUserRepository,
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
-    private val projectRepository: ProjectRepository
+    private val projectRepository: ProjectRepository,
+    private val notificationEventRepository: NotificationEventRepository,
+    private val entityManager: EntityManager
 ) : AbstractIntegrationTest() {
 
     init {
@@ -158,6 +163,36 @@ class OrganizationServiceSpec @Autowired constructor(
                 }
 
                 organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, guest.id!!) shouldBe false
+            }
+
+            // yona EnrollOrganizationApp.java 대응, Project P1-16과 동일 유형(P1-122). 이미 대기 중인
+            // 가입 신청이 있는 유저가 재신청해도 알림이 중복 발행되지 않아야 한다.
+            it("7. 이미 대기 중인 가입 신청이 있는 유저가 재신청해도 알림이 중복 발행되지 않아야 한다 (P1-122)") {
+                val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
+                val applicant = userRepository.save(
+                    User(loginId = "applicant-user", name = "신청자", email = "applicant@yona.io")
+                )
+
+                // Given - 최초 가입 신청
+                organizationService.enroll(org.name, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                // When - 동일 유저가 다시 가입 신청(중복)
+                organizationService.enroll(org.name, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                // Then - 대기 신청 목록엔 여전히 1건만 있고, 신청 알림도 1건만 발행돼야 한다
+                val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
+                updatedApplicant.enrolledOrganizations.count { it.id == org.id } shouldBe 1
+
+                val requestEvents = notificationEventRepository.findAll().filter {
+                    it.resourceId == org.id.toString() &&
+                        it.eventType == EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST &&
+                        it.newValue == "REQUEST"
+                }
+                requestEvents.size shouldBe 1
             }
         }
     }
