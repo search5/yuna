@@ -37,7 +37,7 @@ interface UserRepository : JpaRepository<User, Long> {
           AND (u.name LIKE :query 
                OR u.loginId LIKE :query)
     """)
-    fun findUsersForAdmin(@Param("state") state: com.github.search5.yona.domain.user.UserState, @Param("query") query: String, pageable: Pageable): Page<User>
+    fun findUsersForAdmin(@Param("state") state: UserState, @Param("query") query: String, pageable: Pageable): Page<User>
 
     @Query("""
         SELECT COUNT(u) FROM User u 
@@ -45,5 +45,5 @@ interface UserRepository : JpaRepository<User, Long> {
           AND (u.name LIKE :query 
                OR u.loginId LIKE :query)
     """)
-    fun countUsersForAdmin(@Param("state") state: com.github.search5.yona.domain.user.UserState, @Param("query") query: String): Int
+    fun countUsersForAdmin(@Param("state") state: UserState, @Param("query") query: String): Int
 }

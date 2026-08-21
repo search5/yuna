@@ -14,6 +14,10 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.servlet.mvc.support.RedirectAttributes
+import java.security.MessageDigest
+import java.util.Base64
+import java.util.UUID
 
 @Controller
 class AuthController(
@@ -29,7 +33,7 @@ class AuthController(
     fun redirectToLoginForm(
         @RequestParam(value = "error", required = false) error: String?,
         @RequestParam(value = "logout", required = false) logout: String?,
-        redirectAttributes: org.springframework.web.servlet.mvc.support.RedirectAttributes
+        redirectAttributes: RedirectAttributes
     ): String {
         if (error != null) {
             redirectAttributes.addAttribute("error", error)
@@ -95,7 +99,7 @@ class AuthController(
             return "signup"
         }
 
-        val salt = java.util.UUID.randomUUID().toString().substring(0, 8)
+        val salt = UUID.randomUUID().toString().substring(0, 8)
         val hashed = hashPassword(user.password ?: "", salt)
         user.password = hashed
         user.passwordSalt = salt
@@ -116,7 +120,7 @@ class AuthController(
     }
 
     private fun hashPassword(password: String, salt: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val digest = MessageDigest.getInstance("SHA-256")
         digest.reset()
         digest.update(salt.toByteArray(Charsets.UTF_8))
         var hashed = digest.digest(password.toByteArray(Charsets.UTF_8))
@@ -124,6 +128,6 @@ class AuthController(
             digest.reset()
             hashed = digest.digest(hashed)
         }
-        return java.util.Base64.getEncoder().encodeToString(hashed)
+        return Base64.getEncoder().encodeToString(hashed)
     }
 }

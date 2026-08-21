@@ -2,21 +2,29 @@ package com.github.search5.yona.config
 
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.watch.WatchRepository
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.user.User
 import org.springframework.context.MessageSource
 import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.stereotype.Component
+import org.springframework.web.context.request.RequestContextHolder
+import org.springframework.web.context.request.ServletRequestAttributes
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 import com.github.search5.yona.domain.milestone.MilestoneRepository
@@ -134,7 +142,7 @@ class TemplateHelper(
         return issueRepository.countByParentId(issueId) > 0
     }
 
-    fun countByParentIssueIdAndState(parentId: Long, state: com.github.search5.yona.domain.enumeration.State): Long {
+    fun countByParentIssueIdAndState(parentId: Long, state: State): Long {
         return issueRepository.countByParentIdAndState(parentId, state)
     }
 
@@ -150,7 +158,7 @@ class TemplateHelper(
 
     fun isOverDueDate(issue: Issue): Boolean {
         val due = issue.dueDate ?: return false
-        return issue.state == com.github.search5.yona.domain.enumeration.State.OPEN && Instant.now().isAfter(due)
+        return issue.state == State.OPEN && Instant.now().isAfter(due)
     }
 
     fun until(issue: Issue): String {
@@ -165,7 +173,7 @@ class TemplateHelper(
             return messageSource.getMessage("common.time.today", null, locale)
         }
 
-        val days = java.time.temporal.ChronoUnit.DAYS.between(nowDate, dueDate)
+        val days = ChronoUnit.DAYS.between(nowDate, dueDate)
         return if (days < 0) {
             messageSource.getMessage("common.time.default.day", arrayOf((-days).toString()), locale)
         } else {
@@ -194,27 +202,27 @@ class TemplateHelper(
     }
 
     fun countIssues(project: Project): Long {
-        return issueRepository.countByProjectAndState(project, com.github.search5.yona.domain.enumeration.State.OPEN)
+        return issueRepository.countByProjectAndState(project, State.OPEN)
     }
 
     fun countPullRequests(project: Project): Long {
-        return pullRequestRepository.countByToProjectAndState(project, com.github.search5.yona.domain.enumeration.State.OPEN)
+        return pullRequestRepository.countByToProjectAndState(project, State.OPEN)
     }
 
     fun countBoardPosts(project: Project): Long {
         return postingRepository.countByProject(project)
     }
 
-    fun getVotersExceptCurrentUser(voters: Collection<com.github.search5.yona.domain.user.User>, currentUser: com.github.search5.yona.domain.user.User?): List<com.github.search5.yona.domain.user.User> {
+    fun getVotersExceptCurrentUser(voters: Collection<User>, currentUser: User?): List<User> {
         if (currentUser == null) return voters.toList()
         return voters.filter { it.id != currentUser.id }
     }
 
-    fun getVotersForAvatar(voters: Collection<com.github.search5.yona.domain.user.User>, size: Int): List<com.github.search5.yona.domain.user.User> {
+    fun getVotersForAvatar(voters: Collection<User>, size: Int): List<User> {
         return voters.take(size)
     }
 
-    fun getVotersForName(voters: Collection<com.github.search5.yona.domain.user.User>, fromIndex: Int, size: Int): List<com.github.search5.yona.domain.user.User> {
+    fun getVotersForName(voters: Collection<User>, fromIndex: Int, size: Int): List<User> {
         val list = voters.toList()
         val start = Math.max(0, fromIndex)
         val end = Math.min(list.size, fromIndex + size)
@@ -222,24 +230,24 @@ class TemplateHelper(
         return list.subList(start, end)
     }
 
-    fun getVotersTooltip(voters: Collection<com.github.search5.yona.domain.user.User>, fromIndex: Int, size: Int): String {
+    fun getVotersTooltip(voters: Collection<User>, fromIndex: Int, size: Int): String {
         val list = getVotersForName(voters, fromIndex, size)
         val names = list.joinToString("<br>") { it.name ?: it.loginId }
         val hasMore = voters.size > fromIndex + size
         return if (hasMore) "$names<br>&hellip;" else names
     }
 
-    fun isMember(project: Project?, user: com.github.search5.yona.domain.user.User?): Boolean {
+    fun isMember(project: Project?, user: User?): Boolean {
         if (project == null || user == null) return false
         if (project.id == null || user.id == null) return false
         return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
     }
 
-    fun isManager(project: Project?, user: com.github.search5.yona.domain.user.User?): Boolean {
+    fun isManager(project: Project?, user: User?): Boolean {
         if (project == null || user == null) return false
         if (project.id == null || user.id == null) return false
         return projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
     }
 
@@ -258,24 +266,24 @@ class TemplateHelper(
         return issueLabelRepository.findByProject(project)
     }
 
-    fun canBeDeleted(issue: Issue?, comments: List<com.github.search5.yona.domain.issue.IssueComment>?): Boolean {
+    fun canBeDeleted(issue: Issue?, comments: List<IssueComment>?): Boolean {
         if (issue == null) return false
         if (comments.isNullOrEmpty()) return true
         return comments.all { it.authorLoginId == issue.authorLoginId }
     }
 
-    fun getAssignableUsers(project: Project?): List<com.github.search5.yona.domain.user.User> {
+    fun getAssignableUsers(project: Project?): List<User> {
         if (project == null || project.id == null) return emptyList()
         return projectUserRepository.findByProjectId(project.id!!).map { it.user }
     }
 
-    fun getOpenMilestones(project: Project?): List<com.github.search5.yona.domain.milestone.Milestone> {
+    fun getOpenMilestones(project: Project?): List<Milestone> {
         if (project == null) return emptyList()
-        return milestoneRepository.findByProjectAndState(project, com.github.search5.yona.domain.enumeration.State.OPEN)
+        return milestoneRepository.findByProjectAndState(project, State.OPEN)
     }
 
     fun isMac(): Boolean {
-        val request = (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() as? org.springframework.web.context.request.ServletRequestAttributes)?.request
+        val request = (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)?.request
         val userAgent = request?.getHeader("User-Agent") ?: return false
         return userAgent.contains("Macintosh", ignoreCase = true)
     }

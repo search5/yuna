@@ -1,8 +1,10 @@
 package com.github.search5.yona.domain.user
 
+import com.github.search5.yona.domain.mail.MailService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -12,11 +14,11 @@ class UserServiceSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val emailRepository = mockk<EmailRepository>()
     val userVerificationRepository = mockk<UserVerificationRepository>()
-    val mailService = mockk<com.github.search5.yona.domain.mail.MailService>()
+    val mailService = mockk<MailService>()
     val userService = UserServiceImpl(userRepository, emailRepository, userVerificationRepository, mailService)
 
     beforeTest {
-        io.mockk.clearMocks(userRepository, emailRepository, userVerificationRepository, mailService)
+        clearMocks(userRepository, emailRepository, userVerificationRepository, mailService)
     }
 
     describe("UserService") {

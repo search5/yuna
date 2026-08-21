@@ -2,6 +2,8 @@ package com.github.search5.yona.domain.issue
 
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.user.User
+import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.ResponseStatus
 
 interface IssueService {
     // yona AbstractPosting.isPublish(transient)/Issue.isDraft(영속) 대응 (P1-65).
@@ -59,8 +61,8 @@ interface IssueService {
 }
 
 // yona Issue.checkLabels()/IssueLabel.IssueLabelException 대응 (P1-80).
-@org.springframework.web.bind.annotation.ResponseStatus(
-    value = org.springframework.http.HttpStatus.BAD_REQUEST,
+@ResponseStatus(
+    value = HttpStatus.BAD_REQUEST,
     reason = "같은 배타(exclusive) 카테고리의 라벨을 두 개 이상 붙일 수 없습니다."
 )
 class IssueLabelExclusiveCategoryException(message: String) : RuntimeException(message)

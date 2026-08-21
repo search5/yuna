@@ -37,6 +37,7 @@ import org.springframework.core.io.Resource
 import org.springframework.core.io.FileSystemResource
 import org.springframework.http.MediaType
 import org.springframework.http.HttpStatus
+import java.text.Normalizer
 
 @Controller
 class OrganizationViewController(
@@ -366,7 +367,7 @@ class OrganizationViewController(
                 }
 
                 // 신규 로고 저장
-                val normalizedFilename = java.text.Normalizer.normalize(logoFile.originalFilename ?: "logo", java.text.Normalizer.Form.NFC)
+                val normalizedFilename = Normalizer.normalize(logoFile.originalFilename ?: "logo", Normalizer.Form.NFC)
                 attachmentService.store(
                     inputStream = logoFile.inputStream,
                     name = normalizedFilename,

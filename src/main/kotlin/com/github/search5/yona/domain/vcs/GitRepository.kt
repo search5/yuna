@@ -4,9 +4,12 @@ import tools.jackson.databind.ObjectMapper
 import tools.jackson.databind.node.ObjectNode
 import com.github.search5.yona.domain.user.User
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.errors.LargeObjectException
 import org.eclipse.jgit.lib.Constants
+import org.eclipse.jgit.lib.ConfigConstants
 import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.revwalk.RevTree
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.treewalk.TreeWalk
@@ -39,10 +42,13 @@ import java.io.InputStream
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.io.OutputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import com.github.search5.yona.domain.support.FileUtil
 
 class GitRepository(
@@ -395,8 +401,8 @@ class GitRepository(
         formatter.setRepository(fakeRepo)
         formatter.isDetectRenames = true
 
-        var treeA: org.eclipse.jgit.revwalk.RevTree? = null
-        var treeB: org.eclipse.jgit.revwalk.RevTree? = null
+        var treeA: RevTree? = null
+        var treeB: RevTree? = null
 
         val treeParserA = if (commitA != null) {
             treeA = RevWalk(repoA).parseTree(commitA)
@@ -453,7 +459,7 @@ class GitRepository(
                             val str = String(rawA, Charset.forName(charsetStr))
                             fileDiff.a = RawText(str.toByteArray(StandardCharsets.UTF_8))
                         }
-                    } catch (e: org.eclipse.jgit.errors.LargeObjectException) {
+                    } catch (e: LargeObjectException) {
                         fileDiff.addError(FileDiff.Error.A_SIZE_EXCEEDED)
                     }
                 }
@@ -480,7 +486,7 @@ class GitRepository(
                             val str = String(rawB, Charset.forName(charsetStr))
                             fileDiff.b = RawText(str.toByteArray(StandardCharsets.UTF_8))
                         }
-                    } catch (e: org.eclipse.jgit.errors.LargeObjectException) {
+                    } catch (e: LargeObjectException) {
                         fileDiff.addError(FileDiff.Error.B_SIZE_EXCEEDED)
                     }
                 }
@@ -504,9 +510,9 @@ class GitRepository(
             if (fileDiff.a != null && fileDiff.b != null && !(fileDiff.isBinaryA || fileDiff.isBinaryB) && isModifyOrRename) {
                 val diffAlgorithm = DiffAlgorithm.getAlgorithm(
                     repoB.config.getEnum(
-                        org.eclipse.jgit.lib.ConfigConstants.CONFIG_DIFF_SECTION,
+                        ConfigConstants.CONFIG_DIFF_SECTION,
                         null,
-                        org.eclipse.jgit.lib.ConfigConstants.CONFIG_KEY_ALGORITHM,
+                        ConfigConstants.CONFIG_KEY_ALGORITHM,
                         DiffAlgorithm.SupportedAlgorithm.HISTOGRAM
                     )
                 )
@@ -697,7 +703,7 @@ class GitRepository(
         return File(File(baseDir), "$ownerName/$projectName.git")
     }
 
-    override fun getArchive(os: java.io.OutputStream, branchName: String) {
+    override fun getArchive(os: OutputStream, branchName: String) {
         useRepository { repo ->
             val objectId = repo.resolve(branchName) ?: return@useRepository
             val revWalk = RevWalk(repo)
@@ -708,18 +714,18 @@ class GitRepository(
             treeWalk.addTree(tree)
             treeWalk.isRecursive = true
 
-            java.util.zip.ZipOutputStream(os).use { zos ->
+            ZipOutputStream(os).use { zos ->
                 while (treeWalk.next()) {
                     val path = treeWalk.pathString
                     val fileMode = treeWalk.getFileMode(0)
 
-                    if (fileMode.equals(org.eclipse.jgit.lib.FileMode.REGULAR_FILE) ||
-                        fileMode.equals(org.eclipse.jgit.lib.FileMode.EXECUTABLE_FILE)) {
+                    if (fileMode.equals(FileMode.REGULAR_FILE) ||
+                        fileMode.equals(FileMode.EXECUTABLE_FILE)) {
 
                         val fileObjectId = treeWalk.getObjectId(0)
                         val loader = repo.open(fileObjectId)
 
-                        val entry = java.util.zip.ZipEntry(path)
+                        val entry = ZipEntry(path)
                         zos.putNextEntry(entry)
                         loader.copyTo(zos)
                         zos.closeEntry()

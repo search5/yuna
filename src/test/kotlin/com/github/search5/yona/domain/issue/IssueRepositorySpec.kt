@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.enumeration.State
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
@@ -88,7 +89,7 @@ class IssueRepositorySpec @Autowired constructor(
                     )
 
                     // 접근 가능한 프로젝트 목록에는 이 프로젝트가 아예 없다.
-                    val result = issueRepository.searchIssues(emptyList(), "%권한%", author.id, org.springframework.data.domain.PageRequest.of(0, 20))
+                    val result = issueRepository.searchIssues(emptyList(), "%권한%", author.id, PageRequest.of(0, 20))
 
                     result.content.size shouldBe 1
                     result.content.first().title shouldBe "권한 없는 프로젝트의 내 이슈"
@@ -113,7 +114,7 @@ class IssueRepositorySpec @Autowired constructor(
                         )
                     )
 
-                    val result = issueRepository.searchIssues(emptyList(), "%담당%", assigneeUser.id, org.springframework.data.domain.PageRequest.of(0, 20))
+                    val result = issueRepository.searchIssues(emptyList(), "%담당%", assigneeUser.id, PageRequest.of(0, 20))
 
                     result.content.size shouldBe 1
                     result.content.first().title shouldBe "권한 없는 프로젝트의 담당 이슈"
@@ -137,7 +138,7 @@ class IssueRepositorySpec @Autowired constructor(
                         )
                     )
 
-                    val result = issueRepository.searchIssues(emptyList(), "%무관%", stranger.id, org.springframework.data.domain.PageRequest.of(0, 20))
+                    val result = issueRepository.searchIssues(emptyList(), "%무관%", stranger.id, PageRequest.of(0, 20))
 
                     result.content.size shouldBe 0
                 }
@@ -157,7 +158,7 @@ class IssueRepositorySpec @Autowired constructor(
                         )
                     )
 
-                    val result = issueRepository.searchIssues(emptyList(), "%비로그인%", null, org.springframework.data.domain.PageRequest.of(0, 20))
+                    val result = issueRepository.searchIssues(emptyList(), "%비로그인%", null, PageRequest.of(0, 20))
 
                     result.content.size shouldBe 0
                 }

@@ -8,6 +8,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
@@ -76,7 +77,7 @@ class PostingRepositorySpec @Autowired constructor(
                         )
                     )
 
-                    val result = postingRepository.searchPostings(emptyList(), "%권한%", author.id, org.springframework.data.domain.PageRequest.of(0, 20))
+                    val result = postingRepository.searchPostings(emptyList(), "%권한%", author.id, PageRequest.of(0, 20))
 
                     result.content.size shouldBe 1
                     result.content.first().title shouldBe "권한 없는 프로젝트의 내 게시글"
@@ -100,7 +101,7 @@ class PostingRepositorySpec @Autowired constructor(
                         )
                     )
 
-                    val result = postingRepository.searchPostings(emptyList(), "%무관%", stranger.id, org.springframework.data.domain.PageRequest.of(0, 20))
+                    val result = postingRepository.searchPostings(emptyList(), "%무관%", stranger.id, PageRequest.of(0, 20))
 
                     result.content.size shouldBe 0
                 }
@@ -120,7 +121,7 @@ class PostingRepositorySpec @Autowired constructor(
                         )
                     )
 
-                    val result = postingRepository.searchPostings(emptyList(), "%비로그인%", null, org.springframework.data.domain.PageRequest.of(0, 20))
+                    val result = postingRepository.searchPostings(emptyList(), "%비로그인%", null, PageRequest.of(0, 20))
 
                     result.content.size shouldBe 0
                 }

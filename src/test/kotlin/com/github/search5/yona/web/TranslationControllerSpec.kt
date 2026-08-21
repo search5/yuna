@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.*
+import io.mockk.clearMocks
 
 class TranslationControllerSpec : DescribeSpec({
     val translationService = mockk<TranslationService>()
@@ -48,7 +49,7 @@ class TranslationControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             translationService,
             projectRepository,
             issueRepository,

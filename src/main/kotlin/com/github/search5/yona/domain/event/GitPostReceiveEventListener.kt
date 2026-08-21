@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.webhook.WebhookService
 import com.github.search5.yona.domain.webhook.PushedCommits
 import org.eclipse.jgit.lib.ObjectId
+import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.lib.RepositoryBuilder
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
@@ -85,7 +86,7 @@ class GitPostReceiveEventListener(
                 command.type == ReceiveCommand.Type.UPDATE_NONFASTFORWARD
     }
 
-    private fun parseCommitsFrom(command: ReceiveCommand, repository: org.eclipse.jgit.lib.Repository): Collection<RevCommit> {
+    private fun parseCommitsFrom(command: ReceiveCommand, repository: Repository): Collection<RevCommit> {
         val list = mutableListOf<RevCommit>()
         try {
             val endRange = command.newId

@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserIdent
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.PlayRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
@@ -430,7 +431,7 @@ class CodeReviewServiceImpl(
         }
     }
 
-    private fun noChangesBetween(repository: com.github.search5.yona.domain.vcs.PlayRepository, revA: String, revB: String, path: String): Boolean {
+    private fun noChangesBetween(repository: PlayRepository, revA: String, revB: String, path: String): Boolean {
         val blobA = repository.getBlobId(revA, path)
         val blobB = repository.getBlobId(revB, path)
         return blobA == blobB

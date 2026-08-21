@@ -40,6 +40,11 @@ import tools.jackson.databind.ObjectMapper
 import com.github.search5.yona.domain.support.DiagnosticService
 import org.springframework.core.env.Environment
 import com.github.search5.yona.domain.support.YonaUpdateService
+import com.github.search5.yona.domain.site.DataBackupService
+import io.mockk.clearMocks
+import org.springframework.mock.web.MockMultipartFile
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+import org.springframework.http.MediaType
 
 class SiteControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
@@ -55,7 +60,7 @@ class SiteControllerSpec : DescribeSpec({
     val objectMapper = ObjectMapper()
 
     val siteService = mockk<SiteService>()
-    val dataBackupService = mockk<com.github.search5.yona.domain.site.DataBackupService>()
+    val dataBackupService = mockk<DataBackupService>()
 
     val siteViewController = SiteViewController(
         userRepository,
@@ -82,7 +87,7 @@ class SiteControllerSpec : DescribeSpec({
     val mockMvcApi = MockMvcBuilders.standaloneSetup(siteApiController).build()
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             userRepository,
             projectRepository,
             projectUserRepository,
@@ -426,12 +431,12 @@ class SiteControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
                 every { dataBackupService.importAll(any()) } returns Unit
 
-                val file = org.springframework.mock.web.MockMultipartFile(
+                val file = MockMultipartFile(
                     "data", "backup.json", "application/json", "{\"n4user\":[]}".toByteArray()
                 )
 
                 mockMvcApi.perform(
-                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/site/import")
+                    MockMvcRequestBuilders.multipart("/site/import")
                         .file(file)
                         .principal(adminAuth)
                 )
@@ -462,7 +467,7 @@ class SiteControllerSpec : DescribeSpec({
 
                 mockMvcApi.perform(
                     post("/site/setAttachmentToUserAvatar")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"avatarFileId": 100, "email": "gildong@example.com"}""")
                         .principal(adminAuth)
                 )

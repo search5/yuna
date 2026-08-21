@@ -1,13 +1,25 @@
 package com.github.search5.yona.domain.webhook
 
+import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.WebhookType
+import com.github.search5.yona.domain.issue.Assignee
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueComment
+import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.notification.NotificationUrlResolver
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.pullrequest.CodeCommentThread
+import com.github.search5.yona.domain.pullrequest.CommitComment
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserState
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -20,6 +32,9 @@ import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.lib.TreeFormatter
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
+import tools.jackson.databind.ObjectMapper
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Optional
 
 private fun testCommit(message: String, authorName: String = "tester", authorEmail: String = "tester@yona.io"): RevCommit {
@@ -46,7 +61,7 @@ class WebhookServiceSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     // relaxed=true: 대부분의 테스트는 리소스 링크와 무관하므로 stub하지 않은 호출은 null(링크 없음)로
     // 흘러가게 두고, 링크 자체를 검증하는 테스트에서만 개별적으로 every {}를 재정의한다.
-    val notificationUrlResolver = mockk<com.github.search5.yona.domain.notification.NotificationUrlResolver>(relaxed = true)
+    val notificationUrlResolver = mockk<NotificationUrlResolver>(relaxed = true)
     val webhookThreadRecorder = mockk<WebhookThreadRecorder>(relaxed = true)
 
     val webhookService = WebhookServiceImpl(
@@ -54,7 +69,7 @@ class WebhookServiceSpec : DescribeSpec({
     )
 
     beforeTest {
-        io.mockk.clearMocks(webhookRepository, webhookThreadRepository, projectRepository, notificationUrlResolver, webhookThreadRecorder)
+        clearMocks(webhookRepository, webhookThreadRepository, projectRepository, notificationUrlResolver, webhookThreadRecorder)
     }
 
     describe("WebhookService 비즈니스 테스트") {
@@ -115,7 +130,7 @@ class WebhookServiceSpec : DescribeSpec({
                 
                 // mock eventUser
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val issue = Issue(
                     id = 100L,
                     title = "웹훅 테스트 이슈",
                     body = "내용",
@@ -130,7 +145,7 @@ class WebhookServiceSpec : DescribeSpec({
                 // 비동기로 HttpClient 호출이 전개되나, Mocking 환경 하에서 예외 없이 로직이 흘러가는지 검증.
                 webhookService.sendWebhook(
                     project = project,
-                    eventType = com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE,
+                    eventType = EventType.NEW_ISSUE,
                     sender = sender,
                     resource = issue
                 )
@@ -185,7 +200,7 @@ class WebhookServiceSpec : DescribeSpec({
                 val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
 
                 val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, sender, pushed)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.get("ref").get(0).asText() shouldBe "refs/heads/master"
                 json.get("commits").size() shouldBe 1
@@ -207,13 +222,13 @@ class WebhookServiceSpec : DescribeSpec({
                 )
                 val siteAdminSender = User(
                     id = 6L, loginId = "admin", name = "관리자", email = "admin@yona.io",
-                    state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN
+                    state = UserState.SITE_ADMIN
                 )
                 val commit = testCommit("admin commit", authorName = "admin", authorEmail = "admin@yona.io")
                 val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
 
                 val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, siteAdminSender, pushed)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.get("sender").get("site_admin").asBoolean() shouldBe true
                 json.get("repository").get("overview").asText() shouldBe "테스트 프로젝트 설명"
@@ -222,8 +237,8 @@ class WebhookServiceSpec : DescribeSpec({
                     "https://yona.example.com/owner/test-project/commit/${commit.name}"
 
                 val expectedTimestamp = commit.authorIdent.`when`.toInstant()
-                    .atZone(java.time.ZoneId.systemDefault())
-                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'hh:mm:ssZ"))
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'hh:mm:ssZ"))
                 json.get("commits").get(0).get("timestamp").asText() shouldBe expectedTimestamp
             }
 
@@ -237,7 +252,7 @@ class WebhookServiceSpec : DescribeSpec({
                 val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
 
                 val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, normalSender, pushed)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.get("sender").get("site_admin").asBoolean() shouldBe false
             }
@@ -252,7 +267,7 @@ class WebhookServiceSpec : DescribeSpec({
                     gitPush = true, webhookType = WebhookType.SIMPLE
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val issue = Issue(
                     id = 100L, title = "웹훅 테스트 이슈", body = "내용", project = project, number = 10
                 )
                 every {
@@ -260,7 +275,7 @@ class WebhookServiceSpec : DescribeSpec({
                 } returns "https://yona.example.com/owner/test-project/issue/10"
 
                 val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_ISSUE, sender, issue)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.get("text").asText() shouldBe
                     "[test-project] 송신자님이 새 이슈를 등록했습니다. <https://yona.example.com/owner/test-project/issue/10|#10: 웹훅 테스트 이슈>"
@@ -272,7 +287,7 @@ class WebhookServiceSpec : DescribeSpec({
                     gitPush = true, webhookType = WebhookType.DETAIL_SLACK
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val issue = Issue(
                     id = 101L, title = "A > B 비교", body = "내용", project = project, number = 11
                 )
                 every {
@@ -280,7 +295,7 @@ class WebhookServiceSpec : DescribeSpec({
                 } returns "https://yona.example.com/owner/test-project/issue/11"
 
                 val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issue)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.get("text").asText() shouldBe
                     "[test-project] 송신자님이 새 이슈를 등록했습니다. <https://yona.example.com/owner/test-project/issue/11|#11: A &gt; B 비교>"
@@ -292,10 +307,10 @@ class WebhookServiceSpec : DescribeSpec({
                     gitPush = true, webhookType = WebhookType.SIMPLE
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
-                val parentIssue = com.github.search5.yona.domain.issue.Issue(
+                val parentIssue = Issue(
                     id = 200L, title = "부모 이슈", body = "내용", project = project, number = 20
                 )
-                val comment = com.github.search5.yona.domain.issue.IssueComment(
+                val comment = IssueComment(
                     id = 300L, contents = "댓글 내용입니다", issue = parentIssue
                 )
                 every {
@@ -303,7 +318,7 @@ class WebhookServiceSpec : DescribeSpec({
                 } returns "https://yona.example.com/owner/test-project/issue/20#comment-300"
 
                 val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_COMMENT, sender, comment)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.get("text").asText() shouldBe
                     "[test-project] 송신자님이 새 댓글을 등록했습니다. <https://yona.example.com/owner/test-project/issue/20#comment-300|#20: 부모 이슈>"
@@ -315,13 +330,13 @@ class WebhookServiceSpec : DescribeSpec({
                     gitPush = true, webhookType = WebhookType.SIMPLE
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val issue = Issue(
                     id = 102L, title = "삭제된 이슈", body = "내용", project = project, number = 12
                 )
                 every { notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "102") } returns null
 
                 val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_ISSUE, sender, issue)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.get("text").asText() shouldBe "[test-project] 송신자님이 새 이슈를 등록했습니다."
             }
@@ -338,15 +353,15 @@ class WebhookServiceSpec : DescribeSpec({
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
                 val assigneeUser = User(id = 8L, loginId = "assignee", name = "담당자이름")
-                val milestone = com.github.search5.yona.domain.milestone.Milestone(id = 500L, title = "1.0 릴리즈", project = project)
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val milestone = Milestone(id = 500L, title = "1.0 릴리즈", project = project)
+                val issue = Issue(
                     id = 103L, title = "필드 테스트 이슈", body = "이슈 본문", project = project, number = 13,
                     milestone = milestone,
-                    assignee = com.github.search5.yona.domain.issue.Assignee(id = 1L, user = assigneeUser, project = project)
+                    assignee = Assignee(id = 1L, user = assigneeUser, project = project)
                 )
 
                 val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issue)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
                 val fields = json.get("attachments").get(0).get("fields")
 
                 json.get("attachments").get(0).get("text").asText() shouldBe "이슈 본문"
@@ -364,12 +379,12 @@ class WebhookServiceSpec : DescribeSpec({
                     gitPush = true, webhookType = WebhookType.DETAIL_SLACK
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val issue = Issue(
                     id = 104L, title = "마일스톤 없는 이슈", body = "본문", project = project, number = 14
                 )
 
                 val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issue)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
                 val fields = json.get("attachments").get(0).get("fields")
 
                 fields.size() shouldBe 2
@@ -384,7 +399,7 @@ class WebhookServiceSpec : DescribeSpec({
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
                 val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
-                val pullRequest = com.github.search5.yona.domain.pullrequest.PullRequest(
+                val pullRequest = PullRequest(
                     id = 60L, title = "PR 제목", body = "PR 본문",
                     toProject = project, fromProject = project,
                     toBranch = "master", fromBranch = "feature/x",
@@ -392,7 +407,7 @@ class WebhookServiceSpec : DescribeSpec({
                 )
 
                 val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_PULL_REQUEST, sender, pullRequest)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
                 val attachment = json.get("attachments").get(0)
                 val fields = attachment.get("fields")
 
@@ -413,12 +428,12 @@ class WebhookServiceSpec : DescribeSpec({
                     gitPush = true, webhookType = WebhookType.DETAIL_SLACK
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
-                val commitComment = com.github.search5.yona.domain.pullrequest.CommitComment(
+                val commitComment = CommitComment(
                     id = 70L, project = project, contents = "커밋 댓글 내용"
                 )
 
                 val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_COMMENT, sender, commitComment)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.get("text").asText() shouldBe "[test-project] 송신자님이 새 댓글을 등록했습니다."
                 json.get("attachments").get(0).get("text").asText() shouldBe ""
@@ -433,12 +448,12 @@ class WebhookServiceSpec : DescribeSpec({
                     gitPush = true, webhookType = WebhookType.DETAIL_SLACK
                 )
                 val sender = User(id = 2L, loginId = "sender", name = "송신자")
-                val posting = com.github.search5.yona.domain.board.Posting(
+                val posting = Posting(
                     id = 80L, title = "게시글 제목", body = "게시글 본문", project = project, number = 4
                 )
 
                 val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_POSTING, sender, posting)
-                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val json = ObjectMapper().readTree(payload)
 
                 json.has("attachments") shouldBe false
             }
@@ -452,7 +467,7 @@ class WebhookServiceSpec : DescribeSpec({
                     id = 60L, project = project, payloadUrl = "http://localhost:8080/hook",
                     webhookType = WebhookType.DETAIL_HANGOUT_CHAT
                 )
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val issue = Issue(
                     id = 105L, title = "스레드 테스트 이슈", body = "내용", project = project, number = 15
                 )
                 val responseBody = """{"thread":{"name":"spaces/AAA/threads/BBB"}}"""
@@ -469,7 +484,7 @@ class WebhookServiceSpec : DescribeSpec({
                     id = 61L, project = project, payloadUrl = "http://localhost:8080/hook",
                     webhookType = WebhookType.DETAIL_SLACK
                 )
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val issue = Issue(
                     id = 106L, title = "이슈", body = "내용", project = project, number = 16
                 )
                 val responseBody = """{"thread":{"name":"spaces/AAA/threads/BBB"}}"""
@@ -483,7 +498,7 @@ class WebhookServiceSpec : DescribeSpec({
                 val hangoutWebhook = Webhook(
                     id = 62L, project = project, webhookType = WebhookType.DETAIL_HANGOUT_CHAT
                 )
-                val issue = com.github.search5.yona.domain.issue.Issue(
+                val issue = Issue(
                     id = 107L, title = "이슈", body = "내용", project = project, number = 17
                 )
 
@@ -504,10 +519,10 @@ class WebhookServiceSpec : DescribeSpec({
             val sender = User(id = 2L, loginId = "sender", name = "송신자")
 
             it("이슈 댓글은 부모 이슈(ISSUE_POST)를 스레드 키로 조회/저장해야 한다") {
-                val parentIssue = com.github.search5.yona.domain.issue.Issue(
+                val parentIssue = Issue(
                     id = 200L, title = "부모 이슈", body = "내용", project = project, number = 20
                 )
-                val comment = com.github.search5.yona.domain.issue.IssueComment(
+                val comment = IssueComment(
                     id = 300L, contents = "댓글", issue = parentIssue
                 )
                 every {
@@ -532,16 +547,16 @@ class WebhookServiceSpec : DescribeSpec({
 
             it("PR 리뷰 댓글은 부모 풀 리퀘스트(PULL_REQUEST)를 스레드 키로 조회/저장해야 한다") {
                 val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
-                val pullRequest = com.github.search5.yona.domain.pullrequest.PullRequest(
+                val pullRequest = PullRequest(
                     id = 60L, title = "PR", body = "본문",
                     toProject = project, fromProject = project,
                     toBranch = "master", fromBranch = "feature/x",
                     contributor = contributor, number = 3
                 )
-                val thread = com.github.search5.yona.domain.pullrequest.CodeCommentThread(
+                val thread = CodeCommentThread(
                     id = 400L, pullRequest = pullRequest, project = project
                 )
-                val reviewComment = com.github.search5.yona.domain.pullrequest.ReviewComment(
+                val reviewComment = ReviewComment(
                     id = 500L, contents = "리뷰 댓글", thread = thread
                 )
                 every {
@@ -564,7 +579,7 @@ class WebhookServiceSpec : DescribeSpec({
             // CommitComment는 yona Webhook.java에 대응 이벤트 자체가 없어(P2-18) 부모 매핑 규칙이
             // 없다 — 레거시에 없는 동작을 새로 추가하지 않도록 자기 자신의 키를 그대로 써야 한다.
             it("CommitComment는 부모 매핑 규칙이 없어 자기 자신의 키(COMMIT_COMMENT)를 그대로 써야 한다") {
-                val commitComment = com.github.search5.yona.domain.pullrequest.CommitComment(
+                val commitComment = CommitComment(
                     id = 600L, project = project, contents = "커밋 댓글"
                 )
                 every {

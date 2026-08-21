@@ -13,6 +13,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.issue.IssueLabelService
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -30,11 +31,15 @@ import org.springframework.core.io.FileSystemResource
 import org.springframework.http.MediaType
 import org.springframework.context.MessageSource
 import org.springframework.beans.factory.annotation.Value
+import java.net.URLDecoder
 import java.util.Locale
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import org.springframework.web.server.ResponseStatusException
 import com.github.search5.yona.domain.mail.MailService
 import com.github.search5.yona.domain.support.MarkdownService
 import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.project.ProjectTransfer
 import com.github.search5.yona.domain.project.ProjectTransferRepository
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.issue.IssueRepository
@@ -398,23 +403,23 @@ class ProjectViewController(
         @PathVariable branch: String,
         @RequestParam(value = "path", required = false, defaultValue = "") path: String,
         authentication: Authentication?,
-        response: jakarta.servlet.http.HttpServletResponse
+        response: HttpServletResponse
     ) {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
-            ?: throw org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found")
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                throw org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied")
+                throw ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied")
             }
         } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            throw org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied")
+            throw ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied")
         }
 
         val repository = repositoryService.getRepository(project)
-        val decodedBranch = java.net.URLDecoder.decode(branch, "UTF-8")
-        val decodedPath = java.net.URLDecoder.decode(path, "UTF-8")
+        val decodedBranch = URLDecoder.decode(branch, "UTF-8")
+        val decodedPath = URLDecoder.decode(path, "UTF-8")
 
         // yona CodeApp.java:135-164 download()의 getMetaDataFromAncestorDirectories() 존재 검증
         // 대응 (P2-30) — 응답 헤더를 쓰고 스트리밍을 시작하기 전에 브랜치/경로가 실제로 존재하는지
@@ -423,7 +428,7 @@ class ProjectViewController(
         // 브랜치 전체를 아카이브한다(UI의 "Download ZIP" 버튼도 path를 절대 넘기지 않는다) — 그
         // 동작을 그대로 재현했다.
         repositoryService.getMetaDataFromAncestorDirectories(repository, decodedBranch, decodedPath)
-            ?: throw org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Path not found")
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "Path not found")
 
         response.contentType = "application/zip"
         response.setHeader("Content-Disposition", "attachment; filename=\"$projectName-$branch.zip\"")
@@ -474,7 +479,7 @@ class ProjectViewController(
         val trimmedOwner = owner.trim()
         val organization = organizationRepository.findByName(trimmedOwner).orElse(null)
         if (organization != null && !accessControl.isOrganizationAdmin(organization, loginUser)) {
-            throw org.springframework.web.server.ResponseStatusException(
+            throw ResponseStatusException(
                 HttpStatus.FORBIDDEN, "'${loginUser.name}' has no permission"
             )
         }
@@ -595,7 +600,7 @@ class ProjectViewController(
         val projectNames = projectPage.content.map { "${it.owner}/${it.name}" }
         val total = projectPage.totalElements
 
-        val headers = org.springframework.http.HttpHeaders()
+        val headers = HttpHeaders()
         headers.add("Content-Range", "items ${projectNames.size}/$total")
 
         return ResponseEntity.ok().headers(headers).body(projectNames)
@@ -708,7 +713,7 @@ class ProjectViewController(
             .build()
     }
 
-    private fun sendTransferRequestMail(pt: com.github.search5.yona.domain.project.ProjectTransfer, request: HttpServletRequest) {
+    private fun sendTransferRequestMail(pt: ProjectTransfer, request: HttpServletRequest) {
         try {
             val serverUrl = getServerUrl(request)
             val acceptUrl = "$serverUrl/project/transfer/${pt.id}/${pt.confirmKey}"
@@ -972,7 +977,7 @@ class ProjectViewController(
     private fun getProjectDashboardData(
         project: Project,
         model: Model,
-        projectUsers: List<com.github.search5.yona.domain.project.ProjectUser>
+        projectUsers: List<ProjectUser>
     ) {
         val openIssues = issueRepository.findByProjectAndState(project, State.OPEN)
         val allIssues = issueRepository.findByProject(project)
@@ -1030,7 +1035,7 @@ class ProjectViewController(
     }
 
     data class AssigneeDashboardDto(
-        val user: com.github.search5.yona.domain.user.User,
+        val user: User,
         val count: Int,
         val percent: Int
     )

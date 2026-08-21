@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.security.core.Authentication
 import java.util.Optional
+import io.mockk.clearMocks
 
 // yona CommentThreadApp.updateState()의 AccessControl.isAllowed(..., REOPEN/CLOSE) 체크 대응 (P0-18).
 // open()/close()에 권한 체크가 전혀 없어 무관한 사용자가 임의 프로젝트의 리뷰 스레드를 열고/닫을 수
@@ -37,7 +38,7 @@ class CommentThreadControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(commentThreadController).build()
 
     beforeTest {
-        io.mockk.clearMocks(codeReviewService, userRepository, commentThreadRepository, accessControl)
+        clearMocks(codeReviewService, userRepository, commentThreadRepository, accessControl)
     }
 
     describe("CommentThreadController TDD 검증") {

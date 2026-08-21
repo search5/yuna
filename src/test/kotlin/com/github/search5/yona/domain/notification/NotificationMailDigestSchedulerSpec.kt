@@ -11,9 +11,12 @@ import com.github.search5.yona.domain.mail.MailService
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.pullrequest.CodeCommentThread
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.CommitComment
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.support.MarkdownService
 import com.github.search5.yona.domain.user.User
@@ -21,6 +24,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -63,7 +67,7 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
     )
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             notificationMailRepository, notificationEventMerger, messageResolver, urlResolver, mailRenderer,
             markdownService, mailService, userRepository, issueRepository, postingRepository,
             issueCommentRepository, postingCommentRepository, pullRequestRepository, commitCommentRepository,
@@ -263,9 +267,9 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
 
         it("REVIEW_COMMENT 이벤트는 References로 스레드의 첫 리뷰 댓글 Message-ID를 채운다") {
             val project = Project(id = 3L, name = "proj", owner = "owner")
-            val thread = com.github.search5.yona.domain.pullrequest.CodeCommentThread(id = 10L, project = project)
-            val firstComment = com.github.search5.yona.domain.pullrequest.ReviewComment(id = 50L, thread = thread)
-            val newComment = com.github.search5.yona.domain.pullrequest.ReviewComment(id = 55L, thread = thread)
+            val thread = CodeCommentThread(id = 10L, project = project)
+            val firstComment = ReviewComment(id = 50L, thread = thread)
+            val newComment = ReviewComment(id = 55L, thread = thread)
 
             val user = receiver(2L)
             val event = NotificationEvent(
@@ -296,7 +300,7 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
 
         it("COMMIT_COMMENT 이벤트는 References로 커밋 리소스의 Message-ID를 채운다") {
             val project = Project(id = 3L, name = "proj", owner = "owner")
-            val commitComment = com.github.search5.yona.domain.pullrequest.CommitComment(id = 77L, project = project, commitId = "abc123")
+            val commitComment = CommitComment(id = 77L, project = project, commitId = "abc123")
 
             val user = receiver(2L)
             val event = NotificationEvent(

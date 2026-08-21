@@ -27,6 +27,11 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 
 class CompareViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -66,7 +71,7 @@ class CompareViewControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, projectUserRepository, userRepository, repositoryService, playRepository, commentThreadRepository)
+        clearMocks(projectRepository, projectUserRepository, userRepository, repositoryService, playRepository, commentThreadRepository)
     }
 
     describe("CompareViewController 템플릿 연동 테스트") {
@@ -104,11 +109,11 @@ class CompareViewControllerSpec : DescribeSpec({
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-                val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val org = Organization(id = 1L, name = "org")
                 org.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = user, organization = org,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
                 val groupProject = Project(id = 6L, owner = "testowner", name = "group-project", projectScope = ProjectScope.PROTECTED, vcs = "GIT", organization = org)

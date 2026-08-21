@@ -3,6 +3,7 @@ package com.github.search5.yona.domain.vcs
 import tools.jackson.databind.node.ObjectNode
 import java.io.File
 import java.io.IOException
+import java.io.OutputStream
 
 interface PlayRepository {
     companion object {
@@ -72,7 +73,7 @@ interface PlayRepository {
 
     fun getDirectory(): File
 
-    fun getArchive(os: java.io.OutputStream, branchName: String)
+    fun getArchive(os: OutputStream, branchName: String)
 
     // yona PullRequest.getBlobId() 대응 (P1-20, CodeCommentThread.isOutdated()에서 사용).
     // 리비전에 해당 경로가 없으면(파일이 그 시점에 존재하지 않으면) null.

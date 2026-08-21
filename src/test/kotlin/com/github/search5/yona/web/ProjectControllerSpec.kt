@@ -39,6 +39,10 @@ import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.project.TitleHeadService
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.issue.IssueLabelCategory
+import com.github.search5.yona.domain.issue.IssueLabel
+import com.github.search5.yona.domain.project.TitleHead
 
 class ProjectControllerSpec : DescribeSpec({
     val projectService = mockk<ProjectService>()
@@ -78,7 +82,7 @@ class ProjectControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(projectController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectService, projectRepository, projectUserRepository, userRepository, pushedBranchRepository, titleHeadService, issueLabelRepository)
+        clearMocks(projectService, projectRepository, projectUserRepository, userRepository, pushedBranchRepository, titleHeadService, issueLabelRepository)
     }
 
     describe("ProjectController 웹 API 테스트") {
@@ -330,13 +334,13 @@ class ProjectControllerSpec : DescribeSpec({
         // yona ProjectApi.titleHeads()/getherTitleHeads()/getherProjectLabels() 대응 (P1-103).
         describe("GET /api/{owner}/{projectName}/titleHeads") {
             val titleHeadProject = Project(id = 50L, name = "th", owner = "owner", projectScope = ProjectScope.PUBLIC)
-            val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "type", isExclusive = false, project = titleHeadProject)
-            val label = com.github.search5.yona.domain.issue.IssueLabel(id = 9L, category = category, color = "#ff0000", name = "bug", project = titleHeadProject)
+            val category = IssueLabelCategory(id = 1L, name = "type", isExclusive = false, project = titleHeadProject)
+            val label = IssueLabel(id = 9L, category = category, color = "#ff0000", name = "bug", project = titleHeadProject)
 
             it("공개 프로젝트는 비회원도 조회 가능하고, 머리말과 라벨을 합쳐서 반환해야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "th") } returns Optional.of(titleHeadProject)
                 every { titleHeadService.search(titleHeadProject, "bu") } returns listOf(
-                    com.github.search5.yona.domain.project.TitleHead(id = 1L, project = titleHeadProject, headKeyword = "Bug", frequency = 3)
+                    TitleHead(id = 1L, project = titleHeadProject, headKeyword = "Bug", frequency = 3)
                 )
                 every { issueLabelRepository.findByProject(titleHeadProject) } returns listOf(label)
 

@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.CodeReviewService
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
@@ -47,7 +48,7 @@ import org.springframework.transaction.annotation.Transactional
 class IncomingMailProcessingService(
     private val originalEmailRepository: OriginalEmailRepository,
     private val userRepository: UserRepository,
-    private val projectRepository: com.github.search5.yona.domain.project.ProjectRepository,
+    private val projectRepository: ProjectRepository,
     private val issueRepository: IssueRepository,
     private val postingRepository: PostingRepository,
     private val issueService: IssueService,

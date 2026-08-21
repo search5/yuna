@@ -38,6 +38,16 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.issue.IssueEventRepository
+import com.github.search5.yona.domain.project.TitleHeadService
+import io.mockk.clearMocks
+import io.mockk.slot
+import com.github.search5.yona.domain.issue.IssueSharer
+import com.github.search5.yona.domain.issue.IssueEvent
+import com.github.search5.yona.domain.enumeration.EventType
+import com.github.search5.yona.domain.issue.IssueComment
+import java.security.MessageDigest
 
 class IssueControllerSpec : DescribeSpec({
     val issueService = mockk<IssueService>()
@@ -45,10 +55,10 @@ class IssueControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
-    val attachmentService = mockk<com.github.search5.yona.domain.attachment.AttachmentService>()
+    val attachmentService = mockk<AttachmentService>()
     val issueCommentRepository = mockk<IssueCommentRepository>()
-    val issueEventRepository = mockk<com.github.search5.yona.domain.issue.IssueEventRepository>()
-    val titleHeadService = mockk<com.github.search5.yona.domain.project.TitleHeadService>()
+    val issueEventRepository = mockk<IssueEventRepository>()
+    val titleHeadService = mockk<TitleHeadService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -83,7 +93,7 @@ class IssueControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(issueService, issueRepository, projectRepository, projectUserRepository, userRepository, attachmentService, issueCommentRepository, issueEventRepository, titleHeadService)
+        clearMocks(issueService, issueRepository, projectRepository, projectUserRepository, userRepository, attachmentService, issueCommentRepository, issueEventRepository, titleHeadService)
         every { titleHeadService.deleteTitleHeadKeyword(any(), any()) } returns Unit
     }
 
@@ -144,7 +154,7 @@ class IssueControllerSpec : DescribeSpec({
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
-                val pageableSlot = io.mockk.slot<Pageable>()
+                val pageableSlot = slot<Pageable>()
                 every { issueRepository.findByProject(project, capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
 
                 mockMvc.perform(get("/api/projects/1/issues").principal(userAuth))
@@ -157,7 +167,7 @@ class IssueControllerSpec : DescribeSpec({
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
-                val pageableSlot = io.mockk.slot<Pageable>()
+                val pageableSlot = slot<Pageable>()
                 every { issueRepository.findByProject(project, capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
 
                 mockMvc.perform(get("/api/projects/1/issues").param("size", "999").principal(userAuth))
@@ -186,7 +196,7 @@ class IssueControllerSpec : DescribeSpec({
                     authorId = user.id, state = State.OPEN
                 )
                 sharedIssue.sharers.add(
-                    com.github.search5.yona.domain.issue.IssueSharer(
+                    IssueSharer(
                         loginId = otherUser.loginId, user = otherUser, issue = sharedIssue
                     )
                 )
@@ -247,8 +257,8 @@ class IssueControllerSpec : DescribeSpec({
 
         describe("GET /api/projects/{projectId}/issues/{issueId}/timeline") {
             it("권한이 있는 유저가 조회하면 이슈의 변경 이력을 시간순으로 반환해야 한다") {
-                val issueEvent = com.github.search5.yona.domain.issue.IssueEvent(
-                    id = 1L, issue = issue, eventType = com.github.search5.yona.domain.enumeration.EventType.ISSUE_STATE_CHANGED,
+                val issueEvent = IssueEvent(
+                    id = 1L, issue = issue, eventType = EventType.ISSUE_STATE_CHANGED,
                     oldValue = "OPEN", newValue = "CLOSED"
                 )
                 every { projectRepository.findById(1L) } returns Optional.of(project)
@@ -277,7 +287,7 @@ class IssueControllerSpec : DescribeSpec({
                     authorId = user.id, state = State.OPEN
                 )
                 sharedIssue.sharers.add(
-                    com.github.search5.yona.domain.issue.IssueSharer(
+                    IssueSharer(
                         loginId = otherUser.loginId, user = otherUser, issue = sharedIssue
                     )
                 )
@@ -684,7 +694,7 @@ class IssueControllerSpec : DescribeSpec({
         // yona IssueApi.java:551-584 detectChange() 대응 (P1-102). 폴링으로 다른 사용자의 변경을 감지.
         describe("POST /api/projects/{projectId}/issues/{issueId}/detectChange") {
             it("body와 댓글 수가 그대로면 issueBodyChanged=false를 반환해야 한다") {
-                val checksum = java.security.MessageDigest.getInstance("SHA-1")
+                val checksum = MessageDigest.getInstance("SHA-1")
                     .digest("이슈 내용".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
                 every { projectRepository.findById(1L) } returns Optional.of(project)
@@ -725,10 +735,10 @@ class IssueControllerSpec : DescribeSpec({
             }
 
             it("다른 사람이 댓글을 추가했으면 최신 댓글 작성자 이름을 포함해야 한다") {
-                val newComment = com.github.search5.yona.domain.issue.IssueComment(
+                val newComment = IssueComment(
                     id = 50L, contents = "새 댓글", authorLoginId = "otheruser", issue = issue
                 )
-                val checksum = java.security.MessageDigest.getInstance("SHA-1")
+                val checksum = MessageDigest.getInstance("SHA-1")
                     .digest("이슈 내용".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
                 every { projectRepository.findById(1L) } returns Optional.of(project)

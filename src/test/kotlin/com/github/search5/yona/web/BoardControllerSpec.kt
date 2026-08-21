@@ -34,14 +34,20 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.issue.IssueLabelRepository
+import io.mockk.clearMocks
+import io.mockk.slot
+import org.springframework.data.domain.Pageable
+import com.github.search5.yona.domain.issue.IssueLabelCategory
+import com.github.search5.yona.domain.issue.IssueLabel
 
 class BoardControllerSpec : DescribeSpec({
     val postingService = mockk<PostingService>()
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
-    val postingRepository = mockk<com.github.search5.yona.domain.board.PostingRepository>()
-    val issueLabelRepository = mockk<com.github.search5.yona.domain.issue.IssueLabelRepository>()
+    val postingRepository = mockk<PostingRepository>()
+    val issueLabelRepository = mockk<IssueLabelRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -73,7 +79,7 @@ class BoardControllerSpec : DescribeSpec({
         .build()
 
     beforeTest {
-        io.mockk.clearMocks(postingService, projectRepository, projectUserRepository, userRepository, postingRepository, issueLabelRepository)
+        clearMocks(postingService, projectRepository, projectUserRepository, userRepository, postingRepository, issueLabelRepository)
     }
 
     describe("BoardController 웹 API 테스트") {
@@ -113,7 +119,7 @@ class BoardControllerSpec : DescribeSpec({
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
-                val pageableSlot = io.mockk.slot<org.springframework.data.domain.Pageable>()
+                val pageableSlot = slot<Pageable>()
                 every { postingService.getPostings(1L, capture(pageableSlot)) } returns PageImpl(listOf(posting), pageRequest, 1)
 
                 mockMvc.perform(get("/api/projects/1/posts").param("size", "999").principal(userAuth))
@@ -320,9 +326,9 @@ class BoardControllerSpec : DescribeSpec({
 
         describe("PUT /api/projects/{projectId}/posts/{postId}/labels") {
             it("작성자가 라벨 ID 목록으로 게시글 라벨을 교체하면 200 OK를 반환해야 한다") {
-                val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "기본", project = project)
-                val label1 = com.github.search5.yona.domain.issue.IssueLabel(id = 1L, name = "버그", color = "red", category = category, project = project)
-                val label2 = com.github.search5.yona.domain.issue.IssueLabel(id = 2L, name = "긴급", color = "orange", category = category, project = project)
+                val category = IssueLabelCategory(id = 1L, name = "기본", project = project)
+                val label1 = IssueLabel(id = 1L, name = "버그", color = "red", category = category, project = project)
+                val label2 = IssueLabel(id = 2L, name = "긴급", color = "orange", category = category, project = project)
 
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { postingService.getPosting(1L, 1L) } returns posting

@@ -20,7 +20,9 @@ import org.springframework.ui.Model
 
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.Operation
+import org.springframework.transaction.annotation.Transactional
 
 @Controller
 class WatchController(
@@ -123,7 +125,7 @@ class WatchController(
 
     @PostMapping("/{owner}/{projectName}/unwatch")
     @ResponseBody
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     fun unwatchProject(
         @PathVariable owner: String,
         @PathVariable projectName: String,
@@ -162,7 +164,7 @@ class WatchController(
         }
 
         val notiType = try {
-            com.github.search5.yona.domain.enumeration.EventType.valueOf(notificationType)
+            EventType.valueOf(notificationType)
         } catch (e: Exception) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 알림 타입입니다.")
         }
@@ -190,8 +192,8 @@ class WatchController(
         return ResponseEntity.ok(mapOf("status" to "success"))
     }
 
-    private fun isNotifiedByDefault(eventType: com.github.search5.yona.domain.enumeration.EventType): Boolean {
-        return eventType != com.github.search5.yona.domain.enumeration.EventType.NEW_COMMENT
+    private fun isNotifiedByDefault(eventType: EventType): Boolean {
+        return eventType != EventType.NEW_COMMENT
     }
 
     @GetMapping("/-_-api/v1/owners/{owner}/projects/{projectName}/posts/{number}/watchers")

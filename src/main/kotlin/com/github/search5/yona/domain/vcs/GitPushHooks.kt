@@ -10,12 +10,13 @@ import org.eclipse.jgit.transport.PreReceiveHook
 import org.eclipse.jgit.transport.ReceiveCommand
 import org.eclipse.jgit.transport.ReceivePack
 import org.springframework.context.ApplicationEventPublisher
+import java.time.Duration
 import java.time.Instant
 
 private const val RESERVED_REF = "refs/yobi"
 private const val RESERVED_REF_PREFIX = "refs/yobi/"
 private const val BRANCH_PREFIX = "refs/heads/"
-private val RECENTLY_PUSHED_WINDOW: java.time.Duration = java.time.Duration.ofHours(1)
+private val RECENTLY_PUSHED_WINDOW: Duration = Duration.ofHours(1)
 
 /**
  * yona의 playRepository/hooks/RejectPushToReservedRefs.java 대응.

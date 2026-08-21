@@ -27,6 +27,12 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.project.ProjectUser
 
 class BranchApiControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -61,7 +67,7 @@ class BranchApiControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(branchApiController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, projectUserRepository, userRepository, repositoryService, playRepository)
+        clearMocks(projectRepository, projectUserRepository, userRepository, repositoryService, playRepository)
     }
 
     describe("BranchApiController 웹 API 테스트") {
@@ -88,12 +94,12 @@ class BranchApiControllerSpec : DescribeSpec({
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 성공해야 한다") {
-                val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val org = Organization(id = 1L, name = "org")
                 val groupProject = Project(id = 1L, name = "TestProject", owner = "owner", vcs = "git", projectScope = ProjectScope.PROTECTED, organization = org)
                 org.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = user, organization = org,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
 
@@ -131,9 +137,9 @@ class BranchApiControllerSpec : DescribeSpec({
             it("매니저가 삭제를 요청하면 302 리다이렉트와 deleteBranch 메소드가 정상 호출되어야 한다 (P1-97, legacy PROJECT DELETE는 매니저/조직관리자 전용)") {
                 val managerUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 managerUser.projectUsers.add(
-                    com.github.search5.yona.domain.project.ProjectUser(
+                    ProjectUser(
                         id = 200L, user = managerUser, project = project,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MANAGER.roleType)
+                        role = Role(id = RoleType.MANAGER.roleType)
                     )
                 )
 
@@ -154,9 +160,9 @@ class BranchApiControllerSpec : DescribeSpec({
             it("매니저가 아닌 일반 멤버가 삭제를 요청하면 403 Forbidden 화면을 반환해야 한다 (P1-97)") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(
-                    com.github.search5.yona.domain.project.ProjectUser(
+                    ProjectUser(
                         id = 201L, user = memberUser, project = project,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)
+                        role = Role(id = RoleType.MEMBER.roleType)
                     )
                 )
 

@@ -15,17 +15,22 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.support.MarkdownService
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseBody
 import org.springframework.web.servlet.mvc.support.RedirectAttributes
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 @Controller
 class MilestoneViewController(
@@ -70,7 +75,7 @@ class MilestoneViewController(
         val daysBetween = milestone.dueDate?.let { dueDate ->
             val nowLocalDate = LocalDate.now(ZoneId.systemDefault())
             val dueLocalDate = LocalDate.ofInstant(dueDate, ZoneId.systemDefault())
-            java.time.temporal.ChronoUnit.DAYS.between(nowLocalDate, dueLocalDate)
+            ChronoUnit.DAYS.between(nowLocalDate, dueLocalDate)
         }
         
         return MilestoneViewDto(
@@ -483,30 +488,30 @@ class MilestoneViewController(
         return "redirect:/$owner/$projectName/milestone/$id"
     }
 
-    @org.springframework.web.bind.annotation.DeleteMapping("/{owner}/{projectName}/milestone/{id}")
-    @org.springframework.web.bind.annotation.ResponseBody
+    @DeleteMapping("/{owner}/{projectName}/milestone/{id}")
+    @ResponseBody
     fun deleteMilestone(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @PathVariable id: Long,
         authentication: Authentication?
-    ): org.springframework.http.ResponseEntity<Void> {
+    ): ResponseEntity<Void> {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
-            ?: return org.springframework.http.ResponseEntity.notFound().build()
+            ?: return ResponseEntity.notFound().build()
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-            ?: return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build()
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
-            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build()
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
         val milestone = milestoneService.getMilestone(id)
-            ?: return org.springframework.http.ResponseEntity.notFound().build()
+            ?: return ResponseEntity.notFound().build()
         if (milestone.project.id != project.id) {
-            return org.springframework.http.ResponseEntity.notFound().build()
+            return ResponseEntity.notFound().build()
         }
         
         milestoneService.deleteMilestone(id)
         
-        return org.springframework.http.ResponseEntity.noContent()
+        return ResponseEntity.noContent()
             .header("Location", "/$owner/$projectName/milestones")
             .build()
     }

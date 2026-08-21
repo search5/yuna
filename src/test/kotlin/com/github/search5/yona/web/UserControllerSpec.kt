@@ -23,6 +23,10 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
+import io.mockk.slot
+import org.springframework.security.authentication.BadCredentialsException
+import org.hamcrest.Matchers
 
 class UserControllerSpec : DescribeSpec({
     val userService = mockk<UserService>()
@@ -37,7 +41,7 @@ class UserControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(userController).build()
 
     beforeTest {
-        io.mockk.clearMocks(userService, userRepository, recentIssueService, userSettingRepository, yonaAuthenticationProvider)
+        clearMocks(userService, userRepository, recentIssueService, userSettingRepository, yonaAuthenticationProvider)
     }
 
     describe("UserController 웹 API 테스트") {
@@ -107,7 +111,7 @@ class UserControllerSpec : DescribeSpec({
                         .param("token", "test-token-50")
                 )
                     .andExpect(status().isOk)
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("이메일 인증이 완료되었습니다.")))
+                    .andExpect(content().string(Matchers.containsString("이메일 인증이 완료되었습니다.")))
             }
         }
 
@@ -139,7 +143,7 @@ class UserControllerSpec : DescribeSpec({
                         .param("code", "verification-code")
                 )
                     .andExpect(status().isOk)
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("회원가입 계정 인증이 완료되었습니다.")))
+                    .andExpect(content().string(Matchers.containsString("회원가입 계정 인증이 완료되었습니다.")))
             }
         }
 
@@ -170,7 +174,7 @@ class UserControllerSpec : DescribeSpec({
                 every { userRepository.findById(1L) } returns Optional.of(testUser)
                 every { userService.isEmailExist("new-mail@example.com") } returns false
 
-                val capturedUser = io.mockk.slot<User>()
+                val capturedUser = slot<User>()
                 every { userRepository.save(capture(capturedUser)) } answers { capturedUser.captured }
 
                 // When & Then
@@ -349,7 +353,7 @@ class UserControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
                 every {
                     yonaAuthenticationProvider.authenticate(match<UsernamePasswordAuthenticationToken> { it.name == "gildong" })
-                } throws org.springframework.security.authentication.BadCredentialsException("비밀번호가 일치하지 않습니다.")
+                } throws BadCredentialsException("비밀번호가 일치하지 않습니다.")
 
                 mockMvc.perform(
                     post("/api/users/token")

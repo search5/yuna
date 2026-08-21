@@ -18,6 +18,8 @@ import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
+import org.eclipse.jgit.api.errors.NoHeadException
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.file.Files
 import org.springframework.http.HttpHeaders
@@ -100,7 +102,7 @@ class CodeViewController(
             return "error/403"
         }
 
-        val decodedBranch = java.net.URLDecoder.decode(branch, "UTF-8")
+        val decodedBranch = URLDecoder.decode(branch, "UTF-8")
         val normalizedPath = path.removePrefix("/")
 
         val repository = repositoryService.getRepository(project)
@@ -154,7 +156,7 @@ class CodeViewController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val decodedRev = java.net.URLDecoder.decode(rev, "UTF-8")
+        val decodedRev = URLDecoder.decode(rev, "UTF-8")
         val normalizedPath = path.removePrefix("/")
 
         val rawData = repositoryService.getFileAsRaw(owner, projectName, decodedRev, normalizedPath)
@@ -234,8 +236,8 @@ class CodeViewController(
             return "error/403"
         }
 
-        val decodedBranch = java.net.URLDecoder.decode(branch, "UTF-8")
-        val decodedPath = path?.let { java.net.URLDecoder.decode(it, "UTF-8") }?.removePrefix("/")
+        val decodedBranch = URLDecoder.decode(branch, "UTF-8")
+        val decodedPath = path?.let { URLDecoder.decode(it, "UTF-8") }?.removePrefix("/")
 
         val repository = repositoryService.getRepository(project)
         val branches = repository.getRefNames()
@@ -246,7 +248,7 @@ class CodeViewController(
         // code/nohead(_svn) 뷰로 안내한다.
         val commits = try {
             repository.getHistory(page, 25, decodedBranch, decodedPath)
-        } catch (e: org.eclipse.jgit.api.errors.NoHeadException) {
+        } catch (e: NoHeadException) {
             model.addAttribute("project", project)
             return if (project.vcs == "SUBVERSION") "code/nohead_svn" else "code/nohead"
         }

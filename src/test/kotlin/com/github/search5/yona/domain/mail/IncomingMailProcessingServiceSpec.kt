@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.mail
 
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.attachment.Attachment
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
@@ -33,6 +34,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -88,7 +90,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
     val project = Project(id = 10L, name = "hive", owner = "dlab", projectScope = ProjectScope.PUBLIC)
 
     beforeTest {
-        io.mockk.clearMocks(
+        clearMocks(
             originalEmailRepository, userRepository, projectRepository, issueRepository, postingRepository,
             issueService, commentService, attachmentService, commentThreadRepository, commitCommentRepository,
             codeReviewService, mailService, issueCommentRepository, postingCommentRepository, reviewCommentRepository
@@ -309,7 +311,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 every { issueRepository.findById(100L) } returns Optional.of(savedIssue)
                 every { issueRepository.save(any()) } returnsArgument 0
 
-                val savedAttachment = com.github.search5.yona.domain.attachment.Attachment(
+                val savedAttachment = Attachment(
                     id = 999L, name = "photo.png", containerType = ResourceType.ISSUE_POST, containerId = "100"
                 )
                 every {
@@ -497,7 +499,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 every { reviewCommentRepository.findById(401L) } returns Optional.of(savedReviewComment)
                 every { reviewCommentRepository.save(any()) } returnsArgument 0
 
-                val savedAttachment = com.github.search5.yona.domain.attachment.Attachment(
+                val savedAttachment = Attachment(
                     id = 998L, name = "shot.png", containerType = ResourceType.REVIEW_COMMENT, containerId = "401"
                 )
                 every {

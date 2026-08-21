@@ -5,6 +5,7 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.organization.Organization
@@ -60,7 +61,7 @@ class NotificationUrlResolverSpec : DescribeSpec({
         it("ISSUE_COMMENT는 이슈 URL에 #comment-{id} 앵커를 붙인다") {
             val project = Project(id = 1L, name = "myproj", owner = "gildong")
             val issue = Issue(id = 10L, title = "제목", body = "본문", project = project, number = 7L)
-            val comment = com.github.search5.yona.domain.issue.IssueComment(id = 55L, contents = "댓글", issue = issue)
+            val comment = IssueComment(id = 55L, contents = "댓글", issue = issue)
             every { issueCommentRepository.findById(55L) } returns Optional.of(comment)
             every { issueRepository.findById(10L) } returns Optional.of(issue)
 

@@ -5,14 +5,18 @@ import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.Commit
 import com.github.search5.yona.domain.vcs.PlayRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import org.springframework.context.MessageSource
 
 // yona utils/AutoLinkRenderer.java:268-296 toValidSHALink() 대응 (P2-35). SHA 커밋 자동 링크화가
 // project.isGit() 뿐 아니라 project.isCodeAvailable()(코드브라우저 메뉴 활성 여부)도 검사해야 하는데,
@@ -24,7 +28,7 @@ class AutoLinkRendererSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val organizationRepository = mockk<OrganizationRepository>()
     val repositoryService = mockk<RepositoryService>()
-    val messageSource = mockk<org.springframework.context.MessageSource>()
+    val messageSource = mockk<MessageSource>()
 
     val autoLinkRenderer = AutoLinkRenderer(
         projectRepository, issueRepository, userRepository, organizationRepository,
@@ -34,14 +38,14 @@ class AutoLinkRendererSpec : DescribeSpec({
     val sha = "abc1234"
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, issueRepository, userRepository, organizationRepository, repositoryService, messageSource)
+        clearMocks(projectRepository, issueRepository, userRepository, organizationRepository, repositoryService, messageSource)
     }
 
     describe("render() - SHA 자동 링크화 (P2-35)") {
         it("코드브라우저가 켜진(isCodeEnabled=true) GIT 프로젝트에서는 SHA가 커밋 링크로 변환된다") {
             val project = Project(id = 1L, owner = "owner", name = "proj", vcs = "GIT", isCodeEnabled = true)
             val repo = mockk<PlayRepository>()
-            val commit = mockk<com.github.search5.yona.domain.vcs.Commit>()
+            val commit = mockk<Commit>()
             every { repositoryService.getRepository(project) } returns repo
             every { repo.getCommit(sha) } returns commit
             every { commit.getId() } returns sha
@@ -59,7 +63,7 @@ class AutoLinkRendererSpec : DescribeSpec({
             val result = autoLinkRenderer.render(sha, project)
 
             result shouldNotContain "<a"
-            io.mockk.verify(exactly = 0) { repositoryService.getRepository(any()) }
+            verify(exactly = 0) { repositoryService.getRepository(any()) }
         }
     }
 })

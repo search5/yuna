@@ -25,6 +25,13 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 
 class BranchViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -59,7 +66,7 @@ class BranchViewControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(branchViewController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, projectUserRepository, userRepository, repositoryService, playRepository)
+        clearMocks(projectRepository, projectUserRepository, userRepository, repositoryService, playRepository)
     }
 
     describe("BranchViewController 웹 API 테스트") {
@@ -100,16 +107,16 @@ class BranchViewControllerSpec : DescribeSpec({
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-                val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
-                val groupUser = com.github.search5.yona.domain.user.User(id = 10L, loginId = "groupuser", name = "그룹멤버")
+                val groupOrg = Organization(id = 1L, name = "org")
+                val groupUser = User(id = 10L, loginId = "groupuser", name = "그룹멤버")
                 groupOrg.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = groupUser, organization = groupOrg,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
                 val groupProject = Project(id = 5L, owner = "owner", name = "group-project", vcs = "git", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
-                val groupAuth = org.springframework.security.authentication.UsernamePasswordAuthenticationToken("groupuser", "password")
+                val groupAuth = UsernamePasswordAuthenticationToken("groupuser", "password")
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "group-project") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("groupuser") } returns Optional.of(groupUser)

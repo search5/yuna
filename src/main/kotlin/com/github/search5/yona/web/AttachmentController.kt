@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.attachment.Attachment
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
@@ -10,6 +11,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.core.io.FileSystemResource
 import org.springframework.core.io.Resource
+import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -17,6 +19,8 @@ import org.springframework.web.bind.annotation.*
 import org.springframework.web.multipart.MultipartFile
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.security.Principal
+import java.text.Normalizer
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
@@ -31,10 +35,10 @@ class AttachmentController(
     private val postingRepository: PostingRepository,
     private val milestoneRepository: MilestoneRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val accessControl: com.github.search5.yona.config.security.AccessControl
+    private val accessControl: AccessControl
 ) {
 
-    private fun findUploader(authorEmail: String?, authorLoginId: String?, principal: java.security.Principal?): User {
+    private fun findUploader(authorEmail: String?, authorLoginId: String?, principal: Principal?): User {
         if (!authorEmail.isNullOrBlank()) {
             val u = userRepository.findByEmail(authorEmail)
             if (u.isPresent && u.get().loginId != "anonymous") {
@@ -59,7 +63,7 @@ class AttachmentController(
         @RequestParam("filePath") file: MultipartFile,
         @RequestParam(value = "authorEmail", required = false) authorEmail: String?,
         @RequestParam(value = "authorLoginId", required = false) authorLoginId: String?,
-        principal: java.security.Principal?
+        principal: Principal?
     ): ResponseEntity<Map<String, String>> {
         val uploader = findUploader(authorEmail, authorLoginId, principal)
         if (uploader.loginId == "anonymous") {
@@ -67,7 +71,7 @@ class AttachmentController(
         }
 
         // NFC 파일명 정규화
-        val normalizedFilename = java.text.Normalizer.normalize(file.originalFilename ?: "unknown", java.text.Normalizer.Form.NFC)
+        val normalizedFilename = Normalizer.normalize(file.originalFilename ?: "unknown", Normalizer.Form.NFC)
 
         // yona AttachmentApp.java:84-85 attach.store(...)의 반환값(isCreated) 대응 (P2-24) —
         // AttachmentService.store()가 dedup 여부를 직접 반환하므로 사후에 existsByHash로 추정할
@@ -102,7 +106,7 @@ class AttachmentController(
         @PathVariable("id") id: Long,
         @RequestParam(value = "action", required = false) action: String?,
         request: HttpServletRequest,
-        principal: java.security.Principal?
+        principal: Principal?
     ): ResponseEntity<Resource> {
         val attachment = attachmentRepository.findById(id).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
@@ -131,7 +135,7 @@ class AttachmentController(
 
         val resource = FileSystemResource(file)
         
-        val contentDisposition = org.springframework.http.ContentDisposition.builder(dispositionType)
+        val contentDisposition = ContentDisposition.builder(dispositionType)
             .filename(attachment.name, StandardCharsets.UTF_8)
             .build()
             .toString()
@@ -148,7 +152,7 @@ class AttachmentController(
     fun deleteFile(
         @PathVariable("id") id: Long,
         @RequestParam(value = "_method", required = false) method: String?,
-        principal: java.security.Principal?
+        principal: Principal?
     ): ResponseEntity<String> {
         if (method?.lowercase() != "delete") {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("_method must be 'delete'.")
@@ -222,7 +226,7 @@ class AttachmentController(
     fun getFileList(
         @RequestParam(value = "containerType", required = false) containerType: String?,
         @RequestParam(value = "containerId", required = false) containerId: String?,
-        principal: java.security.Principal?
+        principal: Principal?
     ): ResponseEntity<Map<String, Any>> {
         if (containerType.isNullOrBlank() || containerId.isNullOrBlank()) {
             return ResponseEntity.ok(mapOf("attachments" to emptyList<Any>()))

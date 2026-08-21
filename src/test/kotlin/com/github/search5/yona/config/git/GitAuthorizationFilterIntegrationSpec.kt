@@ -9,11 +9,13 @@ import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import jakarta.servlet.Filter
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.context.WebApplicationContext
 import java.nio.charset.StandardCharsets
@@ -35,9 +37,9 @@ class GitAuthorizationFilterIntegrationSpec @Autowired constructor(
 
     init {
         beforeSpec {
-            val securityFilter = wac.getBean("springSecurityFilterChain", jakarta.servlet.Filter::class.java)
+            val securityFilter = wac.getBean("springSecurityFilterChain", Filter::class.java)
             mockMvc = MockMvcBuilders.webAppContextSetup(wac)
-                .addFilters<org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder>(securityFilter)
+                .addFilters<DefaultMockMvcBuilder>(securityFilter)
                 .build()
         }
 

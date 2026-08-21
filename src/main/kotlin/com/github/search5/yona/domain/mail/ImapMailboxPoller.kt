@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.support.PropertyName
 import com.github.search5.yona.domain.support.PropertyService
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
+import jakarta.mail.Folder
 import jakarta.mail.FolderClosedException
 import jakarta.mail.Message
 import jakarta.mail.Multipart
@@ -13,6 +14,7 @@ import jakarta.mail.event.MessageCountEvent
 import jakarta.mail.event.MessageCountListener
 import jakarta.mail.internet.InternetAddress
 import jakarta.mail.internet.MimeMessage
+import jakarta.mail.internet.MimePart
 import org.eclipse.angus.mail.imap.IMAPFolder
 import org.eclipse.angus.mail.imap.IMAPStore
 import org.slf4j.LoggerFactory
@@ -20,6 +22,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
+import java.time.Duration
 import java.time.Instant
 import java.util.Properties
 import java.util.concurrent.ScheduledFuture
@@ -67,7 +70,7 @@ class ImapMailboxPoller(
         try {
             store = connect()
             val opened = store!!.getFolder(folderName) as IMAPFolder
-            opened.open(jakarta.mail.Folder.READ_ONLY)
+            opened.open(Folder.READ_ONLY)
             folder = opened
         } catch (e: Exception) {
             logger.error("IMAP 폴더를 여는 데 실패했습니다", e)
@@ -128,7 +131,7 @@ class ImapMailboxPoller(
         }
 
         val reopened = reconnected.getFolder(folderName) as IMAPFolder
-        reopened.open(jakarta.mail.Folder.READ_ONLY)
+        reopened.open(Folder.READ_ONLY)
         return reopened
     }
 
@@ -281,7 +284,7 @@ class ImapMailboxPoller(
                 }
             },
             Instant.now(),
-            java.time.Duration.ofMillis(pollingIntervalMs)
+            Duration.ofMillis(pollingIntervalMs)
         )
     }
 
@@ -319,7 +322,7 @@ class ImapMailboxPoller(
                 }
                 !part.fileName.isNullOrBlank() -> {
                     val bytes = part.inputStream.use { it.readBytes() }
-                    val contentId = (part as? jakarta.mail.internet.MimePart)?.contentID?.trim('<', '>')
+                    val contentId = (part as? MimePart)?.contentID?.trim('<', '>')
                     listOf(InboundAttachment(part.fileName, part.contentType ?: "application/octet-stream", bytes, contentId))
                 }
                 else -> emptyList()

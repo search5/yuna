@@ -4,12 +4,14 @@ import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.Operation
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.mention.MentionService
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
+import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingComment
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
@@ -60,7 +62,7 @@ class CommentServiceImpl(
     // 답글이면 같은 부모의 마지막 형제 답글(없으면 부모 댓글 자신)을, 그 외(최상위 새 댓글)면 게시물/
     // 이슈의 마지막 댓글을 인용한다. IssueApp의 numOfComments 불일치 자가복구(가비지 댓글 삭제) 로직은
     // Ebean 캐시 특유의 데이터 정합성 땜질이라 옮기지 않는다 — yuna는 매 저장 시 count를 직접 재계산한다.
-    private fun resolvePostingPreviousContents(posting: com.github.search5.yona.domain.board.Posting, parentComment: PostingComment?): String {
+    private fun resolvePostingPreviousContents(posting: Posting, parentComment: PostingComment?): String {
         val existingComments = postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(posting.id!!)
         if (existingComments.isEmpty()) {
             return quotePrevious("Original posting", posting.body ?: "", posting.updatedDate, posting.authorLoginId)
@@ -73,7 +75,7 @@ class CommentServiceImpl(
         return quotePrevious("Previous comment", previous.contents, previous.createdDate, previous.authorLoginId)
     }
 
-    private fun resolveIssuePreviousContents(issue: com.github.search5.yona.domain.issue.Issue, parentComment: IssueComment?): String {
+    private fun resolveIssuePreviousContents(issue: Issue, parentComment: IssueComment?): String {
         val existingComments = issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!)
         if (existingComments.isEmpty()) {
             return quotePrevious("Original issue", issue.body ?: "", issue.updatedDate, issue.authorLoginId)

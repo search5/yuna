@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.board.PostingService
 import com.github.search5.yona.domain.issue.Assignee
 import com.github.search5.yona.domain.issue.AssigneeRepository
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueLabelCategory
 import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
 import com.github.search5.yona.domain.issue.IssueLabelService
 import com.github.search5.yona.domain.issue.IssueRepository
@@ -15,9 +16,12 @@ import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.pullrequest.CommentThread
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestCommit
 import com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestEvent
 import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.role.Role
@@ -27,14 +31,17 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.FavoriteProject
 import com.github.search5.yona.domain.user.FavoriteProjectRepository
+import com.github.search5.yona.domain.vcs.PlayRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.webhook.Webhook
 import com.github.search5.yona.domain.webhook.WebhookRepository
+import com.github.search5.yona.domain.webhook.WebhookThread
 import com.github.search5.yona.domain.webhook.WebhookThreadRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -476,7 +483,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             val result = projectService.detachLabel(6L, 201L)
 
             result shouldBe true
-            io.mockk.verify(exactly = 0) { labelRepository.delete(label) }
+            verify(exactly = 0) { labelRepository.delete(label) }
         }
     }
 
@@ -485,10 +492,10 @@ class ProjectServiceImplSpec : DescribeSpec({
     // 검사, recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom(), repository.renameTo(),
     // FavoriteProject.updateFavoriteProject() 네 가지를 전부 그대로 재현한다.
     describe("ProjectServiceImpl.updateProject - 개명 (P1-144)") {
-        val playRepository = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+        val playRepository = mockk<PlayRepository>()
 
         beforeTest {
-            io.mockk.clearMocks(playRepository, answers = false)
+            clearMocks(playRepository, answers = false)
         }
 
         fun baseParam(name: String? = null) = UpdateProjectParam(
@@ -514,7 +521,7 @@ class ProjectServiceImplSpec : DescribeSpec({
 
             projectService.updateProject(20L, baseParam(name = "old-name"))
 
-            io.mockk.verify(exactly = 0) { repositoryService.getRepository(any()) }
+            verify(exactly = 0) { repositoryService.getRepository(any()) }
         }
 
         it("같은 소유자 내 이미 존재하는 이름으로 바꾸려 하면 예외가 발생하고 아무것도 바뀌지 않아야 한다") {
@@ -529,7 +536,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             }
 
             project.name shouldBe "old-name"
-            io.mockk.verify(exactly = 0) { repositoryService.getRepository(any()) }
+            verify(exactly = 0) { repositoryService.getRepository(any()) }
         }
 
         it("저장소 rename에 실패하면 예외가 발생하고 이름이 바뀌지 않아야 한다") {
@@ -570,7 +577,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             project.previousNameChangedTime shouldNotBe null
             favorite.owner shouldBe "owner1"
             favorite.projectName shouldBe "new-name"
-            io.mockk.verify(exactly = 1) { playRepository.renameTo("new-name") }
+            verify(exactly = 1) { playRepository.renameTo("new-name") }
         }
 
         it("최근 24시간 내 이미 개명 이력이 있으면 previousName을 다시 덮어쓰지 않아야 한다") {
@@ -604,7 +611,7 @@ class ProjectServiceImplSpec : DescribeSpec({
     // fork 자식 프로젝트는 삭제되지 않고 원본 연결만 끊어져야 한다.
     describe("ProjectServiceImpl.deleteProject") {
         beforeTest {
-            io.mockk.clearMocks(
+            clearMocks(
                 projectRepository, projectUserRepository, projectTransferRepository,
                 issueRepository, issueService, issueLabelCategoryRepository, issueLabelService,
                 assigneeRepository, webhookRepository, webhookThreadRepository,
@@ -621,7 +628,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { projectTransferRepository.findByProjectId(1L) } returns listOf(transfer)
             every { projectTransferRepository.deleteAll(listOf(transfer)) } returns Unit
 
-            val thread = mockk<com.github.search5.yona.domain.pullrequest.CommentThread>(relaxed = true)
+            val thread = mockk<CommentThread>(relaxed = true)
             every { commentThreadRepository.findByProject(project) } returns listOf(thread)
             every { commentThreadRepository.deleteAll(listOf(thread)) } returns Unit
 
@@ -632,10 +639,10 @@ class ProjectServiceImplSpec : DescribeSpec({
             // 이미 지워지지 않은 잔여 스레드가 없다고 가정.
             every { commentThreadRepository.findByPullRequest(pr) } returns emptyList()
             every { commentThreadRepository.deleteAll(emptyList()) } returns Unit
-            val prEvent = mockk<com.github.search5.yona.domain.pullrequest.PullRequestEvent>(relaxed = true)
+            val prEvent = mockk<PullRequestEvent>(relaxed = true)
             every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr) } returns listOf(prEvent)
             every { pullRequestEventRepository.deleteAll(listOf(prEvent)) } returns Unit
-            val prCommit = mockk<com.github.search5.yona.domain.pullrequest.PullRequestCommit>(relaxed = true)
+            val prCommit = mockk<PullRequestCommit>(relaxed = true)
             every { pullRequestCommitRepository.findByPullRequest(pr) } returns listOf(prCommit)
             every { pullRequestCommitRepository.deleteAll(listOf(prCommit)) } returns Unit
             every { pullRequestRepository.delete(pr) } returns Unit
@@ -644,7 +651,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { issueRepository.findByProject(project) } returns listOf(issue)
             every { issueService.deleteIssueCascade(issue) } returns Unit
 
-            val category = mockk<com.github.search5.yona.domain.issue.IssueLabelCategory>(relaxed = true)
+            val category = mockk<IssueLabelCategory>(relaxed = true)
             every { category.id } returns 30L
             every { issueLabelCategoryRepository.findByProject(project) } returns listOf(category)
             every { issueLabelService.deleteCategory(30L) } returns Unit
@@ -656,7 +663,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             val webhook = mockk<Webhook>(relaxed = true)
             every { webhook.id } returns 40L
             every { webhookRepository.findByProjectId(1L) } returns listOf(webhook)
-            val webhookThread = mockk<com.github.search5.yona.domain.webhook.WebhookThread>(relaxed = true)
+            val webhookThread = mockk<WebhookThread>(relaxed = true)
             every { webhookThreadRepository.findByWebhookId(40L) } returns listOf(webhookThread)
             every { webhookThreadRepository.deleteAll(listOf(webhookThread)) } returns Unit
             every { webhookRepository.delete(webhook) } returns Unit
@@ -705,13 +712,13 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { pullRequestRepository.findByToProject(fork) } returns emptyList()
             // P2-37: fork가 제3 프로젝트로 보낸 PR에 달린 CommentThread(thread.project가 그 제3
             // 프로젝트)도 PR 단위로 정리돼야 한다.
-            val forkThread = mockk<com.github.search5.yona.domain.pullrequest.CommentThread>(relaxed = true)
+            val forkThread = mockk<CommentThread>(relaxed = true)
             every { commentThreadRepository.findByPullRequest(forkPr) } returns listOf(forkThread)
             every { commentThreadRepository.deleteAll(listOf(forkThread)) } returns Unit
             every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(forkPr) } returns emptyList()
-            every { pullRequestEventRepository.deleteAll(emptyList<com.github.search5.yona.domain.pullrequest.PullRequestEvent>()) } returns Unit
+            every { pullRequestEventRepository.deleteAll(emptyList<PullRequestEvent>()) } returns Unit
             every { pullRequestCommitRepository.findByPullRequest(forkPr) } returns emptyList()
-            every { pullRequestCommitRepository.deleteAll(emptyList<com.github.search5.yona.domain.pullrequest.PullRequestCommit>()) } returns Unit
+            every { pullRequestCommitRepository.deleteAll(emptyList<PullRequestCommit>()) } returns Unit
             every { pullRequestRepository.delete(forkPr) } returns Unit
             every { projectRepository.save(fork) } returns fork
 

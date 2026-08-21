@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
@@ -47,7 +48,7 @@ class IssueShareServiceImpl(
         val processedQuery = "%${query.lowercase()}%"
         val el = userRepository.searchUsers(processedQuery, PageRequest.of(0, maxFetchUsers))
         for (u in el.content) {
-            if (project.projectScope == com.github.search5.yona.domain.project.ProjectScope.PUBLIC) {
+            if (project.projectScope == ProjectScope.PUBLIC) {
                 users.add(mapUser(u))
             } else {
                 if (isMemberOfProject(u, project)) {
@@ -91,7 +92,7 @@ class IssueShareServiceImpl(
         val processedQuery = "%${query.lowercase()}%"
         val el = userRepository.searchUsers(processedQuery, PageRequest.of(0, maxFetchUsers))
         for (u in el.content) {
-            if (project.projectScope == com.github.search5.yona.domain.project.ProjectScope.PUBLIC) {
+            if (project.projectScope == ProjectScope.PUBLIC) {
                 users.add(mapUser(u))
             } else {
                 if (isMemberOfProject(u, project)) {
@@ -250,7 +251,7 @@ class IssueShareServiceImpl(
 
         val org = project.organization
         if (org != null) {
-            if (project.projectScope == com.github.search5.yona.domain.project.ProjectScope.PRIVATE) {
+            if (project.projectScope == ProjectScope.PRIVATE) {
                 val orgAdmins = organizationUserRepository.findByOrganizationIdAndRoleId(org.id!!, RoleType.ORG_ADMIN.roleType)
                 for (ou in orgAdmins) {
                     userIds.add(ou.user.id!!)

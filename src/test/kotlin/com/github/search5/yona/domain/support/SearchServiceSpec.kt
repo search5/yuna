@@ -3,8 +3,11 @@ package com.github.search5.yona.domain.support
 import com.github.search5.yona.domain.enumeration.SearchType
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.board.PostingCommentRepository
@@ -58,7 +61,7 @@ class SearchServiceSpec : DescribeSpec({
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             // search result mock
-            val expectedIssues: Page<com.github.search5.yona.domain.issue.Issue> = PageImpl(emptyList())
+            val expectedIssues: Page<Issue> = PageImpl(emptyList())
             every { issueRepository.searchIssues(listOf(1L, 2L), "%test%", 10L, pageable) } returns expectedIssues
 
             val result = searchService.searchInAll("test", SearchType.AUTO, loginUser, pageable)
@@ -80,7 +83,7 @@ class SearchServiceSpec : DescribeSpec({
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%board%") } returns 0
 
             // search result mock
-            val expectedPosts: Page<com.github.search5.yona.domain.board.Posting> = PageImpl(emptyList())
+            val expectedPosts: Page<Posting> = PageImpl(emptyList())
             every { postingRepository.searchPostingsInProject(project, "%board%", pageable) } returns expectedPosts
 
             val result = searchService.searchInAProject("board", SearchType.POST, loginUser, project, pageable)
@@ -140,7 +143,7 @@ class SearchServiceSpec : DescribeSpec({
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
 
-            val expectedMilestones: Page<com.github.search5.yona.domain.milestone.Milestone> = PageImpl(emptyList())
+            val expectedMilestones: Page<Milestone> = PageImpl(emptyList())
             every { milestoneRepository.searchMilestones(listOf(1L, 2L), "%test%", pageable) } returns expectedMilestones
 
             val result = searchService.searchInAll("test", SearchType.MILESTONE, loginUser, pageable)
@@ -184,7 +187,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(3L), "%test%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(3L), "%test%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(3L), "%test%", 10L) } returns 0
-            val expectedIssues: Page<com.github.search5.yona.domain.issue.Issue> = PageImpl(emptyList())
+            val expectedIssues: Page<Issue> = PageImpl(emptyList())
             every { issueRepository.searchIssues(listOf(3L), "%test%", 10L, pageable) } returns expectedIssues
 
             val result = hiddenSearchService.searchInAll("test", SearchType.AUTO, loginUser, pageable)

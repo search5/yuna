@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.milestone
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.enumeration.State
 import jakarta.persistence.*
@@ -30,6 +31,6 @@ class Milestone(
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id", nullable = false)
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @JsonIgnore
     var project: Project
 )

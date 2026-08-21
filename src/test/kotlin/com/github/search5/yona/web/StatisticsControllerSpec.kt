@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
 
 class StatisticsControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -26,7 +27,7 @@ class StatisticsControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(statisticsController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, userRepository, statisticsService)
+        clearMocks(projectRepository, userRepository, statisticsService)
     }
 
     describe("StatisticsController 통계 기능 TDD 검증") {

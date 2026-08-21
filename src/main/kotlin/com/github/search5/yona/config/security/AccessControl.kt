@@ -179,7 +179,7 @@ class AccessControl(
         val orgId = organization.id ?: return false
         val userId = user.id ?: return false
         return organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.ORG_ADMIN.roleType }
+            .map { it.role.id == RoleType.ORG_ADMIN.roleType }
             .orElse(false)
     }
 
@@ -223,8 +223,8 @@ class AccessControl(
         if (hasGroup && isPublicOrProtected) {
             return organization.organizationUsers.any {
                 it.user.id == user.id && (
-                    it.role.id == com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType ||
-                    it.role.id == com.github.search5.yona.domain.role.RoleType.ORG_ADMIN.roleType
+                    it.role.id == RoleType.ORG_MEMBER.roleType ||
+                    it.role.id == RoleType.ORG_ADMIN.roleType
                 )
             }
         }

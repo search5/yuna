@@ -22,6 +22,11 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 
 class StatisticsViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -53,7 +58,7 @@ class StatisticsViewControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(statisticsViewController).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, userRepository, projectUserRepository)
+        clearMocks(projectRepository, userRepository, projectUserRepository)
     }
 
     describe("StatisticsViewController 템플릿 연동 테스트") {
@@ -113,11 +118,11 @@ class StatisticsViewControllerSpec : DescribeSpec({
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {
-                val groupOrg = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "org")
+                val groupOrg = Organization(id = 1L, name = "org")
                 groupOrg.organizationUsers.add(
-                    com.github.search5.yona.domain.organization.OrganizationUser(
+                    OrganizationUser(
                         id = 1L, user = user, organization = groupOrg,
-                        role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.ORG_MEMBER.roleType)
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
                     )
                 )
                 val groupProject = Project(id = 14L, name = "GroupProj", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = groupOrg)

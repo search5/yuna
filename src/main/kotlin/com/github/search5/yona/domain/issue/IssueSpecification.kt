@@ -3,9 +3,11 @@ package com.github.search5.yona.domain.issue
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.milestone.Milestone
 import jakarta.persistence.criteria.*
 import org.springframework.data.jpa.domain.Specification
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 object IssueSpecification {
@@ -46,9 +48,9 @@ object IssueSpecification {
             // 5. 마일스톤 조건
             if (milestoneId != null) {
                 if (milestoneId == -1L) {
-                    predicates.add(cb.isNull(root.get<com.github.search5.yona.domain.milestone.Milestone>("milestone")))
+                    predicates.add(cb.isNull(root.get<Milestone>("milestone")))
                 } else if (milestoneId > 0) {
-                    predicates.add(cb.equal(root.get<com.github.search5.yona.domain.milestone.Milestone>("milestone").get<Long>("id"), milestoneId))
+                    predicates.add(cb.equal(root.get<Milestone>("milestone").get<Long>("id"), milestoneId))
                 }
             }
 
@@ -95,7 +97,7 @@ object IssueSpecification {
             // 9. 마감일 조건 (dueDate)
             if (!dueDate.isNullOrBlank()) {
                 try {
-                    val localDate = java.time.LocalDate.parse(dueDate)
+                    val localDate = LocalDate.parse(dueDate)
                     val zone = ZoneId.systemDefault()
                     val nextDayInstant = localDate.plusDays(1).atStartOfDay(zone).toInstant()
                     predicates.add(cb.lessThan(root.get<Instant>("dueDate"), nextDayInstant))

@@ -29,6 +29,7 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import io.mockk.clearMocks
 
 class ReviewApiControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -65,7 +66,7 @@ class ReviewApiControllerSpec : DescribeSpec({
     val auth = UsernamePasswordAuthenticationToken("gildong", "pass")
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, pullRequestRepository, userRepository, projectUserRepository, codeReviewService)
+        clearMocks(projectRepository, pullRequestRepository, userRepository, projectUserRepository, codeReviewService)
     }
 
     describe("ReviewApiController API 매핑 및 로직 검증") {

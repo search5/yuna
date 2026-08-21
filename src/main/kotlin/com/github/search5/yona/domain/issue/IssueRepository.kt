@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
+import java.time.Instant
 
 @Repository
 interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor<Issue> {
@@ -40,7 +41,7 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
           AND i.updatedDate >= :since
         ORDER BY i.updatedDate DESC, i.state ASC
     """)
-    fun findRecentlyByUser(@Param("userId") userId: Long, @Param("since") since: java.time.Instant): List<Issue>
+    fun findRecentlyByUser(@Param("userId") userId: Long, @Param("since") since: Instant): List<Issue>
 
     // yona Search.java:112-127 issuesEL()의 "(Project && Keyword) || (Author && Keyword) ||
     // (Assignee && Keyword)" 대응 (P1-81) — 프로젝트 접근권한과 무관하게 본인이 작성했거나

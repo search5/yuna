@@ -5,6 +5,7 @@ import com.github.search5.yona.domain.enumeration.WebhookType
 import com.github.search5.yona.domain.project.Project
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -19,7 +20,7 @@ class WebhookThreadRecorderSpec : DescribeSpec({
     val recorder = WebhookThreadRecorder(webhookThreadRepository, webhookRepository)
 
     beforeTest {
-        io.mockk.clearMocks(webhookThreadRepository, webhookRepository)
+        clearMocks(webhookThreadRepository, webhookRepository)
     }
 
     describe("recordThreadIfAbsent") {

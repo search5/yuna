@@ -23,8 +23,9 @@ import com.github.search5.yona.domain.notification.NotificationEventRepository
 import com.github.search5.yona.domain.notification.UserProjectNotification
 import com.github.search5.yona.domain.notification.UserProjectNotificationRepository
 import com.github.search5.yona.domain.enumeration.EventType
+import org.springframework.transaction.annotation.Transactional
 
-@org.springframework.transaction.annotation.Transactional
+@Transactional
 class WatchServiceSpec @Autowired constructor(
     private val watchService: WatchService,
     private val userRepository: UserRepository,

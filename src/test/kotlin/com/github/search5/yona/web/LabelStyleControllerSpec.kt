@@ -14,6 +14,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.*
+import io.mockk.clearMocks
+import org.hamcrest.Matchers
 
 class LabelStyleControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -23,7 +25,7 @@ class LabelStyleControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, issueLabelRepository)
+        clearMocks(projectRepository, issueLabelRepository)
     }
 
     describe("LabelStyleController 단위 테스트") {
@@ -46,10 +48,10 @@ class LabelStyleControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(content().contentType("text/css;charset=UTF-8"))
                     .andExpect(header().string("ETag", eTag))
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString(".issue-label[data-label-id=\"1\"]")))
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("box-shadow: inset 2px 0 0px #ff0000;")))
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("color: white;"))) // #ff0000는 어두우므로 white
-                    .andExpect(content().string(org.hamcrest.Matchers.containsString("color: dimgray;"))) // #ffffff는 밝으므로 dimgray
+                    .andExpect(content().string(Matchers.containsString(".issue-label[data-label-id=\"1\"]")))
+                    .andExpect(content().string(Matchers.containsString("box-shadow: inset 2px 0 0px #ff0000;")))
+                    .andExpect(content().string(Matchers.containsString("color: white;"))) // #ff0000는 어두우므로 white
+                    .andExpect(content().string(Matchers.containsString("color: dimgray;"))) // #ffffff는 밝으므로 dimgray
             }
 
             it("If-None-Match가 헤더 ETag와 같을 때 304 Not Modified를 반환해야 한다") {

@@ -23,6 +23,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
 import org.springframework.security.core.Authentication
+import com.github.search5.yona.domain.issue.Assignee
+import io.mockk.slot
+import org.hamcrest.Matchers
 
 class WatchControllerSpec : DescribeSpec({
     val watchService = mockk<WatchService>()
@@ -202,14 +205,14 @@ class WatchControllerSpec : DescribeSpec({
                 val issue = Issue(
                     id = 101L, number = 6L, title = "Test Issue 2", project = project,
                     authorId = 30L,
-                    assignee = com.github.search5.yona.domain.issue.Assignee(id = 1L, user = assigneeUser, project = project),
+                    assignee = Assignee(id = 1L, user = assigneeUser, project = project),
                     voters = mutableSetOf(voter)
                 )
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 6L) } returns issue
                 every { userRepository.findById(30L) } returns Optional.of(author)
-                val baseWatchersSlot = io.mockk.slot<Set<User>>()
+                val baseWatchersSlot = slot<Set<User>>()
                 every {
                     watchService.findActualWatchers(capture(baseWatchersSlot), ResourceType.ISSUE_POST, "101", project.id)
                 } answers { baseWatchersSlot.captured }
@@ -218,7 +221,7 @@ class WatchControllerSpec : DescribeSpec({
                     .param("type", "issues"))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.totalWatchers").value(3))
-                    .andExpect(jsonPath("$.watchers[*].name", org.hamcrest.Matchers.containsInAnyOrder("작성자1", "담당자1", "투표자1")))
+                    .andExpect(jsonPath("$.watchers[*].name", Matchers.containsInAnyOrder("작성자1", "담당자1", "투표자1")))
             }
 
             it("type이 posts일 때 해당 게시글의 감시자 JSON 정보를 올바르게 반환해야 한다") {

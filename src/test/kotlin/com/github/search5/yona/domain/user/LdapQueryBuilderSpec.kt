@@ -2,6 +2,7 @@ package com.github.search5.yona.domain.user
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import javax.naming.directory.Attributes
 import javax.naming.directory.BasicAttribute
 import javax.naming.directory.BasicAttributes
 
@@ -41,7 +42,7 @@ class LdapQueryBuilderSpec : DescribeSpec({
     }
 
     describe("LdapQueryBuilder.parseLdapUser") {
-        fun attrs(vararg pairs: Pair<String, String>): javax.naming.directory.Attributes {
+        fun attrs(vararg pairs: Pair<String, String>): Attributes {
             val attributes = BasicAttributes()
             for ((name, value) in pairs) {
                 attributes.put(BasicAttribute(name, value))

@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.model
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
 
 class PasswordResetControllerSpec : DescribeSpec({
     val passwordResetService = mockk<PasswordResetService>()
@@ -27,7 +28,7 @@ class PasswordResetControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(passwordResetController).build()
 
     beforeTest {
-        io.mockk.clearMocks(passwordResetService, userRepository, mailService)
+        clearMocks(passwordResetService, userRepository, mailService)
     }
 
     describe("PasswordResetController 웹 API 테스트") {

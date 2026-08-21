@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import io.mockk.clearMocks
 
 // yona AccessControl.java:119-203 isGlobalResourceAllowed()의 ORGANIZATION 케이스
 // "user.isSiteManager() || isOrganizationAdmin" 대응 (P0-21). 조직 REST API가 조직 관리자
@@ -35,7 +36,7 @@ class OrganizationControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(organizationController).build()
 
     beforeTest {
-        io.mockk.clearMocks(organizationService, organizationUserRepository, userRepository)
+        clearMocks(organizationService, organizationUserRepository, userRepository)
     }
 
     val siteManager = User(id = 1L, loginId = "sitemanager", name = "사이트매니저", state = UserState.SITE_ADMIN)

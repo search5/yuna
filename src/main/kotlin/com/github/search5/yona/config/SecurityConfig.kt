@@ -7,6 +7,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler
 import org.springframework.security.web.authentication.AuthenticationFailureHandler
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache
 import org.springframework.security.web.savedrequest.SavedRequest
 import org.springframework.security.core.Authentication
@@ -14,14 +15,16 @@ import org.springframework.security.core.AuthenticationException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 
+import com.github.search5.yona.config.git.GitAuthorizationFilter
 import com.github.search5.yona.config.oauth2.CustomOAuth2UserService
+import com.github.search5.yona.config.svn.SvnAuthorizationFilter
 
 @Configuration
 @EnableWebSecurity
 class SecurityConfig(
     private val customOAuth2UserService: CustomOAuth2UserService,
-    private val gitAuthorizationFilter: com.github.search5.yona.config.git.GitAuthorizationFilter,
-    private val svnAuthorizationFilter: com.github.search5.yona.config.svn.SvnAuthorizationFilter,
+    private val gitAuthorizationFilter: GitAuthorizationFilter,
+    private val svnAuthorizationFilter: SvnAuthorizationFilter,
     private val apiTokenAuthenticationFilter: ApiTokenAuthenticationFilter
 ) {
 
@@ -73,9 +76,9 @@ class SecurityConfig(
                     .logoutSuccessUrl("/users/loginform?logout")
                     .permitAll()
             }
-            .addFilterAfter(gitAuthorizationFilter, org.springframework.security.web.authentication.www.BasicAuthenticationFilter::class.java)
-            .addFilterAfter(svnAuthorizationFilter, org.springframework.security.web.authentication.www.BasicAuthenticationFilter::class.java)
-            .addFilterAfter(apiTokenAuthenticationFilter, org.springframework.security.web.authentication.www.BasicAuthenticationFilter::class.java)
+            .addFilterAfter(gitAuthorizationFilter, BasicAuthenticationFilter::class.java)
+            .addFilterAfter(svnAuthorizationFilter, BasicAuthenticationFilter::class.java)
+            .addFilterAfter(apiTokenAuthenticationFilter, BasicAuthenticationFilter::class.java)
         return http.build()
     }
 }

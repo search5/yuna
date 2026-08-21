@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.support.isModifiedByOthers
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
 import org.springframework.http.HttpStatus
@@ -67,7 +68,7 @@ class BoardController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val fixedPageable = org.springframework.data.domain.PageRequest.of(
+        val fixedPageable = PageRequest.of(
             pageable.pageNumber,
             ITEMS_PER_PAGE,
             pageable.sort

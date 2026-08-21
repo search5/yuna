@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.context.WebApplicationContext
 
 import com.github.search5.yona.domain.project.ProjectUserService
+import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder
 
 class ProjectViewControllerIntegrationSpec @Autowired constructor(
     private val wac: WebApplicationContext,
@@ -42,7 +43,7 @@ class ProjectViewControllerIntegrationSpec @Autowired constructor(
     init {
         beforeSpec {
             mockMvc = MockMvcBuilders.webAppContextSetup(wac)
-                .apply<org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder>(SecurityMockMvcConfigurers.springSecurity())
+                .apply<DefaultMockMvcBuilder>(SecurityMockMvcConfigurers.springSecurity())
                 .build()
         }
 

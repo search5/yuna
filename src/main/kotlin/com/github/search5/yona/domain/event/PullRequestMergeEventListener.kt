@@ -9,9 +9,11 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestEvent
 import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
+import com.github.search5.yona.domain.user.User
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.scheduling.annotation.Async
@@ -74,7 +76,7 @@ class PullRequestMergeEventListener(
         }
     }
 
-    fun closeReferredIssues(pullRequest: com.github.search5.yona.domain.pullrequest.PullRequest, senderLoginId: String) {
+    fun closeReferredIssues(pullRequest: PullRequest, senderLoginId: String) {
         val project = pullRequest.toProject
         val textsToSearch = mutableListOf<String>()
 
@@ -159,8 +161,8 @@ class PullRequestMergeEventListener(
     }
 
     private fun notifyConflictStateChanged(
-        pullRequest: com.github.search5.yona.domain.pullrequest.PullRequest,
-        sender: com.github.search5.yona.domain.user.User,
+        pullRequest: PullRequest,
+        sender: User,
         isConflictNow: Boolean
     ) {
         val stateLabel = if (isConflictNow) "충돌이 발생했습니다" else "충돌이 해소되었습니다"

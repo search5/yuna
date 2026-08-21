@@ -2,6 +2,7 @@ package com.github.search5.yona.domain.notification
 
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.pullrequest.CodeCommentThread
+import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.support.DiffUtil
@@ -181,7 +182,7 @@ class NotificationMessageResolver(
     }
 
     private fun buildCommentedCodeMessage(
-        reviewComment: com.github.search5.yona.domain.pullrequest.ReviewComment,
+        reviewComment: ReviewComment,
         locale: Locale
     ): String? {
         val thread = reviewComment.thread
