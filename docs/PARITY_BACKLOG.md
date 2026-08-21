@@ -41,7 +41,7 @@
 | P0-21 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 사이트매니저 전역 우회 로직 부재, REST API에서 설정변경/삭제 시 403 가능성(P2-16 "문제없음" 판정과 배치) | `AccessControl.java` | `OrganizationController.kt`(REST) `isOrgAdmin()` | **완료(아래 완료 로그 참고, P2-16 판정 정정)** |
 | P0-22 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** 소유권/원컨테이너 검증 우회, 임의 첨부파일 강제 재배선 가능(보안) | `Attachment.moveOnlySelected()` | `IssueViewController/MilestoneViewController/BoardViewController` | **완료(아래 완료 로그 참고)** |
 | P0-23 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** `HIDE_PROJECT_LISTING` 플래그 및 관련 분기 전무(익명 검색 PUBLIC 필터, 조직검색 게이트 포함), 비공개 모드 우회 노출 | `Search.java`, `SearchApp.java` | `SearchServiceImpl.kt`/`SearchController.kt` | **완료(아래 완료 로그 참고, 범위를 ProjectApp.java/OrganizationApp.java/UserApp.java까지 확장)** |
-| P0-24 | [ ] | **(2026-08-21 백엔드 전수 감사 재검증 중 발견 — PR/코드리뷰 도메인)** PR 코드 리뷰 댓글 작성(`newPullRequestComment`)에 권한 체크가 전혀 없음 — 프로젝트 멤버십/READ 권한 확인 없이 `owner/projectName`과 `pullRequestId`만 알면 로그인한 임의 사용자가 비공개 프로젝트의 PR에도 리뷰 댓글을 달 수 있음. `checkWritePermission`/`accessControl.isAllowed(...)` 호출이 컨트롤러 어디에도 없음(직접 코드 확인). | `app/utils/AccessControl.java`(REVIEW_COMMENT 생성은 `isProjectResourceCreatable`로 게이트) | `web/ReviewViewController.kt`(`newPullRequestComment` — 권한 체크 코드 0건) | 2026-08-21 게시판 도메인의 `checkWritePermission` 패턴 재검증 중 인접 컨트롤러를 확인하다 발견. 착수 여부는 사용자 결정 대기 |
+| P0-24 | [x] | **(2026-08-21 백엔드 전수 감사 재검증 중 발견 — PR/코드리뷰 도메인)** PR 코드 리뷰 댓글 작성(`newPullRequestComment`)에 권한 체크가 전혀 없음 — 프로젝트 멤버십/READ 권한 확인 없이 `owner/projectName`과 `pullRequestId`만 알면 로그인한 임의 사용자가 비공개 프로젝트의 PR에도 리뷰 댓글을 달 수 있음. `checkWritePermission`/`accessControl.isAllowed(...)` 호출이 컨트롤러 어디에도 없음(직접 코드 확인). | `app/utils/AccessControl.java`(REVIEW_COMMENT 생성은 `isProjectResourceCreatable`로 게이트) | `web/ReviewViewController.kt`(`newPullRequestComment` — 권한 체크 코드 0건) | **완료(아래 완료 로그 참고, newCommitComment도 같은 파일에서 함께 발견해 처리)** |
 | P0-25 | [ ] | **(2026-08-21 P0-23 구현 중 발견)** 사용자 프로필 화면(`/user/{loginId}`)이 대상 사용자가 작성한 이슈/PR을 방문자의 프로젝트 READ 권한과 무관하게 전부 노출 — 비공개 프로젝트의 이슈 제목/PR 제목이 그 프로젝트 멤버가 아닌 누구에게나(익명 포함) 프로필을 통해 유출됨 | `UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()`(프로젝트별 READ 권한 캐시로 필터링) | `UserViewController.kt userProfile()`(필터링 코드 0건 — `issueRepository.findByAuthorId`/`pullRequestRepository.findByContributor` 결과를 그대로 노출) | P0-23(HIDE_PROJECT_LISTING) 구현 중 `UserApp.java:752`를 대조하다 인접 로직에서 발견 — 별도의 정보노출 취약점이라 분리 등록. 착수 여부는 사용자 결정 대기 |
 
 ## P1 — 주요 (기능 결손 / 권한 로직 오류)
@@ -241,6 +241,13 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P0-24**: `ReviewViewController.kt`의 PR 리뷰 댓글/커밋 댓글 작성 두 엔드포인트에 권한 체크 추가(둘 다 권한 검사 코드 0건이었음).
+  - Serena LSP로 yona `PullRequestApp.java:591 @IsCreatable(ResourceType.REVIEW_COMMENT) newComment()`를 재확인 — 로그인 여부만으로는 부족하고, 프로젝트 멤버/조직멤버/사이트매니저이거나(비공개 포함 항상 허용) 공개 프로젝트의 일반 로그인 사용자(REVIEW_COMMENT는 공개 프로젝트 비멤버도 생성 허용 대상에 포함)여야 REVIEW_COMMENT를 생성할 수 있음을 확인.
+  - `ReviewViewController.newPullRequestComment()`에 `accessControl.isProjectResourceCreatable(user, project, ResourceType.REVIEW_COMMENT)` 체크 추가(project 조회 직후, PR 조회보다 먼저 — legacy `@IsCreatable`이 액션 진입 자체를 막는 것과 동일한 위치).
+  - **같은 파일에서 인접 발견**: `newCommitComment()`(커밋 단위 댓글, SVN/Git 분기 포함)도 권한 체크가 전무했음 — yona `CodeHistoryApp.java:189 @IsCreatable(ResourceType.COMMIT_COMMENT)` 대응. 이미 존재하는 `CodeHistoryController.createComment()`(JSON API 경로)는 이 체크가 있었지만, 이 화면(폼 제출) 경로만 누락돼 있었음을 확인 — 같은 취약점 계열이라 이번 세션에서 함께 처리.
+  - 테스트: `ReviewViewControllerSpec.kt` — 기존 테스트에 `accessControl` mock 배선 추가(기본 허용), PR 댓글 권한 거부/허용 2건, 커밋 댓글 권한 거부 1건 신규 추가.
+  - 검증: `./gradlew test --tests "...ReviewViewControllerSpec"` 전체 통과, 이어서 `./gradlew test` 전체 통과(회귀 없음 확인).
 
 - **2026-08-21 — P0-23**: `HIDE_PROJECT_LISTING`(사이트 전역 프로젝트 목록 비공개 모드) 플래그 및 5개 소비처 전체 이식.
   - Serena LSP로 yona 전체 `Application.HIDE_PROJECT_LISTING` 참조를 재조사한 결과, 등록된 범위(`Search.java`/`SearchApp.java`)보다 넓게 총 5곳에서 쓰이고 있음을 확인 — `Search.projectsEL()`(프로젝트 검색 PUBLIC 제외), `SearchApp.searchInAGroup()`(조직 검색 게이트), `ProjectApp.projects()`(전체 프로젝트 목록 차단), `OrganizationApp.orgList()`(전체 조직 목록 차단), `UserApp.userInfo()`(비로그인 방문자에게 프로필의 프로젝트/이슈/PR 숨김). 같은 플래그의 완전한 이식을 위해 이 세션에서 5곳 모두 함께 처리(P0-17에서 이미 만든 `hideProjectListing` `@Value` 필드 패턴 재사용, 컨트롤러/서비스별로 독립 주입).

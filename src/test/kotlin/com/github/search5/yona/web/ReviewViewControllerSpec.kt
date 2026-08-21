@@ -1,9 +1,12 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.CodeReviewService
 import com.github.search5.yona.domain.pullrequest.CommitComment
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.support.CodeRange
@@ -27,27 +30,30 @@ class ReviewViewControllerSpec : DescribeSpec({
     val pullRequestRepository = mockk<PullRequestRepository>()
     val userRepository = mockk<UserRepository>()
     val codeReviewService = mockk<CodeReviewService>()
+    val accessControl = mockk<AccessControl>()
 
     val reviewViewController = ReviewViewController(
         projectRepository,
         pullRequestRepository,
         userRepository,
-        codeReviewService
+        codeReviewService,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(reviewViewController).build()
     val auth = UsernamePasswordAuthenticationToken("gildong", "pass")
 
     beforeTest {
-        io.mockk.clearMocks(projectRepository, pullRequestRepository, userRepository, codeReviewService)
+        io.mockk.clearMocks(projectRepository, pullRequestRepository, userRepository, codeReviewService, accessControl)
+        every { accessControl.isProjectResourceCreatable(any(), any(), any()) } returns true
     }
 
     describe("ReviewViewController 뷰 관련 처리 및 비즈니스 흐름 검증") {
         val user = User(id = 1L, loginId = "gildong", name = "길동")
-        
+
         it("Git 프로젝트의 커밋에 댓글 추가 시 ReviewComment가 생성되고 리다이렉트되어야 한다") {
             val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
             val comment = ReviewComment(id = 300L, contents = "테스트 댓글")
-            
+
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
             every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every {
@@ -190,6 +196,71 @@ class ReviewViewControllerSpec : DescribeSpec({
             )
                 .andExpect(status().isOk)
                 .andExpect(view().name("error/403"))
+        }
+
+        // yona PullRequestApp.java:591 @IsCreatable(ResourceType.REVIEW_COMMENT) 대응 (P0-24).
+        describe("POST /{owner}/{projectName}/pullRequest/{pullRequestId}/comments 권한 체크") {
+            it("REVIEW_COMMENT 생성 권한이 없으면 error/403 뷰를 반환하고 댓글을 생성하지 않아야 한다") {
+                val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
+                every { accessControl.isProjectResourceCreatable(user, project, ResourceType.REVIEW_COMMENT) } returns false
+
+                mockMvc.perform(
+                    post("/gildong/yona-project/pullRequest/5/comments")
+                        .param("contents", "댓글")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+
+                verify(exactly = 0) { codeReviewService.createReviewComment(any(), any(), any(), any(), any(), any(), any()) }
+            }
+
+            it("REVIEW_COMMENT 생성 권한이 있으면 정상적으로 댓글이 생성되고 리다이렉트되어야 한다") {
+                val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
+                val pullRequest = PullRequest(id = 5L, number = 5L, toProject = project, fromProject = project, contributor = user)
+                val comment = ReviewComment(id = 500L, contents = "댓글")
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
+                every { accessControl.isProjectResourceCreatable(user, project, ResourceType.REVIEW_COMMENT) } returns true
+                every { pullRequestRepository.findById(5L) } returns Optional.of(pullRequest)
+                every {
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = null,
+                        contents = "댓글", codeRange = any(), threadId = null, currentUser = user
+                    )
+                } returns comment
+
+                mockMvc.perform(
+                    post("/gildong/yona-project/pullRequest/5/comments")
+                        .param("contents", "댓글")
+                        .principal(auth)
+                )
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/gildong/yona-project/pullRequest/5/changes#comment-500"))
+            }
+        }
+
+        // yona CodeHistoryApp.java:189 @IsCreatable(ResourceType.COMMIT_COMMENT) 대응 (P0-24).
+        describe("POST /{owner}/{projectName}/commit/{commitId}/comments 권한 체크") {
+            it("COMMIT_COMMENT 생성 권한이 없으면 error/403 뷰를 반환하고 댓글을 생성하지 않아야 한다") {
+                val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
+                every { accessControl.isProjectResourceCreatable(user, project, ResourceType.COMMIT_COMMENT) } returns false
+
+                mockMvc.perform(
+                    post("/gildong/yona-project/commit/abc1234/comments")
+                        .param("contents", "댓글")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+
+                verify(exactly = 0) { codeReviewService.createReviewComment(any(), any(), any(), any(), any(), any(), any()) }
+                verify(exactly = 0) { codeReviewService.createCommitComment(any(), any(), any(), any(), any(), any(), any()) }
+            }
         }
     }
 })

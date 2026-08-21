@@ -1,5 +1,7 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.CodeReviewService
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
@@ -14,7 +16,8 @@ class ReviewViewController(
     private val projectRepository: ProjectRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val userRepository: UserRepository,
-    private val codeReviewService: CodeReviewService
+    private val codeReviewService: CodeReviewService,
+    private val accessControl: AccessControl
 ) {
 
     @PostMapping("/{owner}/{projectName}/pullRequest/{pullRequestId}/comments")
@@ -33,6 +36,13 @@ class ReviewViewController(
 
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
+
+        // yona PullRequestApp.java:591 @IsCreatable(ResourceType.REVIEW_COMMENT) 대응 (P0-24).
+        // 권한 체크가 전혀 없어 프로젝트 멤버십/READ 권한과 무관하게 로그인한 임의 사용자가
+        // 비공개 프로젝트의 PR에도 리뷰 댓글을 달 수 있던 취약점.
+        if (!accessControl.isProjectResourceCreatable(user, project, ResourceType.REVIEW_COMMENT)) {
+            return "error/403"
+        }
 
         val pullRequest = pullRequestRepository.findById(pullRequestId).orElse(null)
             ?: return "error/404"
@@ -71,6 +81,14 @@ class ReviewViewController(
 
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
+
+        // yona CodeHistoryApp.java:189 @IsCreatable(ResourceType.COMMIT_COMMENT) 대응 (P0-24,
+        // newPullRequestComment와 같은 파일에서 함께 발견). SVN/Git 분기와 무관하게 커밋 댓글
+        // 생성 자체는 COMMIT_COMMENT 권한으로 게이트된다(CodeHistoryController.createComment의
+        // JSON API 경로는 이미 이 체크가 있음 — 이 화면(폼 제출) 경로만 빠져 있었음).
+        if (!accessControl.isProjectResourceCreatable(user, project, ResourceType.COMMIT_COMMENT)) {
+            return "error/403"
+        }
 
         val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"
         val commentId = if (isSvn) {
