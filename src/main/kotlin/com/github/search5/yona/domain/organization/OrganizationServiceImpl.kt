@@ -208,6 +208,13 @@ class OrganizationServiceImpl(
             throw IllegalArgumentException("User is already a member of this organization")
         }
 
+        // yona EnrollOrganizationApp.java 대응, Project ProjectUserServiceImpl.enroll()의 User.enrolled()
+        // 가드와 동일 유형(P1-122): 이미 대기 중인 가입 신청이 있으면 조용히 무시하고 중복 알림을
+        // 발생시키지 않는다.
+        if (user.enrolledOrganizations.any { it.id == organization.id }) {
+            return
+        }
+
         user.enroll(organization)
         userRepository.save(user)
 
