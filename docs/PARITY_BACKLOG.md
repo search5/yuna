@@ -164,7 +164,7 @@
 | P1-114 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** `getCodeCommentThreadsForChanges` 필터링 전무, 다른 커밋/outdated 스레드가 항상 섞여 노출 | `PullRequest.java` | `PullRequestViewController.viewPullRequest/viewChangesInternal` | **완료(아래 완료 로그 참고)** |
 | P1-115 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** JPQL 연산자 우선순위 버그로 CLOSED/MERGED PR도 브랜치 삭제 처리 대상에 포함 가능 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `PullRequestRepository.findRelatedPullRequests()` | **완료(아래 완료 로그 참고)** |
 | P1-116 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰/커밋 댓글 삭제 권한이 "작성자 또는 MANAGER"로 과도 제한(P1-90~95와 동일 유형이나 조사 누락) | `AccessControl.java` | `CodeReviewServiceImpl.hasPermission()` | **완료(아래 완료 로그 참고)** |
-| P1-117 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 조직 그룹 기반 담당자 후보(조직 관리자/멤버/사이트매니저) 확장 로직 없음 | `User.java` | `ProjectMemberController.assignableUsers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-117 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 조직 그룹 기반 담당자 후보(조직 관리자/멤버/사이트매니저) 확장 로직 없음 | `User.java` | `ProjectMemberController.assignableUsers()` | **완료(아래 완료 로그 참고)** |
 | P1-118 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** 사이트관리자 전용 벌크 사용자 생성(`newUser`)/API 전용 토큰 로그인(`newToken`)/사용자 전체 조회·상태변경(`users`/`updateUserState`) API 부재 | `UserApi.java` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-119 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** `loginId=="admin"`이면 상태 무관 항상 `isSiteManager=true`로 판정하는 yona에 없는 하드코딩 분기 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `User.kt`, `UserDetailsServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-120 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `HIDE_PROJECT_LISTING` 403 체크 및 `@GuestProhibit` 미이식 | `OrganizationApp.java` | `OrganizationViewController.orgList()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -243,6 +243,12 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-117**: `ProjectMemberController.assignableUsers()`의 담당자 후보 목록을 yona `Project.getAssignableUsers()`/`User.findUsersByProjectAndOrganization()` 수준으로 확장.
+  - yona 원본 알고리즘: 프로젝트 멤버 + (조직 소속 프로젝트라면: PRIVATE는 조직 관리자만, 그 외는 조직 멤버 전체) + (요청자가 사이트관리자면 요청자 자신)을 합쳐 이름순 정렬. yuna는 프로젝트 멤버만 반환하고 있었음 — 조직 관리자/멤버 확장, 사이트관리자 자기 자신 추가가 전부 누락.
+  - `ProjectMemberController`에 `OrganizationUserRepository` 의존성 추가, `memberIds` 집합을 세 단계(프로젝트 멤버 → 조직 관리자/멤버 → 사이트관리자 본인)로 채운 뒤 `userRepository.findAllById(memberIds).sortedBy { it.name }`로 조회하도록 재작성.
+  - **범위 내 부수 발견**: 같은 메서드의 진입 권한 검사가 `existsByProjectIdAndUserId(...) || isAllowedIfGroupMember(...)`라는 좁은 멤버십 검사만 쓰고 있었는데, yona 쪽 대응 액션(`IssueApi.java:738 findAssignableUsersOfProject`)은 `@IsAllowed(Operation.READ)`로 사이트매니저/조직관리자 우회와 공개 프로젝트 비멤버 열람까지 포함 — 이 상태로는 방금 추가한 "사이트관리자는 후보에 자동 포함" 로직이 있어도 사이트관리자 본인이 비멤버 프로젝트에서 이 엔드포인트 자체를 호출할 수 없는 모순이 생겨, 같은 P1-90~95/P1-113 유형의 회귀로 판단해 `accessControl.isAllowed(user, project, Operation.READ)`로 함께 교체.
+  - 테스트: `ProjectMemberControllerSpec.kt` +2("PRIVATE 프로젝트가 속한 조직이면 조직 관리자만 후보에 포함하고 일반 조직멤버는 제외", "사이트관리자는 프로젝트/조직 멤버가 아니어도 후보에 포함") — 기존 2건도 신규 생성자 파라미터(`organizationUserRepository`) 반영. 4건 전부 통과.
 
 - **2026-08-21 — P1-116**: `CodeReviewServiceImpl.deleteReviewComment()`/`deleteCommitComment()`의 삭제 권한을 yona `AccessControl.isProjectResourceAllowed()` 수준으로 확장.
   - 기존 private `hasPermission(projectId, commentAuthorId, requestUserId)`는 "작성자 본인 OR 프로젝트 role==MANAGER"만 검사 — yona의 실제 규칙(사이트매니저 우회 → 조직관리자 우회 → `user.isManagerOf(project) || isAuthor` → 이후 오퍼레이션별 세부 규칙)에서 앞의 두 우회가 통째로 빠져 있었음. P1-90~95에서 다른 리소스 타입들에 이미 도입해 둔 정답 패턴 `AccessControl.isAllowed(user, project, resource, Operation)` 오버로드가 `ReviewComment`/`CommitComment`에 대해서도 이미 구현돼 있는 걸 확인(`AccessControl.kt:450,500`) — 재사용만 하면 됐음.
