@@ -108,7 +108,7 @@ class User(
     }
 
     val isSiteManager: Boolean
-        get() = state == UserState.SITE_ADMIN || loginId == "admin"
+        get() = state == UserState.SITE_ADMIN
 
     fun getDisplayName(): String {
         return name

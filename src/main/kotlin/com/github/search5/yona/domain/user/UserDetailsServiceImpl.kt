@@ -16,7 +16,7 @@ class UserDetailsServiceImpl(
             .orElseThrow { UsernameNotFoundException("사용자를 찾을 수 없습니다: $username") }
 
         val authorities = mutableListOf(SimpleGrantedAuthority("ROLE_${user.state.name}"))
-        if (username == "admin" || user.state == UserState.SITE_ADMIN) {
+        if (user.state == UserState.SITE_ADMIN) {
             if (authorities.none { it.authority == "ROLE_SITE_ADMIN" }) {
                 authorities.add(SimpleGrantedAuthority("ROLE_SITE_ADMIN"))
             }
