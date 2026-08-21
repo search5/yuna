@@ -149,4 +149,47 @@ class SearchServiceSpec : DescribeSpec({
             result.searchType shouldBe SearchType.MILESTONE
         }
     }
+
+    // yona Search.projectsEL() 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있을 때 PUBLIC 프로젝트가
+    // 검색 대상에서 제외되는지 검증한다.
+    describe("HIDE_PROJECT_LISTING=true일 때") {
+        val hiddenSearchService = SearchServiceImpl(
+            userRepository,
+            projectRepository,
+            issueRepository,
+            postingRepository,
+            milestoneRepository,
+            issueCommentRepository,
+            postingCommentRepository,
+            reviewCommentRepository,
+            hideProjectListing = true
+        )
+        val pageable = PageRequest.of(0, 20)
+
+        it("익명 사용자는 검색 결과가 비어 있어야 한다(허용 프로젝트 조회 자체를 안 함)") {
+            val result = hiddenSearchService.searchInAll("test", SearchType.AUTO, null, pageable)
+
+            result.issuesCount shouldBe 0
+            result.projectsCount shouldBe 0
+        }
+
+        it("로그인 사용자는 findAllowedProjectIdsForUserExcludingPublic으로 PUBLIC을 제외한 목록만 조회해야 한다") {
+            val loginUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+            every { projectRepository.findAllowedProjectIdsForUserExcludingPublic(10L) } returns listOf(3L)
+            every { userRepository.countSearchUsers("%test%") } returns 0
+            every { projectRepository.countSearchProjects(listOf(3L), "%test%") } returns 0
+            every { issueRepository.countSearchIssues(listOf(3L), "%test%", 10L) } returns 1
+            every { postingRepository.countSearchPostings(listOf(3L), "%test%", 10L) } returns 0
+            every { milestoneRepository.countSearchMilestones(listOf(3L), "%test%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(3L), "%test%", 10L) } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(3L), "%test%", 10L) } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(3L), "%test%", 10L) } returns 0
+            val expectedIssues: Page<com.github.search5.yona.domain.issue.Issue> = PageImpl(emptyList())
+            every { issueRepository.searchIssues(listOf(3L), "%test%", 10L, pageable) } returns expectedIssues
+
+            val result = hiddenSearchService.searchInAll("test", SearchType.AUTO, loginUser, pageable)
+
+            result.issuesCount shouldBe 1
+        }
+    }
 })

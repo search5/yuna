@@ -29,6 +29,7 @@ import org.springframework.core.io.Resource
 import org.springframework.core.io.FileSystemResource
 import org.springframework.http.MediaType
 import org.springframework.context.MessageSource
+import org.springframework.beans.factory.annotation.Value
 import java.util.Locale
 import jakarta.servlet.http.HttpServletRequest
 import com.github.search5.yona.domain.mail.MailService
@@ -69,7 +70,10 @@ class ProjectViewController(
     private val milestoneRepository: MilestoneRepository,
     private val watchService: WatchService,
     private val recentProjectRepository: RecentProjectRepository,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
+    @Value("\${yuna.application.hide-project-listing:false}")
+    private val hideProjectListing: Boolean = false
 ) {
 
 
@@ -478,6 +482,12 @@ class ProjectViewController(
         authentication: Authentication?,
         model: Model
     ): String {
+        // yona ProjectApp.java:1055-1058 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있으면
+        // 사이트매니저를 포함해 누구도 전체 프로젝트 목록을 볼 수 없다.
+        if (hideProjectListing) {
+            return "error/403"
+        }
+
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
         // 사용자가 조회할 수 있는 프로젝트 ID 목록 추출
@@ -513,6 +523,12 @@ class ProjectViewController(
         @RequestParam(value = "filter", defaultValue = "") filter: String,
         authentication: Authentication?
     ): ResponseEntity<List<String>> {
+        // yona ProjectApp.java:1055-1058 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있으면
+        // 사이트매니저를 포함해 누구도 전체 프로젝트 목록을 볼 수 없다.
+        if (hideProjectListing) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
         val user = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
 

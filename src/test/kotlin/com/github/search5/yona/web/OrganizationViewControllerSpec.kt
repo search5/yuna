@@ -18,6 +18,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.issue.IssueRepository
+import org.springframework.ui.ExtendedModelMap
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.organization.OrganizationService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
@@ -200,6 +201,21 @@ class OrganizationViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
 
                 projectsSlot.captured.map { it.id }.toSet() shouldBe setOf(publicProject.id, privateProject.id)
+            }
+        }
+
+        // yona OrganizationApp.java:485-488 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있으면
+        // 누구도 전체 조직 목록을 볼 수 없다.
+        describe("HIDE_PROJECT_LISTING=true일 때 GET /orgs") {
+            val hiddenController = OrganizationViewController(
+                organizationRepository, organizationUserRepository, userRepository, issueRepository,
+                postingRepository, pullRequestRepository, organizationService, attachmentRepository,
+                attachmentService, accessControl, hideProjectListing = true
+            )
+
+            it("error/403 뷰를 반환해야 한다") {
+                val result = hiddenController.orgList(filter = "", pageNum = 1, authentication = null, model = ExtendedModelMap())
+                result shouldBe "error/403"
             }
         }
     }

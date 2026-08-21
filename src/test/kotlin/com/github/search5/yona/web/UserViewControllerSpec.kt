@@ -16,6 +16,7 @@ import com.github.search5.yona.domain.user.FavoriteOrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -131,6 +132,44 @@ class UserViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("user/edit_notifications"))
                     .andExpect(model().attributeExists("user", "projects", "notiTypes", "notiMap", "notiTypeDescriptions"))
             }
+        }
+    }
+
+    // yona UserApp.java:752 "!HIDE_PROJECT_LISTING || !currentUser().isAnonymous()" 대응 (P0-23).
+    describe("HIDE_PROJECT_LISTING=true일 때 GET /user/{loginId}") {
+        val hiddenController = UserViewController(
+            userRepository, projectUserRepository, issueRepository, pullRequestRepository, watchRepository,
+            projectRepository, userProjectNotificationRepository, attachmentRepository, postingRepository,
+            favoriteProjectRepository, favoriteOrganizationRepository, organizationUserRepository,
+            organizationRepository, userService, hideProjectListing = true
+        )
+        val model = org.springframework.ui.ExtendedModelMap()
+
+        it("비로그인 방문자에게는 프로젝트/이슈/PR 목록이 비어 있어야 한다") {
+            val viewedUser = User(id = 20L, loginId = "viewed", name = "대상유저")
+            every { userRepository.findByLoginId("viewed") } returns Optional.of(viewedUser)
+
+            hiddenController.userProfile(loginId = "viewed", daysAgo = 14, selected = "issues", authentication = null, model = model)
+
+            model.getAttribute("projects") shouldBe emptyList<Any>()
+            model.getAttribute("issues") shouldBe emptyList<Any>()
+            model.getAttribute("pullRequests") shouldBe emptyList<Any>()
+        }
+
+        it("로그인한 방문자에게는 영향이 없어야 한다") {
+            val viewedUser = User(id = 20L, loginId = "viewed", name = "대상유저")
+            val viewer = User(id = 30L, loginId = "viewer", name = "방문자")
+            val viewerAuth = UsernamePasswordAuthenticationToken("viewer", "password")
+            every { userRepository.findByLoginId("viewed") } returns Optional.of(viewedUser)
+            every { userRepository.findByLoginId("viewer") } returns Optional.of(viewer)
+            every { projectUserRepository.findByUserId(20L) } returns emptyList()
+            every { issueRepository.findByAuthorId(20L) } returns emptyList()
+            every { pullRequestRepository.findByContributor(viewedUser) } returns emptyList()
+
+            val viewerModel = org.springframework.ui.ExtendedModelMap()
+            hiddenController.userProfile(loginId = "viewed", daysAgo = 14, selected = "issues", authentication = viewerAuth, model = viewerModel)
+
+            viewerModel.getAttribute("currentUser") shouldBe viewer
         }
     }
 })

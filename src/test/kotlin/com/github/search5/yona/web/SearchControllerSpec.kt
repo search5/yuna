@@ -5,6 +5,10 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.support.SearchResult
 import com.github.search5.yona.domain.support.SearchService
 import com.github.search5.yona.domain.user.User
@@ -23,17 +27,19 @@ class SearchControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val projectRepository = mockk<ProjectRepository>()
     val organizationRepository = mockk<OrganizationRepository>()
+    val organizationUserRepository = mockk<OrganizationUserRepository>()
 
     val searchController = SearchController(
         searchService,
         userRepository,
         projectRepository,
-        organizationRepository
+        organizationRepository,
+        organizationUserRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(searchController).build()
 
     beforeTest {
-        io.mockk.clearMocks(searchService, userRepository, projectRepository, organizationRepository)
+        io.mockk.clearMocks(searchService, userRepository, projectRepository, organizationRepository, organizationUserRepository)
     }
 
     describe("SearchController 웹 진입점 테스트") {
@@ -128,6 +134,45 @@ class SearchControllerSpec : DescribeSpec({
                 .andExpect(status().isOk)
                 .andExpect(view().name("search/list"))
                 .andExpect(model().attributeExists("keyword", "searchResult", "currentUser", "project"))
+        }
+    }
+
+    // yona SearchApp.java:126-130 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있을 때의 조직 검색 게이트.
+    describe("HIDE_PROJECT_LISTING=true일 때 GET /org/{organizationName}/search") {
+        val hiddenSearchController = SearchController(
+            searchService, userRepository, projectRepository, organizationRepository,
+            organizationUserRepository, hideProjectListing = true
+        )
+        val hiddenMockMvc = MockMvcBuilders.standaloneSetup(hiddenSearchController).build()
+
+        it("ORG_MEMBER이면서 ORG_ADMIN이기도 한 사용자가 존재할 수 없어 항상 400을 반환해야 한다(legacy 원문 그대로)") {
+            val user = User(id = 10L, loginId = "testuser", name = "테스트유저")
+            val userAuth = UsernamePasswordAuthenticationToken("testuser", "password")
+            val org = Organization(id = 5L, name = "testorg")
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+            every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+            every { organizationUserRepository.findByOrganizationIdAndUserId(5L, 10L) } returns
+                Optional.of(OrganizationUser(user = user, organization = org, role = Role(id = RoleType.ORG_ADMIN.roleType)))
+
+            hiddenMockMvc.perform(
+                get("/org/testorg/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isBadRequest)
+        }
+
+        it("비로그인 사용자는 400을 반환해야 한다") {
+            val org = Organization(id = 5L, name = "testorg")
+            every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+
+            hiddenMockMvc.perform(
+                get("/org/testorg/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isBadRequest)
         }
     }
 })

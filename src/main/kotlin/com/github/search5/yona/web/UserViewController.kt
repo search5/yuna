@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
@@ -54,7 +55,10 @@ class UserViewController(
     private val favoriteOrganizationRepository: FavoriteOrganizationRepository,
     private val organizationUserRepository: OrganizationUserRepository,
     private val organizationRepository: OrganizationRepository,
-    private val userService: UserService
+    private val userService: UserService,
+    // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
+    @Value("\${yuna.application.hide-project-listing:false}")
+    private val hideProjectListing: Boolean = false
 ) {
 
     @GetMapping("/user/issues")
@@ -190,17 +194,25 @@ class UserViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
+        // yona UserApp.java:752 "!HIDE_PROJECT_LISTING || !currentUser().isAnonymous()" 대응
+        // (P0-23) — HIDE_PROJECT_LISTING이 켜져 있으면 비로그인 방문자에게는 프로젝트/이슈/PR
+        // 목록을 전혀 보여주지 않는다(로그인 사용자는 이 화면에서는 영향 없음).
+        val hideFromThisViewer = hideProjectListing && loginUser == null
+
         // 사용자가 소속된 프로젝트 목록
-        val projectUsers = projectUserRepository.findByUserId(user.id!!)
-        val projects = projectUsers.map { it.project }
+        val projects = if (hideFromThisViewer) {
+            emptyList()
+        } else {
+            projectUserRepository.findByUserId(user.id!!).map { it.project }
+        }
 
         // 사용자가 작성한 이슈 목록
-        val issues = issueRepository.findByAuthorId(user.id!!)
+        val issues = if (hideFromThisViewer) emptyList() else issueRepository.findByAuthorId(user.id!!)
         val openIssuesCount = issues.count { it.state == State.OPEN }
         val closedIssuesCount = issues.count { it.state == State.CLOSED }
 
         // 사용자가 작성한 풀 리퀘스트 목록
-        val pullRequests = pullRequestRepository.findByContributor(user)
+        val pullRequests = if (hideFromThisViewer) emptyList() else pullRequestRepository.findByContributor(user)
 
         model.addAttribute("user", user)
         model.addAttribute("projects", projects)
