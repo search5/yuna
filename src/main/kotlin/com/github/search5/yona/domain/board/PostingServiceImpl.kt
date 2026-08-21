@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.support.HistoryUtil
 
@@ -29,7 +30,8 @@ class PostingServiceImpl(
     private val watchService: WatchService,
     private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
-    private val titleHeadService: TitleHeadService
+    private val titleHeadService: TitleHeadService,
+    private val commentService: CommentService
 ) : PostingService {
 
     // yona NotificationEvent.afterNewPost/afterResourceDeleted 대응 (P1-18)
@@ -56,6 +58,9 @@ class PostingServiceImpl(
             projectId = posting.project.id,
             eventType = eventType
         ).toMutableSet()
+        // yona NotificationEvent.java:1380-1385 getReceivers(abstractPosting, except)의
+        // getMentionedUsers(body) 대응 (P1-127). 신규 게시글 본문의 @멘션도 수신자에 포함한다.
+        receivers.addAll(commentService.extractMentionedUsers(posting.body ?: ""))
         receivers.removeIf { it.id == actor.id }
         notificationEvent.receivers = receivers
 

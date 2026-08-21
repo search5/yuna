@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.issue
 
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
@@ -36,7 +37,8 @@ class IssueServiceImpl(
     private val issueLabelService: IssueLabelService,
     private val titleHeadService: TitleHeadService,
     private val attachmentService: AttachmentService,
-    private val favoriteIssueRepository: FavoriteIssueRepository
+    private val favoriteIssueRepository: FavoriteIssueRepository,
+    private val commentService: CommentService
 ) : IssueService {
 
     override fun createIssue(
@@ -140,6 +142,9 @@ class IssueServiceImpl(
             projectId = issue.project.id,
             eventType = notificationEvent.eventType
         ).toMutableSet()
+        // yona NotificationEvent.java:1380-1385 getReceivers(abstractPosting, except)의
+        // getMentionedUsers(body) 대응 (P1-127). 신규 이슈 본문의 @멘션도 수신자에 포함한다.
+        receivers.addAll(commentService.extractMentionedUsers(issue.body ?: ""))
         receivers.removeIf { it.id == sender.id }
         notificationEvent.receivers = receivers
 

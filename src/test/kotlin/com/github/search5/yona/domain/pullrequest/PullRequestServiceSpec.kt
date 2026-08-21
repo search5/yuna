@@ -607,6 +607,27 @@ class PullRequestServiceSpec @Autowired constructor(
                 prEvents.first().senderLoginId shouldBe contributor.loginId
             }
 
+            // yona NotificationEvent.java:1425-1428 getDefaultReceivers(pullRequest)의
+            // getMentionedUsers(body) 대응 (P1-127). 신규 PR 본문의 @멘션도 알림 수신자에
+            // 포함되어야 한다.
+            it("PR 본문에 멘션이 포함되어 있으면 멘션된 사용자도 신규 PR 알림 수신자에 포함되어야 한다") {
+                val mentioned = userRepository.save(User(loginId = "pr-mentioned", name = "PR멘션대상", email = "pr-mentioned@yona.io"))
+
+                pullRequestService.createPullRequest(
+                    title = "멘션 포함 PR",
+                    body = "@pr-mentioned 님 리뷰 부탁드립니다.",
+                    fromProjectId = fromProject.id!!,
+                    toProjectId = toProject.id!!,
+                    fromBranch = "refs/heads/master",
+                    toBranch = "refs/heads/master",
+                    contributor = contributor
+                )
+
+                val notiEvents = notificationEventRepository.findAll()
+                notiEvents.size shouldBe 1
+                notiEvents.first().receivers.map { it.loginId } shouldBe listOf("pr-mentioned")
+            }
+
             it("PR 상태를 변경하면 NotificationEvent와 PullRequestEvent가 모두 생성되어야 한다") {
                 // NotificationEventRecorder(P1-27) + PULL_REQUEST_STATE_CHANGED의 실제 감시자 알림 보강
                 // (legacy NotificationEvent.getReceivers(sender, pullRequest)) 대응 — contributor 본인이
