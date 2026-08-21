@@ -472,13 +472,19 @@ class OrganizationViewController(
         authentication: Authentication?,
         model: Model
     ): String {
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+
+        // yona OrganizationApp.java:485-486 @GuestProhibit 대응 (P1-120). 게스트 계정(User.isGuest)은
+        // 인덱스로 리다이렉트한다 — 로그인하지 않은 익명 사용자는 isGuest가 아니므로 그대로 통과한다.
+        if (loginUser?.isGuest == true) {
+            return "redirect:/"
+        }
+
         // yona OrganizationApp.java:485-488 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있으면
         // 누구도 전체 조직 목록을 볼 수 없다.
         if (hideProjectListing) {
             return "error/403"
         }
-
-        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
         if (pageNum < 1) {
             return "error/404"

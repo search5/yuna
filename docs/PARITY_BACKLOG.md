@@ -167,7 +167,7 @@
 | P1-117 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 조직 그룹 기반 담당자 후보(조직 관리자/멤버/사이트매니저) 확장 로직 없음 | `User.java` | `ProjectMemberController.assignableUsers()` | **완료(아래 완료 로그 참고)** |
 | P1-118 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** 사이트관리자 전용 벌크 사용자 생성(`newUser`)/API 전용 토큰 로그인(`newToken`)/사용자 전체 조회·상태변경(`users`/`updateUserState`) API 부재 | `UserApi.java` | `UserController.kt` | **완료(아래 완료 로그 참고)** |
 | P1-119 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** `loginId=="admin"`이면 상태 무관 항상 `isSiteManager=true`로 판정하는 yona에 없는 하드코딩 분기 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `User.kt`, `UserDetailsServiceImpl.kt` | **완료(아래 완료 로그 참고)** |
-| P1-120 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `HIDE_PROJECT_LISTING` 403 체크 및 `@GuestProhibit` 미이식 | `OrganizationApp.java` | `OrganizationViewController.orgList()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-120 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `HIDE_PROJECT_LISTING` 403 체크 및 `@GuestProhibit` 미이식 | `OrganizationApp.java` | `OrganizationViewController.orgList()` | **완료(아래 완료 로그 참고)** |
 | P1-121 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 게스트 계정 조직 생성 차단(`@GuestProhibit`) 미이식 | `OrganizationApp.java` | `OrganizationViewController.createOrganization()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-122 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 중복 가입 신청 가드 없어 재신청 시 알림 중복 발행(Project P1-16과 동일 유형, 대칭 미적용) | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.enroll()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-123 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 대기 신청 여부 확인 없이 무조건 취소 알림 발행, isGuest 가드도 없음 | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.cancelEnroll()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -243,6 +243,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-120**: `OrganizationViewController.orgList()`에 yona `@GuestProhibit` 대응 추가(`HIDE_PROJECT_LISTING`은 P0-23에서 이미 완료).
+  - yona `OrganizationApp.java:485-486`의 `@GuestProhibit`(→`GuestProhibitAction`)은 `UserApp.currentUser().isGuest`가 true면 인덱스로 리다이렉트한다 — `isGuest`는 로그인 상태에서만 의미 있는 특수 계정 플래그이고, 비로그인 익명 사용자는 `User.anonymous.isGuest`가 기본 false라 차단되지 않는다는 점에 유의해 정확히 재현.
+  - 처리 순서도 legacy와 동일하게 맞춤: yona는 `@GuestProhibit`(액션 컴포지션, 메서드 본문 실행 전)이 `HIDE_PROJECT_LISTING` 체크(메서드 본문 안)보다 먼저 실행되므로, 게스트 차단을 `hideProjectListing` 체크보다 앞에 배치.
+  - 테스트: `OrganizationViewControllerSpec.kt` +2("게스트 계정으로 조회하면 인덱스로 리다이렉트", "비로그인 익명 사용자는 차단되지 않음") — 수정 전 실행해 실패(RED, 게스트가 목록을 그대로 봄) 확인 후 통과(GREEN) 확인. 기존 `HIDE_PROJECT_LISTING` 테스트 포함 전체 12건 통과.
 
 - **2026-08-21 — P1-119**: `User.isSiteManager`/`UserDetailsServiceImpl.loadUserByUsername()`의 `loginId=="admin"` 하드코딩 우회 분기 제거(권한 상승 소지가 있는 yuna 자체 버그, 대응하는 yona 소스 없음).
   - yona 원본 재확인: `User.java:563-569 isSiteManager()`는 별도 `SiteAdmin` 테이블 소속 여부(`SiteAdmin.exists(this)`)로만 판단하고 `loginId`를 특별 취급하지 않음. yuna는 이 개념을 `User.state == UserState.SITE_ADMIN` 하나로 흡수하는 설계 자체는(이미 이전에 확립된) 정당한 스키마 단순화이나, 그 위에 `|| loginId == "admin"`을 추가로 얹은 부분은 legacy에 없는 순수 yuna 버그 — `admin`이라는 로그인ID를 가진 계정이면 실제 상태(잠김/탈퇴 등)와 무관하게 항상 사이트관리자 권한을 갖게 되는 문제.
