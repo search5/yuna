@@ -6,6 +6,7 @@ import javax.sql.DataSource
 import org.springframework.mail.javamail.JavaMailSender
 import com.github.search5.yona.domain.mail.ImapMailboxPoller
 
+@Service
 class DiagnosticService(
     private val dataSource: DataSource,
     // yona MailboxService.java:176-188 Diagnostic.register(SimpleDiagnostic { checkOne() }) 대응
