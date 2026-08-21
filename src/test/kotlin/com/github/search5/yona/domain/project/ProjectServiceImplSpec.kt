@@ -628,6 +628,10 @@ class ProjectServiceImplSpec : DescribeSpec({
             val pr = mockk<PullRequest>(relaxed = true)
             every { pullRequestRepository.findByFromProject(project) } returns listOf(pr)
             every { pullRequestRepository.findByToProject(project) } returns emptyList()
+            // P2-37: PR 단위 CommentThread 정리 — 이 PR엔 project 단위 정리(위 findByProject)로
+            // 이미 지워지지 않은 잔여 스레드가 없다고 가정.
+            every { commentThreadRepository.findByPullRequest(pr) } returns emptyList()
+            every { commentThreadRepository.deleteAll(emptyList()) } returns Unit
             val prEvent = mockk<com.github.search5.yona.domain.pullrequest.PullRequestEvent>(relaxed = true)
             every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr) } returns listOf(prEvent)
             every { pullRequestEventRepository.deleteAll(listOf(prEvent)) } returns Unit
@@ -699,6 +703,11 @@ class ProjectServiceImplSpec : DescribeSpec({
             val forkPr = mockk<PullRequest>(relaxed = true)
             every { pullRequestRepository.findByFromProject(fork) } returns listOf(forkPr)
             every { pullRequestRepository.findByToProject(fork) } returns emptyList()
+            // P2-37: fork가 제3 프로젝트로 보낸 PR에 달린 CommentThread(thread.project가 그 제3
+            // 프로젝트)도 PR 단위로 정리돼야 한다.
+            val forkThread = mockk<com.github.search5.yona.domain.pullrequest.CommentThread>(relaxed = true)
+            every { commentThreadRepository.findByPullRequest(forkPr) } returns listOf(forkThread)
+            every { commentThreadRepository.deleteAll(listOf(forkThread)) } returns Unit
             every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(forkPr) } returns emptyList()
             every { pullRequestEventRepository.deleteAll(emptyList<com.github.search5.yona.domain.pullrequest.PullRequestEvent>()) } returns Unit
             every { pullRequestCommitRepository.findByPullRequest(forkPr) } returns emptyList()
@@ -721,6 +730,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             projectService.deleteProject(1L)
 
             verify(exactly = 1) { pullRequestRepository.delete(forkPr) }
+            verify(exactly = 1) { commentThreadRepository.deleteAll(listOf(forkThread)) }
             verify(exactly = 1) { projectRepository.save(fork) }
             fork.originalProject shouldBe null
             verify(exactly = 0) { projectRepository.delete(fork) }
