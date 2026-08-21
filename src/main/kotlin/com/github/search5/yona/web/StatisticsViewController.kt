@@ -30,15 +30,13 @@ class StatisticsViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        
-        // AnonymousCheck: 익명(비로그인) 사용자 차단
-        if (loginUser == null) {
-            return "error/403"
-        }
 
-        // Project Permission Check
+        // yona StatisticsApp.java:30 @AnonymousCheck(기본값 requiresLogin=false) 대응 (P1-138).
+        // 사이트 전역 로그인 강제 설정이 없는 한 익명 사용자를 무조건 막지 않는다 — 실제 접근 가능 여부는
+        // 프로젝트 스코프(PUBLIC이면 익명도 허용)로만 판단한다. 프로젝트 스코프 확인 전에 무조건 403을
+        // 반환하던 것을 제거.
         if (project.projectScope != ProjectScope.PUBLIC) {
-            if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser)) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
                 return "error/403"
             }
         }
