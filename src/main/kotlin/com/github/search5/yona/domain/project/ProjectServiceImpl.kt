@@ -174,10 +174,11 @@ class ProjectServiceImpl(
         // yona Project.delete():754-759 deleteProjectTransfer() 대응.
         projectTransferRepository.deleteAll(projectTransferRepository.findByProjectId(projectId))
 
-        // yona Project.delete():779-783 deleteCommentThreads() 대응 — PR에 달린 리뷰스레드까지
-        // 포함해 이 프로젝트 소속 스레드를 전부 지운다(reviewComments는 CommentThread 엔티티의
-        // cascade=ALL, orphanRemoval=true로 함께 삭제됨). 아래 PR 삭제보다 먼저 처리한다(legacy와
-        // 동일한 순서).
+        // yona Project.delete():779-783 deleteCommentThreads() 대응 — thread.project==이 프로젝트인
+        // 스레드를 지운다(reviewComments는 CommentThread 엔티티의 cascade=ALL, orphanRemoval=true로
+        // 함께 삭제됨). thread.project가 다른 프로젝트(fork가 제3 프로젝트로 보낸 PR 등)인 스레드는
+        // 이 단계로는 안 잡히고, 아래 deletePullRequestCascade()가 PR 단위로 마저 정리한다(P2-37,
+        // legacy CommentThread.deleteByPullRequest()와 동일한 이중 커버리지).
         commentThreadRepository.deleteAll(commentThreadRepository.findByProject(project))
 
         // yona Project.delete():765-777 deletePullRequests() 대응 — 이 프로젝트가 보낸(fromProject)
@@ -233,10 +234,15 @@ class ProjectServiceImpl(
     }
 
     // yona Project.delete():765-777의 PullRequest 삭제 단위 동작(CommentThread.deleteByPullRequest()
-    // + pullRequest.delete()) 대응. yuna는 PR 리뷰스레드를 위쪽 deleteCommentThreads 단계에서 이미
-    // 프로젝트 단위로 전부 정리하므로, 여기서는 PullRequestEvent/PullRequestCommit(둘 다 FK
-    // nullable=false)만 먼저 지우면 된다.
+    // + pullRequest.delete()) 대응 (P2-37 정정). legacy의 CommentThread.deleteByPullRequest()는
+    // pullRequest FK만으로 스레드를 찾아 thread.project 값과 무관하게 지운다 — 위쪽
+    // deleteCommentThreads 단계(findByProject)는 project==이 프로젝트인 스레드만 지우므로, fork가
+    // 제3 프로젝트로 보낸 PR(thread.project가 그 제3 프로젝트)이나 이 프로젝트 자신이 보낸
+    // PR(toProject≠이 프로젝트, thread.project가 상대 프로젝트)에 달린 스레드는 project 단위
+    // 정리로는 잡히지 않는다. findByProject 단계에서 이미 지워진 스레드는 여기서 다시 조회되지
+    // 않으므로(project==이 프로젝트인 스레드는 이미 없음) 중복 삭제 걱정 없이 그대로 재사용 가능.
     private fun deletePullRequestCascade(pullRequest: PullRequest) {
+        commentThreadRepository.deleteAll(commentThreadRepository.findByPullRequest(pullRequest))
         pullRequestEventRepository.deleteAll(pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest))
         pullRequestCommitRepository.deleteAll(pullRequestCommitRepository.findByPullRequest(pullRequest))
         pullRequestRepository.delete(pullRequest)
