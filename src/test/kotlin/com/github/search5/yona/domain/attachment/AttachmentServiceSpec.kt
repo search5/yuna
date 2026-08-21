@@ -118,8 +118,34 @@ class AttachmentServiceSpec @Autowired constructor(
                 list.any { it.name == "file2.txt" } shouldBe true
             }
 
-            it("4. 임시 업로드 파일 자동 클린업 스케줄러 기능 검증") {
-                val stream = ByteArrayInputStream("Old Temp File".toByteArray())
+            // yona Attachment.java:438-477 cleanupTemporaryUploadFilesWithSchedule() 대응 (P2-26).
+            // 원본은 .ge("createdDate", now-keepAlive) — "오래된" 파일이 아니라 keepAlive 이내에
+            // "최근" 업로드된 파일을 정리 대상으로 삼는다(스케줄러 취지와 반대로 보이는 yona 자체의
+            // 버그로 의심되지만, 사용자 지시로 레거시 비교 방향을 그대로 포팅했다 — 백로그 P2-26 TODO).
+            it("4. 임시 업로드 파일 자동 클린업 스케줄러는 keepAlive 이내의 '최근' 파일을 삭제한다(yona 원본 비교 방향, P2-26)") {
+                val stream = ByteArrayInputStream("Recent Temp File".toByteArray())
+                val (attachment, _) = attachmentService.store(
+                    stream,
+                    "recent_temp.txt",
+                    ResourceType.USER,
+                    "user1",
+                    "chulsoo"
+                )
+
+                attachment.createdDate = Instant.now().minus(1, ChronoUnit.HOURS)
+                attachmentRepository.saveAndFlush(attachment)
+
+                val file = attachmentService.getFile(attachment)
+                file.exists() shouldBe true
+
+                cleanupScheduler.cleanupTemporaryFiles()
+
+                attachmentRepository.existsById(attachment.id!!) shouldBe false
+                file.exists() shouldBe false
+            }
+
+            it("4-1. keepAlive보다 더 오래된 파일은 yona 원본 비교 방향상 삭제되지 않는다(P2-26)") {
+                val stream = ByteArrayInputStream("Truly Old Temp File".toByteArray())
                 val (attachment, _) = attachmentService.store(
                     stream,
                     "old_temp.txt",
@@ -131,13 +157,9 @@ class AttachmentServiceSpec @Autowired constructor(
                 attachment.createdDate = Instant.now().minus(25, ChronoUnit.HOURS)
                 attachmentRepository.saveAndFlush(attachment)
 
-                val file = attachmentService.getFile(attachment)
-                file.exists() shouldBe true
-
                 cleanupScheduler.cleanupTemporaryFiles()
 
-                attachmentRepository.existsById(attachment.id!!) shouldBe false
-                file.exists() shouldBe false
+                attachmentRepository.existsById(attachment.id!!) shouldBe true
             }
 
             // yona Attachment.moveOnlySelected() 대응 (P0-22). 원컨테이너/업로더 검증 없이 요청받은
