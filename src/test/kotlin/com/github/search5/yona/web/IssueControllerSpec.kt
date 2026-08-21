@@ -596,9 +596,7 @@ class IssueControllerSpec : DescribeSpec({
                 every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
                 every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
-                every { issueRepository.delete(issue) } returns Unit
-                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns emptyList()
-                every { attachmentService.deleteAll(com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "5") } returns Unit
+                every { issueService.deleteIssueCascade(issue) } returns Unit
 
                 mockMvc.perform(delete("/api/projects/1/issues/5").principal(managerAuth))
                     .andExpect(status().isOk)
@@ -616,29 +614,27 @@ class IssueControllerSpec : DescribeSpec({
                 every { issueRepository.findByProjectAndNumber(project, 6L) } returns assigneeIssue
                 every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
-                every { issueRepository.delete(assigneeIssue) } returns Unit
-                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(6L) } returns emptyList()
-                every { attachmentService.deleteAll(com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "6") } returns Unit
+                every { issueService.deleteIssueCascade(assigneeIssue) } returns Unit
 
                 mockMvc.perform(delete("/api/projects/1/issues/6").principal(otherAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
             }
 
-            // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
-            it("이슈를 삭제하면 TitleHead 머리말 정리가 호출되어야 한다") {
+            // yona Project.delete() 이슈 삭제(댓글/이벤트/즐겨찾기/첨부파일/TitleHead 정리) 대응 (P0-19) —
+            // 실제 연관 데이터 정리 자체는 IssueServiceImpl.deleteIssueCascade()에 위임되며
+            // (검증은 IssueServiceSpec 참고), 컨트롤러는 위임 호출 자체만 검증한다.
+            it("이슈를 삭제하면 issueService.deleteIssueCascade가 호출되어야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
                 every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(projectManagerUser)
-                every { issueRepository.delete(issue) } returns Unit
-                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns emptyList()
-                every { attachmentService.deleteAll(com.github.search5.yona.domain.enumeration.ResourceType.ISSUE_POST, "5") } returns Unit
+                every { issueService.deleteIssueCascade(issue) } returns Unit
 
                 mockMvc.perform(delete("/api/projects/1/issues/5").principal(managerAuth))
                     .andExpect(status().isOk)
 
-                verify(exactly = 1) { titleHeadService.deleteTitleHeadKeyword(project, issue.title) }
+                verify(exactly = 1) { issueService.deleteIssueCascade(issue) }
             }
         }
 

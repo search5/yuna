@@ -197,6 +197,13 @@ class PostingServiceImpl(
         val title = "[${posting.project.name}] 게시글 삭제: ${posting.title}"
         publishNotification(posting, actor, EventType.RESOURCE_DELETED, title)
 
+        deletePostingCascade(posting)
+    }
+
+    // yona Project.delete()의 posting 삭제 루프(posting.delete()) 대응 (P0-19). PostingComment.posting
+    // FK가 nullable=false라 반드시 먼저 삭제해야 postingRepository.delete(posting)가 FK 제약 위반 없이
+    // 성공한다.
+    override fun deletePostingCascade(posting: Posting) {
         // 연관된 댓글의 첨부파일도 일괄 삭제
         val comments = postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(posting.id!!)
         for (comment in comments) {
@@ -206,6 +213,9 @@ class PostingServiceImpl(
         attachmentService.deleteAll(ResourceType.BOARD_POST, posting.id.toString())
         // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
         titleHeadService.deleteTitleHeadKeyword(posting.project, posting.title)
+        // 답글(parentComment)이 원 댓글보다 항상 나중에 생성되므로, 생성일 역순으로 지우면
+        // 답글이 부모보다 먼저 삭제돼 자기참조 FK(parent_comment_id) 위반을 피할 수 있다.
+        postingCommentRepository.deleteAll(comments.asReversed())
         postingRepository.delete(posting)
     }
 }

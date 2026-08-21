@@ -28,7 +28,8 @@ class PostingServiceSpec @Autowired constructor(
     private val notificationEventRepository: NotificationEventRepository,
     private val notificationMailRepository: NotificationMailRepository,
     private val watchRepository: WatchRepository,
-    private val titleHeadRepository: TitleHeadRepository
+    private val titleHeadRepository: TitleHeadRepository,
+    private val postingCommentRepository: PostingCommentRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -44,6 +45,7 @@ class PostingServiceSpec @Autowired constructor(
             beforeEach {
                 watchRepository.deleteAll()
                 resetNotifications()
+                postingCommentRepository.deleteAll()
                 postingRepository.deleteAll()
                 titleHeadRepository.deleteAll()
                 projectRepository.deleteAll()
@@ -185,6 +187,26 @@ class PostingServiceSpec @Autowired constructor(
                 event.resourceType shouldBe ResourceType.BOARD_POST
                 event.resourceId shouldBe saved.id.toString()
                 event.senderId shouldBe author.id
+            }
+
+            // yona Project.delete() 게시글 삭제 대응(P0-19 조사 중 발견 — Issue 쪽과 동일한 결함).
+            // PostingComment.posting FK가 nullable=false라 댓글이 달린 게시글은 postingRepository
+            // .delete(posting) 단독 호출 시 FK 위반으로 실패했다.
+            it("댓글이 달린 게시글도 FK 위반 없이 삭제되고 댓글도 함께 정리되어야 한다") {
+                val author = userRepository.save(User(loginId = "writer-cc", name = "작성자CC", email = "writer-cc@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project-cc", owner = "writer-cc", projectScope = ProjectScope.PUBLIC))
+                val saved = postingService.createPosting(project.id!!, Posting(title = "댓글 달릴 글", body = "본문", project = project), author.id!!)
+                postingCommentRepository.save(
+                    PostingComment(
+                        contents = "댓글", authorId = author.id, authorLoginId = author.loginId,
+                        authorName = author.name, projectId = project.id, posting = saved
+                    )
+                )
+
+                postingService.deletePosting(project.id!!, saved.number!!, author.id!!)
+
+                postingRepository.findById(saved.id!!).isPresent shouldBe false
+                postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(saved.id!!) shouldBe emptyList()
             }
 
             // yona AbstractPosting.save()/AbstractPostingApp.editPosting()/AbstractPosting.delete()의

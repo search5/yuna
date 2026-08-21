@@ -621,9 +621,9 @@ class IssueViewController(
                 // 1. 삭제
                 if (delete) {
                     if (accessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)) {
-                        // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
-                        titleHeadService.deleteTitleHeadKeyword(issue.project, issue.title)
-                        issueRepository.delete(issue)
+                        // yona Project.delete() 이슈 삭제 대응 (P0-19) — 댓글/이벤트/즐겨찾기/첨부파일/
+                        // 타이틀헤드까지 함께 정리하는 IssueServiceImpl.deleteIssueCascade() 재사용.
+                        issueService.deleteIssueCascade(issue)
                     }
                     continue
                 }

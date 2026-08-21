@@ -36,7 +36,7 @@
 | P0-16 | [x] | CodeHistory 라우트 누락 (커밋 댓글) | `conf/routes` (CodeHistoryApp) | `web/CodeHistoryController.kt` | **완료** — create/delete/list 3개 엔드포인트 |
 | P0-17 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** 조직 게시판 목록에 프로젝트 가시성 필터 없어 비공개 프로젝트 게시글 노출(접근제어 회귀) | `BoardApp.java` | `OrganizationViewController.organizationBoards` | **완료(아래 완료 로그 참고, P0-20과 함께 처리)** |
 | P0-18 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰 스레드 열기/닫기에 권한 체크 전무, 무관한 사용자가 임의 프로젝트 스레드 조작 가능 | `CommentThreadApp.java` | `CommentThreadController.open()/close()` | **완료(아래 완료 로그 참고)** |
-| P0-19 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 계단식 삭제(PR/이슈/게시글/라벨/웹훅 등) 미이식, cascade 선언 없어 삭제 실패 또는 고아 행 발생 | `Project.java` | `ProjectServiceImpl.deleteProject()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P0-19 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 계단식 삭제(PR/이슈/게시글/라벨/웹훅 등) 미이식, cascade 선언 없어 삭제 실패 또는 고아 행 발생 | `Project.java` | `ProjectServiceImpl.deleteProject()` | **완료(아래 완료 로그 참고)** |
 | P0-20 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `getVisibleProjects` 필터 없이 비공개 포함 전체 프로젝트 노출 | `Organization.java` | `OrganizationViewController.organizationHome()` | **완료(P0-17과 동일 원인·동일 커밋, 아래 완료 로그 참고)** |
 | P0-21 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 사이트매니저 전역 우회 로직 부재, REST API에서 설정변경/삭제 시 403 가능성(P2-16 "문제없음" 판정과 배치) | `AccessControl.java` | `OrganizationController.kt`(REST) `isOrgAdmin()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P0-22 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** 소유권/원컨테이너 검증 우회, 임의 첨부파일 강제 재배선 가능(보안) | `Attachment.moveOnlySelected()` | `IssueViewController/MilestoneViewController/BoardViewController` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -224,6 +224,8 @@
 | P2-33 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** 본문 순수 이슈URL 자동 링크화(+권한체크) 미이식 | `Markdown.java`(transformIssueLink) | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-34 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** 글로벌 리소스 생성 권한 판단 함수 미이식(영향 제한적) | `AccessControl.isGlobalResourceCreatable/isResourceCreatable` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-35 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** `project.isCodeAvailable()` 체크 없이 vcs=="GIT"만 검사 | `AutoLinkRenderer.toValidSHALink` | `AutoLinkRenderer.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P2-36 | [ ] | **(2026-08-21 P0-19 구현 중 발견)** PR/리뷰스레드 삭제 시 REVIEW_COMMENT·COMMIT_COMMENT·웹훅 관련 첨부파일이 정리되지 않아 고아 Attachment 행/파일이 남을 수 있음(FK 제약은 없어 삭제 자체는 실패하지 않음, 데이터 위생 문제) | `Attachment` 관련 정리 없음(원본도 이 경로는 자원 누수 소지) | `ProjectServiceImpl.deleteProject()`/`CodeReviewServiceImpl` | P0-19(프로젝트 삭제 계단식 정리) 구현 중, Issue/Posting 댓글은 attachmentService.deleteAll로 정리하면서 리뷰코멘트/커밋코멘트/웹훅 쪽은 대응 유틸이 없어 그대로 남긴 채 진행 — 착수 여부는 사용자 결정 대기 |
+| P2-37 | [ ] | **(2026-08-21 P0-19 구현 중 발견)** 다단계 fork 네트워크에서, fork가 제3의 프로젝트로 보낸 PR에 달린 CommentThread는(thread.project가 그 제3 프로젝트일 경우) 원본 프로젝트 삭제 시 함께 정리되지 않아 PR 삭제 후 고아 CommentThread가 남을 수 있음(매우 드문 edge case, legacy도 동일 범위까지만 처리) | `Project.java` deleteFork()/forkingProjects 루프(동일한 범위 제약을 가짐) | `ProjectServiceImpl.deleteProject()` | P0-19 구현 중 다단계 fork 시나리오를 설계 검토하다 발견 — legacy 자체도 이 경로를 완전히 처리하지 않아 "동일 결함 재현"에 해당, 착수 여부는 사용자 결정 대기 |
 
 ---
 
@@ -238,6 +240,18 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P0-19**: 프로젝트 삭제 계단식 정리 전수 이식(`ProjectServiceImpl.deleteProject()`) — 이전 구현은 ProjectUser만 지우고 나머지는 전부 미처리라 FK 제약 위반으로 삭제 자체가 실패했다.
+  - Serena LSP로 yona `Project.java:700-752 delete()` 및 하위 헬퍼(`deleteProjectTransfer`/`deleteFork`/`deleteCommentThreads`/`deletePullRequests`/`deleteOriginal`)를 전부 재확인 — 순서: 이전요청 삭제 → 리뷰스레드 전체 삭제 → 보낸/받은 PR 삭제 → fork 자식은 삭제하지 않고 PR만 정리 후 원본 연결 해제 → 이슈 → 이슈라벨카테고리 → 담당자 → 웹훅 → 게시글 → 라벨(unlink) → 멤버 → 프로젝트 자신. 이 순서를 그대로 이식.
+  - 조사 위임 에이전트(fork)로 yuna의 각 엔티티 FK nullable 여부·기존 리포지토리 finder 존재 여부·cascade 설정을 전수 확인한 뒤, 직접 Serena로 핵심 발견(특히 `forkingProjects` cascade=ALL 위험, IssueComment/PostingComment FK nullable=false)을 재검증.
+  - **부수 발견 및 즉시 수정(이번 세션 내 처리, 프로젝트 삭제 자체가 이 결함들 때문에 실패하므로 P0-19와 분리 불가)**:
+    1. **`Project.kt`의 `forkingProjects`가 `cascade=[CascadeType.ALL]`(REMOVE 포함)이라 원본 프로젝트를 지우면 모든 fork까지 함께 삭제되던 위험한 결함** — legacy는 fork를 삭제하지 않고 unlink만 한다. `cascade=[PERSIST, MERGE]`로 축소.
+    2. **`IssueController.deleteIssue()`/`IssueViewController.massUpdate(delete=true)`가 `issueRepository.delete(issue)`를 단독 호출해, 댓글이 하나라도 있는 이슈를 지우면 FK 위반(`IssueComment.issue` nullable=false)으로 항상 실패하던 기존 결함** — 새 `IssueServiceImpl.deleteIssueCascade(issue)`(댓글·이벤트·즐겨찾기·첨부파일·TitleHead 정리 후 삭제, 답글 자기참조 FK 회피를 위해 댓글은 생성일 역순 삭제)로 통합해 두 호출부 모두 교체.
+    3. **`PostingServiceImpl.deletePosting()`도 동일한 결함**(`PostingComment.posting` nullable=false) — `deletePostingCascade(posting)`(알림 미발행 버전)로 분리해 재사용, `deletePosting()`은 알림 발행 후 이를 호출하도록 리팩터.
+    4. `AssigneeRepository`(신규), `CommentThreadRepository.findByProject`(신규), `PullRequestRepository.findByFromProject(project): List`(신규, 기존엔 Pageable 버전만 존재), `WebhookThreadRepository.findByWebhookId`(신규) 추가 — 전부 삭제 계단식에 필요했으나 없던 finder.
+  - **테스트**: `IssueServiceSpec.kt` +1(댓글·이벤트·즐겨찾기 있는 이슈도 FK 위반 없이 삭제되고 TitleHead까지 정리됨, 실제 DB 대상 통합테스트), `PostingServiceSpec.kt` +1(댓글 달린 게시글 cascade 삭제), `AccessControlSpec.kt`류와 별개로 `ProjectServiceImplSpec.kt` +2(연관 데이터 전체 정리 후 프로젝트 삭제/ fork는 삭제되지 않고 PR만 정리 후 unlink), `IssueControllerSpec.kt`/`IssueViewControllerSpec.kt`는 기존 3건을 `deleteIssueCascade` 위임 검증으로 갱신(제목 머리말 등 실제 정리 검증은 서비스 계층 테스트로 이동).
+  - 검증: 관련 스펙 전부 개별 통과 확인 후 `./gradlew test` 전체 통과(회귀 없음 확인).
+  - **범위 외 발견, 백로그 등록**: REVIEW_COMMENT/COMMIT_COMMENT/웹훅 관련 첨부파일 고아화(P2-36), 다단계 fork의 제3프로젝트행 PR에 달린 CommentThread 정리 누락(P2-37, legacy도 동일한 제약).
 
 - **2026-08-21 — P0-18**: 리뷰 스레드 open/close에 권한 체크 부재(무관한 로그인 사용자가 임의 프로젝트 스레드를 열고/닫을 수 있던 취약점) 수정.
   - Serena LSP로 yona `CommentThreadApp.java:36-71 updateState()`를 재확인 — `AccessControl.isAllowed(currentUser, thread.asResource(), operation)`(OPEN→`Operation.REOPEN`, CLOSED→`Operation.CLOSE`)를 상태변경 직전에 호출해 거부 시 403을 반환함을 확인. yuna `CommentThreadController.kt`의 `open()`/`close()`는 401(비로그인) 체크만 있고 이 권한 검사 자체가 전혀 없었음(서비스 계층 `CodeReviewServiceImpl.updateThreadState()`에도 없음, 컨트롤러+서비스 어디에도 권한 검사 없이 상태변경이 즉시 커밋되는 구조였음을 확인).

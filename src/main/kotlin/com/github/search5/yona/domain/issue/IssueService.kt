@@ -50,6 +50,12 @@ interface IssueService {
     // 투표)와는 별개로, 이슈 자체에 +1/-1 가중치를 매기는 정수 카운터.
     fun upvoteWeight(issueId: Long): Issue
     fun downvoteWeight(issueId: Long): Issue
+
+
+    // yona Project.delete()의 이슈 삭제 시 연관 데이터(댓글/이벤트/즐겨찾기/첨부파일/타이틀헤드) 정리
+    // 대응 (P0-19). issueRepository.delete(issue) 단독 호출은 IssueComment/IssueEvent/FavoriteIssue가
+    // 전부 issue FK nullable=false라 FK 제약 위반으로 실패한다 — 반드시 이 함수를 통해 삭제해야 한다.
+    fun deleteIssueCascade(issue: Issue)
 }
 
 // yona Issue.checkLabels()/IssueLabel.IssueLabelException 대응 (P1-80).

@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.issue
 
+import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
@@ -10,6 +11,7 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.TitleHeadService
 import com.github.search5.yona.domain.support.HistoryUtil
+import com.github.search5.yona.domain.user.FavoriteIssueRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
@@ -32,7 +34,9 @@ class IssueServiceImpl(
     private val watchService: WatchService,
     private val issueEventRepository: IssueEventRepository,
     private val issueLabelService: IssueLabelService,
-    private val titleHeadService: TitleHeadService
+    private val titleHeadService: TitleHeadService,
+    private val attachmentService: AttachmentService,
+    private val favoriteIssueRepository: FavoriteIssueRepository
 ) : IssueService {
 
     override fun createIssue(
@@ -584,6 +588,26 @@ class IssueServiceImpl(
             .orElseThrow { IllegalArgumentException("Issue not found: $issueId") }
         issue.weight = issue.weight - 1
         return issueRepository.save(issue)
+    }
+
+
+    // yona Project.delete() 이슈 삭제 루프(issue.delete()) 대응 (P0-19). IssueComment/IssueEvent/
+    // FavoriteIssue는 issue FK가 nullable=false라 반드시 먼저 삭제해야 issueRepository.delete(issue)가
+    // FK 제약 위반 없이 성공한다(assignee/sharers/labels/voters는 Issue 엔티티 자체의 cascade로 처리됨).
+    override fun deleteIssueCascade(issue: Issue) {
+        val comments = issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!)
+        for (comment in comments) {
+            attachmentService.deleteAll(ResourceType.ISSUE_COMMENT, comment.id.toString())
+        }
+        attachmentService.deleteAll(ResourceType.ISSUE_POST, issue.id.toString())
+        titleHeadService.deleteTitleHeadKeyword(issue.project, issue.title)
+
+        favoriteIssueRepository.deleteAll(favoriteIssueRepository.findByIssueId(issue.id!!))
+        issueEventRepository.deleteAll(issueEventRepository.findByIssueOrderByCreatedAsc(issue))
+        // 답글(parentComment)이 원 댓글보다 항상 나중에 생성되므로, 생성일 역순으로 지우면
+        // 답글이 부모보다 먼저 삭제돼 자기참조 FK(parent_comment_id) 위반을 피할 수 있다.
+        issueCommentRepository.deleteAll(comments.asReversed())
+        issueRepository.delete(issue)
     }
 
     override fun unvoteIssue(issueId: Long, user: User) {

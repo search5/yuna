@@ -19,4 +19,11 @@ interface PostingService {
         sendNotificationMail: Boolean = false
     ): Posting
     fun deletePosting(projectId: Long, number: Long, authorId: Long)
+
+
+    // yona Project.delete()의 posting 삭제 루프(posting.delete(), 알림 미발행) 대응 (P0-19).
+    // deletePosting()과 달리 RESOURCE_DELETED 알림을 발행하지 않는다 — 프로젝트 자체가 삭제되는
+    // 상황에서 게시글 개수만큼 알림이 나가는 것을 막기 위함(legacy도 Project.delete()에서
+    // AbstractPostingApp의 알림 발행 경로를 타지 않고 모델의 delete()를 직접 호출한다).
+    fun deletePostingCascade(posting: Posting)
 }

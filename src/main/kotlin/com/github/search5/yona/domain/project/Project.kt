@@ -62,7 +62,10 @@ class Project(
     @JoinColumn(name = "original_project_id")
     var originalProject: Project? = null,
 
-    @OneToMany(mappedBy = "originalProject", cascade = [CascadeType.ALL])
+    // yona Project.deleteFork()/deleteOriginal() 대응 (P0-19에서 발견·수정): CascadeType.ALL은
+    // REMOVE를 포함해 원본 프로젝트 삭제 시 모든 fork까지 함께 삭제해버렸다 — legacy는 fork를
+    // 삭제하지 않고 originalProject 연결만 끊는다(ProjectServiceImpl.deleteProject() 참고).
+    @OneToMany(mappedBy = "originalProject", cascade = [CascadeType.PERSIST, CascadeType.MERGE])
     var forkingProjects: MutableList<Project> = mutableListOf(),
 
     @ManyToMany(mappedBy = "enrolledProjects")

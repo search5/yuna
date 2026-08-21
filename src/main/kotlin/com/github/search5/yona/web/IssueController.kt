@@ -301,16 +301,7 @@ class IssueController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        // 연관된 댓글의 첨부파일도 일괄 삭제
-        val comments = issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!)
-        for (comment in comments) {
-            attachmentService.deleteAll(ResourceType.ISSUE_COMMENT, comment.id.toString())
-        }
-
-        attachmentService.deleteAll(ResourceType.ISSUE_POST, issue.id.toString())
-        // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
-        titleHeadService.deleteTitleHeadKeyword(issue.project, issue.title)
-        issueRepository.delete(issue)
+        issueService.deleteIssueCascade(issue)
         return ResponseEntity.ok(mapOf("status" to "success"))
     }
 

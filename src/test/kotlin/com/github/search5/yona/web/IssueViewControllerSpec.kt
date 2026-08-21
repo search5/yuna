@@ -401,14 +401,16 @@ class IssueViewControllerSpec : DescribeSpec({
         }
 
         // yona IssueApp.massUpdate()의 delete 분기(AbstractPosting.delete()) 대응 (P1-103).
+        // 실제 연관 데이터(댓글/이벤트/즐겨찾기/첨부파일/TitleHead) 정리는 P0-19로 IssueServiceImpl
+        // .deleteIssueCascade()에 위임되며(검증은 IssueServiceSpec 참고), 여기서는 위임 호출만 검증한다.
         describe("POST /{owner}/{projectName}/issues/massupdate (delete=true)") {
-            it("일괄삭제 대상 이슈마다 TitleHead 머리말 정리가 호출되어야 한다") {
+            it("일괄삭제 대상 이슈마다 issueService.deleteIssueCascade가 호출되어야 한다") {
                 val toDelete = Issue(id = 7L, number = 7L, title = "[Bug] 지울 이슈", body = "본문", project = project, authorId = memberUser.id, state = State.OPEN)
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { issueRepository.findAllById(listOf(7L)) } returns listOf(toDelete)
-                every { issueRepository.delete(toDelete) } returns Unit
+                every { issueService.deleteIssueCascade(toDelete) } returns Unit
 
                 val form = IssueMassUpdateForm()
                 form.issues = listOf(IssueIdForm().apply { id = 7L })
@@ -424,8 +426,7 @@ class IssueViewControllerSpec : DescribeSpec({
                     model = org.springframework.ui.ExtendedModelMap()
                 )
 
-                verify(exactly = 1) { titleHeadService.deleteTitleHeadKeyword(project, toDelete.title) }
-                verify(exactly = 1) { issueRepository.delete(toDelete) }
+                verify(exactly = 1) { issueService.deleteIssueCascade(toDelete) }
             }
         }
     }
