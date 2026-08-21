@@ -81,6 +81,10 @@ dependencies {
 	// 항상 감지 실패해 모든 첨부가 application/octet-stream으로 저장된다.
 	implementation("org.apache.tika:tika-core:2.9.2")
 
+	// Guava (yona utils/CacheStore.java의 renderedMarkdown 캐시 대응, P2-43) — 사용자 지시로 원본
+	// 그대로 Guava Cache/CacheBuilder를 사용한다(Caffeine 등으로 대체하지 않음).
+	implementation("com.google.guava:guava:33.3.1-jre")
+
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.security:spring-security-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

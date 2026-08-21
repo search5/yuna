@@ -70,6 +70,30 @@ class MarkdownServiceImpl(
         if (body.isEmpty()) {
             return ""
         }
+        val sanitized = renderWithHighlight(body, breaks)
+        return autoLinkRenderer.render(sanitized, project, lang)
+    }
+
+    // yona utils/Markdown.java:218-270 renderWithHighlight() 대응 (P2-43). 사용자 지시로 원본의
+    // 캐시 로직을 구조 그대로 포팅했다 — source.hashCode()만 캐시 키로 쓰고 breaks는 키에 포함되지
+    // 않으며(동일 source를 breaks만 바꿔 렌더링하면 캐시가 이전 breaks 결과를 돌려줄 수 있음, 원본과
+    // 동일한 특성), 캐시 히트 시에도 전체 파이프라인을 다시 계산해 캐시는 갱신하되 반환값은 히트
+    // 당시의 예전 캐시 값을 그대로 쓴다(원본 그대로 — 원본에도 TTL이 없어 이 재계산이 사실상
+    // 무의미해 보이지만 임의로 "고치지" 않고 구조 그대로 옮겼다).
+    private fun renderWithHighlight(source: String, breaks: Boolean): String {
+        val sourceHashCode = source.hashCode()
+        val cached = MarkdownRenderCache.renderedMarkdown.getIfPresent(sourceHashCode)
+        if (cached != null) {
+            val sanitized = renderCore(source, breaks)
+            MarkdownRenderCache.renderedMarkdown.put(sourceHashCode, ZipUtil.compress(sanitized))
+            return ZipUtil.decompress(cached)
+        }
+        val sanitized = renderCore(source, breaks)
+        MarkdownRenderCache.renderedMarkdown.put(sourceHashCode, ZipUtil.compress(sanitized))
+        return sanitized
+    }
+
+    private fun renderCore(body: String, breaks: Boolean): String {
         val extensions = listOf(
             TablesExtension.create(),
             StrikethroughExtension.create(),
@@ -83,8 +107,7 @@ class MarkdownServiceImpl(
             HtmlRenderer.builder().extensions(extensions).build()
         }
         val html = renderer.render(document)
-        val sanitized = sanitize(html)
-        return autoLinkRenderer.render(sanitized, project, lang)
+        return sanitize(html)
     }
 
 override fun renderFileInCodeBrowser(source: String, project: Project): String {
