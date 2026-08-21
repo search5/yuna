@@ -2,6 +2,7 @@ package com.github.search5.yona.domain.webhook
 
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.WebhookType
+import com.github.search5.yona.domain.notification.NotificationUrlResolver
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import org.springframework.beans.factory.annotation.Value
@@ -19,7 +20,10 @@ class WebhookServiceImpl(
     // yona Webhook.java:178 getBaseUrl()(스킴+호스트) 대응 (P2-08). NotificationUrlResolver가
     // 이미 동일 목적으로 쓰는 설정값을 그대로 재사용한다.
     @Value("\${yuna.base-url:}")
-    private val baseUrl: String
+    private val baseUrl: String,
+    // yona Webhook.java:182-192 buildRequestMessage()(리소스 링크) 대응 (P1-132) — 이슈/게시글/PR/댓글
+    // URL 계산 로직을 새로 만들지 않고, 알림메일 경로에서 이미 쓰는 것과 동일한 리졸버를 재사용한다.
+    private val notificationUrlResolver: NotificationUrlResolver
 ) : WebhookService {
 
     @Transactional(readOnly = true)
@@ -93,7 +97,7 @@ class WebhookServiceImpl(
         resource: Any
     ): String {
         val objectMapper = tools.jackson.databind.ObjectMapper()
-        val textMessage = buildTextMessage(webhook.project?.name ?: "", eventType, sender, resource)
+        val textMessage = buildTextMessage(webhook, eventType, sender, resource)
 
         return when (webhook.webhookType) {
             WebhookType.DETAIL_SLACK -> {
@@ -250,11 +254,12 @@ class WebhookServiceImpl(
     }
 
     private fun buildTextMessage(
-        projectName: String,
+        webhook: Webhook,
         eventType: com.github.search5.yona.domain.enumeration.EventType,
         sender: User,
         resource: Any
     ): String {
+        val projectName = webhook.project?.name ?: ""
         val actionMessage = when (eventType) {
             com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE -> "새 이슈를 등록했습니다"
             com.github.search5.yona.domain.enumeration.EventType.ISSUE_STATE_CHANGED -> "이슈 상태를 변경했습니다"
@@ -270,20 +275,39 @@ class WebhookServiceImpl(
             else -> "이벤트를 트리거했습니다"
         }
 
-        val resourceInfo = when (resource) {
-            is com.github.search5.yona.domain.issue.Issue -> "#${resource.number}: ${resource.title}"
-            is com.github.search5.yona.domain.board.Posting -> "#${resource.number}: ${resource.title}"
-            is com.github.search5.yona.domain.issue.IssueComment -> "의견: ${resource.contents?.take(30)}"
-            is com.github.search5.yona.domain.board.PostingComment -> "의견: ${resource.contents?.take(30)}"
-            is com.github.search5.yona.domain.pullrequest.ReviewComment -> "의견: ${resource.contents.take(30)}"
-            is com.github.search5.yona.domain.pullrequest.CommitComment -> "의견: ${resource.contents.take(30)}"
-            is PushedCommits ->
-                "${resource.commits.size}개의 커밋을 ${resource.refNames.firstOrNull() ?: ""} 브랜치로 푸시했습니다"
-            is com.github.search5.yona.domain.pullrequest.PullRequest -> "#${resource.number}: ${resource.title}"
-            else -> ""
+        // PushedCommits는 yona도 buildRequestMessage()(리소스 링크)를 쓰지 않는 별도 경로
+        // (Webhook.java:668 buildRequestBody(commits, refNames, sender, title))라 링크 없이 그대로 유지.
+        if (resource is PushedCommits) {
+            val resourceInfo = "${resource.commits.size}개의 커밋을 ${resource.refNames.firstOrNull() ?: ""} 브랜치로 푸시했습니다"
+            return "[$projectName] ${sender.name}님이 $actionMessage. $resourceInfo"
         }
 
-        return "[$projectName] ${sender.name}님이 $actionMessage. $resourceInfo"
+        return "[$projectName] ${sender.name}님이 $actionMessage.${buildResourceLink(webhook, resource)}"
+    }
+
+    private fun buildResourceLink(webhook: Webhook, resource: Any): String {
+        val linkText = when (resource) {
+            is com.github.search5.yona.domain.issue.Issue -> "#${resource.number}: ${resource.title}"
+            is com.github.search5.yona.domain.board.Posting -> "#${resource.number}: ${resource.title}"
+            is com.github.search5.yona.domain.issue.IssueComment ->
+                "#${resource.issue.number}: ${resource.issue.title}"
+            is com.github.search5.yona.domain.board.PostingComment ->
+                "#${resource.posting.number}: ${resource.posting.title}"
+            is com.github.search5.yona.domain.pullrequest.ReviewComment ->
+                resource.thread?.pullRequest?.let { "#${it.number}: ${it.title}" } ?: "의견: ${resource.contents.take(30)}"
+            is com.github.search5.yona.domain.pullrequest.CommitComment -> "의견: ${resource.contents.take(30)}"
+            is com.github.search5.yona.domain.pullrequest.PullRequest -> "#${resource.number}: ${resource.title}"
+            else -> null
+        } ?: return ""
+
+        val url = notificationUrlResolver.getUrl(getResourceType(resource), getResourceId(resource)) ?: return ""
+
+        val escapedText = if (webhook.webhookType == WebhookType.DETAIL_SLACK) {
+            linkText.replace(">", "&gt;")
+        } else {
+            linkText
+        }
+        return " <$url|$escapedText>"
     }
 
     private fun getResourceType(resource: Any): ResourceType {
