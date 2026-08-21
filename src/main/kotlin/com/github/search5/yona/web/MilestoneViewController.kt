@@ -88,6 +88,8 @@ class MilestoneViewController(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @RequestParam(required = false, defaultValue = "open") state: String,
+        @RequestParam(required = false, defaultValue = "dueDate") orderBy: String,
+        @RequestParam(required = false, defaultValue = "asc") orderDir: String,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -106,12 +108,24 @@ class MilestoneViewController(
             else -> State.OPEN
         }
 
-        val milestones = milestoneService.getMilestones(project.id!!, stateEnum)
-        val milestoneDtos = milestones.map { toViewDto(it) }
+        val milestones = milestoneService.getMilestones(project.id!!, stateEnum, orderBy, orderDir)
+        var milestoneDtos = milestones.map { toViewDto(it) }
+
+        // yona Milestone.java:214-227 findMilestones()의 completionRate 정렬(Comparator, DB 컬럼이
+        // 아니라 계산 필드라 조회 후 별도 정렬) 대응 (P1-128).
+        if (orderBy == "completionRate") {
+            milestoneDtos = if (orderDir.equals("desc", ignoreCase = true)) {
+                milestoneDtos.sortedByDescending { it.completionRate }
+            } else {
+                milestoneDtos.sortedBy { it.completionRate }
+            }
+        }
 
         model.addAttribute("project", project)
         model.addAttribute("milestones", milestoneDtos)
         model.addAttribute("state", state)
+        model.addAttribute("orderBy", orderBy)
+        model.addAttribute("orderDir", orderDir)
         model.addAttribute("currentUser", loginUser)
 
         return "milestone/list"

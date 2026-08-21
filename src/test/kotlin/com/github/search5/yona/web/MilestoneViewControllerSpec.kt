@@ -4,6 +4,7 @@ import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.milestone.MilestoneRepository
@@ -110,7 +111,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
-                every { milestoneService.getMilestones(1L, State.OPEN) } returns listOf(milestone)
+                every { milestoneService.getMilestones(1L, State.OPEN, "dueDate", "asc") } returns listOf(milestone)
                 every { issueRepository.findByMilestone(milestone) } returns emptyList()
 
                 mockMvc.perform(get("/owner/TestProj/milestones").principal(userAuth))
@@ -133,7 +134,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "group-project") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(8L, 10L) } returns false
-                every { milestoneService.getMilestones(8L, State.OPEN) } returns emptyList()
+                every { milestoneService.getMilestones(8L, State.OPEN, "dueDate", "asc") } returns emptyList()
 
                 mockMvc.perform(get("/owner/group-project/milestones").principal(userAuth))
                     .andExpect(status().isOk)
@@ -147,6 +148,64 @@ class MilestoneViewControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/owner/TestProj/milestones").principal(userAuth))
                     .andExpect(view().name("error/403"))
+            }
+
+            // yona MilestoneApp.java:50-73 MilestoneCondition(orderBy/orderDir 파라미터) 대응 (P1-128).
+            it("orderBy/orderDir 파라미터를 서비스 호출에 그대로 전달해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 902L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { milestoneService.getMilestones(1L, State.OPEN, "title", "desc") } returns listOf(milestone)
+                every { issueRepository.findByMilestone(milestone) } returns emptyList()
+
+                mockMvc.perform(
+                    get("/owner/TestProj/milestones")
+                        .param("orderBy", "title")
+                        .param("orderDir", "desc")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("orderBy", "title"))
+                    .andExpect(model().attribute("orderDir", "desc"))
+            }
+
+            // yona Milestone.java:214-227 findMilestones()의 completionRate Comparator 대응 (P1-128).
+            // completionRate는 DB 컬럼이 아니라 계산 필드라, 서비스에서 반환된 순서와 무관하게 컨트롤러가
+            // 완료율 기준으로 다시 정렬해야 한다.
+            it("orderBy=completionRate면 완료율 기준으로 재정렬해야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 903L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+
+                // 완료율: low=0%(0/2), high=100%(2/2) — 서비스가 반환하는 순서는 일부러 low, high로 둔다.
+                val low = Milestone(id = 20L, title = "낮은 완료율", project = project)
+                val high = Milestone(id = 21L, title = "높은 완료율", project = project)
+                every { milestoneService.getMilestones(1L, State.OPEN, "completionRate", "desc") } returns listOf(low, high)
+                every { issueRepository.findByMilestone(low) } returns listOf(
+                    Issue(title = "이슈1", project = project, state = com.github.search5.yona.domain.enumeration.State.OPEN),
+                    Issue(title = "이슈2", project = project, state = com.github.search5.yona.domain.enumeration.State.OPEN)
+                )
+                every { issueRepository.findByMilestone(high) } returns listOf(
+                    Issue(title = "이슈1", project = project, state = com.github.search5.yona.domain.enumeration.State.CLOSED),
+                    Issue(title = "이슈2", project = project, state = com.github.search5.yona.domain.enumeration.State.CLOSED)
+                )
+
+                val result = mockMvc.perform(
+                    get("/owner/TestProj/milestones")
+                        .param("orderBy", "completionRate")
+                        .param("orderDir", "desc")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andReturn()
+
+                @Suppress("UNCHECKED_CAST")
+                val milestones = result.modelAndView!!.model["milestones"] as List<MilestoneViewController.MilestoneViewDto>
+                milestones.map { it.milestone.id } shouldBe listOf(21L, 20L)
             }
         }
 

@@ -3,6 +3,7 @@ package com.github.search5.yona.domain.milestone
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.project.ProjectRepository
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -18,14 +19,21 @@ class MilestoneServiceImpl(
     private val attachmentService: AttachmentService
 ) : MilestoneService {
 
-    override fun getMilestones(projectId: Long, state: State): List<Milestone> {
+    override fun getMilestones(projectId: Long, state: State, orderBy: String, orderDir: String): List<Milestone> {
         val project = projectRepository.findById(projectId)
             .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
-        
+
+        // yona Milestone.java:188-230 findMilestones(projectId, state, sort, direction) 대응
+        // (P1-128). completionRate는 계산 필드(DB 컬럼 아님)라 DB 정렬 대상에서 제외하고
+        // 정렬 없이 조회한 뒤, 컨트롤러가 DTO 변환 후 completionRate 기준으로 별도 정렬한다
+        // (legacy도 동일하게 findMilestones() 안에서 조회 후 Collections.sort()로 재정렬).
+        val direction = if (orderDir.equals("desc", ignoreCase = true)) Sort.Direction.DESC else Sort.Direction.ASC
+        val sort = if (orderBy == "completionRate") Sort.unsorted() else Sort.by(direction, orderBy)
+
         return if (state == State.ALL) {
-            milestoneRepository.findByProject(project)
+            milestoneRepository.findByProject(project, sort)
         } else {
-            milestoneRepository.findByProjectAndState(project, state)
+            milestoneRepository.findByProjectAndState(project, state, sort)
         }
     }
 
