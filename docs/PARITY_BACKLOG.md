@@ -163,7 +163,7 @@
 | P1-113 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** 공개 프로젝트 비멤버의 게시글 작성 권한이 yona보다 과도하게 제한(회귀) — 근본 원인은 Board만의 실수가 아니라, yuna `IssueViewController.createIssueForm`에 이미 존재하는 정답 패턴(`accessControl.isProjectResourceCreatable(user, project, ResourceType.ISSUE_POST)`)을 `BoardViewController.createPost`/`createPostForm`이 재사용하지 않고 `existsByProjectIdAndUserId(...) || isAllowedIfGroupMember(...)`라는 별도의 좁은 검사만 쓰는 것. 동일한 `checkWritePermission` 패턴이 `PullRequestController`/`ReviewApiController`에도 복제돼 있었으나 재확인 결과 그쪽은 P1-78(ACCEPT 권한) 규칙을 정확히 재현한 것이라 회귀가 아니었음(별도 확인 완료). | `AccessControl.java` | `BoardController/BoardViewController` | **완료(아래 완료 로그 참고)** |
 | P1-114 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** `getCodeCommentThreadsForChanges` 필터링 전무, 다른 커밋/outdated 스레드가 항상 섞여 노출 | `PullRequest.java` | `PullRequestViewController.viewPullRequest/viewChangesInternal` | **완료(아래 완료 로그 참고)** |
 | P1-115 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** JPQL 연산자 우선순위 버그로 CLOSED/MERGED PR도 브랜치 삭제 처리 대상에 포함 가능 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `PullRequestRepository.findRelatedPullRequests()` | **완료(아래 완료 로그 참고)** |
-| P1-116 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰/커밋 댓글 삭제 권한이 "작성자 또는 MANAGER"로 과도 제한(P1-90~95와 동일 유형이나 조사 누락) | `AccessControl.java` | `CodeReviewServiceImpl.hasPermission()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-116 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** 리뷰/커밋 댓글 삭제 권한이 "작성자 또는 MANAGER"로 과도 제한(P1-90~95와 동일 유형이나 조사 누락) | `AccessControl.java` | `CodeReviewServiceImpl.hasPermission()` | **완료(아래 완료 로그 참고)** |
 | P1-117 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 프로젝트 도메인)** 조직 그룹 기반 담당자 후보(조직 관리자/멤버/사이트매니저) 확장 로직 없음 | `User.java` | `ProjectMemberController.assignableUsers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-118 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** 사이트관리자 전용 벌크 사용자 생성(`newUser`)/API 전용 토큰 로그인(`newToken`)/사용자 전체 조회·상태변경(`users`/`updateUserState`) API 부재 | `UserApi.java` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-119 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** `loginId=="admin"`이면 상태 무관 항상 `isSiteManager=true`로 판정하는 yona에 없는 하드코딩 분기 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `User.kt`, `UserDetailsServiceImpl.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -243,6 +243,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-116**: `CodeReviewServiceImpl.deleteReviewComment()`/`deleteCommitComment()`의 삭제 권한을 yona `AccessControl.isProjectResourceAllowed()` 수준으로 확장.
+  - 기존 private `hasPermission(projectId, commentAuthorId, requestUserId)`는 "작성자 본인 OR 프로젝트 role==MANAGER"만 검사 — yona의 실제 규칙(사이트매니저 우회 → 조직관리자 우회 → `user.isManagerOf(project) || isAuthor` → 이후 오퍼레이션별 세부 규칙)에서 앞의 두 우회가 통째로 빠져 있었음. P1-90~95에서 다른 리소스 타입들에 이미 도입해 둔 정답 패턴 `AccessControl.isAllowed(user, project, resource, Operation)` 오버로드가 `ReviewComment`/`CommitComment`에 대해서도 이미 구현돼 있는 걸 확인(`AccessControl.kt:450,500`) — 재사용만 하면 됐음.
+  - `CodeReviewServiceImpl`에 `AccessControl` 의존성 추가, 두 삭제 메서드를 `accessControl.isAllowed(currentUser, project, comment, Operation.DELETE)`로 교체. 더 이상 쓰이지 않는 `hasPermission()`(및 그 안에서만 쓰이던 `RoleType` import)을 Serena `safe_delete_symbol`로 제거.
+  - 테스트: `CodeReviewServiceSpec.kt`에 2건 추가("사이트관리자는 작성자도 프로젝트 매니저도 아니어도 타인의 리뷰/커밋 댓글을 삭제할 수 있어야 한다") — 수정 전 코드였다면 실패(작성자도 MANAGER도 아닌 사이트관리자는 거부당함)했을 시나리오를 재현. 신규 생성자 파라미터로 인해 같은 파일의 수동 `CodeReviewServiceImpl(...)` 인스턴스화 지점에도 `accessControl` 인자 반영. `./gradlew compileKotlin compileTestKotlin` + 대상 스펙 전체 통과 확인.
 
 - **2026-08-21 — P1-115**: `PullRequestRepository.findRelatedPullRequests()` JPQL 연산자 우선순위 버그 수정.
   - `WHERE (A) OR (B) AND C` 형태는 JPQL/SQL 모두 AND가 OR보다 우선순위가 높아 `(A) OR ((B) AND C)`로 파싱된다 — `pr.state NOT IN ('CLOSED','MERGED')`가 `toProject/toBranch` 매칭 쪽에만 걸리고 `fromProject/fromBranch` 매칭 쪽은 상태 무관하게 통과. 호출부 `GitPushHooks.cleanupPullRequestsForDeletedBranches()`가 이 결과로 브랜치 삭제 시 관련 PR을 정리하는데, CLOSED/MERGED PR도 잘못 대상에 포함될 수 있었음.
