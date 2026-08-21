@@ -175,7 +175,7 @@
 | P1-125 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 멘션 인덱스 엔티티 자체가 yuna에 없음(2, 3번의 근본 원인) | `Mention.java` | (대응 없음) | **완료(동등 기능으로 대체, 아래 완료 로그 참고)** |
 | P1-126 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직/프로젝트 그룹 멘션 확장 없음, `@owner/project` 정규식 매칭도 불가 | `NotificationEvent.getMentionedUsers()` | `CommentServiceImpl.extractMentionedUsers()` | **완료(아래 완료 로그 참고)** |
 | P1-127 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 신규 이슈/게시글/PR 생성 시 본문 `@멘션` 알림 수신자 계산 자체가 없음 | `NotificationEvent.java` | `IssueServiceImpl/PostingServiceImpl/PullRequestServiceImpl` 생성 로직 | **완료(아래 완료 로그 참고)** |
-| P1-128 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** orderBy/orderDir 정렬 파라미터 및 완료율 정렬 로직 전체 없음 | `MilestoneApp.java` | `MilestoneViewController.listMilestones()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-128 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** orderBy/orderDir 정렬 파라미터 및 완료율 정렬 로직 전체 없음 | `MilestoneApp.java` | `MilestoneViewController.listMilestones()` | **완료(아래 완료 로그 참고)** |
 | P1-129 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 벌크 마일스톤 임포트 API 전체 미이식(단건 생성만 지원) | `MilestoneApi.java` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-130 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** ORGANIZATION/COMMIT_COMMENT/REVIEW_COMMENT/USER_AVATAR에서 `isAllowedAttachment()` 미재사용, 원본 업로더 전용으로 과잉 제한 — 단, 원 서술의 예시 시나리오는 재확인 결과 부정확했음: yona도 ORGANIZATION/USER_AVATAR는 사이트매니저가 아니면 삭제 불가(조직 관리자도 불가)라 이 두 타입은 yuna와 결과가 같음. 실제 과잉 제한이 재현되는 지점은 COMMIT_COMMENT/REVIEW_COMMENT — yona는 이 두 타입을 project-scoped ATTACHMENT로 취급해 프로젝트 멤버 누구나 UPDATE 가능하지만, yuna `deleteFile()`은 이 두 타입도 명시 케이스 없이 catch-all(업로더 전용)로 처리해 일반 멤버가 차단됨. | `AccessControl.java` | `AttachmentController.deleteFile()` | 2026-08-21 백엔드 전수 감사에서 발견, Serena 재검증 과정에서 서술 정정·보강됨. 착수 여부는 사용자 결정 대기 |
 | P1-131 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 감시/즐겨찾기 도메인)** 감시자 목록이 명시적 Watch row만 반환, 작성자/담당자/투표자/프로젝트감시자 합산 및 권한 필터 없음 | `WatcherApi.getWatchers()` | `WatchController.getWatchers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -246,6 +246,12 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-128**: `MilestoneViewController.listMilestones()`에 yona `MilestoneApp.java`(`MilestoneCondition.orderBy`/`orderDir`, 기본값 `dueDate`/`asc`) + `Milestone.java:188-230 findMilestones()` 정렬 로직 대응.
+  - UI가 노출하는 정렬 기준은 `dueDate`(DB 컬럼, `Sort`로 위임)와 `completionRate`(계산 필드, DB 컬럼이 아님) 둘뿐(`milestone/list.scala.html`의 `makeFilterLink` 2곳으로 확인) — yona도 `completionRate`일 때만 DB 정렬을 건너뛰고 조회 후 `Collections.sort()`로 별도 재정렬하는 특별 케이스를 두고 있어 동일하게 이식.
+  - `MilestoneService.getMilestones()`에 `orderBy`/`orderDir` 파라미터를 Kotlin 인터페이스 기본값(`"dueDate"`/`"asc"`)과 함께 추가 — 기존 2-인자 호출부(`IssueViewController`의 이슈 폼 마일스톤 드롭다운 등 3곳)는 코드 변경 없이 그대로 동작(Kotlin 인터페이스 기본 인자 + MockK 목킹 상호작용을 실제 테스트로 검증 완료).
+  - `MilestoneRepository`에 `Sort` 파라미터를 받는 `findByProject`/`findByProjectAndState` 오버로드 추가. `completionRate` 정렬은 서비스에서 `Sort.unsorted()`로 스킵하고, 컨트롤러가 `toViewDto()` 변환 후 `completionRate` 필드로 재정렬(legacy와 동일한 2단계 구조).
+  - 테스트: `MilestoneViewControllerSpec.kt` +2(orderBy/orderDir 파라미터가 서비스 호출과 모델에 그대로 반영/completionRate 정렬 시 완료율 내림차순으로 재배열) — 기존 `getMilestones(1L, State.OPEN)` 2-인자 스텁 2곳도 인터페이스 시그니처 변경에 맞춰 4-인자로 정정. 전체 통과, `IssueViewControllerSpec`/`MilestoneControllerSpec`(기존 2-인자 호출부·스텁 그대로 둠)도 회귀 없음 확인.
 
 - **2026-08-21 — P1-125/126/127**: 멘션(`@`) 시스템 3종을 함께 처리(P1-126 그룹 멘션 확장이 나머지 두 항목의 전제였음).
   - **P1-126** (`CommentServiceImpl.extractMentionedUsers()`): yona `NotificationEvent.getMentionedUsers()`(개별 사용자 + `findOrganizationMembers`(조직 이름 멘션 → 조직 멤버 전원) + `findProjectMembers`(`owner/project` 멘션 → 프로젝트 멤버 전원)) 로직을 이식. 정규식을 `User.LOGIN_ID_PATTERN_ALLOW_FORWARD_SLASH`(`/` 허용) 기준으로 확장.

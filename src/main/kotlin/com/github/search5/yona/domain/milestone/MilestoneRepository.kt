@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.Project
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -12,8 +13,10 @@ import org.springframework.stereotype.Repository
 @Repository
 interface MilestoneRepository : JpaRepository<Milestone, Long> {
     fun findByProject(project: Project): List<Milestone>
+    fun findByProject(project: Project, sort: Sort): List<Milestone>
     fun countByProject(project: Project): Long
     fun findByProjectAndState(project: Project, state: State): List<Milestone>
+    fun findByProjectAndState(project: Project, state: State, sort: Sort): List<Milestone>
     fun findByProjectAndTitle(project: Project, title: String): Milestone?
 
     @Query("""
