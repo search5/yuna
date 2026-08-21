@@ -171,7 +171,7 @@
 | P1-121 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 게스트 계정 조직 생성 차단(`@GuestProhibit`) 미이식 | `OrganizationApp.java` | `OrganizationViewController.createOrganization()` | **완료(아래 완료 로그 참고)** |
 | P1-122 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 중복 가입 신청 가드 없어 재신청 시 알림 중복 발행(Project P1-16과 동일 유형, 대칭 미적용) | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.enroll()` | **완료(아래 완료 로그 참고)** |
 | P1-123 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 대기 신청 여부 확인 없이 무조건 취소 알림 발행, isGuest 가드도 없음 | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.cancelEnroll()` | **완료(아래 완료 로그 참고)** |
-| P1-124 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 조직 로고 업로드 시 이미지 타입/크기(`LOGO_FILE_LIMIT_SIZE`) 검증 미이식 | `OrganizationApp.java` | `OrganizationViewController.updateOrganization()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-124 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 조직 로고 업로드 시 이미지 타입/크기(`LOGO_FILE_LIMIT_SIZE`) 검증 미이식 | `OrganizationApp.java` | `OrganizationViewController.updateOrganization()` | **완료(아래 완료 로그 참고)** |
 | P1-125 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 멘션 인덱스 엔티티 자체가 yuna에 없음(2, 3번의 근본 원인) | `Mention.java` | (대응 없음) | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-126 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직/프로젝트 그룹 멘션 확장 없음, `@owner/project` 정규식 매칭도 불가 | `NotificationEvent.getMentionedUsers()` | `CommentServiceImpl.extractMentionedUsers()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-127 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 신규 이슈/게시글/PR 생성 시 본문 `@멘션` 알림 수신자 계산 자체가 없음 | `NotificationEvent.java` | `IssueServiceImpl/PostingServiceImpl/PullRequestServiceImpl` 생성 로직 | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -245,6 +245,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-124**: 조직 로고 업로드에 yona `utils/LogoUtil.java`(`LOGO_FILE_LIMIT_SIZE`=5MB, `isImageFile` 확장자 검증) 대응 추가.
+  - 신규 `domain/attachment/LogoValidator.kt`(공유 유틸)로 `isImageFile(filename)`/`LOGO_FILE_LIMIT_SIZE` 이식 — yona도 Project/Organization이 같은 `LogoUtil`을 공유하는 구조라 동일하게 재사용 가능한 오브젝트로 분리.
+  - `OrganizationViewController.updateOrganization()`에 검증을 `organizationService.updateOrganizationSettings()` 호출 **이전**에 배치 — yona `validateForUpdate()`가 로고 검증 실패 시 이름/설명 변경을 포함해 전체 갱신을 badRequest로 거부하는 것과 동일한 원자적 실패 순서를 재현(검증을 로고 처리 블록 뒤에 두면 이름/설명은 이미 반영된 뒤 로고만 실패하는 legacy와 다른 동작이 됨).
+  - 테스트: `OrganizationViewControllerSpec.kt` +3(비이미지 확장자 거부/5MB 초과 거부/정상 이미지 갱신 성공) — 작성 중 권한 판단이 리포지토리 스텁이 아니라 `org.organizationUsers`(엔티티 관계) 직접 조회임을 놓쳐 전부 403으로 실패하는 걸 발견해 픽스처를 `org.organizationUsers = mutableListOf(...)`로 정정. 수정 전 실행해 2건 실패(RED) 확인 후 통과(GREEN) 확인. 전체 16건 통과.
 
 - **2026-08-21 — P1-142**: (P1-123 작업 중 발견한 대칭 결함) `ProjectUserServiceImpl.cancelEnroll()`에도 동일한 이중 가드 추가.
   - yona `EnrollProjectApp.java:55-71`을 재확인한 결과 Organization과 완전히 동일한 패턴(`ProjectUser.isGuest()`=이미 정식 멤버면 거부, `User.enrolled()`=실제 대기 신청 없으면 조용히 무시) — Project 쪽의 `enroll()`은 P1-16에서 이미 고쳐졌지만 `cancelEnroll()`은 그 대칭 결함이 남아 있었음.

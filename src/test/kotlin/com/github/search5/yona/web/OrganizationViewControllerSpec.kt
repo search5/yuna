@@ -30,6 +30,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.springframework.mock.web.MockMultipartFile
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -126,6 +128,68 @@ class OrganizationViewControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().is3xxRedirection)
                     .andExpect(redirectedUrl("/organizations/neworg"))
+            }
+        }
+
+        // yona OrganizationApp.java:409-420 validateForUpdate()의 LogoUtil.isImageFile()/
+        // LOGO_FILE_LIMIT_SIZE 검증 대응 (P1-124). 검증 실패 시 이름/설명 변경을 포함해 전체
+        // 갱신 자체가 거부되어야 한다(legacy가 badRequest(setting.render(...))로 아무 것도
+        // 반영하지 않는 것과 동일).
+        describe("POST /organizations/{orgName}/setting 로고 업로드 검증") {
+            it("이미지가 아닌 파일이면 갱신 자체를 거부해야 한다") {
+                org.organizationUsers = mutableListOf(OrganizationUser(id = 3L, user = user, organization = org, role = roleAdmin))
+                every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+
+                val badFile = MockMultipartFile("logoPath", "malware.exe", "application/octet-stream", ByteArray(10))
+
+                mockMvc.perform(
+                    multipart("/organizations/testorg/setting").file(badFile).principal(userAuth)
+                        .param("name", "testorg")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("organization/setting"))
+
+                verify(exactly = 0) { organizationService.updateOrganizationSettings(any(), any(), any(), any()) }
+            }
+
+            it("5MB를 초과하는 이미지면 갱신 자체를 거부해야 한다") {
+                org.organizationUsers = mutableListOf(OrganizationUser(id = 3L, user = user, organization = org, role = roleAdmin))
+                every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+
+                val oversizedFile = MockMultipartFile(
+                    "logoPath", "logo.png", "image/png",
+                    ByteArray((com.github.search5.yona.domain.attachment.LogoValidator.LOGO_FILE_LIMIT_SIZE + 1).toInt())
+                )
+
+                mockMvc.perform(
+                    multipart("/organizations/testorg/setting").file(oversizedFile).principal(userAuth)
+                        .param("name", "testorg")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("organization/setting"))
+
+                verify(exactly = 0) { organizationService.updateOrganizationSettings(any(), any(), any(), any()) }
+            }
+
+            it("정상 크기의 이미지면 설정을 갱신해야 한다") {
+                org.organizationUsers = mutableListOf(OrganizationUser(id = 3L, user = user, organization = org, role = roleAdmin))
+                every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { organizationService.updateOrganizationSettings(org.id!!, "testorg", "", user.id!!) } returns Unit
+                every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
+                every { attachmentService.store(any(), any(), any(), any(), any()) } returns mockk(relaxed = true)
+
+                val goodFile = MockMultipartFile("logoPath", "logo.png", "image/png", ByteArray(10))
+
+                mockMvc.perform(
+                    multipart("/organizations/testorg/setting").file(goodFile).principal(userAuth)
+                        .param("name", "testorg")
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify(exactly = 1) { organizationService.updateOrganizationSettings(org.id!!, "testorg", "", user.id!!) }
             }
         }
 

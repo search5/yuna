@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.organization.OrganizationService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.attachment.LogoValidator
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.UserRepository
@@ -327,6 +328,26 @@ class OrganizationViewController(
 
         if (!isOrgAdmin && !loginUser.isSiteManager) {
             return "error/403"
+        }
+
+        // yona OrganizationApp.java:409-420 validateForUpdate()의 LogoUtil.isImageFile()/
+        // LOGO_FILE_LIMIT_SIZE 검증 대응 (P1-124). 로고가 유효하지 않으면 이름/설명 변경을
+        // 포함해 갱신 자체를 아무 것도 반영하지 않는다(legacy가 badRequest(setting.render(...))로
+        // 응답하는 것과 동일).
+        if (logoFile != null && !logoFile.isEmpty) {
+            val filename = logoFile.originalFilename ?: ""
+            if (!LogoValidator.isImageFile(filename)) {
+                model.addAttribute("org", org)
+                model.addAttribute("currentUser", loginUser)
+                model.addAttribute("error", "지원하지 않는 이미지 형식입니다.")
+                return "organization/setting"
+            }
+            if (logoFile.size > LogoValidator.LOGO_FILE_LIMIT_SIZE) {
+                model.addAttribute("org", org)
+                model.addAttribute("currentUser", loginUser)
+                model.addAttribute("error", "이미지 파일 크기가 너무 큽니다.")
+                return "organization/setting"
+            }
         }
 
         try {
