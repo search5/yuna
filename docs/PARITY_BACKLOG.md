@@ -42,7 +42,7 @@
 | P0-22 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** 소유권/원컨테이너 검증 우회, 임의 첨부파일 강제 재배선 가능(보안) | `Attachment.moveOnlySelected()` | `IssueViewController/MilestoneViewController/BoardViewController` | **완료(아래 완료 로그 참고)** |
 | P0-23 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** `HIDE_PROJECT_LISTING` 플래그 및 관련 분기 전무(익명 검색 PUBLIC 필터, 조직검색 게이트 포함), 비공개 모드 우회 노출 | `Search.java`, `SearchApp.java` | `SearchServiceImpl.kt`/`SearchController.kt` | **완료(아래 완료 로그 참고, 범위를 ProjectApp.java/OrganizationApp.java/UserApp.java까지 확장)** |
 | P0-24 | [x] | **(2026-08-21 백엔드 전수 감사 재검증 중 발견 — PR/코드리뷰 도메인)** PR 코드 리뷰 댓글 작성(`newPullRequestComment`)에 권한 체크가 전혀 없음 — 프로젝트 멤버십/READ 권한 확인 없이 `owner/projectName`과 `pullRequestId`만 알면 로그인한 임의 사용자가 비공개 프로젝트의 PR에도 리뷰 댓글을 달 수 있음. `checkWritePermission`/`accessControl.isAllowed(...)` 호출이 컨트롤러 어디에도 없음(직접 코드 확인). | `app/utils/AccessControl.java`(REVIEW_COMMENT 생성은 `isProjectResourceCreatable`로 게이트) | `web/ReviewViewController.kt`(`newPullRequestComment` — 권한 체크 코드 0건) | **완료(아래 완료 로그 참고, newCommitComment도 같은 파일에서 함께 발견해 처리)** |
-| P0-25 | [ ] | **(2026-08-21 P0-23 구현 중 발견)** 사용자 프로필 화면(`/user/{loginId}`)이 대상 사용자가 작성한 이슈/PR을 방문자의 프로젝트 READ 권한과 무관하게 전부 노출 — 비공개 프로젝트의 이슈 제목/PR 제목이 그 프로젝트 멤버가 아닌 누구에게나(익명 포함) 프로필을 통해 유출됨 | `UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()`(프로젝트별 READ 권한 캐시로 필터링) | `UserViewController.kt userProfile()`(필터링 코드 0건 — `issueRepository.findByAuthorId`/`pullRequestRepository.findByContributor` 결과를 그대로 노출) | P0-23(HIDE_PROJECT_LISTING) 구현 중 `UserApp.java:752`를 대조하다 인접 로직에서 발견 — 별도의 정보노출 취약점이라 분리 등록. 착수 여부는 사용자 결정 대기 |
+| P0-25 | [x] | **(2026-08-21 P0-23 구현 중 발견)** 사용자 프로필 화면(`/user/{loginId}`)이 대상 사용자가 작성한 이슈/PR을 방문자의 프로젝트 READ 권한과 무관하게 전부 노출 — 비공개 프로젝트의 이슈 제목/PR 제목이 그 프로젝트 멤버가 아닌 누구에게나(익명 포함) 프로필을 통해 유출됨 | `UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()`(프로젝트별 READ 권한 캐시로 필터링) | `UserViewController.kt userProfile()`(필터링 코드 0건 — `issueRepository.findByAuthorId`/`pullRequestRepository.findByContributor` 결과를 그대로 노출) | **완료(아래 완료 로그 참고)** |
 
 ## P1 — 주요 (기능 결손 / 권한 로직 오류)
 
@@ -227,6 +227,7 @@
 | P2-35 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 접근제어/검증 유틸 도메인)** `project.isCodeAvailable()` 체크 없이 vcs=="GIT"만 검사 | `AutoLinkRenderer.toValidSHALink` | `AutoLinkRenderer.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-36 | [ ] | **(2026-08-21 P0-19 구현 중 발견)** PR/리뷰스레드 삭제 시 REVIEW_COMMENT·COMMIT_COMMENT·웹훅 관련 첨부파일이 정리되지 않아 고아 Attachment 행/파일이 남을 수 있음(FK 제약은 없어 삭제 자체는 실패하지 않음, 데이터 위생 문제) | `Attachment` 관련 정리 없음(원본도 이 경로는 자원 누수 소지) | `ProjectServiceImpl.deleteProject()`/`CodeReviewServiceImpl` | P0-19(프로젝트 삭제 계단식 정리) 구현 중, Issue/Posting 댓글은 attachmentService.deleteAll로 정리하면서 리뷰코멘트/커밋코멘트/웹훅 쪽은 대응 유틸이 없어 그대로 남긴 채 진행 — 착수 여부는 사용자 결정 대기 |
 | P2-37 | [ ] | **(2026-08-21 P0-19 구현 중 발견)** 다단계 fork 네트워크에서, fork가 제3의 프로젝트로 보낸 PR에 달린 CommentThread는(thread.project가 그 제3 프로젝트일 경우) 원본 프로젝트 삭제 시 함께 정리되지 않아 PR 삭제 후 고아 CommentThread가 남을 수 있음(매우 드문 edge case, legacy도 동일 범위까지만 처리) | `Project.java` deleteFork()/forkingProjects 루프(동일한 범위 제약을 가짐) | `ProjectServiceImpl.deleteProject()` | P0-19 구현 중 다단계 fork 시나리오를 설계 검토하다 발견 — legacy 자체도 이 경로를 완전히 처리하지 않아 "동일 결함 재현"에 해당, 착수 여부는 사용자 결정 대기 |
+| P2-38 | [ ] | **(2026-08-21 P0-25 구현 중 발견)** 사용자 프로필의 이슈 목록이 `daysAgo` 파라미터로 최근 N일 필터링되지 않고 항상 전체 기간을 반환(화면에는 `daysAgo` 값 자체는 표시됨) | `UserApp.java:754-755 Issue.findRecentlyIssuesByDaysAgo(user, daysAgo)` | `UserViewController.kt userProfile()`(`issueRepository.findByAuthorId`만 호출, daysAgo 미사용) | P0-25(프로필 ACL 필터링) 구현 중 `UserApp.java:752` 주변을 대조하다 발견 — 보안 이슈 아닌 기능 완성도 문제라 별도 등록. 착수 여부는 사용자 결정 대기 |
 
 ---
 
@@ -241,6 +242,13 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P0-25**: 사용자 프로필(`/user/{loginId}`)의 프로젝트/이슈/PR 목록에 방문자 READ 권한 필터링 추가(정보노출 취약점).
+  - Serena LSP로 yona `UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()/collectProjects()+addProjectNotDupped()`를 재확인 — 셋 다 대상 사용자가 작성/소속한 항목을, **프로필을 보는 방문자**가 그 항목이 속한 프로젝트를 READ할 수 있는지(`AccessControl.isAllowed(currentUser, project.asResource(), Operation.READ)`)로 필터링함을 확인. yuna `UserViewController.userProfile()`은 이 필터링이 전혀 없어, 비공개 프로젝트의 이슈/PR 제목이 그 프로젝트 멤버가 아닌 누구에게나(비로그인 포함) 프로필을 통해 그대로 노출되고 있었음.
+  - `accessControl: AccessControl`을 `UserViewController` 생성자에 주입, `projects`/`issues`/`pullRequests` 세 목록 모두에 `accessControl.isAllowedToReadProject(loginUser, ...)` 필터를 추가(P0-23의 `hideFromThisViewer` 분기와 자연스럽게 결합).
+  - 테스트: `UserViewControllerSpec.kt` +1(방문자가 READ 권한 없는 프로젝트의 이슈/PR/소속프로젝트가 감춰지고, 권한 있는 것만 노출됨을 검증).
+  - 검증: `./gradlew test --tests "...UserViewControllerSpec"` 전체 통과, 이어서 `./gradlew test` 전체 통과(회귀 없음 확인).
+  - **범위 외 발견, 백로그 등록**: 프로필 이슈 목록이 `daysAgo`로 최근 N일 필터링되지 않고 항상 전체 기간을 반환하는 기능 완성도 문제(P2-38, 보안과 무관).
 
 - **2026-08-21 — P0-24**: `ReviewViewController.kt`의 PR 리뷰 댓글/커밋 댓글 작성 두 엔드포인트에 권한 체크 추가(둘 다 권한 검사 코드 0건이었음).
   - Serena LSP로 yona `PullRequestApp.java:591 @IsCreatable(ResourceType.REVIEW_COMMENT) newComment()`를 재확인 — 로그인 여부만으로는 부족하고, 프로젝트 멤버/조직멤버/사이트매니저이거나(비공개 포함 항상 허용) 공개 프로젝트의 일반 로그인 사용자(REVIEW_COMMENT는 공개 프로젝트 비멤버도 생성 허용 대상에 포함)여야 REVIEW_COMMENT를 생성할 수 있음을 확인.

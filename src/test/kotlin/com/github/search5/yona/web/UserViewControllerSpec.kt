@@ -1,5 +1,6 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.board.PostingRepository
@@ -41,6 +42,7 @@ class UserViewControllerSpec : DescribeSpec({
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     val organizationRepository = mockk<OrganizationRepository>()
     val userService = mockk<UserService>()
+    val accessControl = mockk<AccessControl>()
 
     val userViewController = UserViewController(
         userRepository,
@@ -56,7 +58,8 @@ class UserViewControllerSpec : DescribeSpec({
         favoriteOrganizationRepository,
         organizationUserRepository,
         organizationRepository,
-        userService
+        userService,
+        accessControl
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(userViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -77,9 +80,11 @@ class UserViewControllerSpec : DescribeSpec({
             favoriteProjectRepository,
             favoriteOrganizationRepository,
             organizationUserRepository,
-            organizationRepository
+            organizationRepository,
+            accessControl
         )
         every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
+        every { accessControl.isAllowedToReadProject(any(), any()) } returns true
     }
 
     describe("UserViewController 템플릿 연동 테스트") {
@@ -141,7 +146,7 @@ class UserViewControllerSpec : DescribeSpec({
             userRepository, projectUserRepository, issueRepository, pullRequestRepository, watchRepository,
             projectRepository, userProjectNotificationRepository, attachmentRepository, postingRepository,
             favoriteProjectRepository, favoriteOrganizationRepository, organizationUserRepository,
-            organizationRepository, userService, hideProjectListing = true
+            organizationRepository, userService, accessControl, hideProjectListing = true
         )
         val model = org.springframework.ui.ExtendedModelMap()
 
@@ -170,6 +175,41 @@ class UserViewControllerSpec : DescribeSpec({
             hiddenController.userProfile(loginId = "viewed", daysAgo = 14, selected = "issues", authentication = viewerAuth, model = viewerModel)
 
             viewerModel.getAttribute("currentUser") shouldBe viewer
+        }
+    }
+
+    // yona UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()/
+    // collectProjects() 대응 (P0-25). 대상 사용자가 작성한 이슈/PR/소속 프로젝트 중 방문자가
+    // READ 권한이 없는 것은 프로필에서 감춰져야 한다.
+    describe("GET /user/{loginId} - 방문자의 프로젝트 READ 권한에 따른 필터링") {
+        it("방문자가 READ 권한이 없는 프로젝트의 이슈/PR/소속 프로젝트는 감춰져야 한다") {
+            val viewedUser = User(id = 20L, loginId = "viewed", name = "대상유저")
+            val readableProject = com.github.search5.yona.domain.project.Project(id = 1L, name = "readable", owner = "viewed")
+            val hiddenProject = com.github.search5.yona.domain.project.Project(id = 2L, name = "hidden", owner = "viewed")
+            val readableIssue = com.github.search5.yona.domain.issue.Issue(id = 100L, title = "보이는 이슈", project = readableProject)
+            val hiddenIssue = com.github.search5.yona.domain.issue.Issue(id = 101L, title = "숨겨진 이슈", project = hiddenProject)
+            val readablePr = com.github.search5.yona.domain.pullrequest.PullRequest(
+                id = 200L, number = 1L, toProject = readableProject, fromProject = readableProject, contributor = viewedUser
+            )
+            val hiddenPr = com.github.search5.yona.domain.pullrequest.PullRequest(
+                id = 201L, number = 2L, toProject = hiddenProject, fromProject = hiddenProject, contributor = viewedUser
+            )
+            val memberRole = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)
+            val readableProjectUser = com.github.search5.yona.domain.project.ProjectUser(id = 900L, user = viewedUser, project = readableProject, role = memberRole)
+            val hiddenProjectUser = com.github.search5.yona.domain.project.ProjectUser(id = 901L, user = viewedUser, project = hiddenProject, role = memberRole)
+
+            every { userRepository.findByLoginId("viewed") } returns Optional.of(viewedUser)
+            every { projectUserRepository.findByUserId(20L) } returns listOf(readableProjectUser, hiddenProjectUser)
+            every { issueRepository.findByAuthorId(20L) } returns listOf(readableIssue, hiddenIssue)
+            every { pullRequestRepository.findByContributor(viewedUser) } returns listOf(readablePr, hiddenPr)
+            every { accessControl.isAllowedToReadProject(null, readableProject) } returns true
+            every { accessControl.isAllowedToReadProject(null, hiddenProject) } returns false
+
+            mockMvc.perform(get("/user/viewed"))
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("projects", listOf(readableProject)))
+                .andExpect(model().attribute("issues", listOf(readableIssue)))
+                .andExpect(model().attribute("pullRequests", listOf(readablePr)))
         }
     }
 })

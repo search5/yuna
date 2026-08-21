@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.config.security.AccessControl
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.Authentication
@@ -56,6 +57,7 @@ class UserViewController(
     private val organizationUserRepository: OrganizationUserRepository,
     private val organizationRepository: OrganizationRepository,
     private val userService: UserService,
+    private val accessControl: AccessControl,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
     @Value("\${yuna.application.hide-project-listing:false}")
     private val hideProjectListing: Boolean = false
@@ -199,20 +201,33 @@ class UserViewController(
         // 목록을 전혀 보여주지 않는다(로그인 사용자는 이 화면에서는 영향 없음).
         val hideFromThisViewer = hideProjectListing && loginUser == null
 
-        // 사용자가 소속된 프로젝트 목록
+        // yona UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()/
+        // collectProjects()+addProjectNotDupped() 대응 (P0-25). 대상 사용자가 작성한 이슈/PR/
+        // 소속 프로젝트를 방문자(loginUser)가 READ 가능한 것만 남긴다 — 필터링이 전혀 없어
+        // 비공개 프로젝트의 이슈/PR 제목이 그 프로젝트 멤버가 아닌 누구에게나(익명 포함)
+        // 프로필을 통해 유출되던 정보노출 취약점.
         val projects = if (hideFromThisViewer) {
             emptyList()
         } else {
             projectUserRepository.findByUserId(user.id!!).map { it.project }
+                .filter { accessControl.isAllowedToReadProject(loginUser, it) }
         }
 
-        // 사용자가 작성한 이슈 목록
-        val issues = if (hideFromThisViewer) emptyList() else issueRepository.findByAuthorId(user.id!!)
+        val issues = if (hideFromThisViewer) {
+            emptyList()
+        } else {
+            issueRepository.findByAuthorId(user.id!!)
+                .filter { accessControl.isAllowedToReadProject(loginUser, it.project) }
+        }
         val openIssuesCount = issues.count { it.state == State.OPEN }
         val closedIssuesCount = issues.count { it.state == State.CLOSED }
 
-        // 사용자가 작성한 풀 리퀘스트 목록
-        val pullRequests = if (hideFromThisViewer) emptyList() else pullRequestRepository.findByContributor(user)
+        val pullRequests = if (hideFromThisViewer) {
+            emptyList()
+        } else {
+            pullRequestRepository.findByContributor(user)
+                .filter { accessControl.isAllowedToReadProject(loginUser, it.toProject) }
+        }
 
         model.addAttribute("user", user)
         model.addAttribute("projects", projects)
