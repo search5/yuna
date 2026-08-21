@@ -12,6 +12,10 @@ import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.board.PostingComment
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
@@ -32,10 +36,18 @@ class CommentServiceImpl(
     private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
     private val watchService: WatchService,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val organizationRepository: OrganizationRepository,
+    private val organizationUserRepository: OrganizationUserRepository,
+    private val projectRepository: ProjectRepository,
+    private val projectUserRepository: ProjectUserRepository
 ) : CommentService {
 
-    private val mentionPattern = Pattern.compile("@([a-zA-Z0-9_\\\\-\\\\.]+) ")
+    // yona models/User.java:66 LOGIN_ID_PATTERN_ALLOW_FORWARD_SLASH(문자 클래스 내 "-"의 range
+    // 파싱 모호성을 피하려 하이픈을 클래스 끝으로 옮김 — 문자 집합(영숫자/하이픈/슬래시) 자체는
+    // 동일) + NotificationEvent.java:1518 getMentionedUsers()의 매칭 패턴 대응(P1-126,
+    // owner/project 형식의 그룹 멘션을 포착하려면 '/'를 허용해야 한다).
+    private val mentionPattern = Pattern.compile("@[a-zA-Z0-9/-]+([_.][a-z_.A-Z0-9/-]+)*")
 
     override fun createIssueComment(
         issueId: Long,
@@ -156,16 +168,37 @@ class CommentServiceImpl(
         return savedComment
     }
 
+    // yona NotificationEvent.java:1517-1528 getMentionedUsers() 대응 (P1-126). 개별 사용자 멘션뿐
+    // 아니라 조직 이름(@orgname → 조직 멤버 전원)과 owner/project 형식(@owner/project → 프로젝트
+    // 멤버 전원)도 확장한다. 기존 게스트 계정 제외 정책은 확장된 멤버에도 동일하게 적용한다.
+    // 조직/프로젝트 멤버는 엔티티의 in-memory 컬렉션(org.organizationUsers 등) 대신 리포지토리로
+    // 직접 조회한다 — 같은 트랜잭션 안에서 방금 저장된 멤버가 부모 엔티티의 이미 초기화된(비어있는)
+    // 컬렉션에 반영되지 않는 Hibernate 1차 캐시 함정을 피하기 위함이다.
     override fun extractMentionedUsers(contents: String): Set<User> {
         val users = mutableSetOf<User>()
         val matcher = mentionPattern.matcher(contents)
         while (matcher.find()) {
-            val loginId = matcher.group(1)
-            val user = userRepository.findByLoginId(loginId).orElse(null)
-            if (user != null && !user.isGuest) {
+            val mentionWord = matcher.group().substring(1)
+
+            organizationRepository.findByName(mentionWord).ifPresent { org ->
+                organizationUserRepository.findByOrganizationId(org.id!!).forEach { users.add(it.user) }
+            }
+
+            if (mentionWord.contains("/")) {
+                val lastSlash = mentionWord.lastIndexOf("/")
+                val projectName = mentionWord.substring(lastSlash + 1)
+                val ownerLoginId = mentionWord.substring(0, lastSlash)
+                projectRepository.findByOwnerAndName(ownerLoginId, projectName).ifPresent { project ->
+                    projectUserRepository.findByProjectId(project.id!!).forEach { users.add(it.user) }
+                }
+            }
+
+            val user = userRepository.findByLoginId(mentionWord).orElse(null)
+            if (user != null) {
                 users.add(user)
             }
         }
+        users.removeIf { it.isGuest }
         return users
     }
 

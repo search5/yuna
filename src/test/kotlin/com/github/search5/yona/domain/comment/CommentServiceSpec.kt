@@ -5,6 +5,10 @@ import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingComment
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUser
@@ -40,7 +44,9 @@ class CommentServiceSpec @Autowired constructor(
     private val userRepository: UserRepository,
     private val notificationEventRepository: NotificationEventRepository,
     private val postingRepository: PostingRepository,
-    private val postingCommentRepository: PostingCommentRepository
+    private val postingCommentRepository: PostingCommentRepository,
+    private val organizationRepository: OrganizationRepository,
+    private val organizationUserRepository: OrganizationUserRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -51,6 +57,8 @@ class CommentServiceSpec @Autowired constructor(
                 issueRepository.deleteAll()
                 postingCommentRepository.deleteAll()
                 postingRepository.deleteAll()
+                organizationUserRepository.deleteAll()
+                organizationRepository.deleteAll()
                 projectUserRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
@@ -106,6 +114,67 @@ class CommentServiceSpec @Autowired constructor(
                 // userb가 수신자로 정상 등록되었는지 확인
                 event.receivers.size shouldBe 1
                 event.receivers.first().loginId shouldBe "userb"
+            }
+
+            // yona NotificationEvent.getMentionedUsers()의 findOrganizationMembers() 대응 (P1-126).
+            it("조직 이름을 멘션하면 조직 멤버 전원이 알림 수신자에 포함되어야 한다") {
+                val author = userRepository.save(User(loginId = "usera2", name = "작성자2", email = "usera2@yona.io"))
+                val orgMember1 = userRepository.save(User(loginId = "orgmember1", name = "조직원1", email = "orgmember1@yona.io"))
+                val orgMember2 = userRepository.save(User(loginId = "orgmember2", name = "조직원2", email = "orgmember2@yona.io"))
+                val role = roleRepository.save(Role(id = RoleType.ORG_MEMBER.roleType, name = "ORG_MEMBER"))
+                val org = organizationRepository.save(Organization(name = "team-org"))
+                organizationUserRepository.save(OrganizationUser(user = orgMember1, organization = org, role = role))
+                organizationUserRepository.save(OrganizationUser(user = orgMember2, organization = org, role = role))
+
+                val project = projectRepository.save(Project(name = "org-mention-project", owner = "usera2"))
+                val issue = issueRepository.save(
+                    Issue(
+                        title = "조직 멘션 테스트", body = "본문", project = project,
+                        authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                        createdDate = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                val savedComment = commentService.createIssueComment(
+                    issueId = issue.id!!,
+                    contents = "@team-org 검토 부탁드립니다.",
+                    author = author
+                )
+
+                savedComment.id shouldNotBe null
+                val event = notificationEventRepository.findAll().first()
+                val receiverLoginIds = event.receivers.map { it.loginId }.toSet()
+                receiverLoginIds shouldBe setOf("orgmember1", "orgmember2")
+            }
+
+            // yona NotificationEvent.getMentionedUsers()의 findProjectMembers() 대응 (P1-126).
+            it("owner/project 형식으로 멘션하면 해당 프로젝트 멤버 전원이 알림 수신자에 포함되어야 한다") {
+                val author = userRepository.save(User(loginId = "usera3", name = "작성자3", email = "usera3@yona.io"))
+                val projMember = userRepository.save(User(loginId = "projmember", name = "프로젝트원", email = "projmember@yona.io"))
+                val role = roleRepository.save(Role(id = RoleType.MEMBER.roleType, name = "MEMBER"))
+
+                val mentionedProject = projectRepository.save(Project(name = "target-project", owner = "someowner"))
+                projectUserRepository.save(ProjectUser(project = mentionedProject, user = projMember, role = role))
+
+                val hostProject = projectRepository.save(Project(name = "host-project", owner = "usera3"))
+                val issue = issueRepository.save(
+                    Issue(
+                        title = "프로젝트 멘션 테스트", body = "본문", project = hostProject,
+                        authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                        createdDate = Instant.now(), state = State.OPEN
+                    )
+                )
+
+                val savedComment = commentService.createIssueComment(
+                    issueId = issue.id!!,
+                    contents = "@someowner/target-project 확인해주세요.",
+                    author = author
+                )
+
+                savedComment.id shouldNotBe null
+                val event = notificationEventRepository.findAll().first()
+                val receiverLoginIds = event.receivers.map { it.loginId }.toSet()
+                receiverLoginIds shouldBe setOf("projmember")
             }
 
             it("게시글 댓글을 작성/삭제하면 posting.numOfComments가 실제 댓글 수와 일치해야 한다 (P1-19)") {

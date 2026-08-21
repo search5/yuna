@@ -823,6 +823,23 @@ class IssueServiceSpec @Autowired constructor(
                     events.first().eventType shouldBe EventType.NEW_ISSUE
                 }
 
+                // yona NotificationEvent.forNewIssue()의 getReceivers(issue, author)(watchers +
+                // getMentionedUsers(body)) 대응 (P1-127). 신규 이슈 본문에 있는 @멘션도 알림 수신자에
+                // 포함되어야 한다 — 지금까지는 댓글에서만 멘션이 처리되고 신규 게시물 생성 시점에는
+                // 전혀 처리되지 않았다.
+                it("이슈 본문에 멘션이 포함되어 있으면 멘션된 사용자도 신규 이슈 알림 수신자에 포함되어야 한다") {
+                    val author = userRepository.save(User(loginId = "mention-author", name = "작성자", email = "mention-author@yona.io"))
+                    val mentioned = userRepository.save(User(loginId = "mentioned-user", name = "멘션대상", email = "mentioned-user@yona.io"))
+                    val project = projectRepository.save(Project(name = "mention-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+                    val issue = Issue(title = "멘션 포함 이슈", body = "@mentioned-user 님 확인 부탁드립니다.", project = project)
+
+                    issueService.createIssue(issue = issue, author = author)
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().receivers.map { it.loginId } shouldBe listOf("mentioned-user")
+                }
+
                 it("초안을 발행하면 createdDate가 갱신되고 state가 DRAFT->OPEN으로 바뀌고 번호가 재채번되며 신규 이슈 알림이 발행되어야 한다") {
                     val author = userRepository.save(User(loginId = "drafter2", name = "초안작성자2", email = "drafter2@yona.io"))
                     val project = projectRepository.save(Project(name = "publish-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))

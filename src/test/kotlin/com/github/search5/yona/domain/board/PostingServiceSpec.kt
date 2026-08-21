@@ -78,6 +78,22 @@ class PostingServiceSpec @Autowired constructor(
                 event.senderId shouldBe author.id
             }
 
+            // yona NotificationEvent.forNewPost()의 getReceivers(abstractPosting, except)(watchers +
+            // getMentionedUsers(body)) 대응 (P1-127). 신규 게시글 본문의 @멘션도 알림 수신자에
+            // 포함되어야 한다.
+            it("게시글 본문에 멘션이 포함되어 있으면 멘션된 사용자도 신규 게시글 알림 수신자에 포함되어야 한다") {
+                val author = userRepository.save(User(loginId = "mention-writer", name = "작성자", email = "mention-writer@yona.io"))
+                val mentioned = userRepository.save(User(loginId = "mentioned-reader", name = "멘션대상", email = "mentioned-reader@yona.io"))
+                val project = projectRepository.save(Project(name = "mention-board-project", owner = "mention-writer", projectScope = ProjectScope.PUBLIC))
+                val posting = Posting(title = "공지", body = "@mentioned-reader 님 확인 부탁드립니다.", project = project)
+
+                postingService.createPosting(project.id!!, posting, author.id!!)
+
+                val events = notificationEventRepository.findAll()
+                events.size shouldBe 1
+                events.first().receivers.map { it.loginId } shouldBe listOf("mentioned-reader")
+            }
+
             it("본인이 작성한 글을 수정하고 알림 발송 옵션을 선택하지 않으면 알림이 발행되지 않아야 한다(P1-44)") {
                 val author = userRepository.save(User(loginId = "writer3", name = "작성자3", email = "writer3@yona.io"))
                 val project = projectRepository.save(Project(name = "board-project3", owner = "writer3"))
