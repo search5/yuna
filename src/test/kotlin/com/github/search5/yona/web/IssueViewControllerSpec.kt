@@ -157,6 +157,43 @@ class IssueViewControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/owner/TestProj/issues").principal(userAuth))
                     .andExpect(view().name("error/403"))
             }
+
+            // yona IssueApp.java:46,166-177 getItemsPerPage() 대응 (P1-105).
+            it("itemsPerPage를 지정하지 않으면 기본 페이지 크기는 15여야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { issueRepository.countByProjectAndState(project, State.OPEN) } returns 1L
+                every { issueRepository.countByProjectAndState(project, State.CLOSED) } returns 0L
+                every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
+                every { projectUserRepository.findByProjectId(any<Long>()) } returns emptyList()
+                every { issueLabelRepository.findByProject(any<Project>()) } returns emptyList()
+                val pageableSlot = io.mockk.slot<Pageable>()
+                every { issueRepository.findAll(any<org.springframework.data.jpa.domain.Specification<Issue>>(), capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
+                every { issueRepository.count(any<org.springframework.data.jpa.domain.Specification<Issue>>()) } returns 1L
+
+                mockMvc.perform(get("/owner/TestProj/issues").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                pageableSlot.captured.pageSize shouldBe 15
+            }
+
+            it("itemsPerPage가 45를 넘게 요청해도 45로 clamp되어야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { issueRepository.countByProjectAndState(project, State.OPEN) } returns 1L
+                every { issueRepository.countByProjectAndState(project, State.CLOSED) } returns 0L
+                every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
+                every { projectUserRepository.findByProjectId(any<Long>()) } returns emptyList()
+                every { issueLabelRepository.findByProject(any<Project>()) } returns emptyList()
+                val pageableSlot = io.mockk.slot<Pageable>()
+                every { issueRepository.findAll(any<org.springframework.data.jpa.domain.Specification<Issue>>(), capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
+                every { issueRepository.count(any<org.springframework.data.jpa.domain.Specification<Issue>>()) } returns 1L
+
+                mockMvc.perform(get("/owner/TestProj/issues").param("itemsPerPage", "999").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                pageableSlot.captured.pageSize shouldBe 45
+            }
         }
 
         describe("GET /{owner}/{projectName}/issue/{number}") {

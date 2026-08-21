@@ -75,7 +75,8 @@ class BoardViewController(
         } else {
             Sort.by(Sort.Direction.DESC, orderBy)
         }
-        val pageable = PageRequest.of(actualPage, 20, sort)
+        // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE 대응 (P1-105) — 게시글 목록은 고정 15, 클라이언트 오버라이드 없음.
+        val pageable = PageRequest.of(actualPage, ITEMS_PER_PAGE, sort)
 
         val labelFilter = labelIds?.filterNotNull()?.takeIf { it.isNotEmpty() }
         val postingPage = if (labelFilter != null) {
@@ -365,6 +366,11 @@ class BoardViewController(
         } catch (e: Exception) {
             ""
         }
+    }
+
+    companion object {
+        // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE 대응 (P1-105).
+        private const val ITEMS_PER_PAGE = 15
     }
 }
 

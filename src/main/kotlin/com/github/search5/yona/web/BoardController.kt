@@ -47,10 +47,12 @@ class BoardController(
             accessControl.isAllowedIfGroupMember(project, user)
     }
 
+    // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE(15) 대응 (P1-105). 게시글 목록은 이슈와 달리
+    // 클라이언트가 페이지 크기를 바꿀 수 없는 고정값이라, 요청에 담긴 size는 무시하고 항상 15로 고정한다.
     @GetMapping
     fun getPostings(
         @PathVariable projectId: Long,
-        @PageableDefault(size = 25) pageable: Pageable,
+        @PageableDefault(size = ITEMS_PER_PAGE) pageable: Pageable,
         authentication: Authentication?
     ): ResponseEntity<Page<Posting>> {
         val project = projectRepository.findById(projectId).orElse(null)
@@ -61,7 +63,12 @@ class BoardController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val page = postingService.getPostings(projectId, pageable)
+        val fixedPageable = org.springframework.data.domain.PageRequest.of(
+            pageable.pageNumber,
+            ITEMS_PER_PAGE,
+            pageable.sort
+        )
+        val page = postingService.getPostings(projectId, fixedPageable)
         return ResponseEntity.ok(page)
     }
 
@@ -203,4 +210,9 @@ class BoardController(
         val readme: Boolean?,
         val sendNotificationMail: Boolean? = null
     )
+
+    companion object {
+        // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE 대응 (P1-105).
+        const val ITEMS_PER_PAGE = 15
+    }
 }

@@ -130,6 +130,23 @@ class BoardViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("error/403"))
             }
 
+            // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE 대응 (P1-105) — 게시글 목록은 항상 고정 15.
+            it("페이지 크기는 항상 15로 고정되어야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                val pageableSlot = io.mockk.slot<Pageable>()
+                every { postingRepository.findByProject(project, capture(pageableSlot)) } returns PageImpl(listOf(posting), pageRequest, 1)
+                every { postingService.getNotices(1L) } returns emptyList()
+
+                mockMvc.perform(get("/owner/TestProj/posts").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                pageableSlot.captured.pageSize shouldBe 15
+            }
+
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57) — 직접 멤버가 아니어도
             // PROTECTED 프로젝트가 속한 조직의 멤버라면 읽을 수 있어야 한다.
             it("직접 멤버가 아니어도 프로젝트가 속한 조직의 멤버라면 200 OK를 반환해야 한다") {

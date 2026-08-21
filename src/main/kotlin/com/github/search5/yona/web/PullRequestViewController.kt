@@ -58,7 +58,7 @@ class PullRequestViewController(
             else -> State.OPEN
         }
 
-        val pageable = PageRequest.of(page, 20, Sort.by(Sort.Direction.DESC, "id"))
+        val pageable = PageRequest.of(page, ITEMS_PER_PAGE, Sort.by(Sort.Direction.DESC, "id"))
         val prPage = if (stateEnum == State.ALL) {
             pullRequestRepository.findByToProject(project, pageable)
         } else {
@@ -84,7 +84,7 @@ class PullRequestViewController(
             return "error/403"
         }
 
-        val pageable = PageRequest.of(page, 20, Sort.by(Sort.Direction.DESC, "id"))
+        val pageable = PageRequest.of(page, ITEMS_PER_PAGE, Sort.by(Sort.Direction.DESC, "id"))
         val prPage = pullRequestRepository.findByToProjectAndStateIn(project, listOf(State.CLOSED, State.MERGED), pageable)
 
         return renderList(model, project, loginUser, prPage, "closed")
@@ -106,7 +106,7 @@ class PullRequestViewController(
             return "error/403"
         }
 
-        val pageable = PageRequest.of(page, 20, Sort.by(Sort.Direction.DESC, "id"))
+        val pageable = PageRequest.of(page, ITEMS_PER_PAGE, Sort.by(Sort.Direction.DESC, "id"))
         val prPage = pullRequestRepository.findByFromProject(project, pageable)
 
         return renderList(model, project, loginUser, prPage, "sent")
@@ -375,5 +375,11 @@ class PullRequestViewController(
         model.addAttribute("tab", "changes")
 
         return "pullrequest/view"
+    }
+
+    companion object {
+        // yona models/PullRequest.java:66 ITEMS_PER_PAGE 대응 (P1-105) — PR 목록은 AbstractPostingApp과
+        // 별개의 독립 상수(값은 동일 15)를 쓰며, 고정값이고 클라이언트 오버라이드가 없다.
+        private const val ITEMS_PER_PAGE = 15
     }
 }

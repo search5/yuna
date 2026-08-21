@@ -82,6 +82,7 @@ class IssueViewController(
         @RequestParam(required = false) format: String?,
         @RequestParam(required = false, defaultValue = "createdDate") orderBy: String,
         @RequestParam(required = false, defaultValue = "desc") orderDir: String,
+        @RequestParam(required = false, defaultValue = "15") itemsPerPage: Int,
         authentication: Authentication?,
         model: Model
     ): Any {
@@ -109,7 +110,8 @@ class IssueViewController(
         } else {
             Sort.by(Sort.Direction.DESC, orderBy)
         }
-        val pageable = PageRequest.of(actualPage, 20, sort)
+        // yona IssueApp.java:46,166-177 getItemsPerPage() 대응 (P1-105) — 요청값이 45를 넘으면 clamp.
+        val pageable = PageRequest.of(actualPage, minOf(itemsPerPage, ITEMS_PER_PAGE_MAX), sort)
 
         // Specification 생성 및 필터 적용
         val spec = IssueSpecification.filterIssues(
@@ -746,6 +748,11 @@ class IssueViewController(
         )
 
         return "redirect:/$owner/$projectName/issue/$number"
+    }
+
+    companion object {
+        // yona IssueApp.java:46 ITEMS_PER_PAGE_MAX 대응 (P1-105).
+        private const val ITEMS_PER_PAGE_MAX = 45
     }
 }
 
