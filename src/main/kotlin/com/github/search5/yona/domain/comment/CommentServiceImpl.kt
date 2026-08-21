@@ -23,6 +23,9 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.regex.Pattern
 
 @Service
@@ -49,6 +52,55 @@ class CommentServiceImpl(
     // owner/project 형식의 그룹 멘션을 포착하려면 '/'를 허용해야 한다).
     private val mentionPattern = Pattern.compile("@[a-zA-Z0-9/-]+([_.][a-z_.A-Z0-9/-]+)*")
 
+    // yona BoardApp.java:429-446/IssueApp.java:1020-1057 AddPreviousContent()+getPrevious() 대응
+    // (P2-17) — 새 댓글 알림의 oldValue("인용 이전 내용")를 채운다. 첫 댓글이면 원본 게시물/이슈 본문을,
+    // 답글이면 같은 부모의 마지막 형제 답글(없으면 부모 댓글 자신)을, 그 외(최상위 새 댓글)면 게시물/
+    // 이슈의 마지막 댓글을 인용한다. IssueApp의 numOfComments 불일치 자가복구(가비지 댓글 삭제) 로직은
+    // Ebean 캐시 특유의 데이터 정합성 땜질이라 옮기지 않는다 — yuna는 매 저장 시 count를 직접 재계산한다.
+    private fun resolvePostingPreviousContents(posting: com.github.search5.yona.domain.board.Posting, parentComment: PostingComment?): String {
+        val existingComments = postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(posting.id!!)
+        if (existingComments.isEmpty()) {
+            return quotePrevious("Original posting", posting.body ?: "", posting.updatedDate, posting.authorLoginId)
+        }
+        val previous = if (parentComment != null) {
+            existingComments.filter { it.parentComment?.id == parentComment.id }.lastOrNull() ?: parentComment
+        } else {
+            existingComments.last()
+        }
+        return quotePrevious("Previous comment", previous.contents, previous.createdDate, previous.authorLoginId)
+    }
+
+    private fun resolveIssuePreviousContents(issue: com.github.search5.yona.domain.issue.Issue, parentComment: IssueComment?): String {
+        val existingComments = issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!)
+        if (existingComments.isEmpty()) {
+            return quotePrevious("Original issue", issue.body ?: "", issue.updatedDate, issue.authorLoginId)
+        }
+        val previous = if (parentComment != null) {
+            existingComments.filter { it.parentComment?.id == parentComment.id }.lastOrNull() ?: parentComment
+        } else {
+            existingComments.last()
+        }
+        return quotePrevious("Previous comment", previous.contents, previous.createdDate, previous.authorLoginId)
+    }
+
+    private fun quotePrevious(title: String, contents: String, date: Instant?, authorLoginId: String?): String {
+        return "\n\n<br />\n\n--- $title from @${authorLoginId ?: ""}  ${formatShortDate(date)} ---\n\n<br />\n\n$contents"
+    }
+
+    // yona utils/JodaDateUtil.java:127-142 getOptionalShortDate() 대응.
+    private fun formatShortDate(date: Instant?): String {
+        if (date == null) return ""
+        val zone = ZoneId.systemDefault()
+        val target = date.atZone(zone)
+        val current = Instant.now().atZone(zone)
+        val pattern = when {
+            target.year != current.year -> "yy.MM.dd 'at' h:mm a"
+            target.toLocalDate() != current.toLocalDate() -> "MMM d 'at' h:mm a"
+            else -> "'at' h:mm a"
+        }
+        return target.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+    }
+
     override fun createIssueComment(
         issueId: Long,
         contents: String,
@@ -61,6 +113,9 @@ class CommentServiceImpl(
         if (parentCommentId != null) {
             parentComment = issueCommentRepository.findById(parentCommentId).orElse(null)
         }
+
+        // P2-17: 저장 전에 미리 계산해야 지금 만드는 이 댓글이 "마지막 댓글"에 섞여 들어가지 않는다.
+        val previousContents = resolveIssuePreviousContents(issue, parentComment)
 
         val comment = IssueComment(
             contents = contents,
@@ -83,6 +138,7 @@ class CommentServiceImpl(
             resourceType = ResourceType.ISSUE_COMMENT,
             resourceId = savedComment.id.toString(),
             eventType = EventType.NEW_COMMENT,
+            oldValue = previousContents,
             newValue = contents
         )
 
@@ -120,6 +176,9 @@ class CommentServiceImpl(
             parentComment = postingCommentRepository.findById(parentCommentId).orElse(null)
         }
 
+        // P2-17: 저장 전에 미리 계산해야 지금 만드는 이 댓글이 "마지막 댓글"에 섞여 들어가지 않는다.
+        val previousContents = resolvePostingPreviousContents(posting, parentComment)
+
         val comment = PostingComment(
             contents = contents,
             createdDate = Instant.now(),
@@ -145,6 +204,7 @@ class CommentServiceImpl(
             resourceType = ResourceType.NONISSUE_COMMENT,
             resourceId = savedComment.id.toString(),
             eventType = EventType.NEW_COMMENT,
+            oldValue = previousContents,
             newValue = contents
         )
 

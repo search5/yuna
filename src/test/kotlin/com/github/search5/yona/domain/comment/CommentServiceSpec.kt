@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.Role
@@ -29,6 +30,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldContain
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -194,6 +196,95 @@ class CommentServiceSpec @Autowired constructor(
 
                 commentService.deletePostingComment(comment1.id!!, commenter)
                 postingRepository.findById(posting.id!!).orElseThrow().numOfComments shouldBe 1
+            }
+
+            // yona IssueApp.java:1020-1057 AddPreviousContent()+getPrevious() 대응 (P2-17) — 새 댓글
+            // 알림의 oldValue("인용 이전 내용")가 항상 null로 방치되던 것을 채운다.
+            it("이슈의 첫 댓글이면 알림 oldValue에 원본 이슈 본문이 인용되어야 한다 (P2-17)") {
+                val author = userRepository.save(User(loginId = "quoteauthor", name = "작성자", email = "quoteauthor@yona.io"))
+                val commenter = userRepository.save(User(loginId = "quotecommenter", name = "댓글러", email = "quotecommenter@yona.io"))
+                val project = projectRepository.save(Project(name = "quote-project", owner = "quoteauthor", projectScope = ProjectScope.PUBLIC))
+                val issue = issueRepository.save(
+                    Issue(
+                        title = "인용 테스트 이슈", body = "이슈 원본 본문", project = project,
+                        authorId = author.id, authorLoginId = author.loginId, authorName = author.name
+                    )
+                )
+
+                commentService.createIssueComment(issue.id!!, "첫 댓글", commenter, null)
+
+                val event = notificationEventRepository.findAll().first { it.eventType == EventType.NEW_COMMENT }
+                event.oldValue shouldNotBe null
+                event.oldValue!!.shouldContain("Original issue")
+                event.oldValue!!.shouldContain("이슈 원본 본문")
+            }
+
+            it("이슈에 두 번째 최상위 댓글을 달면 알림 oldValue에 첫 번째 댓글이 인용되어야 한다 (P2-17)") {
+                val author = userRepository.save(User(loginId = "quoteauthor2", name = "작성자", email = "quoteauthor2@yona.io"))
+                val commenter = userRepository.save(User(loginId = "quotecommenter2", name = "댓글러", email = "quotecommenter2@yona.io"))
+                // 두 댓글을 다른 사람이 달아야 한다 — 같은 발신자의 30초 이내 연속 NEW_COMMENT는
+                // NotificationEventRecorder의 초안 병합(P1-27)에 걸려 이 테스트가 검증하려는
+                // 두 번째 댓글의 oldValue 자체가 첫 번째 이벤트 것으로 덮여쓰이게 된다.
+                val secondCommenter = userRepository.save(User(loginId = "quotecommenter2b", name = "댓글러2", email = "quotecommenter2b@yona.io"))
+                val project = projectRepository.save(Project(name = "quote-project2", owner = "quoteauthor2", projectScope = ProjectScope.PUBLIC))
+                val issue = issueRepository.save(
+                    Issue(
+                        title = "인용 테스트 이슈2", body = "본문", project = project,
+                        authorId = author.id, authorLoginId = author.loginId, authorName = author.name
+                    )
+                )
+
+                commentService.createIssueComment(issue.id!!, "첫 번째 댓글 내용", commenter, null)
+                commentService.createIssueComment(issue.id!!, "두 번째 댓글", secondCommenter, null)
+
+                val event = notificationEventRepository.findAll()
+                    .filter { it.eventType == EventType.NEW_COMMENT }
+                    .maxBy { it.id!! }
+                event.oldValue!!.shouldContain("Previous comment")
+                event.oldValue!!.shouldContain("첫 번째 댓글 내용")
+            }
+
+            it("답글이고 형제 답글이 없으면 알림 oldValue에 부모 댓글이 인용되어야 한다 (P2-17)") {
+                val author = userRepository.save(User(loginId = "quoteauthor3", name = "작성자", email = "quoteauthor3@yona.io"))
+                val commenter = userRepository.save(User(loginId = "quotecommenter3", name = "댓글러", email = "quotecommenter3@yona.io"))
+                // 부모 댓글과 답글을 다른 사람이 달아야 한다 — 같은 발신자의 30초 이내 연속 NEW_COMMENT는
+                // NotificationEventRecorder의 초안 병합(P1-27)에 걸려 답글의 oldValue가 부모 댓글 생성
+                // 이벤트의 것으로 덮여쓰이게 된다.
+                val replier = userRepository.save(User(loginId = "quotereplier3", name = "답글러", email = "quotereplier3@yona.io"))
+                val project = projectRepository.save(Project(name = "quote-project3", owner = "quoteauthor3", projectScope = ProjectScope.PUBLIC))
+                val issue = issueRepository.save(
+                    Issue(
+                        title = "인용 테스트 이슈3", body = "본문", project = project,
+                        authorId = author.id, authorLoginId = author.loginId, authorName = author.name
+                    )
+                )
+                val parent = commentService.createIssueComment(issue.id!!, "부모 댓글 내용", commenter, null)
+
+                commentService.createIssueComment(issue.id!!, "답글", replier, parent.id)
+
+                val event = notificationEventRepository.findAll()
+                    .filter { it.eventType == EventType.NEW_COMMENT }
+                    .maxBy { it.id!! }
+                event.oldValue!!.shouldContain("Previous comment")
+                event.oldValue!!.shouldContain("부모 댓글 내용")
+            }
+
+            it("게시글의 첫 댓글이면 알림 oldValue에 원본 게시글 본문이 인용되어야 한다 (P2-17)") {
+                val author = userRepository.save(User(loginId = "quoteauthor4", name = "작성자", email = "quoteauthor4@yona.io"))
+                val commenter = userRepository.save(User(loginId = "quotecommenter4", name = "댓글러", email = "quotecommenter4@yona.io"))
+                val project = projectRepository.save(Project(name = "quote-project4", owner = "quoteauthor4", projectScope = ProjectScope.PUBLIC))
+                val posting = postingRepository.save(
+                    Posting(
+                        title = "인용 테스트 게시글", body = "게시글 원본 본문", project = project, number = 1L,
+                        authorId = author.id, authorLoginId = author.loginId, authorName = author.name
+                    )
+                )
+
+                commentService.createPostingComment(posting.id!!, "첫 댓글", commenter, null)
+
+                val event = notificationEventRepository.findAll().first { it.eventType == EventType.NEW_COMMENT }
+                event.oldValue!!.shouldContain("Original posting")
+                event.oldValue!!.shouldContain("게시글 원본 본문")
             }
 
             it("작성자도 매니저도 아닌 일반 프로젝트 멤버가 이슈 댓글을 수정할 수 있어야 한다 (P1-90, yona AccessControl.java:280-282 UPDATE는 isMemberOf만 있으면 허용)") {

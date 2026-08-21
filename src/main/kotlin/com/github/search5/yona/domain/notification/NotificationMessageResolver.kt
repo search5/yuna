@@ -55,8 +55,9 @@ class NotificationMessageResolver(
             EventType.NEW_COMMIT, EventType.COMMENT_UPDATED ->
                 newValue.orEmpty()
 
-            // legacy: newValue + oldValue. oldValue(comment.previousContents)는 yuna의 현재 NEW_COMMENT
-            // 생성 경로에서 항상 null이라 null-safe하게 이어붙인다(legacy처럼 "null" 문자열이 붙는 것을 방지).
+            // legacy: newValue + oldValue. oldValue(comment.previousContents, "인용 이전 내용")는
+            // CommentServiceImpl.resolvePostingPreviousContents/resolveIssuePreviousContents(P2-17)가
+            // 채운다 — 최초 댓글이면 원본 게시물/이슈 본문, 아니면 형제 답글/부모 댓글/마지막 댓글을 인용.
             EventType.NEW_COMMENT -> newValue.orEmpty() + oldValue.orEmpty()
 
             EventType.ISSUE_BODY_CHANGED, EventType.POSTING_BODY_CHANGED ->
