@@ -10,6 +10,20 @@ import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.issue.AssigneeRepository
+import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
+import com.github.search5.yona.domain.issue.IssueLabelService
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.issue.IssueService
+import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.board.PostingService
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.webhook.WebhookRepository
+import com.github.search5.yona.domain.webhook.WebhookThreadRepository
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -27,7 +41,21 @@ class ProjectServiceImpl(
     private val roleRepository: RoleRepository,
     private val organizationRepository: OrganizationRepository,
     private val organizationUserRepository: OrganizationUserRepository,
-    private val labelRepository: LabelRepository
+    private val labelRepository: LabelRepository,
+    // P0-19: 프로젝트 삭제 계단식 정리(yona Project.delete())에 필요한 의존성.
+    private val issueRepository: IssueRepository,
+    private val issueService: IssueService,
+    private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
+    private val issueLabelService: IssueLabelService,
+    private val assigneeRepository: AssigneeRepository,
+    private val webhookRepository: WebhookRepository,
+    private val webhookThreadRepository: WebhookThreadRepository,
+    private val postingRepository: PostingRepository,
+    private val postingService: PostingService,
+    private val commentThreadRepository: CommentThreadRepository,
+    private val pullRequestRepository: PullRequestRepository,
+    private val pullRequestEventRepository: PullRequestEventRepository,
+    private val pullRequestCommitRepository: PullRequestCommitRepository
 ) : ProjectService {
 
     // yona Project.findByOwnerAndProjectName()의 예전 위치(previousOwnerLoginId/previousName) 폴백
@@ -106,12 +134,76 @@ class ProjectServiceImpl(
     override fun deleteProject(projectId: Long) {
         val project = projectRepository.findById(projectId)
             .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
-        
+
+        // yona Project.delete():754-759 deleteProjectTransfer() 대응.
+        projectTransferRepository.deleteAll(projectTransferRepository.findByProjectId(projectId))
+
+        // yona Project.delete():779-783 deleteCommentThreads() 대응 — PR에 달린 리뷰스레드까지
+        // 포함해 이 프로젝트 소속 스레드를 전부 지운다(reviewComments는 CommentThread 엔티티의
+        // cascade=ALL, orphanRemoval=true로 함께 삭제됨). 아래 PR 삭제보다 먼저 처리한다(legacy와
+        // 동일한 순서).
+        commentThreadRepository.deleteAll(commentThreadRepository.findByProject(project))
+
+        // yona Project.delete():765-777 deletePullRequests() 대응 — 이 프로젝트가 보낸(fromProject)
+        // PR과 받은(toProject) PR을 모두 지운다.
+        (pullRequestRepository.findByFromProject(project) + pullRequestRepository.findByToProject(project))
+            .forEach { deletePullRequestCascade(it) }
+
+        // yona Project.delete():608-624 forkingProjects 루프 대응 — 이 프로젝트를 fork한 자식
+        // 프로젝트는 삭제하지 않고, legacy와 동일하게 그 fork가 관여한 PR만 정리한 뒤(fork.deletePullRequests())
+        // 원본 연결을 끊는다(fork.deleteOriginal()) — fork 프로젝트 자체나 그 이슈/게시글 등은 보존.
+        project.forkingProjects.forEach { fork ->
+            (pullRequestRepository.findByFromProject(fork) + pullRequestRepository.findByToProject(fork))
+                .forEach { deletePullRequestCascade(it) }
+            fork.originalProject = null
+            projectRepository.save(fork)
+        }
+
+        // yona Project.delete():723-725 issues 루프 대응(댓글/이벤트/즐겨찾기/첨부파일/TitleHead까지
+        // IssueServiceImpl.deleteIssueCascade()가 함께 정리).
+        issueRepository.findByProject(project).forEach { issueService.deleteIssueCascade(it) }
+
+        // yona Project.delete():727-729 IssueLabelCategory 삭제 대응(라벨 및 조인테이블까지 함께 정리).
+        issueLabelCategoryRepository.findByProject(project).forEach { category ->
+            issueLabelService.deleteCategory(category.id!!)
+        }
+
+        // yona Project.delete():731-733 assignees 루프 대응 — Issue.assignee의 cascade=ALL로 대부분
+        // 이미 삭제되지만, 어떤 이슈에도 연결되지 않은 잔여 Assignee가 있을 경우를 대비한 방어적 정리.
+        assigneeRepository.deleteAll(assigneeRepository.findByProjectId(projectId))
+
+        // yona Project.delete():735-737 webhooks 루프 대응 — WebhookThread.webhook_id FK가
+        // nullable=false라 웹훅을 지우기 전에 먼저 정리해야 한다.
+        webhookRepository.findByProjectId(projectId).forEach { webhook ->
+            webhookThreadRepository.deleteAll(webhookThreadRepository.findByWebhookId(webhook.id!!))
+            webhookRepository.delete(webhook)
+        }
+
+        // yona Project.delete():739-741 posts 루프 대응 — 프로젝트 전체가 삭제되는 상황이라
+        // 게시글 개수만큼 알림이 발행되지 않도록 deletePosting() 대신 알림을 발행하지 않는
+        // deletePostingCascade()를 쓴다(legacy도 Project.delete()에서 posting.delete()를 직접
+        // 호출할 뿐 알림 발행 경로를 타지 않는다).
+        postingRepository.findByProject(project).forEach { postingService.deletePostingCascade(it) }
+
+        // yona Project.delete():743-746 labels 루프 대응 — yuna의 Label은 project 소유 필드가 없는
+        // category+name 기반 공용 개체라 project_label 조인테이블 행은 Project 삭제 시 Hibernate가
+        // 자동으로 정리한다(별도 unlink 호출 불필요).
+
         // 연관 멤버 삭제
         val members = projectUserRepository.findByProjectId(projectId)
         projectUserRepository.deleteAll(members)
 
         projectRepository.delete(project)
+    }
+
+    // yona Project.delete():765-777의 PullRequest 삭제 단위 동작(CommentThread.deleteByPullRequest()
+    // + pullRequest.delete()) 대응. yuna는 PR 리뷰스레드를 위쪽 deleteCommentThreads 단계에서 이미
+    // 프로젝트 단위로 전부 정리하므로, 여기서는 PullRequestEvent/PullRequestCommit(둘 다 FK
+    // nullable=false)만 먼저 지우면 된다.
+    private fun deletePullRequestCascade(pullRequest: PullRequest) {
+        pullRequestEventRepository.deleteAll(pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest))
+        pullRequestCommitRepository.deleteAll(pullRequestCommitRepository.findByPullRequest(pullRequest))
+        pullRequestRepository.delete(pullRequest)
     }
 
     @Transactional

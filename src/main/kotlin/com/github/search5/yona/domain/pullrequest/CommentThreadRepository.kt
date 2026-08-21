@@ -11,4 +11,8 @@ interface CommentThreadRepository : JpaRepository<CommentThread, Long> {
     fun findByCommitIdAndStateOrderByCreatedDateDesc(commitId: String, state: CommentThread.ThreadState): List<CommentThread>
     fun findByPullRequest(pullRequest: PullRequest): List<CommentThread>
     fun findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(project: Project, commitId: String): List<CommentThread>
+
+    // yona Project.deleteCommentThreads()(this.commentThreads 전체) 대응 (P0-19).
+    fun findByProject(project: Project): List<CommentThread>
 }
+

@@ -16,6 +16,8 @@ import com.github.search5.yona.domain.project.ProjectUser
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.user.FavoriteIssue
+import com.github.search5.yona.domain.user.FavoriteIssueRepository
 import com.github.search5.yona.domain.watch.Watch
 import com.github.search5.yona.domain.watch.WatchRepository
 import io.kotest.matchers.shouldBe
@@ -40,12 +42,14 @@ class IssueServiceSpec @Autowired constructor(
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
     private val watchRepository: WatchRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val titleHeadRepository: TitleHeadRepository
+    private val titleHeadRepository: TitleHeadRepository,
+    private val favoriteIssueRepository: FavoriteIssueRepository
 ) : AbstractIntegrationTest() {
 
     init {
         describe("IssueService 비즈니스 테스트") {
             beforeEach {
+                favoriteIssueRepository.deleteAll()
                 watchRepository.deleteAll()
                 issueEventRepository.deleteAll()
                 notificationEventRepository.deleteAll()
@@ -923,6 +927,39 @@ class IssueServiceSpec @Autowired constructor(
                     )
 
                     titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "Bug")!!.frequency shouldBe 1
+                }
+            }
+
+            describe("deleteIssueCascade (P0-19, yona Project.delete()의 이슈 삭제 대응)") {
+                it("댓글/이벤트/즐겨찾기가 있는 이슈도 FK 위반 없이 삭제되고 연관 행이 모두 정리되어야 한다") {
+                    val author = userRepository.save(User(loginId = "cascade-author", name = "캐스케이드", email = "cascade@yona.io"))
+                    val project = projectRepository.save(Project(name = "cascade-project", owner = "cascade-author"))
+                    val issue = issueService.createIssue(
+                        issue = Issue(title = "[Bug] 삭제될 이슈", body = "본문", project = project),
+                        author = author
+                    )
+                    titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "Bug") shouldNotBe null
+                    issueCommentRepository.save(
+                        IssueComment(
+                            contents = "댓글", authorId = author.id, authorLoginId = author.loginId,
+                            authorName = author.name, projectId = project.id, issue = issue
+                        )
+                    )
+                    issueEventRepository.save(
+                        IssueEvent(
+                            issue = issue, senderLoginId = author.loginId,
+                            eventType = EventType.ISSUE_STATE_CHANGED, oldValue = "OPEN", newValue = "CLOSED"
+                        )
+                    )
+                    favoriteIssueRepository.save(FavoriteIssue(user = author, issue = issue))
+
+                    issueService.deleteIssueCascade(issue)
+
+                    issueRepository.findById(issue.id!!).isPresent shouldBe false
+                    issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!).shouldBeEmpty()
+                    issueEventRepository.findByIssueOrderByCreatedAsc(issue).shouldBeEmpty()
+                    favoriteIssueRepository.findByIssueId(issue.id!!).shouldBeEmpty()
+                    titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "Bug") shouldBe null
                 }
             }
         }

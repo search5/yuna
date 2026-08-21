@@ -1,15 +1,34 @@
 package com.github.search5.yona.domain.project
 
+import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.board.PostingService
+import com.github.search5.yona.domain.issue.Assignee
+import com.github.search5.yona.domain.issue.AssigneeRepository
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
+import com.github.search5.yona.domain.issue.IssueLabelService
+import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
+import com.github.search5.yona.domain.webhook.Webhook
+import com.github.search5.yona.domain.webhook.WebhookRepository
+import com.github.search5.yona.domain.webhook.WebhookThreadRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -30,6 +49,19 @@ class ProjectServiceImplSpec : DescribeSpec({
     val organizationRepository = mockk<OrganizationRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     val labelRepository = mockk<LabelRepository>()
+    val issueRepository = mockk<IssueRepository>()
+    val issueService = mockk<IssueService>()
+    val issueLabelCategoryRepository = mockk<IssueLabelCategoryRepository>()
+    val issueLabelService = mockk<IssueLabelService>()
+    val assigneeRepository = mockk<AssigneeRepository>()
+    val webhookRepository = mockk<WebhookRepository>()
+    val webhookThreadRepository = mockk<WebhookThreadRepository>()
+    val postingRepository = mockk<PostingRepository>()
+    val postingService = mockk<PostingService>()
+    val commentThreadRepository = mockk<CommentThreadRepository>()
+    val pullRequestRepository = mockk<PullRequestRepository>()
+    val pullRequestEventRepository = mockk<PullRequestEventRepository>()
+    val pullRequestCommitRepository = mockk<PullRequestCommitRepository>()
 
     val projectService = ProjectServiceImpl(
         projectRepository,
@@ -40,7 +72,20 @@ class ProjectServiceImplSpec : DescribeSpec({
         roleRepository,
         organizationRepository,
         organizationUserRepository,
-        labelRepository
+        labelRepository,
+        issueRepository,
+        issueService,
+        issueLabelCategoryRepository,
+        issueLabelService,
+        assigneeRepository,
+        webhookRepository,
+        webhookThreadRepository,
+        postingRepository,
+        postingService,
+        commentThreadRepository,
+        pullRequestRepository,
+        pullRequestEventRepository,
+        pullRequestCommitRepository
     )
 
     describe("ProjectServiceImpl.acceptTransfer") {
@@ -396,6 +441,135 @@ class ProjectServiceImplSpec : DescribeSpec({
 
             result shouldBe true
             io.mockk.verify(exactly = 0) { labelRepository.delete(label) }
+        }
+    }
+
+    // yona Project.delete() 대응 (P0-19) — 계단식 삭제 전수 이식. 프로젝트 삭제 시 연관된 모든
+    // 리소스(이전요청/리뷰스레드/PR/이슈/라벨카테고리/담당자/웹훅/게시글/멤버)가 함께 정리되고,
+    // fork 자식 프로젝트는 삭제되지 않고 원본 연결만 끊어져야 한다.
+    describe("ProjectServiceImpl.deleteProject") {
+        beforeTest {
+            io.mockk.clearMocks(
+                projectRepository, projectUserRepository, projectTransferRepository,
+                issueRepository, issueService, issueLabelCategoryRepository, issueLabelService,
+                assigneeRepository, webhookRepository, webhookThreadRepository,
+                postingRepository, postingService, commentThreadRepository,
+                pullRequestRepository, pullRequestEventRepository, pullRequestCommitRepository,
+                answers = false
+            )
+        }
+
+        it("연관 데이터를 모두 정리한 뒤 프로젝트 자체를 삭제해야 한다") {
+            val project = Project(id = 1L, name = "will-delete", owner = "owner")
+
+            val transfer = mockk<ProjectTransfer>(relaxed = true)
+            every { projectTransferRepository.findByProjectId(1L) } returns listOf(transfer)
+            every { projectTransferRepository.deleteAll(listOf(transfer)) } returns Unit
+
+            val thread = mockk<com.github.search5.yona.domain.pullrequest.CommentThread>(relaxed = true)
+            every { commentThreadRepository.findByProject(project) } returns listOf(thread)
+            every { commentThreadRepository.deleteAll(listOf(thread)) } returns Unit
+
+            val pr = mockk<PullRequest>(relaxed = true)
+            every { pullRequestRepository.findByFromProject(project) } returns listOf(pr)
+            every { pullRequestRepository.findByToProject(project) } returns emptyList()
+            val prEvent = mockk<com.github.search5.yona.domain.pullrequest.PullRequestEvent>(relaxed = true)
+            every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr) } returns listOf(prEvent)
+            every { pullRequestEventRepository.deleteAll(listOf(prEvent)) } returns Unit
+            val prCommit = mockk<com.github.search5.yona.domain.pullrequest.PullRequestCommit>(relaxed = true)
+            every { pullRequestCommitRepository.findByPullRequest(pr) } returns listOf(prCommit)
+            every { pullRequestCommitRepository.deleteAll(listOf(prCommit)) } returns Unit
+            every { pullRequestRepository.delete(pr) } returns Unit
+
+            val issue = mockk<Issue>(relaxed = true)
+            every { issueRepository.findByProject(project) } returns listOf(issue)
+            every { issueService.deleteIssueCascade(issue) } returns Unit
+
+            val category = mockk<com.github.search5.yona.domain.issue.IssueLabelCategory>(relaxed = true)
+            every { category.id } returns 30L
+            every { issueLabelCategoryRepository.findByProject(project) } returns listOf(category)
+            every { issueLabelService.deleteCategory(30L) } returns Unit
+
+            val assignee = mockk<Assignee>(relaxed = true)
+            every { assigneeRepository.findByProjectId(1L) } returns listOf(assignee)
+            every { assigneeRepository.deleteAll(listOf(assignee)) } returns Unit
+
+            val webhook = mockk<Webhook>(relaxed = true)
+            every { webhook.id } returns 40L
+            every { webhookRepository.findByProjectId(1L) } returns listOf(webhook)
+            val webhookThread = mockk<com.github.search5.yona.domain.webhook.WebhookThread>(relaxed = true)
+            every { webhookThreadRepository.findByWebhookId(40L) } returns listOf(webhookThread)
+            every { webhookThreadRepository.deleteAll(listOf(webhookThread)) } returns Unit
+            every { webhookRepository.delete(webhook) } returns Unit
+
+            val posting = mockk<Posting>(relaxed = true)
+            every { postingRepository.findByProject(project) } returns listOf(posting)
+            every { postingService.deletePostingCascade(posting) } returns Unit
+
+            val projectUser = mockk<ProjectUser>(relaxed = true)
+            every { projectUserRepository.findByProjectId(1L) } returns listOf(projectUser)
+            every { projectUserRepository.deleteAll(listOf(projectUser)) } returns Unit
+
+            every { projectRepository.findById(1L) } returns Optional.of(project)
+            every { projectRepository.delete(project) } returns Unit
+
+            projectService.deleteProject(1L)
+
+            verify(exactly = 1) { projectTransferRepository.deleteAll(listOf(transfer)) }
+            verify(exactly = 1) { commentThreadRepository.deleteAll(listOf(thread)) }
+            verify(exactly = 1) { pullRequestEventRepository.deleteAll(listOf(prEvent)) }
+            verify(exactly = 1) { pullRequestCommitRepository.deleteAll(listOf(prCommit)) }
+            verify(exactly = 1) { pullRequestRepository.delete(pr) }
+            verify(exactly = 1) { issueService.deleteIssueCascade(issue) }
+            verify(exactly = 1) { issueLabelService.deleteCategory(30L) }
+            verify(exactly = 1) { assigneeRepository.deleteAll(listOf(assignee)) }
+            verify(exactly = 1) { webhookThreadRepository.deleteAll(listOf(webhookThread)) }
+            verify(exactly = 1) { webhookRepository.delete(webhook) }
+            verify(exactly = 1) { postingService.deletePostingCascade(posting) }
+            verify(exactly = 1) { projectUserRepository.deleteAll(listOf(projectUser)) }
+            verify(exactly = 1) { projectRepository.delete(project) }
+        }
+
+        it("이 프로젝트를 fork한 자식 프로젝트는 삭제하지 않고, 그 fork의 PR만 정리한 뒤 원본 연결을 끊어야 한다") {
+            val fork = Project(id = 2L, name = "fork-of-1", owner = "forker")
+            val project = Project(id = 1L, name = "original", owner = "owner", forkingProjects = mutableListOf(fork))
+
+            every { projectTransferRepository.findByProjectId(1L) } returns emptyList()
+            every { projectTransferRepository.deleteAll(emptyList()) } returns Unit
+            every { commentThreadRepository.findByProject(project) } returns emptyList()
+            every { commentThreadRepository.deleteAll(emptyList()) } returns Unit
+            every { pullRequestRepository.findByFromProject(project) } returns emptyList()
+            every { pullRequestRepository.findByToProject(project) } returns emptyList()
+
+            val forkPr = mockk<PullRequest>(relaxed = true)
+            every { pullRequestRepository.findByFromProject(fork) } returns listOf(forkPr)
+            every { pullRequestRepository.findByToProject(fork) } returns emptyList()
+            every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(forkPr) } returns emptyList()
+            every { pullRequestEventRepository.deleteAll(emptyList<com.github.search5.yona.domain.pullrequest.PullRequestEvent>()) } returns Unit
+            every { pullRequestCommitRepository.findByPullRequest(forkPr) } returns emptyList()
+            every { pullRequestCommitRepository.deleteAll(emptyList<com.github.search5.yona.domain.pullrequest.PullRequestCommit>()) } returns Unit
+            every { pullRequestRepository.delete(forkPr) } returns Unit
+            every { projectRepository.save(fork) } returns fork
+
+            every { issueRepository.findByProject(project) } returns emptyList()
+            every { issueLabelCategoryRepository.findByProject(project) } returns emptyList()
+            every { assigneeRepository.findByProjectId(1L) } returns emptyList()
+            every { assigneeRepository.deleteAll(emptyList()) } returns Unit
+            every { webhookRepository.findByProjectId(1L) } returns emptyList()
+            every { postingRepository.findByProject(project) } returns emptyList()
+            every { projectUserRepository.findByProjectId(1L) } returns emptyList()
+            every { projectUserRepository.deleteAll(emptyList()) } returns Unit
+
+            every { projectRepository.findById(1L) } returns Optional.of(project)
+            every { projectRepository.delete(project) } returns Unit
+
+            projectService.deleteProject(1L)
+
+            verify(exactly = 1) { pullRequestRepository.delete(forkPr) }
+            verify(exactly = 1) { projectRepository.save(fork) }
+            fork.originalProject shouldBe null
+            verify(exactly = 0) { projectRepository.delete(fork) }
+            verify(exactly = 1) { projectRepository.delete(project) }
         }
     }
 })
