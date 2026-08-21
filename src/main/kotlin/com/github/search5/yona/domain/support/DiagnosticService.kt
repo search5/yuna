@@ -4,10 +4,14 @@ import org.springframework.stereotype.Service
 import java.io.File
 import javax.sql.DataSource
 import org.springframework.mail.javamail.JavaMailSender
+import com.github.search5.yona.domain.mail.ImapMailboxPoller
 
 @Service
 class DiagnosticService(
     private val dataSource: DataSource,
+    // yona MailboxService.java:176-188 Diagnostic.register(SimpleDiagnostic { checkOne() }) 대응
+    // (P1-137). ImapMailboxPoller는 yuna.mailbox.imap.enabled=true일 때만 빈으로 등록되므로 null 허용.
+    private val imapMailboxPoller: ImapMailboxPoller? = null,
     private val mailSender: JavaMailSender? = null
 ) {
 
@@ -56,6 +60,9 @@ class DiagnosticService(
         if (mailSender == null) {
             errors.add("JavaMailSender is not configured. Email notifications may not work.")
         }
+
+        // 4. IMAP 메일 수신기 상태 점검 (yona MailboxService.java:176-188 대응, P1-137)
+        imapMailboxPoller?.healthCheckMessage()?.let { errors.add(it) }
 
         return errors
     }
