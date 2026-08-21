@@ -168,7 +168,7 @@
 | P1-118 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** 사이트관리자 전용 벌크 사용자 생성(`newUser`)/API 전용 토큰 로그인(`newToken`)/사용자 전체 조회·상태변경(`users`/`updateUserState`) API 부재 | `UserApi.java` | `UserController.kt` | **완료(아래 완료 로그 참고)** |
 | P1-119 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사용자/인증 도메인)** `loginId=="admin"`이면 상태 무관 항상 `isSiteManager=true`로 판정하는 yona에 없는 하드코딩 분기 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `User.kt`, `UserDetailsServiceImpl.kt` | **완료(아래 완료 로그 참고)** |
 | P1-120 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `HIDE_PROJECT_LISTING` 403 체크 및 `@GuestProhibit` 미이식 | `OrganizationApp.java` | `OrganizationViewController.orgList()` | **완료(아래 완료 로그 참고)** |
-| P1-121 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 게스트 계정 조직 생성 차단(`@GuestProhibit`) 미이식 | `OrganizationApp.java` | `OrganizationViewController.createOrganization()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-121 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 게스트 계정 조직 생성 차단(`@GuestProhibit`) 미이식 | `OrganizationApp.java` | `OrganizationViewController.createOrganization()` | **완료(아래 완료 로그 참고)** |
 | P1-122 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 중복 가입 신청 가드 없어 재신청 시 알림 중복 발행(Project P1-16과 동일 유형, 대칭 미적용) | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.enroll()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-123 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 대기 신청 여부 확인 없이 무조건 취소 알림 발행, isGuest 가드도 없음 | `EnrollOrganizationApp.java` | `OrganizationServiceImpl.cancelEnroll()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-124 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 조직 로고 업로드 시 이미지 타입/크기(`LOGO_FILE_LIMIT_SIZE`) 검증 미이식 | `OrganizationApp.java` | `OrganizationViewController.updateOrganization()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -243,6 +243,10 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-121**: `OrganizationViewController.createOrganization()`에 yona `@GuestProhibit`(`OrganizationApp.java:90-91`) 대응 추가 — P1-120과 동일한 패턴, 게스트 계정(`isGuest`)이면 조직을 생성하지 않고 인덱스로 리다이렉트.
+  - 비로그인 사용자는 기존 로직(`error/403`, yona `@AnonymousCheck(requiresLogin=true)` 대응)이 이미 담당하므로 그대로 두고, 로그인된 게스트 계정에 대한 차단만 추가.
+  - 테스트: `OrganizationViewControllerSpec.kt` +2("게스트 계정이면 조직을 생성하지 않고 인덱스로 리다이렉트", "일반 사용자면 조직을 생성") — 수정 전 실행해 게스트 케이스 실패(RED) 확인 후 통과(GREEN) 확인. 전체 13건 통과.
 
 - **2026-08-21 — P1-120**: `OrganizationViewController.orgList()`에 yona `@GuestProhibit` 대응 추가(`HIDE_PROJECT_LISTING`은 P0-23에서 이미 완료).
   - yona `OrganizationApp.java:485-486`의 `@GuestProhibit`(→`GuestProhibitAction`)은 `UserApp.currentUser().isGuest`가 true면 인덱스로 리다이렉트한다 — `isGuest`는 로그인 상태에서만 의미 있는 특수 계정 플래그이고, 비로그인 익명 사용자는 `User.anonymous.isGuest`가 기본 false라 차단되지 않는다는 점에 유의해 정확히 재현.

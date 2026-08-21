@@ -29,10 +29,12 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.data.web.PageableHandlerMethodArgumentResolver
@@ -94,6 +96,38 @@ class OrganizationViewControllerSpec : DescribeSpec({
         val org = Organization(id = 1L, name = "testorg")
         val roleMember = Role(id = RoleType.ORG_MEMBER.roleType, name = "ORG_MEMBER")
         val roleAdmin = Role(id = RoleType.ORG_ADMIN.roleType, name = "ORG_ADMIN")
+
+        // yona OrganizationApp.java:90-91 @GuestProhibit 대응 (P1-121). orgList와 동일하게
+        // isGuest 계정만 차단하고 비로그인 사용자는 (별도 @AnonymousCheck가 담당하는) error/403으로
+        // 처리된다.
+        describe("POST /organizations/new") {
+            it("게스트 계정이면 조직을 생성하지 않고 인덱스로 리다이렉트해야 한다") {
+                val guestAuth = UsernamePasswordAuthenticationToken("guestuser", "password")
+                val guestUser = User(id = 31L, loginId = "guestuser", name = "게스트", state = UserState.ACTIVE, isGuest = true)
+                every { userRepository.findByLoginId("guestuser") } returns Optional.of(guestUser)
+
+                mockMvc.perform(
+                    post("/organizations/new").principal(guestAuth)
+                        .param("name", "neworg")
+                )
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/"))
+
+                verify(exactly = 0) { organizationService.createOrganization(any(), any(), any()) }
+            }
+
+            it("일반 사용자면 조직을 생성해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { organizationService.createOrganization("neworg", null, 10L) } returns Organization(id = 5L, name = "neworg")
+
+                mockMvc.perform(
+                    post("/organizations/new").principal(userAuth)
+                        .param("name", "neworg")
+                )
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/organizations/neworg"))
+            }
+        }
 
         describe("GET /org/{orgName}") {
             it("조직이 존재하지 않으면 404 에러 뷰를 반환해야 한다") {
