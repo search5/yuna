@@ -43,6 +43,19 @@ interface ProjectRepository : JpaRepository<Project, Long> {
     """)
     fun findAllowedProjectIdsForUser(@Param("userId") userId: Long): List<Long>
 
+    // yona Search.projectsEL()의 Application.HIDE_PROJECT_LISTING=true 분기 대응 (P0-23).
+    // PUBLIC 프로젝트를 제외하고 "이 사용자가 직접 멤버이거나(모든 scope) 소속 조직이 PROTECTED로
+    // 공개한" 프로젝트만 반환한다 — 사이트 전역으로 프로젝트 존재 자체를 숨기는 모드에서 쓰인다.
+    @Query("""
+        SELECT DISTINCT p.id FROM Project p 
+        LEFT JOIN p.projectUsers pu 
+        LEFT JOIN p.organization o 
+        LEFT JOIN o.organizationUsers ou 
+        WHERE (pu.user.id = :userId) 
+           OR (ou.user.id = :userId AND p.projectScope = com.github.search5.yona.domain.project.ProjectScope.PROTECTED)
+    """)
+    fun findAllowedProjectIdsForUserExcludingPublic(@Param("userId") userId: Long): List<Long>
+
     @Query("""
         SELECT p.id FROM Project p 
         WHERE p.projectScope = com.github.search5.yona.domain.project.ProjectScope.PUBLIC

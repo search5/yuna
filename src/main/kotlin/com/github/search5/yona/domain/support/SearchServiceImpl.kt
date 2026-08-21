@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -26,14 +27,24 @@ class SearchServiceImpl(
     private val milestoneRepository: MilestoneRepository,
     private val issueCommentRepository: IssueCommentRepository,
     private val postingCommentRepository: PostingCommentRepository,
-    private val reviewCommentRepository: ReviewCommentRepository
+    private val reviewCommentRepository: ReviewCommentRepository,
+    // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
+    @Value("\${yuna.application.hide-project-listing:false}")
+    private val hideProjectListing: Boolean = false
 ) : SearchService {
 
+    // yona Search.projectsEL() 대응 (P0-23). HIDE_PROJECT_LISTING이 켜져 있으면 PUBLIC 프로젝트를
+    // 검색 대상에서 제외한다 — 익명은 결과 없음, 로그인 사용자는 자신이 멤버이거나 소속 조직이
+    // PROTECTED로 공개한 프로젝트만 남는다.
     private fun getAllowedProjectIds(user: User?): List<Long> {
         return if (user == null || user.id == null) {
-            projectRepository.findPublicProjectIds()
+            if (hideProjectListing) emptyList() else projectRepository.findPublicProjectIds()
         } else {
-            projectRepository.findAllowedProjectIdsForUser(user.id!!)
+            if (hideProjectListing) {
+                projectRepository.findAllowedProjectIdsForUserExcludingPublic(user.id!!)
+            } else {
+                projectRepository.findAllowedProjectIdsForUser(user.id!!)
+            }
         }
     }
 

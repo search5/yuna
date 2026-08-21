@@ -1,10 +1,13 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.enumeration.SearchType
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.support.SearchService
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
@@ -20,7 +23,11 @@ class SearchController(
     private val searchService: SearchService,
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
-    private val organizationRepository: OrganizationRepository
+    private val organizationRepository: OrganizationRepository,
+    private val organizationUserRepository: OrganizationUserRepository,
+    // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
+    @Value("\${yuna.application.hide-project-listing:false}")
+    private val hideProjectListing: Boolean = false
 ) {
 
     @GetMapping("/search")
@@ -68,6 +75,21 @@ class SearchController(
         }
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+
+        // yona SearchApp.java:126-130 대응 (P0-23). HIDE_PROJECT_LISTING이 켜져 있으면 이 조직의
+        // ORG_MEMBER이면서 동시에 ORG_ADMIN인 사용자만 그룹 검색이 허용된다(legacy 원문 그대로 —
+        // 두 역할이 DB상 상호 배타적이라 사실상 항상 거부되는 legacy 자체의 동작을 그대로 재현).
+        if (hideProjectListing) {
+            val orgUser = loginUser?.id?.let {
+                organizationUserRepository.findByOrganizationIdAndUserId(organization.id!!, it).orElse(null)
+            }
+            val isMember = orgUser?.role?.id == RoleType.ORG_MEMBER.roleType
+            val isAdmin = orgUser?.role?.id == RoleType.ORG_ADMIN.roleType
+            if (!isMember || !isAdmin) {
+                throw ResponseStatusException(HttpStatus.BAD_REQUEST)
+            }
+        }
+
         val searchType = SearchType.getValue(searchTypeVal)
         val pageable = PageRequest.of(pageNum - 1, 20)
 

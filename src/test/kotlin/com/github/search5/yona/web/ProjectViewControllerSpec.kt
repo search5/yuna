@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -290,6 +291,28 @@ class ProjectViewControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/owner/memberonly-project/code/main/download").principal(userAuth))
                     .andExpect(status().isOk)
             }
+        }
+    }
+
+    // yona ProjectApp.java:1055-1058 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있으면 사이트매니저를
+    // 포함해 누구도 전체 프로젝트 목록(HTML/JSON 둘 다)을 볼 수 없다.
+    describe("HIDE_PROJECT_LISTING=true일 때 GET /projects") {
+        val hiddenController = ProjectViewController(
+            projectRepository, projectUserRepository, userRepository, repositoryService, projectService,
+            organizationUserRepository, attachmentRepository, attachmentService, organizationRepository,
+            messageSource, mailService, markdownService, roleRepository, projectTransferRepository,
+            issueLabelService, issueRepository, postingRepository, pullRequestRepository, milestoneRepository,
+            watchService, recentProjectRepository, accessControl, hideProjectListing = true
+        )
+
+        it("HTML 목록은 error/403 뷰를 반환해야 한다") {
+            val result = hiddenController.projects(filter = "", pageNum = 1, authentication = null, model = org.springframework.ui.ExtendedModelMap())
+            result shouldBe "error/403"
+        }
+
+        it("JSON API는 403 Forbidden을 반환해야 한다") {
+            val response = hiddenController.projectsJson(query = "", filter = "", authentication = null)
+            response.statusCode shouldBe org.springframework.http.HttpStatus.FORBIDDEN
         }
     }
 })

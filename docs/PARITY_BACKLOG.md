@@ -40,8 +40,9 @@
 | P0-20 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** `getVisibleProjects` 필터 없이 비공개 포함 전체 프로젝트 노출 | `Organization.java` | `OrganizationViewController.organizationHome()` | **완료(P0-17과 동일 원인·동일 커밋, 아래 완료 로그 참고)** |
 | P0-21 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 사이트매니저 전역 우회 로직 부재, REST API에서 설정변경/삭제 시 403 가능성(P2-16 "문제없음" 판정과 배치) | `AccessControl.java` | `OrganizationController.kt`(REST) `isOrgAdmin()` | **완료(아래 완료 로그 참고, P2-16 판정 정정)** |
 | P0-22 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** 소유권/원컨테이너 검증 우회, 임의 첨부파일 강제 재배선 가능(보안) | `Attachment.moveOnlySelected()` | `IssueViewController/MilestoneViewController/BoardViewController` | **완료(아래 완료 로그 참고)** |
-| P0-23 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** `HIDE_PROJECT_LISTING` 플래그 및 관련 분기 전무(익명 검색 PUBLIC 필터, 조직검색 게이트 포함), 비공개 모드 우회 노출 | `Search.java`, `SearchApp.java` | `SearchServiceImpl.kt`/`SearchController.kt` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P0-23 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 사이트관리/통계/검색 도메인)** `HIDE_PROJECT_LISTING` 플래그 및 관련 분기 전무(익명 검색 PUBLIC 필터, 조직검색 게이트 포함), 비공개 모드 우회 노출 | `Search.java`, `SearchApp.java` | `SearchServiceImpl.kt`/`SearchController.kt` | **완료(아래 완료 로그 참고, 범위를 ProjectApp.java/OrganizationApp.java/UserApp.java까지 확장)** |
 | P0-24 | [ ] | **(2026-08-21 백엔드 전수 감사 재검증 중 발견 — PR/코드리뷰 도메인)** PR 코드 리뷰 댓글 작성(`newPullRequestComment`)에 권한 체크가 전혀 없음 — 프로젝트 멤버십/READ 권한 확인 없이 `owner/projectName`과 `pullRequestId`만 알면 로그인한 임의 사용자가 비공개 프로젝트의 PR에도 리뷰 댓글을 달 수 있음. `checkWritePermission`/`accessControl.isAllowed(...)` 호출이 컨트롤러 어디에도 없음(직접 코드 확인). | `app/utils/AccessControl.java`(REVIEW_COMMENT 생성은 `isProjectResourceCreatable`로 게이트) | `web/ReviewViewController.kt`(`newPullRequestComment` — 권한 체크 코드 0건) | 2026-08-21 게시판 도메인의 `checkWritePermission` 패턴 재검증 중 인접 컨트롤러를 확인하다 발견. 착수 여부는 사용자 결정 대기 |
+| P0-25 | [ ] | **(2026-08-21 P0-23 구현 중 발견)** 사용자 프로필 화면(`/user/{loginId}`)이 대상 사용자가 작성한 이슈/PR을 방문자의 프로젝트 READ 권한과 무관하게 전부 노출 — 비공개 프로젝트의 이슈 제목/PR 제목이 그 프로젝트 멤버가 아닌 누구에게나(익명 포함) 프로필을 통해 유출됨 | `UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()`(프로젝트별 READ 권한 캐시로 필터링) | `UserViewController.kt userProfile()`(필터링 코드 0건 — `issueRepository.findByAuthorId`/`pullRequestRepository.findByContributor` 결과를 그대로 노출) | P0-23(HIDE_PROJECT_LISTING) 구현 중 `UserApp.java:752`를 대조하다 인접 로직에서 발견 — 별도의 정보노출 취약점이라 분리 등록. 착수 여부는 사용자 결정 대기 |
 
 ## P1 — 주요 (기능 결손 / 권한 로직 오류)
 
@@ -240,6 +241,16 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P0-23**: `HIDE_PROJECT_LISTING`(사이트 전역 프로젝트 목록 비공개 모드) 플래그 및 5개 소비처 전체 이식.
+  - Serena LSP로 yona 전체 `Application.HIDE_PROJECT_LISTING` 참조를 재조사한 결과, 등록된 범위(`Search.java`/`SearchApp.java`)보다 넓게 총 5곳에서 쓰이고 있음을 확인 — `Search.projectsEL()`(프로젝트 검색 PUBLIC 제외), `SearchApp.searchInAGroup()`(조직 검색 게이트), `ProjectApp.projects()`(전체 프로젝트 목록 차단), `OrganizationApp.orgList()`(전체 조직 목록 차단), `UserApp.userInfo()`(비로그인 방문자에게 프로필의 프로젝트/이슈/PR 숨김). 같은 플래그의 완전한 이식을 위해 이 세션에서 5곳 모두 함께 처리(P0-17에서 이미 만든 `hideProjectListing` `@Value` 필드 패턴 재사용, 컨트롤러/서비스별로 독립 주입).
+  - `ProjectRepository.findAllowedProjectIdsForUserExcludingPublic(userId)` 신규(`findAllowedProjectIdsForUser`에서 PUBLIC 조건만 제거) — `SearchServiceImpl.getAllowedProjectIds()`에서 플래그 켜짐 시 사용.
+  - `SearchController.searchInAGroup()`에 `SearchApp.java:126-130` 게이트를 원문 그대로 이식 — **legacy 자체의 결함을 그대로 재현**: `!user.isMemberOf(organization) || !user.isAdminOf(organization)`(ORG_MEMBER이면서 동시에 ORG_ADMIN이어야 통과)인데 이 두 역할이 DB상 상호 배타적(한 사용자가 한 조직에 대해 정확히 하나의 role row만 가짐)이라 실제로는 플래그가 켜지면 **모든 사용자에게 항상 400**이 반환되는, legacy 자체의 관찰 가능한 동작을 정확히 재현(의도한 설계인지 legacy의 버그인지는 불명이나, 1:1 이식 원칙에 따라 임의로 "고치지" 않음).
+  - `ProjectViewController.projects()`/`projectsJson()`, `OrganizationViewController.orgList()`는 각각 `ProjectApp.java:1055-1058`/`OrganizationApp.java:485-488`과 동일하게 플래그 켜짐 시 무조건 403.
+  - `UserViewController.userProfile()`은 `UserApp.java:752`와 동일하게, 플래그가 켜져 있고 **비로그인 방문자**인 경우에만 프로젝트/이슈/PR 목록을 비움(로그인 방문자는 영향 없음).
+  - 테스트: `SearchServiceSpec.kt` +2(익명 결과 없음/로그인 사용자는 `findAllowedProjectIdsForUserExcludingPublic` 사용), `SearchControllerSpec.kt` +2(조직 검색 항상 400 — 로그인/비로그인 둘 다), `ProjectViewControllerSpec.kt` +2(HTML 403/JSON 403), `OrganizationViewControllerSpec.kt` +1(조직 목록 403), `UserViewControllerSpec.kt` +2(비로그인 방문자 빈 목록/로그인 방문자 영향 없음).
+  - 검증: 관련 스펙 전부 개별 통과 확인 후 `./gradlew test` 전체 통과(회귀 없음 확인).
+  - **범위 외 발견, 백로그 등록**: 사용자 프로필의 이슈/PR 목록이 방문자의 프로젝트 READ 권한과 무관하게 노출되는 별도의 정보노출 취약점(P0-25, `HIDE_PROJECT_LISTING`과 무관하게 항상 존재) — 이번 세션에서 대조하다 발견했으나 별도 취약점이라 분리 등록.
 
 - **2026-08-21 — P0-22**: 이슈/마일스톤/게시글 신규 생성 시 임시 업로드 첨부파일을 소유권 검증 없이 그대로 재배선하던 보안 결함 수정.
   - Serena LSP로 yona `Attachment.java:173-185 moveOnlySelected(from, to, selectedFileIds)`를 재확인 — 선택된 첨부파일 ID 각각에 대해 `attachment.containerId==from.getId() && attachment.containerType==from.getType()`(원래 있던 곳이 맞는지)를 만족해야만(또는 사이트매니저) 옮긴다는 걸 확인. `from`은 항상 `UserApp.currentUser().asResource()`(`ResourceType.USER`+업로더 id) — 즉 임시 업로드 자체가 업로더별로 분리된 컨테이너에 저장됨.

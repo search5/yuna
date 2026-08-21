@@ -5,6 +5,7 @@ import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.organization.OrganizationRepository
+import org.springframework.beans.factory.annotation.Value
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.organization.OrganizationService
@@ -47,7 +48,10 @@ class OrganizationViewController(
     private val organizationService: OrganizationService,
     private val attachmentRepository: AttachmentRepository,
     private val attachmentService: AttachmentService,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
+    @Value("\${yuna.application.hide-project-listing:false}")
+    private val hideProjectListing: Boolean = false
 ) {
 
     @GetMapping(value = ["/org/{orgName}", "/organizations/{orgName}"])
@@ -468,6 +472,12 @@ class OrganizationViewController(
         authentication: Authentication?,
         model: Model
     ): String {
+        // yona OrganizationApp.java:485-488 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있으면
+        // 누구도 전체 조직 목록을 볼 수 없다.
+        if (hideProjectListing) {
+            return "error/403"
+        }
+
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
         if (pageNum < 1) {
