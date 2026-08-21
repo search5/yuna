@@ -381,9 +381,19 @@ class IncomingMailProcessingService(
 
     private fun createComment(thread: ResolvedThread, sender: User, body: String): IncomingMailOutcome {
         return when (thread.resourceType) {
+            // yona IssueApp.java:1004-1011 newReferComment() 대응 (P2-34). isResourceCreatable()의
+            // ISSUE_COMMENT 케이스로 판단해, 발신자가 프로젝트 READ 권한이 없어도 그 이슈의
+            // 작성자/담당자/공유대상이면 메일 답장으로 댓글을 달 수 있다(legacy와 동일하게 거부 시
+            // 조용히 Rejected로 회신 — 메일 인바운드 발신자 이메일 노출 방지).
             ResourceType.ISSUE_POST -> {
-                val comment = commentService.createIssueComment(thread.resourceId.toLong(), body, sender)
-                IncomingMailOutcome.IssueCommentCreated(comment.id!!, thread.resourceId.toLong())
+                val issueId = thread.resourceId.toLong()
+                val issue = issueRepository.findById(issueId).orElse(null)
+                    ?: return IncomingMailOutcome.Rejected("이슈를 찾을 수 없습니다: $issueId")
+                if (!accessControl.isIssueCommentCreatable(sender, issue.project, issue)) {
+                    return IncomingMailOutcome.Rejected("댓글 작성 권한이 없습니다: $issueId")
+                }
+                val comment = commentService.createIssueComment(issueId, body, sender)
+                IncomingMailOutcome.IssueCommentCreated(comment.id!!, issueId)
             }
             ResourceType.BOARD_POST -> {
                 val comment = commentService.createPostingComment(thread.resourceId.toLong(), body, sender)

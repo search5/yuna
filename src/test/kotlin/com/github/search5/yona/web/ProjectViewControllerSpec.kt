@@ -16,6 +16,7 @@ import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -290,6 +291,63 @@ class ProjectViewControllerSpec : DescribeSpec({
 
                 mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/owner/TestProj/changeVCS").principal(userAuth))
                     .andExpect(status().isNoContent)
+            }
+        }
+
+        // yona ProjectApp.java:168-186 newProject()의 "owner가 기존 조직명이면 그 조직 admin만
+        // 생성 가능" 가드 + "그 조직에 project.organization 연동" 대응 (P2-34).
+        describe("POST /projectform (프로젝트 생성)") {
+            fun newProjectRequest(owner: String) =
+                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/projectform")
+                    .principal(userAuth)
+                    .param("owner", owner)
+                    .param("name", "newproj")
+                    .param("overview", "설명")
+                    .param("projectScope", "PUBLIC")
+                    .param("vcs", "GIT")
+
+            it("owner가 조직명이 아니면(개인 프로젝트) 조직 가드 없이 생성된다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { organizationRepository.findByName("testuser") } returns Optional.empty()
+                val created = Project(id = 900L, owner = "testuser", name = "newproj")
+                every { projectService.createProject(any(), user) } returns created
+                every { watchService.watch(any(), any(), any()) } just Runs
+
+                mockMvc.perform(newProjectRequest("testuser"))
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/testuser/newproj"))
+
+                verify(exactly = 1) { projectService.createProject(any(), user) }
+            }
+
+            it("owner가 기존 조직명이고 사용자가 그 조직의 admin이면 조직이 연동된 채 생성된다") {
+                val org = com.github.search5.yona.domain.organization.Organization(id = 50L, name = "myorg")
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { organizationRepository.findByName("myorg") } returns Optional.of(org)
+                every { organizationUserRepository.findByOrganizationIdAndUserId(50L, 10L) } returns
+                    Optional.of(com.github.search5.yona.domain.organization.OrganizationUser(user = user, organization = org, role = Role(id = RoleType.ORG_ADMIN.roleType)))
+                val projectSlot = slot<Project>()
+                val created = Project(id = 901L, owner = "myorg", name = "newproj", organization = org)
+                every { projectService.createProject(capture(projectSlot), user) } returns created
+                every { watchService.watch(any(), any(), any()) } just Runs
+
+                mockMvc.perform(newProjectRequest("myorg"))
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/myorg/newproj"))
+
+                projectSlot.captured.organization shouldBe org
+            }
+
+            it("owner가 기존 조직명인데 사용자가 그 조직의 admin이 아니면 403 Forbidden을 반환하고 생성하지 않는다") {
+                val org = com.github.search5.yona.domain.organization.Organization(id = 51L, name = "otherorg")
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { organizationRepository.findByName("otherorg") } returns Optional.of(org)
+                every { organizationUserRepository.findByOrganizationIdAndUserId(51L, 10L) } returns Optional.empty()
+
+                mockMvc.perform(newProjectRequest("otherorg"))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { projectService.createProject(any(), any()) }
             }
         }
 

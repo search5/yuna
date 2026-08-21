@@ -183,6 +183,35 @@ class AccessControl(
             .orElse(false)
     }
 
+    // yona AccessControl.java:32-34 isGlobalResourceCreatable() 대응 (P2-34). 프로젝트처럼 특정
+    // 프로젝트에 속하지 않는 전역 리소스(예: 새 프로젝트 자체)를 생성할 때는 로그인 여부만 확인한다
+    // (legacy `!user.isAnonymous()` — user==null이 yuna의 익명 상태에 대응).
+    fun isGlobalResourceCreatable(user: User?): Boolean = user != null
+
+    // yona AccessControl.java:100-118 isResourceCreatable()의 ISSUE_COMMENT 케이스 대응 (P2-34).
+    // 댓글을 달 대상 Issue의 작성자/담당자/공유대상이면(legacy isAllowedIfAuthor/isAllowedIfAssignee/
+    // isAllowedIfSharer) 프로젝트 멤버 여부와 무관하게 항상 허용되고, 그 외에는 프로젝트 기준
+    // 생성권한(isProjectResourceCreatable)으로 위임한다(legacy가 container.getProject()로 project를
+    // 역산해 isProjectResourceAllowed에 위임하는 것과 동일).
+    fun isIssueCommentCreatable(user: User?, project: Project, issue: Issue): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
+        if (user != null) {
+            val isAuthor = issue.authorId != null && issue.authorId == user.id
+            val isAssignee = issue.assignee?.user?.id == user.id
+            if (isAuthor || isAssignee || isAllowedIfSharer(issue, user)) return true
+        }
+        return isProjectResourceCreatable(user, project, ResourceType.ISSUE_COMMENT)
+    }
+
+    // yona AccessControl.java:100-118 isResourceCreatable()의 NONISSUE_COMMENT 케이스 대응 (P2-34).
+    // 댓글을 달 대상 Posting은 legacy isAllowedIfAssignee/isAllowedIfSharer의 분기 대상이 아니므로
+    // (BOARD_POST case 없음) 작성자 우회만 적용된다.
+    fun isPostingCommentCreatable(user: User?, project: Project, posting: Posting): Boolean {
+        if (isAnonymousNotAllowed() && user == null) return false
+        if (user != null && posting.authorId != null && posting.authorId == user.id) return true
+        return isProjectResourceCreatable(user, project, ResourceType.NONISSUE_COMMENT)
+    }
+
     // yona AccessControl.java:90-94 isAllowedIfGroupMember() 대응 (P1-57). 프로젝트 직접 멤버가
     // 아니어도 조직(그룹) 소속이면 PUBLIC/PROTECTED 프로젝트에 한해 권한을 준다 — web 컨트롤러들의
     // checkReadPermission/checkWritePermission이 이 규칙을 호출할 수 있도록 공개.
@@ -244,7 +273,9 @@ class AccessControl(
     // yona OrganizationUser.isAdmin(Organization, User)/isAdmin(Long, Long) 대응 (P1-85 1b).
     // Organization을 직접 대상으로 하는 오버로드 및 nullable user 지원 — 위 isOrganizationAdmin(project, user)와
     // 달리 project 경유가 아니라 organization을 직접 받는 경로(ORGANIZATION 리소스, PROJECT_TRANSFER 등)에 쓰인다.
-    private fun isOrganizationAdmin(organization: Organization?, user: User?): Boolean {
+    // yona ProjectApp/ImportApp.newProject()의 "owner가 기존 조직명이면 그 조직 admin만 생성 가능" 가드
+    // (P2-34)가 컨트롤러에서 직접 호출해야 해 public으로 공개한다(순수 가시성 조정, 로직 변경 없음).
+    fun isOrganizationAdmin(organization: Organization?, user: User?): Boolean {
         val orgId = organization?.id ?: return false
         val userId = user?.id ?: return false
         return organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId)

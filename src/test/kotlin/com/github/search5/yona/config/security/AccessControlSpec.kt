@@ -433,4 +433,68 @@ class AccessControlSpec : DescribeSpec({
             result shouldBe emptyList()
         }
     }
+
+    // yona AccessControl.java:32-34 isGlobalResourceCreatable() 대응 (P2-34).
+    describe("isGlobalResourceCreatable(user)") {
+        it("로그인 사용자는 항상 허용된다") {
+            accessControl.isGlobalResourceCreatable(stranger) shouldBe true
+        }
+        it("비로그인(익명, user=null)은 거부된다") {
+            accessControl.isGlobalResourceCreatable(null) shouldBe false
+        }
+    }
+
+    // yona AccessControl.java:100-118 isResourceCreatable()의 ISSUE_COMMENT/NONISSUE_COMMENT
+    // 케이스 대응 (P2-34).
+    describe("isIssueCommentCreatable(user, project, issue) / isPostingCommentCreatable(user, project, posting)") {
+        val issueAuthor = User(id = 200L, loginId = "issueAuthor", name = "issueAuthor")
+        val issueAssignee = User(id = 201L, loginId = "issueAssignee", name = "issueAssignee")
+        val issueSharerUser = User(id = 202L, loginId = "issueSharer", name = "issueSharer")
+        val postAuthor = User(id = 203L, loginId = "postAuthor", name = "postAuthor")
+
+        val issueOnPrivate = Issue(
+            id = 300L, title = "비공개 이슈", project = privateProject, number = 1L,
+            authorId = issueAuthor.id, assignee = Assignee(id = 1L, user = issueAssignee, project = privateProject)
+        )
+        issueOnPrivate.sharers.add(
+            IssueSharer(id = 1L, loginId = issueSharerUser.loginId, user = issueSharerUser, issue = issueOnPrivate)
+        )
+
+        val issueOnPublic = Issue(id = 301L, title = "공개 이슈", project = publicProject, number = 2L, authorId = issueAuthor.id)
+
+        val postingOnPrivate = Posting(id = 400L, title = "비공개 글", project = privateProject, number = 1L, authorId = postAuthor.id)
+        val postingOnPublic = Posting(id = 401L, title = "공개 글", project = publicProject, number = 2L, authorId = postAuthor.id)
+
+        it("이슈 작성자는 비공개 프로젝트 비멤버라도 댓글을 달 수 있다") {
+            accessControl.isIssueCommentCreatable(issueAuthor, privateProject, issueOnPrivate) shouldBe true
+        }
+        it("이슈 담당자는 비공개 프로젝트 비멤버라도 댓글을 달 수 있다") {
+            accessControl.isIssueCommentCreatable(issueAssignee, privateProject, issueOnPrivate) shouldBe true
+        }
+        it("이슈 공유대상은 비공개 프로젝트 비멤버라도 댓글을 달 수 있다") {
+            accessControl.isIssueCommentCreatable(issueSharerUser, privateProject, issueOnPrivate) shouldBe true
+        }
+        it("작성자/담당자/공유대상이 아닌 비공개 프로젝트 비멤버는 댓글을 달 수 없다") {
+            accessControl.isIssueCommentCreatable(stranger, privateProject, issueOnPrivate) shouldBe false
+        }
+        it("프로젝트 멤버는 이슈 작성자가 아니어도 댓글을 달 수 있다") {
+            accessControl.isIssueCommentCreatable(member, privateProject, issueOnPrivate) shouldBe true
+        }
+        it("공개 프로젝트에서는 비멤버 로그인 사용자도 댓글을 달 수 있다(isProjectResourceCreatable로 위임)") {
+            accessControl.isIssueCommentCreatable(stranger, publicProject, issueOnPublic) shouldBe true
+        }
+        it("비로그인(익명)은 공개 프로젝트라도 댓글을 달 수 없다") {
+            accessControl.isIssueCommentCreatable(null, publicProject, issueOnPublic) shouldBe false
+        }
+
+        it("게시글 작성자는 비공개 프로젝트 비멤버라도 댓글을 달 수 있다") {
+            accessControl.isPostingCommentCreatable(postAuthor, privateProject, postingOnPrivate) shouldBe true
+        }
+        it("작성자가 아닌 비공개 프로젝트 비멤버는 댓글을 달 수 없다") {
+            accessControl.isPostingCommentCreatable(stranger, privateProject, postingOnPrivate) shouldBe false
+        }
+        it("공개 프로젝트에서는 비멤버 로그인 사용자도 게시글 댓글을 달 수 있다") {
+            accessControl.isPostingCommentCreatable(stranger, publicProject, postingOnPublic) shouldBe true
+        }
+    }
 })

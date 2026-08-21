@@ -457,9 +457,20 @@ class ProjectViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "redirect:/users/loginform"
 
+        // yona ProjectApp.java:168-178 newProject()의 권한 가드 대응 (P2-34) —
+        // isGlobalResourceCreatable(항상 true, 위에서 이미 로그인 확인함)과 별개로, owner가 기존
+        // 조직명과 같으면 그 조직의 admin만 그 조직 아래 프로젝트를 생성할 수 있다.
+        val trimmedOwner = owner.trim()
+        val organization = organizationRepository.findByName(trimmedOwner).orElse(null)
+        if (organization != null && !accessControl.isOrganizationAdmin(organization, loginUser)) {
+            throw org.springframework.web.server.ResponseStatusException(
+                HttpStatus.FORBIDDEN, "'${loginUser.name}' has no permission"
+            )
+        }
+
         try {
             val project = Project().apply {
-                this.owner = owner.trim()
+                this.owner = trimmedOwner
                 this.name = name.trim()
                 this.overview = overview.trim()
                 this.projectScope = ProjectScope.valueOf(projectScope.uppercase())
@@ -470,6 +481,12 @@ class ProjectViewController(
                 this.isReviewEnabled = review
                 this.isMilestoneEnabled = milestone
                 this.isBoardEnabled = board
+                // yona ProjectApp.java:184-186 "Organization.isNameExist(owner)면 project.organization
+                // 연동" 대응 (P2-34) — 지금까지는 owner가 조직명이어도 project.organization이 채워지지
+                // 않아, 조직 소속 프로젝트인데도 조직 관리자 권한/조직 프로젝트 목록에서 누락되고 있었다.
+                if (organization != null) {
+                    this.organization = organization
+                }
             }
 
             val saved = projectService.createProject(project, loginUser)
