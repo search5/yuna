@@ -110,6 +110,21 @@ class BranchApiControllerSpec : DescribeSpec({
 
                 verify { playRepository.setDefaultBranch("feature-a") }
             }
+
+            // yona BranchApp.java:47 @IsOnlyGitAvailable 대응 (P2-29). SVN 프로젝트에 브랜치
+            // 기본값 지정을 요청하면 아무 일도 하지 않은 채(no-op) 성공 신호를 돌려주지 않고
+            // 400으로 명확히 거부해야 한다.
+            it("Git이 아닌(SVN) 프로젝트면 400을 반환하고 setDefaultBranch를 호출하지 않아야 한다 (P2-29)") {
+                val svnProject = Project(id = 2L, name = "SvnProject", owner = "owner", vcs = "SVN", projectScope = ProjectScope.PUBLIC)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "SvnProject") } returns Optional.of(svnProject)
+
+                mockMvc.perform(
+                    post("/owner/SvnProject/code/feature-a/setAsDefault").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { playRepository.setDefaultBranch(any()) }
+            }
         }
 
         describe("DELETE /{owner}/{projectName}/code/{branch}") {
@@ -150,6 +165,19 @@ class BranchApiControllerSpec : DescribeSpec({
 
                 mockMvc.perform(
                     delete("/owner/TestProject/code/feature-a").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { playRepository.deleteBranch(any()) }
+            }
+
+            // yona BranchApp.java:47 @IsOnlyGitAvailable 대응 (P2-29).
+            it("Git이 아닌(SVN) 프로젝트면 400을 반환하고 deleteBranch를 호출하지 않아야 한다 (P2-29)") {
+                val svnProject = Project(id = 3L, name = "SvnProject2", owner = "owner", vcs = "SUBVERSION", projectScope = ProjectScope.PUBLIC)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "SvnProject2") } returns Optional.of(svnProject)
+
+                mockMvc.perform(
+                    delete("/owner/SvnProject2/code/feature-a").principal(userAuth)
                 )
                     .andExpect(status().isOk)
 
