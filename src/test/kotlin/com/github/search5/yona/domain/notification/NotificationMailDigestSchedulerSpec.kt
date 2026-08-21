@@ -70,7 +70,7 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
             reviewCommentRepository, commentThreadRepository, projectRepository, organizationRepository,
             answers = false
         )
-        every { markdownService.render(any(), any(), any()) } answers { firstArg() }
+        every { markdownService.render(any(), any(), any(), any()) } answers { firstArg() }
         every { mailRenderer.render(any(), any(), any(), any(), any(), any()) } answers { firstArg() }
         every { mailRenderer.renderPlain(any()) } answers { firstArg() }
         every { urlResolver.getUrlToView(any()) } returns null
@@ -190,6 +190,11 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
             scheduler().sendMail()
 
             verify(exactly = 2) { mailService.sendNotificationMail(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+            // yona Markdown.render(source, project, lang) 대응 (P1-140) — 이 스케줄러는 요청 스레드가
+            // 아니라 LocaleContextHolder로 언어를 알 수 없으므로, 배치별로 계산해둔 수신자 언어를
+            // markdownService.render()에 명시적으로 넘겨야 한다(각 배치가 자기 로케일을 그대로 받는지 검증).
+            verify(exactly = 1) { markdownService.render("메시지", true, any(), "ko") }
+            verify(exactly = 1) { markdownService.render("메시지", true, any(), "en") }
         }
 
         it("recipientLimit이 설정되면 hideAddress일 때 (limit-1)명 단위로 쪼개 발송한다") {

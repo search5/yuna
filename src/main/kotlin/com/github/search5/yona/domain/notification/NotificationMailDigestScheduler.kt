@@ -205,7 +205,10 @@ class NotificationMailDigestScheduler(
         val htmlMessage = if (main.eventType == EventType.ISSUE_BODY_CHANGED || main.eventType == EventType.POSTING_BODY_CHANGED) {
             message
         } else {
-            markdownService.render(message, true, projectOf(main))
+            // yona Markdown.render(source, project, lang) 대응 (P1-140) — 이 스케줄러는 HTTP 요청 스레드가
+            // 아니라 LocaleContextHolder로 수신자의 언어를 알 수 없다. 이미 계산해둔 수신자 배치의 locale을
+            // 명시적으로 넘겨 @멘션 표시 이름이 발신자가 아니라 수신자의 언어로 렌더링되게 한다.
+            markdownService.render(message, true, projectOf(main), locale.language)
         }
 
         val htmlBody = mailRenderer.render(htmlMessage, urlToView, unwatchResourceType, unwatchResourceId, acceptsReply != null, locale)

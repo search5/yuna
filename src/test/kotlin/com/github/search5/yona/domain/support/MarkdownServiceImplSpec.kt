@@ -57,6 +57,23 @@ class MarkdownServiceImplSpec : DescribeSpec({
             output.shouldContain("@요비")
         }
 
+        // yona Markdown.java:333-336/342-344 render(source, project, breaks, lang) 대응 (P1-140) —
+        // 다이제스트 메일 배치 스레드처럼 요청 컨텍스트가 없어 LocaleContextHolder로 언어를 알 수 없는
+        // 상황에서도, 호출자가 명시한 lang으로 @멘션 표시 이름이 렌더링돼야 한다.
+        it("lang을 명시하면 LocaleContextHolder와 무관하게 그 언어로 멘션 이름을 렌더링해야 한다") {
+            val bilingualUser = User(id = 3L, loginId = "gildong", name = "홍길동", englishName = "Gildong Hong", lang = "ko-KR")
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(bilingualUser)
+            every { organizationRepository.findByName("gildong") } returns Optional.empty()
+
+            val outputEn = markdownService.render("Mention: @gildong", true, project, "en")
+            val outputKo = markdownService.render("Mention: @gildong", true, project, "ko")
+
+            outputEn.shouldContain("@Gildong Hong")
+            outputEn.shouldNotContain("@홍길동")
+            outputKo.shouldContain("@홍길동")
+            outputKo.shouldNotContain("@Gildong Hong")
+        }
+
         it("이슈 #2 링크 변환 테스트") {
             val issue = Issue(id = 10L, title = "버그수정", project = project, number = 2L, state = State.OPEN)
             every { issueRepository.findByProjectAndNumber(any(), 2L) } returns issue

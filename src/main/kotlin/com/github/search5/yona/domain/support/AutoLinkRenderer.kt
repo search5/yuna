@@ -89,7 +89,7 @@ class AutoLinkRenderer(
         fun toLink(matcher: Matcher): Link
     }
 
-    fun render(body: String, currentProject: Project?): String {
+    fun render(body: String, currentProject: Project?, lang: String? = null): String {
         var resultHtml = body
 
         // 1. Path with Issue
@@ -125,7 +125,7 @@ class AutoLinkRenderer(
             if (slashIndex > -1) {
                 toValidProjectLink(path.substring(0, slashIndex), path.substring(slashIndex + 1))
             } else {
-                toValidUserLink(path)
+                toValidUserLink(path, lang)
             }
         }
 
@@ -232,7 +232,7 @@ class AutoLinkRenderer(
         return Link()
     }
 
-    private fun toValidUserLink(userId: String): Link {
+    private fun toValidUserLink(userId: String, lang: String? = null): Link {
         val userOpt = userRepository.findByLoginId(userId)
         val orgOpt = organizationRepository.findByName(userId)
 
@@ -251,8 +251,11 @@ class AutoLinkRenderer(
             } else {
                 "<img src='${user.avatarUrl}' class='avatar-wrap smaller no-margin-no-padding vertical-top' alt='@${user.name} ${user.loginId}'> "
             }
-            val locale = LocaleContextHolder.getLocale()
-            val userName = user.getPureNameOnly(locale.language)
+            // yona AutoLinkRenderer.java:322-327 대응 (P1-140) — lang이 명시적으로 주어지면(다이제스트
+            // 메일 배치 스레드처럼 HTTP 요청 컨텍스트가 없어 LocaleContextHolder가 수신자의 언어를 알 수
+            // 없는 경우) 그 값을 그대로 쓰고, 없을 때만(일반 요청 처리 스레드) 현재 요청의 로케일로 대체한다.
+            val effectiveLang = if (lang.isNullOrBlank()) LocaleContextHolder.getLocale().language else lang
+            val userName = user.getPureNameOnly(effectiveLang)
             val escapeContent = StringEscapeUtils.escapeHtml4("$avatarImage${user.name} ${user.loginId}")
 
             return Link(
