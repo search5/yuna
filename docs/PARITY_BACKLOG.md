@@ -212,7 +212,7 @@
 | P2-18 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** `getCommitComments()`(SVN 커밋코멘트 ↔ PR 매핑) 대응 부재 | `PullRequest.java` | (대응 없음) | **완료(조사 결과 이식 불필요로 판정, 아래 완료 로그 참고)** |
 | P2-19 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 조직 도메인)** 조직명 변경 시 `FavoriteOrganization.organizationName` 비정규화 필드 동기화 누락 | `FavoriteOrganization.java` | `OrganizationServiceImpl.updateOrganizationSettings()` | **완료(아래 완료 로그 참고)** |
 | P2-20 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 가입요청/취소 알림 수신자 계산이 Watch 여부를 무시 | `NotificationEvent.getReceivers(Project)` | `ProjectUserServiceImpl.getProjectManagers()` | **완료(아래 완료 로그 참고)** |
-| P2-21 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직 가입 신청 oldValue/newValue 페어링이 비대칭이라 드래프트 상쇄 최적화 미작동 | `NotificationEvent.java` | `OrganizationServiceImpl.enroll/cancelEnroll` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P2-21 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 알림/메일 도메인)** 조직 가입 신청 oldValue/newValue 페어링이 비대칭이라 드래프트 상쇄 최적화 미작동 | `NotificationEvent.java` | `OrganizationServiceImpl.enroll/cancelEnroll` | **완료(아래 완료 로그 참고)** |
 | P2-22 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** 마일스톤 상세의 이슈 목록 정렬(번호 내림차순) 없음, 쿼리에도 ORDER BY 없음 | `Milestone.java` | `MilestoneViewController.toViewDto()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-23 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 마일스톤 도메인)** dueDate 파싱 실패 시 조용히 null로 저장(에러 알림 없음) | `MilestoneApp.validateDueDate()` | `MilestoneViewController.createMilestone/editMilestone` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P2-24 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 첨부파일 도메인)** DB dedup 미이식 + isNew 판정 오류로 201 응답 도달 불가, 재업로드마다 중복 행 생성 | `Attachment.save()` | `AttachmentServiceImpl.store()`/`AttachmentController.uploadFile()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -250,6 +250,11 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P2-21**: `OrganizationServiceImpl.enroll()`/`cancelEnroll()`/`addOrganizationMember()`가 `NotificationEvent`의 `oldValue`를 전부 `"NONE"`으로 채우고 있던 것을, yona `NotificationEvent.java:1257-1286` `afterOrganizationMemberRequest()`(REQUEST→`oldValue="CANCEL"`, CANCEL→`oldValue="REQUEST"`, ACCEPT→`oldValue="REQUEST"`) 대응으로 정정.
+  - 원인 분석: `NotificationEventRecorder.record()`(30초 draft window 병합, P1-27)는 같은 리소스·같은 이벤트타입·같은 발신자의 직전 이벤트가 있으면 `event.oldValue = lastEvent.oldValue`로 병합한 뒤 `event.oldValue == event.newValue`면 두 이벤트를 모두 삭제하고 알림을 발행하지 않는다. 이 상쇄가 성립하려면 REQUEST/CANCEL의 oldValue/newValue가 서로 반대값으로 대칭 페어링돼 있어야 하는데(`ProjectUserServiceImpl.enroll/cancelEnroll`은 P1-16에서 이미 이 페어링을 정확히 갖고 있었음 — 조직 쪽만 예외였음), 조직 쪽은 항상 `oldValue="NONE"`이라 병합 후에도 `oldValue(NONE) != newValue(CANCEL/REQUEST)`가 되어 상쇄 조건이 절대 만족되지 않았다. 즉 신청 직후 바로 취소해도(30초 안) 관리자에게 신청+취소 알림이 각각 발행돼, "아무 일도 없었던 것"이 되어야 할 상황에 불필요한 알림 잡음이 생겼다.
+  - `addOrganizationMember()`(ACCEPT)는 eventType이 REQUEST/CANCEL과 달라 병합 로직이 실제로 교차 적용되지는 않지만(기능적으로는 무해), yona 원본 값(`oldValue="REQUEST"`)과 정확히 일치시키기 위해 함께 수정.
+  - 테스트: `OrganizationServiceSpec.kt` 테스트 #10을 "취소 알림이 1건 발행돼야 한다"(기존에는 이 버그를 그대로 인코딩한 잘못된 기대값이었음)에서 "신청/취소 알림이 모두 상쇄되어 발행되지 않아야 한다(0건)"로 정정 — 수정 전 실패(레드)를 확인한 뒤 수정 후 통과(그린) 확인. 전체 14/14 통과.
 
 - **2026-08-21 — P2-20**: `ProjectUserServiceImpl.getProjectManagers()`가 프로젝트 매니저 전원을 무조건 가입요청/취소 알림 수신자로 넣던 것을, yona `NotificationEvent.java:1468-1477` `getReceivers(Project)` 대응으로 실제 그 프로젝트를 감시(Watch) 중인 매니저만 받도록 수정. `WatchService.isWatching()`(이미 존재)을 재사용.
   - 기존 `ProjectUserServiceSpec.kt`의 다른 테스트들이 "매니저가 알림을 받는다"는 걸 암묵적으로 가정하고 있어(감시 여부 설정이 아예 없었음), `beforeEach`에 `watchService.watch(manager, PROJECT, ...)`를 추가해 매니저가 기본으로 감시 중인 상태로 맞춤(현실적인 기본 시나리오) — 감시하지 않는 매니저가 실제로 알림을 못 받는지는 별도 신규 테스트로 검증.
