@@ -152,6 +152,46 @@ class CommentControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.contents").value("수정된이슈댓글"))
             }
 
+            it("original이 현재 댓글 내용과 일치하면 정상적으로 수정해야 한다 (P1-102)") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+
+                val updatedComment = IssueComment(id = 100L, contents = "수정된이슈댓글", issue = issue, authorId = user.id, authorLoginId = user.loginId, authorName = user.name)
+                every { commentService.updateIssueComment(100L, "수정된이슈댓글", user) } returns updatedComment
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/100")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정된이슈댓글\", \"original\": \"이슈댓글\"}")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.contents").value("수정된이슈댓글"))
+            }
+
+            it("original이 현재 댓글 내용과 다르면 409 Conflict와 storedContent를 반환하고 저장하지 않아야 한다 (P1-102)") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/100")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정된이슈댓글\", \"original\": \"다른사람이 이미 바꾼 내용\"}")
+                )
+                    .andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.message").value("Already modified by someone."))
+                    .andExpect(jsonPath("$.storedContent").value("이슈댓글"))
+
+                verify(exactly = 0) { commentService.updateIssueComment(any(), any(), any()) }
+            }
+
             it("타인이 수정 시 403 Forbidden을 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)

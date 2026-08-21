@@ -26,6 +26,8 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueEventRepository
+import com.github.search5.yona.domain.support.isModifiedByOthers
+import com.github.search5.yona.domain.support.sha1Hex
 
 @RestController
 @RequestMapping("/api/projects/{projectId}/issues")
@@ -368,6 +370,80 @@ class IssueController(
         return ResponseEntity.ok(issueService.downvoteWeight(issue.id!!))
     }
 
+
+    // yona IssueApi.java:551-584 detectChange() 대응 (P1-102). 클라이언트가 화면에 표시된 시점의
+    // body 체크섬(클라이언트가 직접 SHA-1 계산)과 댓글 수를 보내면, 서버 현재 상태와 비교해 "다른
+    // 사용자가 이미 수정했는지"를 폴링으로 감지한다. 저장 시점 충돌 차단(409)은 별도 — updateIssue의
+    // 원본 대조 검사(아래) 참고.
+    @PostMapping("/{number}/detectChange")
+    fun detectChange(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        @RequestBody request: DetectChangeRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Map<String, Any?>> {
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val comments = issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!)
+        val currentNumOfComments = comments.size
+
+        val result = mutableMapOf<String, Any?>()
+        if (request.numOfComments < currentNumOfComments) {
+            val lastComment = comments.last()
+            val commentAuthor = lastComment.authorLoginId?.let { userRepository.findByLoginId(it).orElse(null) }
+            result["commentAuthorName"] = commentAuthor?.getDisplayName() ?: lastComment.authorLoginId
+        }
+
+        val currentChecksum = sha1Hex(issue.body ?: "")
+        result["issueBodyChanged"] = currentChecksum != request.issueBodyChecksum
+        result["numOfComments"] = currentNumOfComments
+        result["issueBodyChecksum"] = currentChecksum
+        result["issueUpdateDate"] = (issue.updatedDate ?: issue.createdDate)?.toEpochMilli()
+        result["result"] = "ok"
+
+        return ResponseEntity.ok(result)
+    }
+
+    // yona IssueApi.java:319-349 updateIssueContent() 대응 (P1-102). 이슈 본문만 인라인 수정하는
+    // 경량 API — 클라이언트가 "저장 직전에 화면에 있던 원문 전체"를 그대로 보내면, 서버가 그 원문의
+    // 체크섬과 현재 DB 값의 체크섬을 비교해 다르면(=그 사이에 다른 사람이 이미 수정) 409로 거부한다
+    // (detectChange의 "클라이언트가 체크섬을 계산해 보냄"과 반대로, 여기는 서버가 두 원문을 각각 해시).
+    @PatchMapping("/{number}/content")
+    fun updateIssueContent(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        @RequestBody request: UpdateIssueContentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Map<String, Any?>> {
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        if (isModifiedByOthers(issue.body ?: "", request.original)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(mapOf("message" to "Already modified by someone.", "storedContent" to issue.body))
+        }
+
+        if (!accessControl.isAllowed(user, project, issue, Operation.UPDATE)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        issue.body = request.content
+        issueRepository.save(issue)
+
+        return ResponseEntity.ok(mapOf("body" to issue.body))
+    }
+
     data class CreateIssueRequest(
         val title: String,
         val body: String?,
@@ -388,5 +464,16 @@ class IssueController(
 
     data class MoveIssueRequest(
         val targetProjectId: Long
+    )
+
+
+    data class DetectChangeRequest(
+        val issueBodyChecksum: String,
+        val numOfComments: Int
+    )
+
+    data class UpdateIssueContentRequest(
+        val content: String,
+        val original: String
     )
 }
