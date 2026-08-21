@@ -63,6 +63,10 @@ class MarkdownServiceImpl(
     }
 
     override fun render(body: String, breaks: Boolean, project: Project?): String {
+        return render(body, breaks, project, null)
+    }
+
+    override fun render(body: String, breaks: Boolean, project: Project?, lang: String?): String {
         if (body.isEmpty()) {
             return ""
         }
@@ -80,7 +84,7 @@ class MarkdownServiceImpl(
         }
         val html = renderer.render(document)
         val sanitized = sanitize(html)
-        return autoLinkRenderer.render(sanitized, project)
+        return autoLinkRenderer.render(sanitized, project, lang)
     }
 
 override fun renderFileInCodeBrowser(source: String, project: Project): String {
