@@ -474,5 +474,90 @@ class WebhookServiceSpec : DescribeSpec({
                 verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
             }
         }
+
+        // yona Webhook.java:346 eventComment.getParent().asResource() / :480 eventPullRequest.asResource()
+        // 대응 (P1-134) — 댓글 이벤트의 Hangout 스레드 키는 댓글 자신이 아니라 부모 리소스 기준이어야
+        // 같은 이슈/게시글/PR에 달리는 댓글들이 한 스레드로 묶인다.
+        describe("Hangout Chat 스레드 키는 댓글 자신이 아니라 부모 리소스를 써야 한다 (P1-134)") {
+            val hangoutWebhook = Webhook(
+                id = 70L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+            )
+            val sender = User(id = 2L, loginId = "sender", name = "송신자")
+
+            it("이슈 댓글은 부모 이슈(ISSUE_POST)를 스레드 키로 조회/저장해야 한다") {
+                val parentIssue = com.github.search5.yona.domain.issue.Issue(
+                    id = 200L, title = "부모 이슈", body = "내용", project = project, number = 20
+                )
+                val comment = com.github.search5.yona.domain.issue.IssueComment(
+                    id = 300L, contents = "댓글", issue = parentIssue
+                )
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(70L, ResourceType.ISSUE_POST, "200")
+                } returns null
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMENT, sender, comment)
+                verify(exactly = 1) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(70L, ResourceType.ISSUE_POST, "200")
+                }
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(70L, ResourceType.ISSUE_COMMENT, "300")
+                }
+
+                webhookService.recordHangoutThreadIfNeeded(
+                    hangoutWebhook, comment, """{"thread":{"name":"spaces/AAA/threads/BBB"}}"""
+                )
+                verify(exactly = 1) {
+                    webhookThreadRecorder.recordThreadIfAbsent(70L, ResourceType.ISSUE_POST, "200", "spaces/AAA/threads/BBB")
+                }
+            }
+
+            it("PR 리뷰 댓글은 부모 풀 리퀘스트(PULL_REQUEST)를 스레드 키로 조회/저장해야 한다") {
+                val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
+                val pullRequest = com.github.search5.yona.domain.pullrequest.PullRequest(
+                    id = 60L, title = "PR", body = "본문",
+                    toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature/x",
+                    contributor = contributor, number = 3
+                )
+                val thread = com.github.search5.yona.domain.pullrequest.CodeCommentThread(
+                    id = 400L, pullRequest = pullRequest, project = project
+                )
+                val reviewComment = com.github.search5.yona.domain.pullrequest.ReviewComment(
+                    id = 500L, contents = "리뷰 댓글", thread = thread
+                )
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(70L, ResourceType.PULL_REQUEST, "60")
+                } returns null
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewComment)
+                verify(exactly = 1) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(70L, ResourceType.PULL_REQUEST, "60")
+                }
+
+                webhookService.recordHangoutThreadIfNeeded(
+                    hangoutWebhook, reviewComment, """{"thread":{"name":"spaces/AAA/threads/CCC"}}"""
+                )
+                verify(exactly = 1) {
+                    webhookThreadRecorder.recordThreadIfAbsent(70L, ResourceType.PULL_REQUEST, "60", "spaces/AAA/threads/CCC")
+                }
+            }
+
+            // CommitComment는 yona Webhook.java에 대응 이벤트 자체가 없어(P2-18) 부모 매핑 규칙이
+            // 없다 — 레거시에 없는 동작을 새로 추가하지 않도록 자기 자신의 키를 그대로 써야 한다.
+            it("CommitComment는 부모 매핑 규칙이 없어 자기 자신의 키(COMMIT_COMMENT)를 그대로 써야 한다") {
+                val commitComment = com.github.search5.yona.domain.pullrequest.CommitComment(
+                    id = 600L, project = project, contents = "커밋 댓글"
+                )
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(70L, ResourceType.COMMIT_COMMENT, "600")
+                } returns null
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMENT, sender, commitComment)
+                verify(exactly = 1) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(70L, ResourceType.COMMIT_COMMENT, "600")
+                }
+            }
+        }
     }
 })

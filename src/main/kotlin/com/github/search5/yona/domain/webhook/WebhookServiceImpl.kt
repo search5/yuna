@@ -117,10 +117,9 @@ class WebhookServiceImpl(
             WebhookType.DETAIL_HANGOUT_CHAT -> {
                 val root = objectMapper.createObjectNode()
                 root.put("text", textMessage)
-                
-                // 스레드 지원
-                val resType = getResourceType(resource)
-                val resId = getResourceId(resource)
+
+                // 스레드 지원 (P1-134 — 부모 리소스 기준 키로 조회)
+                val (resType, resId) = threadKeyOf(resource)
                 if (resType != ResourceType.NOT_A_RESOURCE && resId.isNotBlank()) {
                     val webhookThread = webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(
                         webhook.id ?: 0L,
@@ -434,6 +433,25 @@ class WebhookServiceImpl(
             return
         }
 
-        webhookThreadRecorder.recordThreadIfAbsent(webhookId, getResourceType(resource), getResourceId(resource), threadId)
+        val (resType, resId) = threadKeyOf(resource)
+        webhookThreadRecorder.recordThreadIfAbsent(webhookId, resType, resId, threadId)
+    }
+
+    // yona Webhook.java:346 eventComment.getParent().asResource() / :480 eventPullRequest.asResource()
+    // 대응 (P1-134) — Hangout Chat 스레드 키는 댓글 자신이 아니라 부모 리소스(이슈/게시글/PR) 기준으로
+    // 계산해야 같은 이슈/게시글/PR에 달리는 댓글들이 하나의 대화 스레드로 묶인다. CommitComment는 yona에
+    // 대응 이벤트 자체가 없어(P2-18) 부모 매핑 규칙이 없으므로 자기 자신의 키를 그대로 쓴다
+    // (레거시에 없는 동작을 새로 추가하지 않는다).
+    private fun threadKeyOf(resource: Any): Pair<ResourceType, String> {
+        return when (resource) {
+            is com.github.search5.yona.domain.issue.IssueComment ->
+                ResourceType.ISSUE_POST to (resource.issue.id?.toString() ?: "")
+            is com.github.search5.yona.domain.board.PostingComment ->
+                ResourceType.BOARD_POST to (resource.posting.id?.toString() ?: "")
+            is com.github.search5.yona.domain.pullrequest.ReviewComment ->
+                resource.thread?.pullRequest?.let { ResourceType.PULL_REQUEST to (it.id?.toString() ?: "") }
+                    ?: (getResourceType(resource) to getResourceId(resource))
+            else -> getResourceType(resource) to getResourceId(resource)
+        }
     }
 }
