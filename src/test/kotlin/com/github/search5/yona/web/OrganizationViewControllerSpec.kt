@@ -179,7 +179,8 @@ class OrganizationViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { organizationService.updateOrganizationSettings(org.id!!, "testorg", "", user.id!!) } returns Unit
                 every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
-                every { attachmentService.store(any(), any(), any(), any(), any()) } returns mockk(relaxed = true)
+                every { attachmentService.store(any(), any(), any(), any(), any()) } returns
+                    (mockk<com.github.search5.yona.domain.attachment.Attachment>(relaxed = true) to true)
 
                 val goodFile = MockMultipartFile("logoPath", "logo.png", "image/png", ByteArray(10))
 

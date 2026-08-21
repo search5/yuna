@@ -206,7 +206,7 @@ class IncomingMailProcessingService(
         val cidMap = mutableMapOf<String, Attachment>()
         for (attachment in attachments) {
             try {
-                val saved = attachmentService.store(
+                val (saved, _) = attachmentService.store(
                     attachment.bytes.inputStream(),
                     attachment.fileName,
                     resourceType,

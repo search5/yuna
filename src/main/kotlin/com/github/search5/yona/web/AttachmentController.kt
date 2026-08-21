@@ -69,23 +69,16 @@ class AttachmentController(
         // NFC 파일명 정규화
         val normalizedFilename = java.text.Normalizer.normalize(file.originalFilename ?: "unknown", java.text.Normalizer.Form.NFC)
 
-        // 해시 존재 여부를 store() 호출 직전 체크 (테스트 Mock 스펙에 부합되게 existsByHash 선행)
-        // 실제 AttachmentServiceImpl.store()가 실행되면 DB 저장이 완료되므로 true가 나오기 때문에
-        // isNew(최초 생성 여부)를 미리 산출하기 위함.
-        // 다만 AttachmentService.store() 호출을 통해 임시 해시를 획득하기 어려우므로,
-        // DB 저장 전/후 혹은 existsByHash 모킹 결과에 의존하기 위해 다음과 같이 구현합니다.
-        
-        val attach = attachmentService.store(
+        // yona AttachmentApp.java:84-85 attach.store(...)의 반환값(isCreated) 대응 (P2-24) —
+        // AttachmentService.store()가 dedup 여부를 직접 반환하므로 사후에 existsByHash로 추정할
+        // 필요가 없다.
+        val (attach, isNew) = attachmentService.store(
             inputStream = file.inputStream,
             name = normalizedFilename,
             containerType = ResourceType.NOT_A_RESOURCE,
             containerId = "",
             ownerLoginId = uploader.loginId ?: "anonymous"
         )
-
-        // store()를 이미 다 거쳤으므로 existsByHash를 체크하기보다 count 혹은 repository findByHash를 조회.
-        // 하지만 모킹 테스트에서는 existsByHash를 stubbing하므로 호환성을 제공.
-        val isNew = !attachmentRepository.existsByHash(attach.hash)
 
         val fileUrl = "/files/${attach.id}"
         val body = mapOf(
