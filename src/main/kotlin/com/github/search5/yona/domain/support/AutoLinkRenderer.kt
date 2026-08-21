@@ -211,8 +211,12 @@ class AutoLinkRenderer(
     private fun toValidSHALink(prefix: String, project: Project?, sha: String): Link {
         if (project != null) {
             try {
+                // yona utils/AutoLinkRenderer.java:275 "!project.isCodeAvailable() || !project.isGit()"
+                // 대응 (P2-35). isCodeAvailable()(코드브라우저 메뉴 활성 여부, legacy
+                // `menuSetting == null || menuSetting.code` == yuna `project.isCodeEnabled`)이 꺼져
+                // 있으면 GIT이어도 커밋 SHA를 링크로 바꾸지 않는다.
                 val vcs = project.vcs?.uppercase() ?: "GIT"
-                if (vcs != "GIT") {
+                if (!project.isCodeEnabled || vcs != "GIT") {
                     return Link()
                 }
                 val repo = repositoryService.getRepository(project)
