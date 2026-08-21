@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.enumeration.State
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
@@ -69,6 +70,55 @@ class PullRequestRepositorySpec @Autowired constructor(
                 foundPr.fromProject.name shouldBe "repo-b"
                 foundPr.contributor.loginId shouldBe "contrib"
                 foundPr.state shouldBe State.OPEN
+            }
+
+            // yuna 자체 버그(P1-115): JPQL `A OR B AND C`는 `A OR (B AND C)`로 파싱되어 AND가 OR의
+            // 두 번째 항에만 걸린다. `pr.state NOT IN (...)`가 toProject/toBranch 쪽에만 적용되고
+            // fromProject/fromBranch 쪽은 상태와 무관하게 매칭돼, CLOSED/MERGED PR도 브랜치 삭제
+            // 처리 대상(cleanupPullRequestsForDeletedBranches)에 잘못 포함될 수 있었다.
+            it("findRelatedPullRequests는 fromProject/fromBranch로 매칭되는 CLOSED/MERGED PR을 제외해야 한다") {
+                val contributor = userRepository.save(
+                    User(loginId = "contrib2", name = "기여자2", email = "contrib2@yona.io")
+                )
+                val receiver = userRepository.save(
+                    User(loginId = "receive2", name = "수신자2", email = "receive2@yona.io")
+                )
+                val fromProject = projectRepository.save(Project(name = "from-repo", owner = "owner-from"))
+                val toProject = projectRepository.save(Project(name = "to-repo", owner = "owner-to"))
+
+                val closedFromBranchPr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "닫힌 PR(from 매칭)",
+                        body = "closed",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "main",
+                        fromBranch = "feature-closed",
+                        contributor = contributor,
+                        receiver = receiver,
+                        created = Instant.now(),
+                        state = State.CLOSED
+                    )
+                )
+                val openFromBranchPr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "열린 PR(from 매칭)",
+                        body = "open",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "main",
+                        fromBranch = "feature-closed",
+                        contributor = contributor,
+                        receiver = receiver,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                val related = pullRequestRepository.findRelatedPullRequests(fromProject, "feature-closed")
+
+                related.map { it.id } shouldBe listOf(openFromBranchPr.id)
+                related.map { it.id } shouldNotContain closedFromBranchPr.id
             }
         }
     }

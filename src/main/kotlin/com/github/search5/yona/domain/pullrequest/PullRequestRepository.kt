@@ -54,9 +54,9 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long> {
 
 
     @Query("""
-        SELECT pr FROM PullRequest pr 
-        WHERE (pr.fromProject = :project AND pr.fromBranch = :branch) 
-           OR (pr.toProject = :project AND pr.toBranch = :branch)
+        SELECT pr FROM PullRequest pr
+        WHERE ((pr.fromProject = :project AND pr.fromBranch = :branch)
+           OR (pr.toProject = :project AND pr.toBranch = :branch))
            AND pr.state NOT IN ('CLOSED', 'MERGED')
     """)
     fun findRelatedPullRequests(
