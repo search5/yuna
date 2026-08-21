@@ -9,6 +9,7 @@ import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
@@ -48,6 +49,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
     val commentThreadRepository = mockk<CommentThreadRepository>()
+    val pullRequestEventRepository = mockk<PullRequestEventRepository>()
     val pullRequestCommitRepository = mockk<PullRequestCommitRepository>()
     val issueRepository = mockk<IssueRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
@@ -75,6 +77,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
         projectUserRepository,
         userRepository,
         commentThreadRepository,
+        pullRequestEventRepository,
         pullRequestCommitRepository,
         issueRepository,
         accessControl
@@ -92,9 +95,11 @@ class PullRequestViewControllerSpec : DescribeSpec({
             projectUserRepository,
             userRepository,
             commentThreadRepository,
+            pullRequestEventRepository,
             pullRequestCommitRepository,
             issueRepository
         )
+        every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(any()) } returns emptyList()
     }
 
     describe("PullRequestViewController 템플릿 연동 테스트") {
@@ -243,6 +248,48 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("pullrequest/view"))
                     .andExpect(model().attributeExists("project", "pr", "mergeResult"))
+            }
+
+            // yona git/partial_pull_request_event.scala.html 대응 (P1-106) — 대화 탭에 댓글스레드와
+            // PullRequestEvent가 시간순으로 병합되고, 렌더링 대상이 아닌 이벤트 타입은 제외된다.
+            it("timeline 모델 속성에 댓글스레드와 이벤트가 시간순으로 병합되고 NEW_PULL_REQUEST는 제외되어야 한다") {
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 905L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.attemptMerge(50L) } returns PullRequestMergeResult(pullRequest = pullRequest)
+
+                val thread = com.github.search5.yona.domain.pullrequest.SimpleCommentThread(
+                    id = 700L, pullRequest = pullRequest,
+                    createdDate = java.time.Instant.parse("2026-01-01T00:00:00Z")
+                )
+                every { commentThreadRepository.findByPullRequest(pullRequest) } returns listOf(thread)
+                every { pullRequestCommitRepository.findByPullRequest(pullRequest) } returns emptyList()
+
+                val stateEvent = com.github.search5.yona.domain.pullrequest.PullRequestEvent(
+                    id = 1L, pullRequest = pullRequest, senderLoginId = "testuser",
+                    eventType = com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED,
+                    oldValue = "OPEN", newValue = "CLOSED",
+                    created = java.time.Instant.parse("2026-01-02T00:00:00Z")
+                )
+                val newPrEvent = com.github.search5.yona.domain.pullrequest.PullRequestEvent(
+                    id = 2L, pullRequest = pullRequest, senderLoginId = "testuser",
+                    eventType = com.github.search5.yona.domain.enumeration.EventType.NEW_PULL_REQUEST,
+                    oldValue = null, newValue = "PR 본문",
+                    created = java.time.Instant.parse("2026-01-03T00:00:00Z")
+                )
+                every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest) } returns listOf(stateEvent, newPrEvent)
+
+                val result = mockMvc.perform(get("/owner/TestProj/pull/1").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andReturn()
+
+                val timeline = result.modelAndView!!.model["timeline"] as List<*>
+                timeline.size shouldBe 2
+                val kinds = timeline.map { (it as com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem).kind }
+                kinds shouldBe listOf("THREAD", "EVENT")
             }
         }
 

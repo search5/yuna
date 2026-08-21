@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.issue.IssueEventRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -63,6 +64,7 @@ class IssueViewControllerSpec : DescribeSpec({
     val repositoryService = mockk<RepositoryService>()
     val recentIssueService = mockk<com.github.search5.yona.domain.issue.RecentIssueService>(relaxed = true)
     val titleHeadService = mockk<com.github.search5.yona.domain.project.TitleHeadService>()
+    val issueEventRepository = mockk<IssueEventRepository>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -100,7 +102,8 @@ class IssueViewControllerSpec : DescribeSpec({
         repositoryService,
         recentIssueService,
         accessControl,
-        titleHeadService
+        titleHeadService,
+        issueEventRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(issueViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -111,9 +114,10 @@ class IssueViewControllerSpec : DescribeSpec({
             projectRepository, projectService, issueRepository, projectUserRepository, userRepository, issueCommentRepository,
             watchService, milestoneService, issueLabelRepository, favoriteIssueRepository, attachmentRepository,
             messageSource, recentProjectRepository, issueService, templateHelper, issueExcelService, repositoryService,
-            recentIssueService, titleHeadService
+            recentIssueService, titleHeadService, issueEventRepository
         )
         every { titleHeadService.deleteTitleHeadKeyword(any(), any()) } returns Unit
+        every { issueEventRepository.findByIssueOrderByCreatedAsc(any()) } returns emptyList()
     }
 
     describe("IssueViewController 템플릿 연동 테스트") {
@@ -210,6 +214,45 @@ class IssueViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("issue/view"))
                     .andExpect(model().attributeExists("project", "issue", "comments", "currentUser", "isWatching", "isWatchingProject"))
+            }
+
+            // yona Issue.getTimeline() 대응 (P1-106) — 댓글+IssueEvent를 시간순으로 병합하고
+            // ISSUE_BODY_CHANGED는 화면에서 제외한다.
+            it("timeline 모델 속성에 댓글과 이벤트가 시간순으로 병합되고 ISSUE_BODY_CHANGED는 제외되어야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
+                val comment = com.github.search5.yona.domain.issue.IssueComment(
+                    id = 300L, contents = "댓글", issue = issue,
+                    createdDate = java.time.Instant.parse("2026-01-01T00:00:00Z")
+                )
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns listOf(comment)
+                every { watchService.isWatching(any(), any(), any()) } returns false
+                every { favoriteIssueRepository.findByUserIdAndIssueId(10L, 5L) } returns java.util.Optional.empty()
+                every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
+
+                val stateEvent = com.github.search5.yona.domain.issue.IssueEvent(
+                    id = 1L, issue = issue, senderLoginId = "testuser",
+                    eventType = com.github.search5.yona.domain.enumeration.EventType.ISSUE_STATE_CHANGED,
+                    oldValue = "OPEN", newValue = "CLOSED",
+                    created = java.time.Instant.parse("2026-01-02T00:00:00Z")
+                )
+                val bodyChangedEvent = com.github.search5.yona.domain.issue.IssueEvent(
+                    id = 2L, issue = issue, senderLoginId = "testuser",
+                    eventType = com.github.search5.yona.domain.enumeration.EventType.ISSUE_BODY_CHANGED,
+                    oldValue = "이전 본문", newValue = "새 본문",
+                    created = java.time.Instant.parse("2026-01-03T00:00:00Z")
+                )
+                every { issueEventRepository.findByIssueOrderByCreatedAsc(issue) } returns listOf(stateEvent, bodyChangedEvent)
+
+                val result = mockMvc.perform(get("/owner/TestProj/issue/1").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andReturn()
+
+                val timeline = result.modelAndView!!.model["timeline"] as List<*>
+                timeline.size shouldBe 2
+                val kinds = timeline.map { (it as com.github.search5.yona.domain.issue.IssueTimelineItem).kind }
+                kinds shouldBe listOf("COMMENT", "EVENT")
             }
         }
         describe("GET /user/issues/new") {

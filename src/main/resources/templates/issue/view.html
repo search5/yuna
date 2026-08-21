@@ -136,8 +136,9 @@
                     <div id="comments" class="board-comment-wrap">
                         <div id="timeline">
                             <div class="timeline-list">
-                                <!-- 댓글 영역 (Thymeleaf Loop) -->
-                                <div th:each="comment : ${comments}" class="comment" th:id="'comment-' + ${comment.id}">
+                                <!-- 타임라인 영역 (댓글 + 상태/담당자/라벨/마일스톤/이동 이벤트, Thymeleaf Loop) -->
+                                <th:block th:each="item : ${timeline}">
+                                <div th:if="${item.kind == 'COMMENT'}" th:with="comment=${item.comment}" class="comment" th:id="'comment-' + ${comment.id}">
                                     <div class="comment-body">
                                         <div class="author-info">
                                             <strong class="name" th:text="${comment.authorName != null ? comment.authorName : comment.authorLoginId}">댓글작성자</strong>
@@ -201,6 +202,39 @@
                                         <div class="content markdown-wrap" th:utext="${markdownService.render(comment.contents, true, project)}">댓글내용</div>
                                     </div>
                                 </div>
+
+                                <!-- 이벤트 영역: yona partial_event_timeline.scala.html 대응 (P1-106) -->
+                                <div th:if="${item.kind == 'EVENT'}" th:with="event=${item.event}, eventTypeName=${event.eventType.name()}" class="event" th:id="'event-' + ${event.id}">
+                                    <div>
+                                        <th:block th:if="${eventTypeName == 'ISSUE_STATE_CHANGED'}">
+                                            <span class="state" th:classappend="${#strings.toLowerCase(event.newValue)}" th:text="#{'issue.state.' + ${#strings.toLowerCase(event.newValue)}}">상태</span>
+                                            <span th:if="${#strings.equalsIgnoreCase(event.newValue, 'OPEN')}" th:text="#{issue.event.open(${event.senderLoginId})}">이슈를 열었습니다</span>
+                                            <span th:if="${#strings.equalsIgnoreCase(event.newValue, 'CLOSED')}" th:text="#{issue.event.closed(${event.senderLoginId})}">이슈를 닫았습니다</span>
+                                        </th:block>
+                                        <th:block th:if="${eventTypeName == 'ISSUE_ASSIGNEE_CHANGED'}">
+                                            <span class="state changed" th:text="#{issue.state.assigned}">할당됨</span>
+                                            <span th:if="${event.newValue != null}" th:text="#{issue.event.assigned(${event.senderLoginId}, ${event.newValue})}">담당자로 지정했습니다</span>
+                                            <span th:if="${event.newValue == null}" th:text="#{issue.event.unassigned(${event.senderLoginId})}">담당자를 없앴습니다</span>
+                                        </th:block>
+                                        <th:block th:if="${eventTypeName == 'ISSUE_MILESTONE_CHANGED'}">
+                                            <span class="state milestone-changed" th:text="#{issue.update.milestone.id}">마일스톤 변경</span>
+                                            <span th:text="#{issue.event.milestone.changed(${event.senderLoginId}, ${event.newValue != null ? event.newValue : #messages.msg('common.none')})}">마일스톤을 변경했습니다</span>
+                                        </th:block>
+                                        <th:block th:if="${eventTypeName == 'ISSUE_MOVED'}">
+                                            <span class="state changed" th:text="#{issue.event.moved.title}">이동함</span>
+                                            <span th:text="#{issue.event.moved(${event.senderLoginId}, ${event.oldValue})}">이슈를 이동했습니다</span>
+                                        </th:block>
+                                        <th:block th:if="${eventTypeName == 'ISSUE_LABEL_CHANGED'}">
+                                            <span class="state label-changed" th:text="#{issue.event.label.added.title}">라벨 변경</span>
+                                            <span th:text="#{issue.event.label.changed(${event.senderLoginId}, ${event.oldValue}, ${event.newValue})}">라벨을 변경했습니다</span>
+                                        </th:block>
+                                        <th:block th:if="${eventTypeName != 'ISSUE_STATE_CHANGED' && eventTypeName != 'ISSUE_ASSIGNEE_CHANGED' && eventTypeName != 'ISSUE_MILESTONE_CHANGED' && eventTypeName != 'ISSUE_MOVED' && eventTypeName != 'ISSUE_LABEL_CHANGED'}">
+                                            <span class="state changed" th:text="${event.senderLoginId} + ': ' + ${event.newValue}">이벤트</span>
+                                        </th:block>
+                                    </div>
+                                    <span class="date" th:text="${templateHelper.agoOrDateString(event.created)}">날짜</span>
+                                </div>
+                            </th:block>
                             </div>
                         </div>
 

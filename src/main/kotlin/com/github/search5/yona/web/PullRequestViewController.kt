@@ -28,6 +28,7 @@ class PullRequestViewController(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val commentThreadRepository: CommentThreadRepository,
+    private val pullRequestEventRepository: com.github.search5.yona.domain.pullrequest.PullRequestEventRepository,
     private val pullRequestCommitRepository: com.github.search5.yona.domain.pullrequest.PullRequestCommitRepository,
     private val issueRepository: com.github.search5.yona.domain.issue.IssueRepository,
     private val accessControl: AccessControl
@@ -172,6 +173,27 @@ class PullRequestViewController(
             val commentThreads = commentThreadRepository.findByPullRequest(pullRequest)
                 .sortedBy { it.createdDate }
             model.addAttribute("commentThreads", commentThreads)
+
+            // yona git/partial_pull_request_event.scala.html 대응 (P1-106) — PR 대화 탭에 상태변경/
+            // 병합/리뷰완료 이력을 댓글과 함께 시간순으로 보여준다. legacy 파샬이 실제로 렌더링하는
+            // 이벤트 타입(STATE_CHANGED/MERGED/REVIEW_STATE_CHANGED)만 다루고, 그 외(NEW_PULL_REQUEST/
+            // COMMIT_CHANGED)는 legacy의 "case _ => {}"와 동일하게 화면에서 제외한다.
+            val renderedEventTypes = setOf(
+                com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_STATE_CHANGED,
+                com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_MERGED,
+                com.github.search5.yona.domain.enumeration.EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+            )
+            val events = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
+                .filter { it.eventType in renderedEventTypes }
+            val timeline = (
+                commentThreads.map {
+                    com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem(kind = "THREAD", date = it.createdDate, thread = it)
+                } +
+                    events.map {
+                        com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem(kind = "EVENT", date = it.created, event = it)
+                    }
+                ).sortedBy { it.date }
+            model.addAttribute("timeline", timeline)
         }
 
         val referredIssues = getReferredIssues(pullRequest)

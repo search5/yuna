@@ -2,12 +2,15 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.issue.IssueEventRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueLabelRepository
+import com.github.search5.yona.domain.issue.IssueTimelineItem
 import com.github.search5.yona.domain.milestone.MilestoneService
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
@@ -62,7 +65,8 @@ class IssueViewController(
     private val repositoryService: RepositoryService,
     private val recentIssueService: RecentIssueService,
     private val accessControl: AccessControl,
-    private val titleHeadService: TitleHeadService
+    private val titleHeadService: TitleHeadService,
+    private val issueEventRepository: IssueEventRepository
 ) {
 
     @GetMapping("/{owner}/{projectName}/issues")
@@ -279,9 +283,20 @@ class IssueViewController(
             """{"id":"$id","mimeType":"$mimeType","name":"$name","url":"$url","size":$size}"""
         }
 
+        // yona Issue.getTimeline()(댓글+IssueEvent를 시간순으로 병합, ISSUE_BODY_CHANGED는 화면에서
+        // 제외 — partial_event_timeline.scala.html:115) 대응 (P1-106). 지금까지 화면이 이 API의
+        // 존재를 알고도 소비하지 않아 댓글만 보이고 상태/담당자/라벨/마일스톤/이동 이력이 전혀 안 보였다.
+        val events = issueEventRepository.findByIssueOrderByCreatedAsc(issue)
+            .filter { it.eventType != EventType.ISSUE_BODY_CHANGED }
+        val timeline = (
+            comments.map { IssueTimelineItem(kind = "COMMENT", date = it.createdDate ?: Instant.EPOCH, comment = it) } +
+                events.map { IssueTimelineItem(kind = "EVENT", date = it.created, event = it) }
+            ).sortedBy { it.date }
+
         model.addAttribute("project", project)
         model.addAttribute("issue", issue)
         model.addAttribute("comments", comments)
+        model.addAttribute("timeline", timeline)
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("isWatching", isWatching)
         model.addAttribute("isWatchingProject", isWatchingProject)
