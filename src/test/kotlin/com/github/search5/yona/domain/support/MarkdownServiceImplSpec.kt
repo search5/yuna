@@ -13,6 +13,7 @@ import com.github.search5.yona.domain.vcs.Commit
 import com.github.search5.yona.domain.vcs.PlayRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
@@ -235,6 +236,35 @@ class MarkdownServiceImplSpec : DescribeSpec({
 
             output.shouldContain("/yobi/yobi/code/main/docs/guide.md")
             output.shouldContain("/yobi/yobi/files/main/images/logo.png")
+        }
+
+        // yona utils/Markdown.java:218-270 renderWithHighlight()의 CacheStore.renderedMarkdown
+        // 캐시 대응 (P2-43, 사용자 지시로 원본 구조 그대로 포팅).
+        describe("렌더 결과 캐시 (P2-43)") {
+            it("같은 source를 같은 breaks로 반복 렌더링하면 매번 동일한 결과를 반환해야 한다") {
+                val source = "# cache-basic-test\n\nsome **bold** text"
+
+                val first = markdownService.render(source, true)
+                val second = markdownService.render(source, true)
+
+                second shouldBe first
+                first.shouldContain("<strong>bold</strong>")
+            }
+
+            // yona 원본 캐시 키가 source.hashCode()만 쓰고 breaks는 키에 포함하지 않아, 같은
+            // source를 breaks 값만 바꿔 렌더링하면 캐시된 이전 breaks 결과가 그대로 반환된다 —
+            // 이 특성을 구조 그대로 포팅했으므로 yuna에서도 동일하게 재현돼야 한다.
+            it("동일 source를 breaks만 바꿔 렌더링해도 캐시된 이전 breaks 결과가 그대로 반환된다 (yona 원본 캐시 키 특성 그대로 포팅)") {
+                val source = "cache-quirk-test-line-one\nline-two"
+
+                val renderedWithBreaksTrue = markdownService.render(source, true)
+                renderedWithBreaksTrue.shouldContain("<br>")
+
+                val renderedWithBreaksFalse = markdownService.render(source, false)
+
+                renderedWithBreaksFalse shouldBe renderedWithBreaksTrue
+                renderedWithBreaksFalse.shouldContain("<br>")
+            }
         }
     }
 })
