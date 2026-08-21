@@ -70,7 +70,7 @@ class ProjectTransferForkSpec : DescribeSpec({
 
         it("프로젝트 이관 요청 API 호출 시 정상 응답을 반환해야 한다") {
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every { projectUserRepository.findByProjectIdAndUserId(10L, 1L) } returns Optional.of(projectUser)
             
             val pt = ProjectTransfer(
@@ -110,7 +110,7 @@ class ProjectTransferForkSpec : DescribeSpec({
 
         it("프로젝트 포크 API 호출 시 자식 프로젝트를 생성하고 정상 응답을 반환해야 한다") {
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             
             val forkedProject = Project(id = 20L, name = "yona-project", owner = "gildong", originalProject = project)
             every { projectService.forkProject(10L, 1L) } returns forkedProject

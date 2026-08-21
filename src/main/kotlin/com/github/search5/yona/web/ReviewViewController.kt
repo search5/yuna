@@ -31,7 +31,7 @@ class ReviewViewController(
         val user = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: throw IllegalStateException("User not authenticated")
 
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val pullRequest = pullRequestRepository.findById(pullRequestId).orElse(null)
@@ -69,7 +69,7 @@ class ReviewViewController(
         val user = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: throw IllegalStateException("User not authenticated")
 
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"
@@ -113,7 +113,7 @@ class ReviewViewController(
         val user = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: throw IllegalStateException("User not authenticated")
 
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"

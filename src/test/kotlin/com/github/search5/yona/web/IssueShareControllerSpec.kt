@@ -55,7 +55,7 @@ class IssueShareControllerSpec : DescribeSpec({
         describe("GET /-_-api/v1/owners/{owner}/projects/{projectName}/assignableUsers") {
             it("프로젝트 내 담당자 지정 가능한 유저 목록을 반환해야 한다") {
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 
                 val resultList = listOf(
                     mapOf("loginId" to "testuser", "name" to "나에게 지정", "type" to "user")
@@ -77,7 +77,7 @@ class IssueShareControllerSpec : DescribeSpec({
                 val targetUser = User(id = 2L, loginId = "assigneeUser", name = "담당자", email = "assignee@example.com")
 
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
                 every { userRepository.findByLoginId("assigneeUser") } returns Optional.of(targetUser)
 
@@ -105,7 +105,7 @@ class IssueShareControllerSpec : DescribeSpec({
         describe("POST /-_-api/v1/owners/{owner}/projects/{projectName}/issues/{number}/share") {
             it("공유자를 추가하고 결과를 반환해야 한다") {
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns issue
 
                 val mockResult = mapOf("action" to "added", "sharer" to "공유대상자")

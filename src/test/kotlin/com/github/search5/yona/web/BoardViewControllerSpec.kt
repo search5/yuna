@@ -109,7 +109,7 @@ class BoardViewControllerSpec : DescribeSpec({
             it("비공개 프로젝트일 때 멤버라면 200 OK와 board/list 뷰를 반환해야 한다") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { postingRepository.findByProject(project, any<Pageable>()) } returns PageImpl(listOf(posting), pageRequest, 1)
@@ -122,7 +122,7 @@ class BoardViewControllerSpec : DescribeSpec({
             }
 
             it("프로젝트 멤버가 아닐 경우 403 Forbidden 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
@@ -142,7 +142,7 @@ class BoardViewControllerSpec : DescribeSpec({
                     )
                 )
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(groupProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
                 every { postingRepository.findByProject(groupProject, any<Pageable>()) } returns PageImpl(listOf(posting), pageRequest, 1)
@@ -156,7 +156,7 @@ class BoardViewControllerSpec : DescribeSpec({
             it("labelIds 파라미터가 있으면 라벨 필터 쿼리를 사용해야 한다 (P1-19)") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 901L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every {
@@ -181,7 +181,7 @@ class BoardViewControllerSpec : DescribeSpec({
             it("멤버라면 200 OK와 board/view 뷰를 반환해야 한다") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 902L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { postingService.getPosting(1L, 1L) } returns posting
@@ -198,7 +198,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/post/new") {
             it("멤버라면 200 OK와 board/create 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
 
@@ -211,7 +211,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
         describe("POST /{owner}/{projectName}/post/{number}/edit (P1-44)") {
             it("sendNotificationMail 옵션을 postingService.updatePosting에 그대로 전달해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { postingService.getPosting(1L, 1L) } returns posting
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
@@ -230,7 +230,7 @@ class BoardViewControllerSpec : DescribeSpec({
             }
 
             it("sendNotificationMail을 선택하지 않으면 false로 전달해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { postingService.getPosting(1L, 1L) } returns posting
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
@@ -252,7 +252,7 @@ class BoardViewControllerSpec : DescribeSpec({
             it("temporaryUploadFiles로 넘어온 첨부파일 ID들이 생성된 게시글에 연결되어야 한다") {
                 val savedPosting = Posting(id = 100L, number = 5L, title = "제목", body = "본문", project = project)
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { postingService.createPosting(1L, any(), 10L) } returns savedPosting

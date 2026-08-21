@@ -132,7 +132,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             it("비공개 프로젝트일 때 멤버라면 200 OK와 project/home 뷰를 반환해야 한다") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = managerRole))
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { projectUserRepository.findByProjectId(1L) } returns listOf(projectUser)
@@ -146,7 +146,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             }
 
             it("프로젝트 멤버가 아닐 경우 403 Forbidden 뷰를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
@@ -165,7 +165,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 )
                 val groupProject = Project(id = 11L, name = "group-project", owner = "owner", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
 
-                every { projectRepository.findByOwnerAndName("owner", "group-project") } returns Optional.of(groupProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "group-project") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(11L, 10L) } returns false
                 every { projectUserRepository.findByProjectId(11L) } returns emptyList()
@@ -176,13 +176,29 @@ class ProjectViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("project/home"))
             }
+
+            // yona GitApp.java:95-104 findByPreviousPlaceOf() 폴백 대응, 웹 라우트 배선 (P1-100).
+            it("프로젝트가 이전(rename/소유자 변경)된 뒤에도 예전 owner/name URL로 접근하면 새 위치의 프로젝트를 찾아야 한다") {
+                val movedProject = Project(id = 20L, name = "new-name", owner = "new-owner", projectScope = ProjectScope.PUBLIC)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("old-owner", "old-name") } returns Optional.of(movedProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(20L, 10L) } returns false
+                every { projectUserRepository.findByProjectId(20L) } returns emptyList()
+                every { watchService.isWatching(any(), any(), any()) } returns false
+                every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+                mockMvc.perform(get("/old-owner/old-name").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("project/home"))
+                    .andExpect(model().attribute("project", movedProject))
+            }
         }
 
         describe("GET /{owner}/{projectName}/members") {
             it("멤버라면 200 OK와 project/members 뷰를 반환해야 한다") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 901L, user = memberUser, project = project, role = managerRole))
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { projectUserRepository.findByProjectId(1L) } returns listOf(projectUser)
@@ -201,7 +217,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 every { playRepository.getRefNames() } returns listOf("refs/heads/master")
                 every { playRepository.getDefaultBranch() } returns "refs/heads/master"
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
@@ -216,7 +232,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 val memberRole = Role(id = RoleType.MEMBER.roleType)
                 val memberProjectUser = ProjectUser(id = 100L, user = user, project = project, role = memberRole)
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(memberProjectUser)
@@ -228,7 +244,7 @@ class ProjectViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/changeVCS") {
             it("MANAGER 권한이 있는 멤버는 change_vcs 뷰를 반환받아야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
@@ -241,7 +257,7 @@ class ProjectViewControllerSpec : DescribeSpec({
 
         describe("POST /{owner}/{projectName}/changeVCS") {
             it("MANAGER 권한을 지닌 멤버는 VCS 변경을 성공적으로 요청할 수 있어야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
                 every { projectService.changeVCS(1L) } returns project
@@ -255,7 +271,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             val memberOnlyProject = Project(id = 4L, owner = "owner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
 
             it("[Test-12-5-1] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 비멤버인 경우 403 Forbidden을 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns false
 
@@ -265,7 +281,7 @@ class ProjectViewControllerSpec : DescribeSpec({
 
             it("[Test-12-5-2] 공개 프로젝트이며 isCodeAccessibleMemberOnly가 true이고 멤버인 경우 200 OK와 올바른 zip 출력을 해야 한다") {
                 val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
-                every { projectRepository.findByOwnerAndName("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-project") } returns Optional.of(memberOnlyProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(4L, 10L) } returns true
                 every { repositoryService.getRepository(memberOnlyProject) } returns playRepo

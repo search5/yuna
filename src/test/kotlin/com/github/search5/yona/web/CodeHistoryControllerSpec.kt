@@ -80,7 +80,7 @@ class CodeHistoryControllerSpec : DescribeSpec({
 
         describe("POST /api/vcs/{owner}/{projectName}/commit/{commitId}/comments") {
             it("멤버가 존재하는 커밋에 댓글을 작성하면 201 Created를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 val commit = mockk<Commit>(relaxed = true)
                 val playRepo = mockk<PlayRepository>(relaxed = true)
@@ -100,7 +100,7 @@ class CodeHistoryControllerSpec : DescribeSpec({
             }
 
             it("존재하지 않는 커밋이면 404 Not Found를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 val playRepo = mockk<PlayRepository>(relaxed = true)
                 every { repositoryService.getRepository(project) } returns playRepo
@@ -122,7 +122,7 @@ class CodeHistoryControllerSpec : DescribeSpec({
                     id = 500L, project = project, commitId = commitId,
                     contents = "삭제될 댓글", author = UserIdent(user)
                 )
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { commitCommentRepository.findById(500L) } returns Optional.of(comment)
                 every { commitCommentRepository.delete(comment) } returns Unit
@@ -142,7 +142,7 @@ class CodeHistoryControllerSpec : DescribeSpec({
                     id = 501L, project = project, commitId = commitId,
                     contents = "타인의 댓글", author = UserIdent(otherAuthor)
                 )
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { commitCommentRepository.findById(501L) } returns Optional.of(comment)
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
@@ -164,7 +164,7 @@ class CodeHistoryControllerSpec : DescribeSpec({
                 memberUser.projectUsers.add(
                     ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType))
                 )
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { commitCommentRepository.findById(502L) } returns Optional.of(comment)
                 every { commitCommentRepository.delete(comment) } returns Unit
@@ -182,7 +182,7 @@ class CodeHistoryControllerSpec : DescribeSpec({
         describe("GET /api/vcs/{owner}/{projectName}/commit/{commitId}/comments") {
             it("해당 커밋의 댓글 목록을 200 OK로 반환해야 한다") {
                 val comment = CommitComment(id = 502L, project = project, commitId = commitId, contents = "댓글1")
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every {
                     commitCommentRepository.findByProjectAndCommitIdOrderByCreatedDateAsc(project, commitId)
                 } returns listOf(comment)

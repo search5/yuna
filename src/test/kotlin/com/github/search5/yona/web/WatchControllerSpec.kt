@@ -130,7 +130,7 @@ class WatchControllerSpec : DescribeSpec({
             it("/{owner}/{projectName}/watch 호출 시 해당 프로젝트를 감시 등록해야 한다") {
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
                 every { watchService.watch(user1, ResourceType.PROJECT, "1") } just Runs
 
@@ -144,7 +144,7 @@ class WatchControllerSpec : DescribeSpec({
             it("/{owner}/{projectName}/unwatch 호출 시 감시를 해제하고 연관 알림설정을 삭제해야 한다") {
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
                 every { watchService.unwatch(user1, ResourceType.PROJECT, "1") } just Runs
                 every { userProjectNotificationRepository.deleteByUserAndProject(user1, project) } just Runs
@@ -177,7 +177,7 @@ class WatchControllerSpec : DescribeSpec({
             it("type이 issues일 때 해당 이슈의 감시자 JSON 정보를 올바르게 반환해야 한다") {
                 val issue = Issue(id = 100L, number = 5L, title = "Test Issue", project = project)
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
                 every { watchService.findWatchers(ResourceType.ISSUE_POST, "100") } returns setOf(user1, user2)
 
@@ -193,7 +193,7 @@ class WatchControllerSpec : DescribeSpec({
             it("type이 posts일 때 해당 게시글의 감시자 JSON 정보를 올바르게 반환해야 한다") {
                 val posting = Posting(id = 200L, number = 3L, title = "Test Post", project = project)
 
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { postingRepository.findByProjectAndNumber(project, 3L) } returns posting
                 every { watchService.findWatchers(ResourceType.BOARD_POST, "200") } returns setOf(user2)
 
@@ -209,7 +209,7 @@ class WatchControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/watchers") {
             it("프로젝트 감시자 뷰와 감시자 목록을 모델에 전달하여 200 OK를 반환해야 한다") {
-                every { projectRepository.findByOwnerAndName("owner", "TestProj") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { watchService.findWatchers(ResourceType.PROJECT, "1") } returns setOf(user1)
 
                 mockMvc.perform(get("/owner/TestProj/watchers"))

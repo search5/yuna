@@ -44,7 +44,7 @@ class CodeHistoryController(
         @RequestParam(required = false, defaultValue = "HEAD") branch: String,
         @RequestParam(required = false) path: String?
     ): ResponseEntity<List<CommitResponse>> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val repository = repositoryService.getRepository(project)
@@ -74,7 +74,7 @@ class CodeHistoryController(
         @PathVariable projectName: String,
         @PathVariable commitId: String
     ): ResponseEntity<CommitResponse> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val repository = repositoryService.getRepository(project)
@@ -106,7 +106,7 @@ class CodeHistoryController(
         @RequestBody request: CreateCommitCommentRequest,
         authentication: Authentication?
     ): ResponseEntity<CommitComment> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
@@ -142,7 +142,7 @@ class CodeHistoryController(
         @PathVariable id: Long,
         authentication: Authentication?
     ): ResponseEntity<Void> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
@@ -164,7 +164,7 @@ class CodeHistoryController(
         @PathVariable projectName: String,
         @PathVariable commitId: String
     ): ResponseEntity<List<CommitComment>> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         return ResponseEntity.ok(

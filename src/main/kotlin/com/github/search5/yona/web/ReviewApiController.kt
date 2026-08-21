@@ -65,7 +65,7 @@ class ReviewApiController(
         val user = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: throw IllegalStateException("User not authenticated")
 
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         if (!checkWritePermission(project, user)) {
@@ -90,7 +90,7 @@ class ReviewApiController(
         val user = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: throw IllegalStateException("User not authenticated")
 
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         if (!checkWritePermission(project, user)) {

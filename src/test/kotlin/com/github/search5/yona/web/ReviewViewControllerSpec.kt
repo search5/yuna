@@ -49,7 +49,7 @@ class ReviewViewControllerSpec : DescribeSpec({
             val comment = ReviewComment(id = 300L, contents = "테스트 댓글")
             
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every {
                 codeReviewService.createReviewComment(
                     project = project,
@@ -91,7 +91,7 @@ class ReviewViewControllerSpec : DescribeSpec({
             val comment = CommitComment(id = 400L, contents = "테스트 SVN 댓글")
 
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every {
                 codeReviewService.createCommitComment(
                     project = project,
@@ -132,7 +132,7 @@ class ReviewViewControllerSpec : DescribeSpec({
             val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
             
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every { codeReviewService.deleteReviewComment(300L, user) } returns Unit
 
             mockMvc.perform(
@@ -149,7 +149,7 @@ class ReviewViewControllerSpec : DescribeSpec({
             val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
             
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every { codeReviewService.deleteReviewComment(300L, user) } throws IllegalArgumentException("Permission denied")
 
             mockMvc.perform(
@@ -164,7 +164,7 @@ class ReviewViewControllerSpec : DescribeSpec({
             val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "SUBVERSION")
 
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every { codeReviewService.deleteCommitComment(400L, user) } returns Unit
 
             mockMvc.perform(
@@ -181,7 +181,7 @@ class ReviewViewControllerSpec : DescribeSpec({
             val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "SUBVERSION")
 
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
-            every { projectRepository.findByOwnerAndName("gildong", "yona-project") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every { codeReviewService.deleteCommitComment(400L, user) } throws IllegalArgumentException("Permission denied")
 
             mockMvc.perform(

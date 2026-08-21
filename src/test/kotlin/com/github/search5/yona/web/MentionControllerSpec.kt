@@ -111,7 +111,7 @@ class MentionControllerSpec : DescribeSpec({
 
         it("비공개 프로젝트는 멤버가 아니면 403을 반환해야 한다") {
             val project = Project(id = 10L, name = "priv", owner = "owner", projectScope = ProjectScope.PRIVATE)
-            every { projectRepository.findByOwnerAndName("owner", "priv") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(10L, 1L) } returns false
 
@@ -128,7 +128,7 @@ class MentionControllerSpec : DescribeSpec({
             val other = User(id = 2L, loginId = "other", name = "다른사람")
             val groupMember = User(id = 3L, loginId = "groupie", name = "그룹멤버")
 
-            every { projectRepository.findByOwnerAndName("owner", "p") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(11L, 1L) } returns true
             me.projectUsers.add(ProjectUser(id = 9001L, user = me, project = project, role = memberRole))
@@ -166,7 +166,7 @@ class MentionControllerSpec : DescribeSpec({
                 englishName = "Gildong Hong", lang = "ko"
             )
 
-            every { projectRepository.findByOwnerAndName("owner", "p2") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p2") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(meEnglishSpeaker)
             every { projectUserRepository.existsByProjectIdAndUserId(12L, 1L) } returns true
             meEnglishSpeaker.projectUsers.add(ProjectUser(id = 9002L, user = meEnglishSpeaker, project = project, role = memberRole))
@@ -189,7 +189,7 @@ class MentionControllerSpec : DescribeSpec({
             val project = Project(id = 12L, name = "pub", owner = "owner", projectScope = ProjectScope.PUBLIC)
             val searched = User(id = 4L, loginId = "found", name = "검색됨")
 
-            every { projectRepository.findByOwnerAndName("owner", "pub") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "pub") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { userRepository.searchUsers("sea", PageRequest.of(0, 20)) } returns PageImpl(listOf(searched))
 
@@ -211,7 +211,7 @@ class MentionControllerSpec : DescribeSpec({
             val project = Project(id = 13L, name = "p2", owner = "owner", projectScope = ProjectScope.PRIVATE)
             val admin = User(id = 5L, loginId = "admin", name = "관리자")
 
-            every { projectRepository.findByOwnerAndName("owner", "p2") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p2") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(13L, 1L) } returns true
             me.projectUsers.add(ProjectUser(id = 9003L, user = me, project = project, role = memberRole))
@@ -238,7 +238,7 @@ class MentionControllerSpec : DescribeSpec({
             val commenterB = User(id = 8L, loginId = "commenterB", name = "댓글B")
             val issue = Issue(id = 600L, title = "이슈", project = project, number = 3L, authorLoginId = "author1")
 
-            every { projectRepository.findByOwnerAndName("owner", "p5") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p5") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(20L, 1L) } returns true
             me.projectUsers.add(ProjectUser(id = 9004L, user = me, project = project, role = memberRole))
@@ -276,7 +276,7 @@ class MentionControllerSpec : DescribeSpec({
                 user = watcher, resourceType = ResourceType.PROJECT, resourceId = "21"
             )
 
-            every { projectRepository.findByOwnerAndName("owner", "p6") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p6") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(21L, 1L) } returns true
             me.projectUsers.add(ProjectUser(id = 9005L, user = me, project = project, role = memberRole))
@@ -303,7 +303,7 @@ class MentionControllerSpec : DescribeSpec({
             val issueSharer = com.github.search5.yona.domain.issue.IssueSharer(loginId = "sharer1", user = sharer, issue = issue)
             issue.sharers.add(issueSharer)
 
-            every { projectRepository.findByOwnerAndName("owner", "p7") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p7") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(22L, 1L) } returns true
             me.projectUsers.add(ProjectUser(id = 9006L, user = me, project = project, role = memberRole))
@@ -342,7 +342,7 @@ class MentionControllerSpec : DescribeSpec({
                     author = com.github.search5.yona.domain.user.UserIdent(codeCommenter)
                 )
 
-                every { projectRepository.findByOwnerAndName("owner", "cd1") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "cd1") } returns Optional.of(project)
                 every { userRepository.findByLoginId("me") } returns Optional.of(me)
                 every { projectUserRepository.existsByProjectIdAndUserId(30L, 1L) } returns true
                 me.projectUsers.add(ProjectUser(id = 9007L, user = me, project = project, role = memberRole))
@@ -392,7 +392,7 @@ class MentionControllerSpec : DescribeSpec({
                     author = com.github.search5.yona.domain.user.UserIdent(reviewer)
                 )
 
-                every { projectRepository.findByOwnerAndName("owner", "pr1") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "pr1") } returns Optional.of(project)
                 every { userRepository.findByLoginId("me") } returns Optional.of(me)
                 every { projectUserRepository.existsByProjectIdAndUserId(31L, 1L) } returns true
                 me.projectUsers.add(ProjectUser(id = 9008L, user = me, project = project, role = memberRole))
@@ -416,7 +416,7 @@ class MentionControllerSpec : DescribeSpec({
             it("존재하지 않는 PR이면 404를 반환해야 한다") {
                 val project = Project(id = 32L, name = "pr2", owner = "owner", projectScope = ProjectScope.PRIVATE)
 
-                every { projectRepository.findByOwnerAndName("owner", "pr2") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "pr2") } returns Optional.of(project)
                 every { userRepository.findByLoginId("me") } returns Optional.of(me)
                 every { projectUserRepository.existsByProjectIdAndUserId(32L, 1L) } returns true
                 me.projectUsers.add(ProjectUser(id = 9009L, user = me, project = project, role = memberRole))
@@ -436,7 +436,7 @@ class MentionControllerSpec : DescribeSpec({
             val project = Project(id = 14L, name = "p3", owner = "owner", projectScope = ProjectScope.PRIVATE)
             val issue = Issue(id = 500L, title = "버그 수정", project = project, number = 7L)
 
-            every { projectRepository.findByOwnerAndName("owner", "p3") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p3") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(14L, 1L) } returns true
             me.projectUsers.add(ProjectUser(id = 9010L, user = me, project = project, role = memberRole))
@@ -455,7 +455,7 @@ class MentionControllerSpec : DescribeSpec({
         it("mentionType이 user/issue가 아니면 빈 결과를 반환해야 한다") {
             val project = Project(id = 15L, name = "p4", owner = "owner", projectScope = ProjectScope.PRIVATE)
 
-            every { projectRepository.findByOwnerAndName("owner", "p4") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "p4") } returns Optional.of(project)
             every { userRepository.findByLoginId("me") } returns Optional.of(me)
             every { projectUserRepository.existsByProjectIdAndUserId(15L, 1L) } returns true
             me.projectUsers.add(ProjectUser(id = 9011L, user = me, project = project, role = memberRole))

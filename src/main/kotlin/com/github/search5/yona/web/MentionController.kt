@@ -72,7 +72,7 @@ class MentionController(
         @RequestParam(required = false) resourceType: String?,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val loginUser = getLoginUser(authentication)
@@ -165,7 +165,7 @@ class MentionController(
         @RequestParam(required = false, defaultValue = "") mentionType: String,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val loginUser = getLoginUser(authentication)
@@ -228,7 +228,7 @@ class MentionController(
         @RequestParam(required = false, defaultValue = "") mentionType: String,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val loginUser = getLoginUser(authentication)

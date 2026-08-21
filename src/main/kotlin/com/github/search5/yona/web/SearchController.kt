@@ -96,7 +96,7 @@ class SearchController(
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "검색어를 입력해주세요.")
         }
 
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElseThrow {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElseThrow {
             ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.")
         }
 

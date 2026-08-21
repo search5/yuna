@@ -41,7 +41,7 @@ class CodeViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -86,7 +86,7 @@ class CodeViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -124,7 +124,7 @@ class CodeViewController(
         @PathVariable path: String,
         authentication: Authentication?
     ): ResponseEntity<ByteArray> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -204,7 +204,7 @@ class CodeViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
@@ -245,7 +245,7 @@ class CodeViewController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }

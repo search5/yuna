@@ -130,7 +130,7 @@ class ProjectController(
         authentication: Authentication?
     ): ResponseEntity<Any> {
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         if (!isProjectManager(project.id!!, user.id!!)) {
@@ -168,7 +168,7 @@ class ProjectController(
         authentication: Authentication?
     ): ResponseEntity<Any> {
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         return try {
@@ -186,7 +186,7 @@ class ProjectController(
         @PathVariable projectName: String,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication)
@@ -208,7 +208,7 @@ class ProjectController(
         @RequestParam name: String,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
@@ -237,7 +237,7 @@ class ProjectController(
         @PathVariable labelId: Long,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
@@ -261,7 +261,7 @@ class ProjectController(
         @PathVariable projectName: String,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication)
@@ -284,7 +284,7 @@ class ProjectController(
         @PathVariable id: Long,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val project = projectRepository.findByOwnerAndName(owner, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()

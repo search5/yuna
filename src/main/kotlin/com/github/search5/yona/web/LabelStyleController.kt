@@ -22,7 +22,7 @@ class LabelStyleController(
         @PathVariable projectName: String,
         @RequestHeader(value = "If-None-Match", required = false) ifNoneMatch: String?
     ): ResponseEntity<String> {
-        val project = projectRepository.findByOwnerAndName(user, projectName).orElse(null)
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(user, projectName).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
         val labels = issueLabelRepository.findByProject(project)

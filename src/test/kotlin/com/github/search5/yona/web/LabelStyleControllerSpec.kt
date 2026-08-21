@@ -35,7 +35,7 @@ class LabelStyleControllerSpec : DescribeSpec({
                 val label1 = IssueLabel(id = 1L, category = category, color = "#ff0000", name = "Bug", project = project)
                 val label2 = IssueLabel(id = 2L, category = category, color = "#ffffff", name = "Question", project = project)
 
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { issueLabelRepository.findByProject(project) } returns listOf(label1, label2)
 
                 val eTag = "\"${listOf(label1, label2).map { "${it.id}-${it.color}" }.hashCode()}\""
@@ -55,7 +55,7 @@ class LabelStyleControllerSpec : DescribeSpec({
             it("If-None-Match가 헤더 ETag와 같을 때 304 Not Modified를 반환해야 한다") {
                 val label1 = IssueLabel(id = 1L, category = category, color = "#ff0000", name = "Bug", project = project)
 
-                every { projectRepository.findByOwnerAndName("testowner", "testproject") } returns Optional.of(project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
                 every { issueLabelRepository.findByProject(project) } returns listOf(label1)
 
                 val eTag = "\"${listOf(label1).map { "${it.id}-${it.color}" }.hashCode()}\""
