@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -35,6 +36,7 @@ import com.github.search5.yona.domain.milestone.MilestoneRepository
 
 class MilestoneControllerSpec : DescribeSpec({
     val milestoneService = mockk<MilestoneService>()
+    val milestoneRepository = mockk<MilestoneRepository>()
     val projectRepository = mockk<ProjectRepository>()
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
@@ -57,6 +59,7 @@ class MilestoneControllerSpec : DescribeSpec({
 
     val milestoneController = MilestoneController(
         milestoneService,
+        milestoneRepository,
         projectRepository,
         projectUserRepository,
         userRepository,
@@ -65,7 +68,7 @@ class MilestoneControllerSpec : DescribeSpec({
     val mockMvc = MockMvcBuilders.standaloneSetup(milestoneController).build()
 
     beforeTest {
-        io.mockk.clearMocks(milestoneService, projectRepository, projectUserRepository, userRepository)
+        io.mockk.clearMocks(milestoneService, milestoneRepository, projectRepository, projectUserRepository, userRepository)
     }
 
     describe("MilestoneController 웹 API 테스트") {
@@ -177,6 +180,62 @@ class MilestoneControllerSpec : DescribeSpec({
                         .principal(strangerAuth)
                 )
                     .andExpect(status().isForbidden)
+            }
+        }
+
+        // yona controllers/api/MilestoneApi.java:29-50 newMilestone() 대응 (P1-129).
+        describe("POST /api/projects/{projectId}/milestones/bulk") {
+            it("프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+
+                val jsonContent = """{ "milestones": [ { "title": "임포트된 마일스톤" } ] }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/milestones/bulk")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(strangerAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { milestoneRepository.save(any()) }
+            }
+
+            it("이미 존재하는 제목이면 생성하지 않고 중복 메시지를 반환하고, 새 제목은 정상 생성되어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { milestoneRepository.findByProjectAndTitle(project, "이미 있는 제목") } returns milestone
+                every { milestoneRepository.findByProjectAndTitle(project, "새 제목") } returns null
+                val savedSlot = io.mockk.slot<Milestone>()
+                every { milestoneRepository.save(capture(savedSlot)) } answers { savedSlot.captured.apply { id = 40L } }
+
+                val jsonContent = """
+                    {
+                        "milestones": [
+                            { "title": "이미 있는 제목" },
+                            { "title": "새 제목", "description": "설명", "state": "closed" }
+                        ]
+                    }
+                """.trimIndent()
+
+                val result = mockMvc.perform(
+                    post("/api/projects/1/milestones/bulk")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+                    .andExpect(jsonPath("$[0].message").value("이미 존재하는 마일스톤 제목입니다."))
+                    .andExpect(jsonPath("$[1].title").value("새 제목"))
+                    .andExpect(jsonPath("$[1].state").value("closed"))
+                    .andReturn()
+
+                verify(exactly = 1) { milestoneRepository.save(any()) }
+                savedSlot.captured.state shouldBe State.CLOSED
             }
         }
 
