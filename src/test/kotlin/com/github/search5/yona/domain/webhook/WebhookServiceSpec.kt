@@ -325,5 +325,104 @@ class WebhookServiceSpec : DescribeSpec({
                 json.get("text").asText() shouldBe "[test-project] 송신자님이 새 이슈를 등록했습니다."
             }
         }
+
+        // yona Webhook.java:284-298 buildIssueDetails() / :502-515 buildJsonWithPullReqtuestDetails() 대응
+        // (P1-133) — DETAIL_SLACK attachment의 이슈 필드(마일스톤/담당자/상태)가 "State" 하나로 축소돼
+        // 있었고, PR attachment는 아예 미지원이었다.
+        describe("buildPayload - DETAIL_SLACK attachment 필드 (P1-133)") {
+            it("이슈는 마일스톤(있을 때만)/담당자/상태 필드를 모두 포함해야 한다") {
+                val slackWebhook = Webhook(
+                    id = 50L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.DETAIL_SLACK
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val assigneeUser = User(id = 8L, loginId = "assignee", name = "담당자이름")
+                val milestone = com.github.search5.yona.domain.milestone.Milestone(id = 500L, title = "1.0 릴리즈", project = project)
+                val issue = com.github.search5.yona.domain.issue.Issue(
+                    id = 103L, title = "필드 테스트 이슈", body = "이슈 본문", project = project, number = 13,
+                    milestone = milestone,
+                    assignee = com.github.search5.yona.domain.issue.Assignee(id = 1L, user = assigneeUser, project = project)
+                )
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issue)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val fields = json.get("attachments").get(0).get("fields")
+
+                json.get("attachments").get(0).get("text").asText() shouldBe "이슈 본문"
+                fields.get(0).get("title").asText() shouldBe "마일 스톤 변경"
+                fields.get(0).get("value").asText() shouldBe "1.0 릴리즈"
+                fields.get(1).get("title").asText() shouldBe ""
+                fields.get(1).get("value").asText() shouldBe "담당자이름"
+                fields.get(2).get("title").asText() shouldBe "상태"
+                fields.get(2).get("value").asText() shouldBe issue.state.toString()
+            }
+
+            it("마일스톤이 없는 이슈는 마일스톤 필드 없이 담당자/상태 필드만 포함해야 한다") {
+                val slackWebhook = Webhook(
+                    id = 51L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.DETAIL_SLACK
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = com.github.search5.yona.domain.issue.Issue(
+                    id = 104L, title = "마일스톤 없는 이슈", body = "본문", project = project, number = 14
+                )
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issue)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val fields = json.get("attachments").get(0).get("fields")
+
+                fields.size() shouldBe 2
+                fields.get(0).get("title").asText() shouldBe ""
+                fields.get(1).get("title").asText() shouldBe "상태"
+            }
+
+            it("풀 리퀘스트는 보낸사람/보낸브랜치/받는브랜치 필드를 포함해야 한다 (yona 원본은 미지원이었음)") {
+                val slackWebhook = Webhook(
+                    id = 52L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.DETAIL_SLACK
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
+                val pullRequest = com.github.search5.yona.domain.pullrequest.PullRequest(
+                    id = 60L, title = "PR 제목", body = "PR 본문",
+                    toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature/x",
+                    contributor = contributor, number = 3
+                )
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_PULL_REQUEST, sender, pullRequest)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+                val attachment = json.get("attachments").get(0)
+                val fields = attachment.get("fields")
+
+                attachment.get("text").asText() shouldBe "PR 본문"
+                fields.get(0).get("title").asText() shouldBe "보낸 사람"
+                fields.get(0).get("value").asText() shouldBe "기여자"
+                fields.get(1).get("title").asText() shouldBe "코드 보내는 곳"
+                fields.get(1).get("value").asText() shouldBe "feature/x"
+                fields.get(2).get("title").asText() shouldBe "코드 받을 곳"
+                fields.get(2).get("value").asText() shouldBe "master"
+            }
+
+            // CommitComment는 yona Webhook.java에 대응 오버로드 자체가 없는 yuna 전용 리소스라, 링크나
+            // 필드를 새로 만들어 붙이지 않아야 한다(레거시에 없는 동작 추가 금지).
+            it("CommitComment는 링크나 attachment 필드를 새로 만들지 않아야 한다") {
+                val slackWebhook = Webhook(
+                    id = 53L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    gitPush = true, webhookType = WebhookType.DETAIL_SLACK
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val commitComment = com.github.search5.yona.domain.pullrequest.CommitComment(
+                    id = 70L, project = project, contents = "커밋 댓글 내용"
+                )
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_COMMENT, sender, commitComment)
+                val json = tools.jackson.databind.ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe "[test-project] 송신자님이 새 댓글을 등록했습니다."
+                json.get("attachments").get(0).get("text").asText() shouldBe ""
+                json.get("attachments").get(0).get("fields").size() shouldBe 0
+            }
+        }
     }
 })

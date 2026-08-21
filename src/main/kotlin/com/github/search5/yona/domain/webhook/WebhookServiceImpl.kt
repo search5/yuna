@@ -103,33 +103,11 @@ class WebhookServiceImpl(
             WebhookType.DETAIL_SLACK -> {
                 val root = objectMapper.createObjectNode()
                 root.put("text", textMessage)
-                
+
                 val attachments = objectMapper.createArrayNode()
-                val attachNode = objectMapper.createObjectNode()
-                
-                // 리소스 세부 내용 바인딩
-                val bodyText = when (resource) {
-                    is com.github.search5.yona.domain.issue.Issue -> resource.body ?: ""
-                    is com.github.search5.yona.domain.board.Posting -> resource.body ?: ""
-                    is com.github.search5.yona.domain.issue.IssueComment -> resource.contents ?: ""
-                    is com.github.search5.yona.domain.board.PostingComment -> resource.contents ?: ""
-                    else -> ""
-                }
-                attachNode.put("text", bodyText)
-                
-                val fields = objectMapper.createArrayNode()
-                // 예: 상태 필드 등 추가
-                if (resource is com.github.search5.yona.domain.issue.Issue) {
-                    val fieldNode = objectMapper.createObjectNode()
-                    fieldNode.put("title", "State")
-                    fieldNode.put("value", resource.state?.toString() ?: "OPEN")
-                    fieldNode.put("short", true)
-                    fields.add(fieldNode)
-                }
-                attachNode.set("fields", fields)
-                attachments.add(attachNode)
+                attachments.add(buildAttachmentJSON(objectMapper, resource))
                 root.set("attachments", attachments)
-                
+
                 objectMapper.writeValueAsString(root)
             }
             WebhookType.DETAIL_HANGOUT_CHAT -> {
@@ -187,6 +165,71 @@ class WebhookServiceImpl(
     // yona Webhook.java:713-714 buildJSONFromCommit()의
     // new SimpleDateFormat("yyyy-MM-dd'T'hh:mm:ssZ") 대응 (P2-08) — 문자열 포맷까지 그대로 재현한다.
     private val commitTimestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'hh:mm:ssZ")
+
+    // yona Webhook.java:284-298 buildIssueDetails() / :502-515 buildJsonWithPullReqtuestDetails() /
+    // :376-384 buildCommentDetails() / :545-552 buildAttachmentJSON() 대응 (P1-133) — DETAIL_SLACK
+    // attachment의 fields를 리소스 타입별로 yona와 동일하게 구성한다. Issue는 마일스톤(있을 때만)+담당자+상태,
+    // PullRequest는 보낸사람+보낸브랜치+받는브랜치(yona 원본은 완전히 미지원이었음), 그 외(댓글 등)는
+    // yona도 fields 없이 본문만 담는다. yona는 color를 `Play.application().configuration().getString(
+    // "slack." + eventType, "")`로 조회하나 yuna에는 이 설정 자체가 없어(기본값도 항상 "") 빈 문자열로 고정.
+    private fun buildAttachmentJSON(objectMapper: tools.jackson.databind.ObjectMapper, resource: Any): tools.jackson.databind.node.ObjectNode {
+        val fields = objectMapper.createArrayNode()
+        val text: String
+
+        when (resource) {
+            is com.github.search5.yona.domain.issue.Issue -> {
+                text = resource.body ?: ""
+                resource.milestone?.let {
+                    fields.add(buildTitleValueJSON(objectMapper, "마일 스톤 변경", it.title, true))
+                }
+                fields.add(buildTitleValueJSON(objectMapper, "", resource.assignee?.user?.name ?: "", true))
+                fields.add(buildTitleValueJSON(objectMapper, "상태", resource.state.toString(), true))
+            }
+            is com.github.search5.yona.domain.board.Posting -> text = resource.body ?: ""
+            is com.github.search5.yona.domain.pullrequest.PullRequest -> {
+                text = resource.body ?: ""
+                fields.add(buildTitleValueJSON(objectMapper, "보낸 사람", resource.contributor.name, false))
+                fields.add(buildTitleValueJSON(objectMapper, "코드 보내는 곳", resource.fromBranch, true))
+                fields.add(buildTitleValueJSON(objectMapper, "코드 받을 곳", resource.toBranch, true))
+            }
+            is com.github.search5.yona.domain.issue.IssueComment -> text = resource.contents
+            is com.github.search5.yona.domain.board.PostingComment -> text = resource.contents
+            // yona Webhook.java:476-478 — 리뷰 댓글(Pull Request Comment) 이벤트의 DETAIL_SLACK
+            // attachment는 댓글 자신이 아니라 buildJsonWithPullReqtuestDetails(eventPullRequest, ...)를
+            // 그대로 재사용해 부모 풀 리퀘스트의 본문+필드(보낸사람/보낸브랜치/받는브랜치)를 담는다.
+            is com.github.search5.yona.domain.pullrequest.ReviewComment -> {
+                val pullRequest = resource.thread?.pullRequest
+                text = pullRequest?.body ?: ""
+                if (pullRequest != null) {
+                    fields.add(buildTitleValueJSON(objectMapper, "보낸 사람", pullRequest.contributor.name, false))
+                    fields.add(buildTitleValueJSON(objectMapper, "코드 보내는 곳", pullRequest.fromBranch, true))
+                    fields.add(buildTitleValueJSON(objectMapper, "코드 받을 곳", pullRequest.toBranch, true))
+                }
+            }
+            // CommitComment는 yona Webhook.java에 대응하는 오버로드 자체가 없는 yuna 전용 리소스라
+            // (P2-18) else 분기(본문/필드 없음)로 떨어지도록 그대로 둔다(레거시에 없는 동작 추가 금지).
+            else -> text = ""
+        }
+
+        val attachmentNode = objectMapper.createObjectNode()
+        attachmentNode.put("text", text)
+        attachmentNode.set("fields", fields)
+        attachmentNode.put("color", "")
+        return attachmentNode
+    }
+
+    private fun buildTitleValueJSON(
+        objectMapper: tools.jackson.databind.ObjectMapper,
+        title: String,
+        value: String,
+        shorten: Boolean
+    ): tools.jackson.databind.node.ObjectNode {
+        val titleJSON = objectMapper.createObjectNode()
+        titleJSON.put("title", title)
+        titleJSON.put("value", value)
+        titleJSON.put("short", shorten)
+        return titleJSON
+    }
 
     private fun buildPushPayload(webhook: Webhook, sender: User, pushed: PushedCommits): String {
         val objectMapper = tools.jackson.databind.ObjectMapper()
@@ -293,9 +336,13 @@ class WebhookServiceImpl(
                 "#${resource.issue.number}: ${resource.issue.title}"
             is com.github.search5.yona.domain.board.PostingComment ->
                 "#${resource.posting.number}: ${resource.posting.title}"
+            // yona Webhook.java:493-499 buildRequestBody(PullRequest, ReviewComment) — 링크 텍스트는
+            // 리뷰 댓글 자신이 아니라 부모 풀 리퀘스트의 "#번호: 제목". 부모를 못 찾으면(비정상 상태)
+            // yona에 대응 분기가 없으므로 링크를 만들지 않는다.
             is com.github.search5.yona.domain.pullrequest.ReviewComment ->
-                resource.thread?.pullRequest?.let { "#${it.number}: ${it.title}" } ?: "의견: ${resource.contents.take(30)}"
-            is com.github.search5.yona.domain.pullrequest.CommitComment -> "의견: ${resource.contents.take(30)}"
+                resource.thread?.pullRequest?.let { "#${it.number}: ${it.title}" }
+            // CommitComment는 yona Webhook.java에 대응하는 오버로드 자체가 없는 yuna 전용 리소스라
+            // (P2-18) 링크를 만들지 않는다(레거시에 없는 동작 추가 금지).
             is com.github.search5.yona.domain.pullrequest.PullRequest -> "#${resource.number}: ${resource.title}"
             else -> null
         } ?: return ""
