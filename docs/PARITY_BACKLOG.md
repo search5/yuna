@@ -2,6 +2,8 @@
 
 `yona`(Play/Java)에서 `yuna`(Spring Boot/Kotlin)로 이식하며 발견된 기능 격차를 중요도 순으로 번호를 매겨 정리한 작업 백로그다. 원본 감사 리포트: 이 세션에서 생성한 아티팩트 "요나·유나 동치성 감사" 참고.
 
+**템플릿(뷰) 이식은 별도 문서로 관리한다 → [`docs/TEMPLATE_BACKLOG.md`](./TEMPLATE_BACKLOG.md)**(legacy `app/views/**/*.scala.html` 242개 전체를 파일별 작업 순서로 정리, Play/Scala→Thymeleaf 문법 치환만 허용되는 아키텍처 차이).
+
 ## 진행 규칙 (TDD + JaCoCo)
 
 1. 항목마다 **먼저 실패하는 회귀 테스트**를 작성한다 (yona의 기대 동작을 yuna에서 명세).
