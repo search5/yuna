@@ -637,5 +637,127 @@ class IssueControllerSpec : DescribeSpec({
                 verify(exactly = 1) { issueService.downvoteWeight(5L) }
             }
         }
+
+        // yona IssueApi.java:551-584 detectChange() 대응 (P1-102). 폴링으로 다른 사용자의 변경을 감지.
+        describe("POST /api/projects/{projectId}/issues/{issueId}/detectChange") {
+            it("body와 댓글 수가 그대로면 issueBodyChanged=false를 반환해야 한다") {
+                val checksum = java.security.MessageDigest.getInstance("SHA-1")
+                    .digest("이슈 내용".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns emptyList()
+
+                val jsonContent = """{ "issueBodyChecksum": "$checksum", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.issueBodyChanged").value(false))
+                    .andExpect(jsonPath("$.numOfComments").value(0))
+                    .andExpect(jsonPath("$.result").value("ok"))
+            }
+
+            it("body가 변경됐으면 issueBodyChanged=true를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns emptyList()
+
+                val jsonContent = """{ "issueBodyChecksum": "stale-checksum", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.issueBodyChanged").value(true))
+            }
+
+            it("다른 사람이 댓글을 추가했으면 최신 댓글 작성자 이름을 포함해야 한다") {
+                val newComment = com.github.search5.yona.domain.issue.IssueComment(
+                    id = 50L, contents = "새 댓글", authorLoginId = "otheruser", issue = issue
+                )
+                val checksum = java.security.MessageDigest.getInstance("SHA-1")
+                    .digest("이슈 내용".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns listOf(newComment)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+
+                val jsonContent = """{ "issueBodyChecksum": "$checksum", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.commentAuthorName").value(otherUser.getDisplayName()))
+            }
+
+            it("익명 사용자는 401을 반환해야 한다") {
+                val jsonContent = """{ "issueBodyChecksum": "x", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+        }
+
+        // yona IssueApi.java:319-349 updateIssueContent()의 isModifiedByOthers() 충돌 감지 대응 (P1-102).
+        describe("PATCH /api/projects/{projectId}/issues/{issueId}/content") {
+            it("원본이 현재 body와 일치하면 정상적으로 갱신해야 한다") {
+                val contentIssue = Issue(id = 15L, number = 15L, title = "이슈 제목", body = "이슈 내용", project = project, authorId = user.id, state = State.OPEN)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 15L) } returns contentIssue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueRepository.save(contentIssue) } returns contentIssue
+
+                val jsonContent = """{ "content": "수정된 내용", "original": "이슈 내용" }"""
+
+                mockMvc.perform(
+                    patch("/api/projects/1/issues/15/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.body").value("수정된 내용"))
+            }
+
+            it("원본이 현재 body와 다르면(이미 다른 사람이 수정함) 409 Conflict를 반환하고 저장하지 않아야 한다") {
+                val contentIssue = Issue(id = 16L, number = 16L, title = "이슈 제목", body = "이슈 내용", project = project, authorId = user.id, state = State.OPEN)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 16L) } returns contentIssue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+
+                val jsonContent = """{ "content": "내 수정본", "original": "예전에 봤던 옛 내용" }"""
+
+                mockMvc.perform(
+                    patch("/api/projects/1/issues/16/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isConflict)
+                    .andExpect(jsonPath("$.storedContent").value("이슈 내용"))
+
+                verify(exactly = 0) { issueRepository.save(any()) }
+            }
+        }
     }
 })

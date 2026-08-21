@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.support.isModifiedByOthers
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.http.HttpStatus
@@ -68,6 +69,9 @@ class CommentController(
     }
 
     // 이슈 댓글 수정
+    // yona IssueApi.java:594-634 updateIssueComment() 대응 (P1-102). request.original이 전달되면
+    // 저장 직전 화면 원문과 현재 DB 값을 비교해 그 사이 다른 사용자가 이미 수정했는지 확인, 다르면
+    // 409(conflicted)로 거부한다 — updateIssueContent(이슈 본문)와 동일한 패턴.
     @PutMapping("/api/projects/{projectId}/issues/{number}/comments/{commentId}")
     fun updateIssueComment(
         @PathVariable projectId: Long,
@@ -75,7 +79,7 @@ class CommentController(
         @PathVariable commentId: Long,
         @RequestBody request: CommentRequest,
         authentication: Authentication?
-    ): ResponseEntity<IssueComment> {
+    ): ResponseEntity<Any> {
         val project = projectRepository.findById(projectId).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
@@ -93,6 +97,12 @@ class CommentController(
 
         if (comment.authorId != user.id && !isManager) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val original = request.original
+        if (original != null && isModifiedByOthers(comment.contents, original)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(mapOf("message" to "Already modified by someone.", "storedContent" to comment.contents))
         }
 
         val updated = commentService.updateIssueComment(commentId, request.contents, user)
@@ -217,6 +227,10 @@ class CommentController(
     }
 
     data class CommentRequest(
-        val contents: String = ""
+        val contents: String = "",
+        // yona IssueApi.java:594-634 updateIssueComment()의 isModifiedByOthers() 대응 (P1-102).
+        // 클라이언트가 저장 직전 화면에 있던 원문을 함께 보내면 동시편집 충돌을 감지한다 — null이면
+        // 기존 호출자(원문을 안 보내는 클라이언트)와의 하위호환을 위해 충돌 검사를 건너뛴다.
+        val original: String? = null
     )
 }
