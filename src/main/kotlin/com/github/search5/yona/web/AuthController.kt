@@ -1,6 +1,7 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.user.EmailDomainValidator
+import com.github.search5.yona.domain.user.LoginIdFormatValidator
 import com.github.search5.yona.domain.user.ReservedWordsValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserService
@@ -72,6 +73,10 @@ class AuthController(
         bindingResult: BindingResult,
         model: Model
     ): String {
+        // yona models/User.java:65-66,80 LOGIN_ID_PATTERN(@Pattern) 대응 (P1-104).
+        if (!LoginIdFormatValidator.isValid(user.loginId)) {
+            bindingResult.rejectValue("loginId", "pattern", "아이디 형식이 올바르지 않습니다.")
+        }
         if (userService.isLoginIdExist(user.loginId)) {
             bindingResult.rejectValue("loginId", "duplicate", "이미 존재하는 아이디입니다.")
         }

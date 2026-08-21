@@ -198,6 +198,41 @@ class AuthControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { userService.createUser(any()) }
             }
+
+            // yona models/User.java:65-66,80 LOGIN_ID_PATTERN(@Pattern) 대응 (P1-104).
+            it("아이디에 공백이 포함되면 회원가입이 거부되어야 한다") {
+                every { userService.isLoginIdExist("gil dong") } returns false
+
+                mockMvc.perform(
+                    post("/signup")
+                        .param("loginId", "gil dong")
+                        .param("name", "홍길동")
+                        .param("email", "gildong@example.com")
+                        .param("password", "pass123")
+                        .param("retypedPassword", "pass123")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("signup"))
+
+                verify(exactly = 0) { userService.createUser(any()) }
+            }
+
+            it("아이디 형식이 올바르면(영문/숫자/한글/하이픈) 회원가입이 정상 진행되어야 한다") {
+                every { userService.isLoginIdExist("gil-dong123") } returns false
+                every { userService.createUser(any()) } returns User(loginId = "gil-dong123", name = "홍길동")
+
+                mockMvc.perform(
+                    post("/signup")
+                        .param("loginId", "gil-dong123")
+                        .param("name", "홍길동")
+                        .param("email", "gildong@example.com")
+                        .param("password", "pass123")
+                        .param("retypedPassword", "pass123")
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify(exactly = 1) { userService.createUser(any()) }
+            }
         }
     }
 })
