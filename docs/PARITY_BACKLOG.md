@@ -159,7 +159,7 @@
 | P1-109 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** README 게시글 중복 생성 방지 로직 없음, 반복 작성 시 README 게시글 계속 누적 | `BoardApp.java` | `BoardViewController.createPost` | **완료(아래 완료 로그 참고)** |
 | P1-110 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** `issueTemplate=true` write-path 분기 없음, 제출 시 실제 커밋 대신 일반 게시글로 저장 | `BoardApp.java` | `BoardViewController.createPost` | **완료(아래 완료 로그 참고)** |
 | P1-111 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** 코드브라우저 "편집"의 임의 텍스트 파일 온라인 커밋 write-path 없음, 일반 게시글로 저장 | `BoardApp.java` | `BoardViewController.createPost` | **[2026-08-21 순서 변경 예고]** P1-109/110 구현 중 확인: 이 항목은 `BareCommit.kt`가 브랜치 지정(P1-135 대상) 및 하위 경로(nested path) 트리 구성을 지원하지 않아 착수 불가 — P1-135를 먼저 처리(BareCommit 확장)한 뒤 이어서 진행 예정. 착수 여부는 사용자 결정 대기 |
-| P1-112 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** `parentCommentId` DTO 필드 없어 대댓글 생성이 API로 노출 안 됨 | `PostingComment.java` | `CommentController.CommentRequest` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
+| P1-112 | [x] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** `parentCommentId` DTO 필드 없어 대댓글 생성이 API로 노출 안 됨 | `PostingComment.java` | `CommentController.CommentRequest` | **완료(아래 완료 로그 참고)** |
 | P1-113 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — 게시판 도메인)** 공개 프로젝트 비멤버의 게시글 작성 권한이 yona보다 과도하게 제한(회귀) — 근본 원인은 Board만의 실수가 아니라, yuna `IssueViewController.createIssueForm`에 이미 존재하는 정답 패턴(`accessControl.isProjectResourceCreatable(user, project, ResourceType.ISSUE_POST)`)을 `BoardViewController.createPost`/`createPostForm`이 재사용하지 않고 `existsByProjectIdAndUserId(...) || isAllowedIfGroupMember(...)`라는 별도의 좁은 검사만 쓰는 것. 동일한 `checkWritePermission` 패턴이 `PullRequestController`/`ReviewApiController`에도 복제돼 있었으나 재확인 결과 그쪽은 P1-78(ACCEPT 권한) 규칙을 정확히 재현한 것이라 회귀가 아니었음(별도 확인 완료). | `AccessControl.java` | `BoardController/BoardViewController` | 2026-08-21 백엔드 전수 감사에서 발견, Serena 재검증 과정에서 서술 정정·보강됨. 착수 여부는 사용자 결정 대기 |
 | P1-114 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** `getCodeCommentThreadsForChanges` 필터링 전무, 다른 커밋/outdated 스레드가 항상 섞여 노출 | `PullRequest.java` | `PullRequestViewController.viewPullRequest/viewChangesInternal` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
 | P1-115 | [ ] | **(2026-08-21 백엔드 전수 감사에서 발견 — PR/코드리뷰 도메인)** JPQL 연산자 우선순위 버그로 CLOSED/MERGED PR도 브랜치 삭제 처리 대상에 포함 가능 | (대응하는 단일 yona 소스 없음 — yuna 자체 버그) | `PullRequestRepository.findRelatedPullRequests()` | 2026-08-21 백엔드 전수 감사 워크플로우(도메인별 병렬 에이전트, 이후 Serena LSP 강제 재검증)로 발견. 착수 여부는 사용자 결정 대기 |
@@ -242,6 +242,12 @@ yona에는 원래 없던 항목들이다. "레거시 기능 이식"이 아니라
 ---
 
 ## 완료 로그
+
+- **2026-08-21 — P1-112**: 이슈/게시글 댓글 API에 `parentCommentId` 필드 추가해 대댓글 생성을 API로 노출.
+  - Serena LSP로 yona `models/Comment.java:45 parentCommentId`(IssueComment/PostingComment 공용 베이스 필드)와 `BoardApp.java:418/433`/`IssueApp.java:981-1012` 사용처를 재확인. yuna `CommentServiceImpl.createIssueComment()/createPostingComment()`는 이미 `parentCommentId` 파라미터를 받아 `parentComment` 연관관계를 정확히 설정하고 있었지만(서비스 계층은 완전 구현됨), `CommentController.CommentRequest` DTO에 이 필드가 없어 API 요청으로는 절대 전달될 수 없었던 순수 배선 누락이었음을 확인.
+  - `CommentRequest`에 `parentCommentId: Long? = null` 추가, `createIssueComment`/`createPostingComment` 컨트롤러 메서드가 `commentService.createIssueComment/createPostingComment` 호출 시 `request.parentCommentId`를 그대로 전달하도록 수정(수정/삭제 엔드포인트는 원래도 parentCommentId를 다루지 않아 변경 불필요).
+  - 테스트: `CommentControllerSpec.kt` +2(이슈 댓글/게시글 댓글 각각 parentCommentId가 서비스로 그대로 전달되는지 검증).
+  - 검증: `./gradlew test --tests "...CommentControllerSpec"` 전체 통과, 이어서 `./gradlew test` 전체 통과(회귀 없음 확인).
 
 - **2026-08-21 — P1-109, P1-110**: 게시글 작성(`BoardViewController.createPost`)의 README 중복 생성 방지 및 issueTemplate write-path 이식.
   - Serena LSP로 yona `BoardApp.java:209-260 newPost()`를 재확인 — `post.readme`가 true면 `Posting.findREADMEPosting(project)`로 기존 README 게시글 존재 여부를 먼저 확인해, 있으면 새로 만들지 않고 `editPost(userName, projectName, readmePosting.getNumber())`를 **동일 요청 데이터로 in-process 위임**(같은 폼을 재바인딩해 기존 게시글을 수정)한다는 것과, `post.issueTemplate.equals("true")`면 `commitIssueTemplateFile()`만 실행하고 `post.save()` 자체를 건너뛴 채(게시글 DB 행 생성 없이) 프로젝트 홈으로 리다이렉트한다는 것을 확인.

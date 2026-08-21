@@ -116,6 +116,25 @@ class CommentControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.contents").value("이슈댓글"))
             }
 
+            // yona models/Comment.java:45 parentCommentId 대응 (P1-112).
+            it("parentCommentId가 전달되면 commentService에 그대로 전달되어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { commentService.createIssueComment(50L, "답글", user, 100L) } returns issueComment
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"답글\", \"parentCommentId\": 100}")
+                )
+                    .andExpect(status().isCreated)
+
+                verify(exactly = 1) { commentService.createIssueComment(50L, "답글", user, 100L) }
+            }
+
             it("권한이 없는 멤버가 호출 시 403 Forbidden을 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
                 every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
@@ -242,6 +261,25 @@ class CommentControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isCreated)
                     .andExpect(jsonPath("$.contents").value("게시판댓글"))
+            }
+
+            // yona models/Comment.java:45 parentCommentId 대응 (P1-112).
+            it("parentCommentId가 전달되면 commentService에 그대로 전달되어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { postingRepository.findByProjectAndNumber(project, 6L) } returns posting
+                every { commentService.createPostingComment(60L, "답글", user, 200L) } returns postingComment
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts/6/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"답글\", \"parentCommentId\": 200}")
+                )
+                    .andExpect(status().isCreated)
+
+                verify(exactly = 1) { commentService.createPostingComment(60L, "답글", user, 200L) }
             }
         }
 
