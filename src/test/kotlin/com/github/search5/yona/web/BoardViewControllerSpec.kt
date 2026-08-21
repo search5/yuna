@@ -22,6 +22,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.attachment.Attachment
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.data.domain.PageImpl
@@ -365,6 +366,55 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 result shouldBe "redirect:/owner/TestProj"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
+            }
+        }
+
+        // yona BoardApp.newPost()의 path+isMemberOf(project) 온라인 커밋 분기 대응 (P1-111).
+        // BareCommit의 branch+nested-path 지원 오버로드(P1-135)가 실제로 연결됐는지 검증하기 위해
+        // "/tmp/yuna/git"(테스트 전역 gitBaseDir) 아래 실제 bare 저장소를 만들어 커밋 결과를 직접 확인한다.
+        describe("POST /{owner}/{projectName}/posts - 코드브라우저 편집 온라인 커밋 경로") {
+            it("path가 채워지면 게시글 대신 지정 브랜치의 하위 경로에 커밋하고 코드브라우저로 리다이렉트해야 한다") {
+                val codeEditProject = Project(id = 99L, name = "CodeEditProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저", email = "testuser@yona.io")
+                memberUser.projectUsers.add(ProjectUser(id = 955L, user = memberUser, project = codeEditProject, role = Role(id = RoleType.MEMBER.roleType)))
+
+                val gitBaseDir = java.io.File("/tmp/yuna/git")
+                val bareDir = java.io.File(gitBaseDir, "owner/CodeEditProj.git")
+                bareDir.deleteRecursively()
+                org.eclipse.jgit.api.Git.init().setDirectory(bareDir).setBare(true).call().close()
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CodeEditProj") } returns Optional.of(codeEditProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(99L, 10L) } returns true
+
+                val request = PostingForm(
+                    title = "커밋 메시지",
+                    body = "package foo",
+                    path = "src/main/Foo.kt",
+                    branch = "develop"
+                )
+
+                val result = boardViewController.createPost("owner", "CodeEditProj", request, userAuth)
+
+                result shouldBe "redirect:/owner/CodeEditProj/code/develop/src/main/Foo.kt"
+                verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
+
+                val repository = org.eclipse.jgit.storage.file.FileRepositoryBuilder().setGitDir(bareDir).build()
+                try {
+                    val developObjectId = repository.resolve("refs/heads/develop")
+                    developObjectId shouldNotBe null
+                    repository.findRef("refs/heads/master") shouldBe null
+
+                    val revWalk = org.eclipse.jgit.revwalk.RevWalk(repository)
+                    val commit = revWalk.parseCommit(developObjectId)
+                    val treeWalk = org.eclipse.jgit.treewalk.TreeWalk.forPath(repository, "src/main/Foo.kt", commit.tree)
+                    val committedContent = repository.open(treeWalk!!.getObjectId(0)).bytes.toString(Charsets.UTF_8)
+                    committedContent shouldBe "package foo"
+                    treeWalk.close()
+                    revWalk.close()
+                } finally {
+                    repository.close()
+                }
             }
         }
 
