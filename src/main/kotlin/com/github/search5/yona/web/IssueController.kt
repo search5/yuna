@@ -113,6 +113,13 @@ class IssueController(
             ?: return ResponseEntity.notFound().build()
 
         val user = getLoginUser(authentication)
+
+        // yona IssueApp.java:267-269 issue()의 draft 전용 게이트 대응 (P1-84). AccessControl.isAllowed()
+        // 호출보다 먼저 실행되는 별도 체크 — 프로젝트 멤버여도 작성자 본인이 아니면 초안은 못 본다.
+        if (issue.isDraft && (user == null || issue.authorLoginId != user.loginId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
         if (!checkReadPermission(project, issue, user)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
