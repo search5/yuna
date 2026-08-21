@@ -311,5 +311,65 @@ class MilestoneViewControllerSpec : DescribeSpec({
                 }
             }
         }
+
+        // yona MilestoneApp.java:100-125 validateDueDate()(Play 폼 바인딩 실패 시 hasErrors()로 전체
+        // 제출을 막고 경고 플래시) 대응 (P2-23). dueDate 형식이 잘못되면 조용히 null로 저장하지 말고
+        // 저장 자체를 막아야 한다.
+        describe("POST /{owner}/{projectName}/milestones - dueDate 형식 오류 (P2-23)") {
+            it("dueDate 파싱에 실패하면 저장하지 않고 오류와 함께 생성 폼을 다시 보여줘야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { milestoneRepository.findByProjectAndTitle(project, "새 마일스톤") } returns null
+
+                val model = org.springframework.ui.ExtendedModelMap()
+                val result = milestoneViewController.createMilestone(
+                    owner = "owner",
+                    projectName = "TestProj",
+                    title = "새 마일스톤",
+                    contents = null,
+                    dueDate = "이건-날짜가-아님",
+                    state = State.OPEN,
+                    temporaryUploadFiles = null,
+                    authentication = userAuth,
+                    redirectAttributes = mockk(relaxed = true),
+                    model = model
+                )
+
+                result shouldBe "milestone/create"
+                model.getAttribute("dueDateError") shouldBe "milestone.error.duedateFormat"
+                verify(exactly = 0) { milestoneService.createMilestone(any(), any()) }
+            }
+        }
+
+        describe("POST /{owner}/{projectName}/milestone/{id}/edit - dueDate 형식 오류 (P2-23)") {
+            it("dueDate 파싱에 실패하면 저장하지 않고 오류와 함께 수정 폼을 다시 보여줘야 한다") {
+                val original = Milestone(id = 2L, title = "기존 마일스톤", project = project)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { milestoneService.getMilestone(2L) } returns original
+                every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.MILESTONE, "2") } returns emptyList()
+
+                val model = org.springframework.ui.ExtendedModelMap()
+                val result = milestoneViewController.editMilestone(
+                    owner = "owner",
+                    projectName = "TestProj",
+                    id = 2L,
+                    title = "기존 마일스톤",
+                    contents = null,
+                    dueDate = "이건-날짜가-아님",
+                    state = State.OPEN,
+                    temporaryUploadFiles = null,
+                    authentication = userAuth,
+                    redirectAttributes = mockk(relaxed = true),
+                    model = model
+                )
+
+                result shouldBe "milestone/edit"
+                model.getAttribute("dueDateError") shouldBe "milestone.error.duedateFormat"
+                verify(exactly = 0) { milestoneService.updateMilestone(any(), any(), any(), any(), any()) }
+            }
+        }
     }
 })
