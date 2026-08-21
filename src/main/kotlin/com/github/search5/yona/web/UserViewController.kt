@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.mention.MentionService
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.Authentication
@@ -58,6 +59,8 @@ class UserViewController(
     private val organizationRepository: OrganizationRepository,
     private val userService: UserService,
     private val accessControl: AccessControl,
+    // yona Mention.getMentioningIssueIds() 대응 (P2-41).
+    private val mentionService: MentionService,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
     @Value("\${yuna.application.hide-project-listing:false}")
     private val hideProjectListing: Boolean = false
@@ -93,6 +96,9 @@ class UserViewController(
 
         val currentState = State.getValue(state.lowercase())
         val searchKeyword = if (!filter.isNullOrBlank()) "%$filter%" else null
+        // yona Mention.getMentioningIssueIds() 대응 (P2-41) — LIKE 텍스트 검색 대신 실제 멘션 인덱스
+        // 테이블 조회로 조직/프로젝트 그룹 멘션까지 포함해 계산한다.
+        val mentionedIssueIds = mentionService.getMentioningIssueIds(loginUser.id!!)
 
         // 아무 필터도 주어지지 않은 상태라면 기본적으로 나에게 할당된(assigneeId) 이슈로 취급
         val isNoFilter = authorId == null && commenterId == null && assigneeId == null && 
@@ -107,7 +113,11 @@ class UserViewController(
             effectiveAssigneeId != null -> issueRepository.findByAssigneeAndState(effectiveAssigneeId, currentState, searchKeyword, pageable)
             authorId != null -> issueRepository.findByAuthorIdAndState(authorId, currentState, searchKeyword, pageable)
             commenterId != null -> issueRepository.findCommentedByState(commenterId, currentState, searchKeyword, pageable)
-            mentionId != null -> issueRepository.findMentionedByState("%@${loginUser.loginId}%", currentState, searchKeyword, pageable)
+            mentionId != null -> if (mentionedIssueIds.isEmpty()) {
+                Page.empty(pageable)
+            } else {
+                issueRepository.findMentionedByState(mentionedIssueIds, currentState, searchKeyword, pageable)
+            }
             favoriteId != null -> issueRepository.findFavoriteByState(favoriteId, currentState, searchKeyword, pageable)
             sharerId != null -> issueRepository.findSharedByState(sharerId, currentState, searchKeyword, pageable)
             else -> issueRepository.findByState(currentState, pageable)
@@ -135,8 +145,8 @@ class UserViewController(
             }
             mentionId != null -> {
                 Pair(
-                    issueRepository.countMentionedByState("%@${loginUser.loginId}%", State.OPEN),
-                    issueRepository.countMentionedByState("%@${loginUser.loginId}%", State.CLOSED)
+                    if (mentionedIssueIds.isEmpty()) 0L else issueRepository.countMentionedByState(mentionedIssueIds, State.OPEN),
+                    if (mentionedIssueIds.isEmpty()) 0L else issueRepository.countMentionedByState(mentionedIssueIds, State.CLOSED)
                 )
             }
             favoriteId != null -> {
@@ -155,7 +165,7 @@ class UserViewController(
         }
 
         // 좌측 필터 카운트용 수치
-        val mentionCount = issueRepository.countMentionedByState("%@${loginUser.loginId}%", State.OPEN)
+        val mentionCount = if (mentionedIssueIds.isEmpty()) 0L else issueRepository.countMentionedByState(mentionedIssueIds, State.OPEN)
         val shareCount = issueRepository.countSharedByState(loginUser.id!!, State.OPEN)
         val favoriteCount = issueRepository.countFavoriteByState(loginUser.id!!, State.OPEN)
 

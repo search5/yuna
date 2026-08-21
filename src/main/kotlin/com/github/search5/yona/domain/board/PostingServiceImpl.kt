@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.comment.CommentService
+import com.github.search5.yona.domain.mention.MentionService
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.support.HistoryUtil
 
@@ -31,7 +32,9 @@ class PostingServiceImpl(
     private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
     private val titleHeadService: TitleHeadService,
-    private val commentService: CommentService
+    private val commentService: CommentService,
+    // yona AbstractPosting.updateMention() 대응 (P2-41).
+    private val mentionService: MentionService
 ) : PostingService {
 
     // yona NotificationEvent.afterNewPost/afterResourceDeleted 대응 (P1-18)
@@ -106,6 +109,9 @@ class PostingServiceImpl(
 
         val saved = postingRepository.save(posting)
 
+        // yona AbstractPosting.save()의 updateMention() 대응 (P2-41).
+        mentionService.update(ResourceType.BOARD_POST, saved.id.toString(), commentService.extractMentionedUsers(saved.body ?: ""))
+
         // yona AbstractPosting.save()의 TitleHead.saveTitleHeadKeyword() 대응 (P1-103).
         titleHeadService.saveTitleHeadKeyword(project, saved.title)
 
@@ -153,6 +159,9 @@ class PostingServiceImpl(
         }
 
         val saved = postingRepository.save(posting)
+
+        // yona AbstractPosting.update()의 updateMention() 대응 (P2-41).
+        mentionService.update(ResourceType.BOARD_POST, saved.id.toString(), commentService.extractMentionedUsers(saved.body ?: ""))
 
         // yona AbstractPostingApp.editPosting()의 TitleHead.saveTitleHeadKeyword()/deleteTitleHeadKeyword()
         // 대응 (P1-103). 제목이 안 바뀌었어도 legacy와 동일하게 매 수정마다 무조건 두 호출을 모두 실행한다.
