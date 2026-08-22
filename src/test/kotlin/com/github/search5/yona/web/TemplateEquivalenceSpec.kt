@@ -931,6 +931,127 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     doc.select("script[src*='service/yobi.resetPassword.js']").size shouldBe 1
                 }
             }
+
+            describe("[Test-19-20] 프로젝트 헤더(project/header.scala.html) 동치성 검증") {
+                it("비멤버 로그인 사용자에게 프로젝트 가입 요청 버튼이 노출되어야 한다") {
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj")
+                            .with(SecurityMockMvcRequestPostProcessors.user(nonMemberDetails))
+                    ).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select(".project-util a.enrollBtn").size shouldBe 1
+                    doc.select(".project-util a.enrollBtn[data-request-uri*='/api/projects/${publicProj.id}/enroll']").size shouldBe 1
+                }
+
+                it("프로젝트 멤버에게는 가입 요청 버튼이 노출되지 않아야 한다") {
+                    // member는 codeMemberOnlyProj의 실제 ProjectUser임(상위 describe 블록에서 세팅됨)
+                    val result = mockMvc.perform(
+                        get("/owner/memberonly-proj")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    ).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select(".project-util a.enrollBtn").size shouldBe 0
+                }
+
+                it("PROTECTED(그룹 전용) 프로젝트에는 group 배지가 노출되어야 한다") {
+                    val protectedProj = projectRepository.findAll().find { it.name == "protected-proj-header-test" }
+                        ?: projectRepository.save(
+                            Project(
+                                name = "protected-proj-header-test",
+                                owner = "owner",
+                                projectScope = ProjectScope.PROTECTED
+                            )
+                        )
+                    if (!projectUserRepository.existsByProjectIdAndUserId(protectedProj.id!!, member.id!!)) {
+                        val role = roleRepository.findById(RoleType.MEMBER.roleType).orElseGet {
+                            roleRepository.save(Role(id = RoleType.MEMBER.roleType, name = "MEMBER"))
+                        }
+                        projectUserRepository.save(ProjectUser(project = protectedProj, user = member, role = role))
+                    }
+
+                    val result = mockMvc.perform(
+                        get("/owner/${protectedProj.name}").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    ).andReturn()
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select(".project-protected").size shouldBe 1
+                }
+            }
+
+            val settingProj = projectRepository.findAll().find { it.name == "settings-test-proj" } ?: projectRepository.save(
+                Project(
+                    name = "settings-test-proj",
+                    owner = "owner",
+                    projectScope = ProjectScope.PUBLIC,
+                    isCodeAccessibleMemberOnly = false
+                )
+            )
+            if (!projectUserRepository.existsByProjectIdAndUserId(settingProj.id!!, member.id!!)) {
+                val managerRole = roleRepository.findById(RoleType.MANAGER.roleType).orElseGet {
+                    roleRepository.save(Role(id = RoleType.MANAGER.roleType, name = "MANAGER"))
+                }
+                projectUserRepository.save(ProjectUser(project = settingProj, user = member, role = managerRole))
+            } else {
+                val existing = projectUserRepository.findByProjectIdAndUserId(settingProj.id!!, member.id!!).get()
+                if (existing.role.id != RoleType.MANAGER.roleType) {
+                    val managerRole = roleRepository.findById(RoleType.MANAGER.roleType).orElseGet {
+                        roleRepository.save(Role(id = RoleType.MANAGER.roleType, name = "MANAGER"))
+                    }
+                    existing.role = managerRole
+                    projectUserRepository.save(existing)
+                }
+            }
+
+            describe("[Test-19-21] VCS 변경 화면(project/change_vcs.scala.html) 동치성 검증") {
+                it("VCS 변경 화면은 site/layout 기반 전체 GNB/footer와 project/header, project/menu, setting_menu 조각을 포함해야 한다") {
+                    val result = mockMvc.perform(
+                        get("/owner/${settingProj.name}/changeVCS")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    ).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("form[name='gnb-search-form']").size shouldBe 1
+                    doc.select("footer.page-footer-outer").size shouldBe 1
+                    doc.select(".project-header-outer").size shouldBe 1
+                    doc.select(".project-menu-outer").size shouldBe 1
+                    doc.select("script[src*='service/yobi.project.ChangeVCS.js']").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-22] 프로젝트 설정 하위 화면들의 독자 GNB 제거 검증 (delete/transfer/watchers/setting_webhook)") {
+                it("delete/transfer/watchers/setting_webhook 화면이 전부 site/layout 기반 전체 GNB와 footer를 포함해야 한다") {
+                    val deleteDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${settingProj.name}/deleteform").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+                    deleteDoc.select("form[name='gnb-search-form']").size shouldBe 1
+                    deleteDoc.select("footer.page-footer-outer").size shouldBe 1
+
+                    val transferDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${settingProj.name}/transfer").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+                    transferDoc.select("form[name='gnb-search-form']").size shouldBe 1
+                    transferDoc.select("footer.page-footer-outer").size shouldBe 1
+
+                    val watchersDoc = Jsoup.parse(
+                        mockMvc.perform(get("/owner/${settingProj.name}/watchers")).andReturn().response.contentAsString
+                    )
+                    watchersDoc.select("form[name='gnb-search-form']").size shouldBe 1
+                    watchersDoc.select("footer.page-footer-outer").size shouldBe 1
+
+                    val webhookDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/projects/owner/${settingProj.name}/webhooks").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+                    webhookDoc.select("form[name='gnb-search-form']").size shouldBe 1
+                    webhookDoc.select("footer.page-footer-outer").size shouldBe 1
+                }
+            }
         }
     }
 }

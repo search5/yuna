@@ -1,93 +1,18 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${project.name} + ' - 포크'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .fork-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 30px;
-      margin-bottom: 20px;
-      max-width: 700px;
-      margin-left: auto;
-      margin-right: auto;
-  }
-  .help-well {
-      background-color: #f8f9fa;
-      border: 1px solid #e9ecef;
-      padding: 15px;
-      border-radius: 4px;
-      margin-bottom: 20px;
-  }
-  .help-well p {
-      margin-bottom: 5px;
-  }
-</style>
+<head th:replace="~{site/layout :: head(${project.name} + ' - Fork')}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'pullRequest')}"></div>
 
   <!-- 메인 컨텐츠 영역 -->
+  <!-- TODO(그룹11 PR 작업 시): legacy 실제 대응 파일은 project/fork.scala.html이 아니라
+       git/fork.scala.html이다 — 폼 구조/도움말 메시지/이미 포크된 프로젝트 목록 표시를
+       legacy와 줄 단위로 대조해 재작성 필요. 지금은 독자 GNB만 site/layout 기반으로 교체. -->
   <div class="container">
     <div class="fork-container">
       <form th:action="@{/{owner}/{name}/fork(owner=${project.owner}, name=${project.name})}" method="post" class="form-horizontal">
@@ -161,6 +86,10 @@
       </form>
     </div>
   </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
+
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
 </body>
 </html>

@@ -20,6 +20,7 @@
                     <span th:if="${project.projectScope == T(com.github.search5.yona.domain.project.ProjectScope).PRIVATE}" class="project-private">
                         <i class="yobicon-lock"></i>
                     </span>
+                    <span th:if="${project.isProtected}" class="project-protected" title="Group Project">G</span>
                 </div>
                 <div th:if="${project.originalProject != null}" class="project-origin">
                     <span class="project-origin-title" th:text="#{fork.original}">forked from</span>
@@ -30,6 +31,38 @@
             </div>
             <div class="project-util-wrap" th:if="${currentUser != null}">
                 <ul class="project-util">
+                    <li th:if="${!templateHelper.isMember(project, currentUser)}">
+                        <th:block th:if="${templateHelper.isEnrolled(project, currentUser)}">
+                            <button class="ybtn ybtn-small ybtn-info dropdown-toggle" type="button" data-toggle="dropdown">
+                                <i class="yobicon-addfriend"></i>
+                            </button>
+                            <div class="dropdown-menu flat right title">
+                                <div class="pop-title" th:text="#{project.you.want.to.be.a.member(${project.name})}">가입 요청함</div>
+                                <div class="pop-content" th:text="#{project.member.enrollment.help}">승인 대기 중</div>
+                                <div class="pop-content btn-wrap">
+                                    <a class="ybtn enrollBtn" data-request-method="post" th:data-request-uri="@{/api/projects/{id}/enroll/cancel(id=${project.id})}" href="javascript:void(0);" id="enrollBtn">
+                                        <i class="yobicon-removefriend"></i>
+                                        <span th:text="#{button.cancel.enrollment}">가입 요청 취소</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </th:block>
+                        <th:block th:unless="${templateHelper.isEnrolled(project, currentUser)}">
+                            <button class="ybtn ybtn-small dropdown-toggle" type="button" data-toggle="dropdown">
+                                <i class="yobicon-addfriend"></i><span th:text="#{organization.member.enrollment.title}">멤버 가입 요청</span>
+                            </button>
+                            <div class="dropdown-menu flat right title">
+                                <div class="pop-title" th:text="#{project.you.may.want.to.be.a.member(${project.name})}">가입 요청할 수 있습니다</div>
+                                <div class="pop-content" th:text="#{project.member.enrollment.will.help}">요청하면 관리자가 확인합니다</div>
+                                <div class="pop-content btn-wrap">
+                                    <a class="ybtn ybtn-info enrollBtn" data-request-method="post" th:data-request-uri="@{/api/projects/{id}/enroll(id=${project.id})}" href="javascript:void(0);" id="enrollBtn">
+                                        <i class="yobicon-addfriend"></i>
+                                        <span th:text="#{button.new.enrollment}">가입 요청하기</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </th:block>
+                    </li>
                     <li>
                         <div class="btn-group dropdown watch-btn">
                             <a class="btn watcher-count no-border"
