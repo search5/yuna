@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head(${project.name} + ' - ' + #{menu.home})}">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko" th:with="menuHomeLabel=#{menu.home}, pageTitle=${project.name + ' - ' + menuHomeLabel + ' |:| ' + (project.overview ?: '')}">
+<head th:replace="~{site/layout :: head(${pageTitle})}">
 </head>
 <body class="prj" id="html-body">
 <div id="main" class="main">
