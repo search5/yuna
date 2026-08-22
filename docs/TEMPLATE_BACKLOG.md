@@ -107,13 +107,13 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 35 | [x] | `common/tasklistBar.scala.html` | `issue/view.html`, `board/view.html`(인라인, 신규 추가) | 완료(TASK-0229, TDD). **발견**: `yona.Tasklist.js`/`gfm-task-list.js` 정적 자산은 이미 존재했지만 `.tasklist` 셸 마크업과 스크립트 로드가 두 페이지 모두에 전혀 없어 죽어있던 기능이었음. legacy와 동일 위치(본문 markdown-wrap 바로 앞)에 셸 추가 + `yona.Tasklist.js` 로드 추가 |
 | 36 | [i] | `common/twoColumnModeCheckboxArea.scala.html` | `issue/list.html` 등(인라인) | 확인 완료 — `#two-column-mode-checkbox`/`#two-column-mode` 구조 일치(코드 변경 없음) |
 | 37 | [x] | `common/issueLabelColor.scala.html` | `web/LabelStyleController.kt`(`GET /{owner}/{project}/issue/labels.css`) | 완료(TASK-0229, TDD). **발견**: 이 legacy 파일은 뷰가 아니라 `IssueLabelApp.labelStyles()` 컨트롤러가 `text/css`로 직접 렌더링하는 동적 스타일시트였고, yuna의 `LabelStyleController`가 이미 완전히 동일한 로직(RGB/hex 파싱+휘도 계산 포함)으로 이식돼 있었음(선행 세션) — 단 legacy가 이 스타일시트를 링크하는 10개 화면 중 `issue/view`/`issue/create`/`issue/edit`/`board/view`/`board/list` 5곳에 `<link>` 태그 자체가 빠져 있어 추가. `project/partial_dashboard_issuesbylabel`/`project/partial_issuelabels_list`(프로젝트 대시보드·라벨 설정 화면)는 대응 파일 존재 여부 확인 필요 — 미착수로 남김 |
-| 38 | [ ] | `common/commitMsg.scala.html` | `common/commitMsg.html` | 커밋 메시지 표시(이슈 참조 링크화 포함) |
-| 39 | [ ] | `common/branchItem.scala.html` | `common/branchItem.html` | 브랜치 1건 표시 |
-| 40 | [ ] | `common/reviewForm.scala.html` | `common/reviewForm.html` | 코드리뷰 댓글 폼 |
-| 41 | [ ] | `common/partial_history.scala.html` | `common/partial_history.html` | 최근 활동 히스토리 목록(공용) |
-| 42 | [ ] | `common/notificationMail.scala.html` | `common/notificationMail.html` | 알림메일 본문 템플릿(HTML 메일) |
-| 43 | [ ] | `common/uservoice.scala.html` | `common/uservoice.html` | UserVoice 위젯 스니펫 |
-| 44 | [ ] | `common/debug.scala.html` | `common/debug.html` | 디버그용(운영 비노출 가능성 — 그래도 legacy에 있으니 이식) |
+| 38 | [~] | `common/commitMsg.scala.html` | `code/{view,diff,svnDiff}.html`(부분 인라인) | 조사: `.commitMsg` 클래스는 이미 3개 code/* 파일에 존재하나 legacy의 short/desc/moreBtn 펼침 구조까지 일치하는지 미확인 — `code/*` 그룹(그룹10, #154~166) 착수 시 함께 정밀 대조 예정 |
+| 39 | [ ] | `common/branchItem.scala.html` | (미확인) | `code/*` 그룹(그룹10, #154~166) 착수 시 함께 처리 예정 — 브랜치 선택 드롭다운 관련이라 코드 브라우징 화면과 강하게 결합 |
+| 40 | [ ] | `common/reviewForm.scala.html` | (미확인) | 코드리뷰 댓글 폼 — PR/리뷰 도메인(그룹11, #167~192) 착수 시 함께 처리 예정. `common.editor`+`common.uploadForm` 재사용 구조라 #20/#22 완료로 재료는 준비됨 |
+| 41 | [ ] | `common/partial_history.scala.html` | (없음, 백엔드 기능 자체 부재) | **조사 완료, 미착수**. "변경 이력"(edit history) 기능 자체가 yuna `Issue`/`Posting` 엔티티에 없음(`history` 필드 자체가 없음) — 순수 템플릿 이식이 아니라 `docs/PARITY_BACKLOG.md`에 백엔드 항목으로 먼저 등록해야 하는 규모. 이번 배치에서는 조사 결과만 기록 |
+| 42 | [i] | `common/notificationMail.scala.html` | `domain/notification/NotificationMailRenderer.kt`(인라인) | 확인 완료 — Thymeleaf 템플릿이 아니라 Kotlin 코드로 HTML 문자열을 직접 생성하는 방식으로 이미 완전히 동일하게 이식돼 있음(폰트 스택, `hr` 구분선, unwatch/설정변경 푸터 링크, 메시지 키까지 일치). 코드 변경 없음 |
+| 43 | [x] | `common/uservoice.scala.html` | (포팅 제외) | **제외 결정(사유 기록)** — legacy 자체에서도 이 파일을 호출하는 곳이 0건(grep 확인, 죽은 코드). 설령 사용하더라도 원본 Yona 프로젝트 전용 UserVoice 계정(`forum_id`, 위젯 스크립트 URL이 원본 프로젝트에 하드코딩)이라 포크인 yuna에 그대로 심는 것은 부적절 |
+| 44 | [x] | `common/debug.scala.html` | (포팅 제외) | **제외 결정(사유 기록)** — legacy 자체에서도 이 파일을 호출하는 컨트롤러/뷰가 0건(grep 확인, 완전한 죽은 코드) |
 
 ## 그룹 3 — `error/*` 에러 페이지 (9개, #45~53)
 
@@ -688,3 +688,25 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
   전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행(이번 배치로 #16~#37 총 22개 항목 누적,
   다음 응답에서 전체 회귀 실행 예정).
+  → **전체 회귀 `./gradlew test` TASK-0229 커밋 직후 실행, 통과 확인함.**
+
+### #38~#44 그룹2 잔여 항목 조사 (TASK-0230, 코드 변경 없음 — 문서만)
+
+- **#38(commitMsg)**: `.commitMsg` 클래스가 `code/{view,diff,svnDiff}.html` 3곳에 이미 존재하나, legacy의
+  short/desc 펼침(moreBtn) 구조까지 일치하는지는 미확인. `[~]`로 표시, 그룹10(`code/*`, #154~166) 착수 시
+  정밀 대조하기로 결정.
+- **#39(branchItem)**: 브랜치 드롭다운 항목 — 코드 브라우징 화면과 강하게 결합돼 그룹10에서 함께 처리.
+- **#40(reviewForm)**: 코드리뷰 댓글 폼 — PR/리뷰 도메인(그룹11, #167~192)에서 처리. `common.editor`/
+  `common.uploadForm` 재사용 구조라 #20/#22가 이미 재료를 준비해뒀음을 확인.
+- **#41(partial_history)**: "변경 이력" 기능 자체가 yuna `Issue`/`Posting` 엔티티에 없음(`history` 필드 부재)
+  — 순수 템플릿 이식 범위를 넘어서는 백엔드 항목이라 `docs/PARITY_BACKLOG.md`에 먼저 등록이 필요함을 확인,
+  이번 배치에서는 조사만.
+- **#42(notificationMail)**: `NotificationMailRenderer.kt`가 Kotlin 코드로 이미 완전히 동일한 HTML을 생성 중임을
+  확인(폰트 스택, 구분선, 푸터 링크, 메시지 키 전부 일치). 코드 변경 없음.
+- **#43(uservoice)**: legacy 자체에서 호출부 0건(죽은 코드) + 원본 프로젝트 전용 UserVoice 계정 하드코딩이라
+  이식 대상에서 제외 결정, 사유 기록.
+- **#44(debug)**: legacy 자체에서 호출부 0건(죽은 코드)이라 이식 대상에서 제외 결정, 사유 기록.
+- **그룹2(#10~44) 결과**: 완료/확인 25개(#10~24,27~28,32~37,42), 대형 항목이라 별도 세션 필요로 플래그 6개
+  (#25,26,29,30,31,41), 제외 결정 2개(#43,44), 다음 그룹 착수 시 처리하기로 미룬 항목 3개(#38,39,40) — 그룹2
+  전체 처리 완료.
+- **검증**: 문서만 수정, 코드 변경 없음.
