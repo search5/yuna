@@ -2,8 +2,10 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.config.YonaAuthenticationProvider
 import com.github.search5.yona.domain.issue.RecentIssueService
+import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.user.Email
 import com.github.search5.yona.domain.user.EmailDomainValidator
+import com.github.search5.yona.domain.user.ReservedWordsValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserService
@@ -31,6 +33,7 @@ class UserController(
     private val userRepository: UserRepository,
     private val recentIssueService: RecentIssueService,
     private val userSettingRepository: UserSettingRepository,
+    private val organizationRepository: OrganizationRepository,
     private val yonaAuthenticationProvider: YonaAuthenticationProvider,
     @Value("\${yuna.signup.allowed-email-domains:}")
     private val allowedEmailDomains: String,
@@ -151,25 +154,22 @@ class UserController(
         }
     }
 
-    @GetMapping("/user/email/confirm/{emailId}/{token}", produces = ["text/html;charset=UTF-8"])
-    fun confirmEmailLegacy(
-        @PathVariable emailId: Long,
-        @PathVariable token: String
-    ): ResponseEntity<String> {
-        return confirmEmail(emailId, token)
+    // yona UserApp.java:1008-1013 isUsed() 대응. 회원가입 폼의 아이디 실시간 중복확인에 사용된다.
+    @GetMapping("/user/isUsed")
+    fun isUsed(@RequestParam("name") name: String): ResponseEntity<Map<String, Boolean>> {
+        val isExist = userService.isLoginIdExist(name) || organizationRepository.findByName(name).isPresent
+        return ResponseEntity.ok(
+            mapOf(
+                "isExist" to isExist,
+                "isReserved" to ReservedWordsValidator.isReserved(name)
+            )
+        )
     }
 
-    @GetMapping("/user/emails/{emailId}/confirm", produces = ["text/html;charset=UTF-8"])
-    fun confirmEmail(
-        @PathVariable emailId: Long,
-        @RequestParam("token") token: String
-    ): ResponseEntity<String> {
-        val success = userService.confirmEmail(emailId, token)
-        return if (success) {
-            ResponseEntity.ok("<h3>이메일 인증이 완료되었습니다.</h3><p><a href='/login'>로그인 화면으로 이동</a></p>")
-        } else {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST).body("<h3>잘못되거나 만료된 인증 토큰입니다.</h3>")
-        }
+    // yona UserApp.java:1016-1020 isEmailExist() 대응. 회원가입 폼의 이메일 실시간 중복확인에 사용된다.
+    @GetMapping("/user/isEmailExist")
+    fun isEmailExist(@RequestParam("email") email: String): ResponseEntity<Map<String, Boolean>> {
+        return ResponseEntity.ok(mapOf("isExist" to userService.isEmailExist(email)))
     }
 
     @PostMapping("/api/users/emails/{emailId}/set-main")

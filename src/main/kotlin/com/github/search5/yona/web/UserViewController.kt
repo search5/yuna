@@ -295,6 +295,32 @@ class UserViewController(
         return "user/verified"
     }
 
+    // yona UserApp.java:1101-1114 confirmEmail() 대응. 성공 시 editUserInfoForm으로 리다이렉트,
+    // 실패 시 ErrorViews.NotFound(404)를 반환한다. Play의 addUserInfoToSession(자동 세션 갱신)은
+    // Spring Security 인증 모델과 근본적으로 다른 메커니즘이라 이식 범위에서 제외했다.
+    @GetMapping("/user/email/confirm/{emailId}/{token}")
+    fun confirmEmailLegacy(
+        @PathVariable emailId: Long,
+        @PathVariable token: String,
+        response: HttpServletResponse
+    ): String {
+        return confirmEmail(emailId, token, response)
+    }
+
+    @GetMapping("/user/emails/{emailId}/confirm")
+    fun confirmEmail(
+        @PathVariable emailId: Long,
+        @RequestParam("token") token: String,
+        response: HttpServletResponse
+    ): String {
+        val success = userService.confirmEmail(emailId, token)
+        if (!success) {
+            response.status = HttpServletResponse.SC_NOT_FOUND
+            return "error/404"
+        }
+        return "redirect:/user/editform"
+    }
+
     @GetMapping("/user/editform")
     fun editUserProfileForm(
         authentication: Authentication?,

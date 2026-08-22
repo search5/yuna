@@ -1,32 +1,23 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="|Yona - #{title.signUp}|">Yona - 회원가입</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .go-login:hover {
-      text-decoration: underline !important;
-  }
-</style>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
+<head th:replace="~{site/layout :: head(#{title.signUp})}">
 </head>
 <body class="theme-default">
 <div id="main" class="main">
+  <div th:replace="~{site/layout :: gnb}"></div>
   <div class="page full">
     <div class="center-wrap tag-line-wrap signup">
       <h1 class="title">Yona</h1>
       <p class="tag-line" th:text="#{app.description}">21세기 프로젝트 호스팅 소프트웨어</p>
     </div>
 
+    <div class="center-txt" th:if="${requireAdminConfirm}">
+      <p th:text="#{title.signupConfirmDesc}">가입 후 사용을 위해서는 관리자의 승인이 필요합니다</p>
+    </div>
+
     <div class="signup-form-wrap frm-wrap">
       <form th:action="@{/signup}" th:object="${user}" method="post" name="signup">
-        
+
         <!-- 에러 메시지 알림 -->
         <div class="alert alert-danger" th:if="${passwordError}" th:text="${passwordError}" style="margin: 10px 0; color: #b94a48; background-color: #f2dede; border: 1px solid #eed3d7; padding: 8px 14px; border-radius: 4px; text-align: left;"></div>
         <div class="alert alert-danger" th:if="${#fields.hasAnyErrors()}" style="margin: 10px 0; color: #b94a48; background-color: #f2dede; border: 1px solid #eed3d7; padding: 8px 14px; border-radius: 4px; text-align: left;">
@@ -76,14 +67,26 @@
           <button type="submit" class="ybtn ybtn-primary ybtn-large ybtn-fullsize" th:text="#{user.signupBtn}">가입하기</button>
         </div>
 
-        <div class="act-row" style="text-align: center; margin-top: 15px;">
-          <span th:text="#{user.isAlreadySignupUser}">이미 가입하셨나요?</span> <a th:href="@{/login}" class="go-login" style="color: #0088cc; text-decoration: none; font-weight: bold;" th:text="#{title.login}">로그인</a>
+        <div class="act-row">
+          <span th:text="#{user.isAlreadySignupUser}">이미 가입하셨나요?</span> <a th:href="@{/login}" class="go-login" th:text="#{title.login}">로그인</a>
         </div>
       </form>
     </div>
   </div>
+
+  <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
-<script type="text/javascript" src="/javascripts/yona-lib.js"></script>
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
+<script type="text/javascript" src="/javascripts/lib/validate.js"></script>
+<script type="text/javascript">
+    $(document).ready(function() {
+        $yobi.loadModule("user.SignUp", {
+            "sLogindIdCheckUrl" : "/user/isUsed?name=",
+            "sEmailCheckUrl" : "/user/isEmailExist?email="
+        });
+    });
+</script>
+<script type="text/javascript" src="/javascripts/service/yobi.user.SignUp.js"></script>
 </body>
 </html>

@@ -884,6 +884,41 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     doc.select(".email-verification-help").size shouldBe 1
                 }
             }
+
+            describe("[Test-19-18] 회원가입 화면(user/signup.scala.html) 동치성 검증") {
+                it("회원가입 화면은 site/layout 기반 전체 GNB와 footer, 실시간 검증 스크립트를 포함해야 한다") {
+                    val result = mockMvc.perform(get("/signup")).andReturn()
+                    val doc = Jsoup.parse(result.response.contentAsString)
+
+                    doc.select("form[name='gnb-search-form']").size shouldBe 1
+                    doc.select("footer.page-footer-outer").size shouldBe 1
+                    doc.select("script[src*='lib/validate.js']").size shouldBe 1
+                    doc.select("script[src*='service/yobi.user.SignUp.js']").size shouldBe 1
+
+                    val html = result.response.contentAsString
+                    html.contains("sLogindIdCheckUrl") shouldBe true
+                    html.contains("sEmailCheckUrl") shouldBe true
+                }
+
+                it("아이디 중복 확인 엔드포인트(GET /user/isUsed)가 legacy와 동일한 JSON 형식으로 응답해야 한다") {
+                    val result = mockMvc.perform(get("/user/isUsed").param("name", member.loginId))
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val json = tools.jackson.databind.ObjectMapper().readTree(result.response.contentAsString)
+                    json.get("isExist").asBoolean() shouldBe true
+                    json.has("isReserved") shouldBe true
+                }
+
+                it("이메일 중복 확인 엔드포인트(GET /user/isEmailExist)가 legacy와 동일한 JSON 형식으로 응답해야 한다") {
+                    val result = mockMvc.perform(get("/user/isEmailExist").param("email", member.email))
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val json = tools.jackson.databind.ObjectMapper().readTree(result.response.contentAsString)
+                    json.get("isExist").asBoolean() shouldBe true
+                }
+            }
         }
     }
 }
