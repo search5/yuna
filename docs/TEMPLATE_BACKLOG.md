@@ -85,9 +85,9 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 13 | [x] | `common/usermenu.scala.html` | `site/layout.html :: gnb` (인라인) | 완료(TASK-0224, TDD). 내 이슈 카운터 배지(`myOpenIssueCount`), 게스트 새 그룹 만들기 숨김 이식. `NAVBAR_CUSTOM_LINK_NAME/URL` 커스텀 링크와 OAuth 세션 불일치 경고는 미이식(저가치·백엔드 설정 부재, 문서에 기록) |
 | 14 | [x] | `common/usermenu_tab_content_list.scala.html` | `common/usermenu_tab_content_list.html` | 완료(TASK-0225, TDD). legacy가 include하는 3개 파샬(`index/my{OrganizationList,ProjectList,RecentIssueList}.scala.html`) 중 `myRecentIssueList`(최근 방문 이슈 탭)만 완전히 누락돼 있었음을 발견해 이식. yuna가 legacy에 없는 "전체" 탭을 추가로 갖고 있는 점은 그대로 유지(비고: 이미 동작 중인 기능 삭제는 이번 범위 밖) |
 | 15 | [~] | `common/loginDialog.scala.html` | `site/layout.html :: scripts` (인라인) | 부분 완료(TASK-0224). jquery-ui 스크립트 로드 이식(TDD). `useSocialLoginOnly` 폼 숨김 토글과 legacy의 동적 OAuth 프로바이더 목록(`forProviders`)은 yuna가 Spring Security OAuth2 정적 클라이언트 등록 방식이라 구조적으로 다름 — 하드코딩된 github/google 버튼으로 아키텍처적으로 치환된 상태(선행 세션), 토글 자체는 백엔드 설정 부재로 미이식(저가치 코너케이스로 판단, 문서에 기록) |
-| 16 | [~] | `common/select2.scala.html` | `common/select2.html` | 상세 줄단위 대조 미실시(향후 세션에서 처리) |
+| 16 | [x] | `common/select2.scala.html` | `common/select2.html` | 확인 완료 — 완전 일치(TASK-0226 조사 중 대조 완료, 코드 변경 없음) |
 | 17 | [x] | `common/calendar.scala.html` | `common/calendar.html` | 확인 완료 — 완전 일치(TASK-0224 조사 중 대조 완료, 코드 변경 없음) |
-| 18 | [~] | `common/mySeriesMenuTab.scala.html` | `common/mySeriesMenuTab.html` | 상세 줄단위 대조 미실시(향후 세션에서 처리) |
+| 18 | [x] | `common/mySeriesMenuTab.scala.html` | `common/mySeriesMenuTab.html` | 완료(TASK-0226, TDD). "기본 페이지로 설정" 버튼 가시 조건에 loginDefaultPage 비교 추가, `index/notifications.html`/`user/userFiles.html`의 중복 인라인 탭바를 공용 조각 재사용으로 교체 |
 | 19 | [ ] | `common/markdown.scala.html` | `common/markdown.html` | 마크다운 렌더 영역 공통 래퍼 |
 | 20 | [ ] | `common/editor.scala.html` | `common/editor.html` | 마크다운 에디터(툴바 포함) |
 | 21 | [ ] | `common/fileUploader.scala.html` | `common/fileUploader.html` | 첨부파일 업로더 위젯 |
@@ -589,3 +589,25 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   깨져 `recentIssueService` mock을 추가해 함께 고쳤다(회귀).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec" --tests
   "com.github.search5.yona.web.UserViewControllerSpec"`(RED 확인 후 GREEN), 전체 회귀 `./gradlew test` 통과.
+
+### #16~#18 `common/*` 공용 파샬 마무리 (TASK-0226)
+
+- **원인**: #16(select2)은 legacy와 대조 결과 완전 일치(코드 변경 없음). #18(mySeriesMenuTab)은 두 가지 실질
+  격차를 발견: (1) "기본 페이지로 설정" 버튼이 legacy에서는 `!path.equals("/") && !path.substring(1).equals(
+  loginDefaultPage)` 조건으로 "이미 기본 페이지인 경우" 숨겨지는데 yuna는 활성 탭 종류만 체크하고 이 비교가
+  아예 없었음. (2) `common/mySeriesMenuTab.html :: menu` 공용 조각이 `issue/my_list.html` 한 곳에서만 쓰이고,
+  legacy에서 같은 탭바를 공유해야 할 `index/notifications.html`과 `user/userFiles.html`은 각자 탭바를 인라인
+  중복 작성해뒀으며 두 곳 다 "기본 페이지로 설정" 버튼 자체가 없었다.
+- **구현 내용**:
+  - `GlobalModelAttributeAdvice`에 `loginDefaultPage`(`UserSettingRepository.findByUserId(id).loginDefaultPage`)
+    전역 모델 속성 추가.
+  - `common/mySeriesMenuTab.html`의 버튼 노출 조건에 `currentRequestPath != '/' and currentRequestPath.
+    substring(1) != loginDefaultPage`를 추가하고, `requestURI`(개별 컨트롤러 의존) 대신 이미 전역으로 존재하는
+    `currentRequestPath`(#1에서 추가)를 재사용하도록 통일.
+  - `index/notifications.html`, `user/userFiles.html`의 인라인 중복 탭바를 `th:replace="~{common/
+    mySeriesMenuTab :: menu('notifications'|'my_files')}"` 공용 조각 재사용으로 교체.
+- **legacy와 다르게 처리한 지점**: 없음 — 이번 건은 순수하게 누락 복원 및 기존 컨벤션(전역 모델 속성) 재사용.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-11] 개인 3탭 메뉴(common/mySeriesMenuTab.scala.html)
+  동치성 검증` 3종(기본페이지 일치 시 버튼 숨김, 불일치 시 노출, 내 파일 페이지의 공용 탭바 공유).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
+  전체 회귀는 사용자 지시에 따라 10개 항목당 1회로 배치(다음 배치에서 실행 예정).

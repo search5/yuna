@@ -41,11 +41,7 @@
             <div class="page on-fold-intro">
                 <div class="row-fluid content-container">
                     <div class="span8 main-stream">
-                        <ul class="nav nav-tabs">
-                            <li class="active"><a href="/notifications" th:text="#{notification}">Notification</a></li>
-                            <li><a href="/user/issues" th:text="#{issue.myIssue}">My Issues</a></li>
-                            <li><a href="/user/files" th:text="#{user.files}">My Files</a></li>
-                        </ul>
+                        <div th:replace="~{common/mySeriesMenuTab :: menu('notifications')}"></div>
                         <ul class="activity-streams notification-wrap unstyled" id="notifications-list">
                             <!-- partial_notifications 조각 렌더링 -->
                             <th:block th:replace="~{index/partial_notifications :: html}"></th:block>

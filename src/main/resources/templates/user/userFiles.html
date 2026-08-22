@@ -10,11 +10,7 @@
 
   <div class="page-wrap-outer">
     <div class="page-wrap">
-      <ul class="nav nav-tabs">
-        <li><a href="/notifications" th:text="#{notification}">Notification</a></li>
-        <li><a href="/user/issues" th:text="#{issue.myIssue}">My Issues</a></li>
-        <li class="active"><a href="/user/files" th:text="#{user.files}">My Files</a></li>
-      </ul>
+      <div th:replace="~{common/mySeriesMenuTab :: menu('my_files')}"></div>
 
       <form th:action="@{/user/files}" method="GET">
         <div class="user-file-search search search-bar">
