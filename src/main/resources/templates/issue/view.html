@@ -7,6 +7,8 @@
     <div th:replace="~{site/layout :: gnb}"></div>
     <div th:replace="~{project/header :: header(${project})}"></div>
     <div th:replace="~{project/menu :: menu(${project}, 'issue')}"></div>
+    <link rel="stylesheet" th:href="@{/{owner}/{projectName}/issue/labels.css(owner=${project.owner}, projectName=${project.name})}" type="text/css" />
+
 
     <div class="page-wrap-outer">
         <div class="project-page-wrap board-view">
@@ -50,6 +52,12 @@
                         </form>
                     </div>
                     <div th:id="'issue-body-' + ${issue.number}">
+                        <div class="tasklist">
+                            <div class="task-title">Tasks<span class="done-counter"></span></div>
+                            <div class="task-progress">
+                                <div class="bar red" style="width: 0;" title="Tasklist"></div>
+                            </div>
+                        </div>
                         <div class="content markdown-wrap" th:data-allowed-update="${isAllowedUpdate}" th:utext="${markdownService.render(issue.body, true, project)}">본문 내용</div>
                     </div>
                     
@@ -382,6 +390,7 @@
 
 <th:block th:replace="~{site/layout :: scripts}"></th:block>
 <th:block th:replace="~{common/select2 :: select2}"></th:block>
+<script type="text/javascript" src="/javascripts/common/yona.Tasklist.js"></script>
 <script type="text/javascript" src="/javascripts/lib/atjs/jquery.caret.min.js"></script>
 <script type="text/javascript" src="/javascripts/lib/atjs/jquery.atwho.js"></script>
 <script type="text/javascript">
