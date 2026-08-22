@@ -278,6 +278,17 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
     fun countByParentId(parentId: Long): Long
     fun countByParentIdAndState(parentId: Long, state: State): Long
     fun findByParentId(parentId: Long): List<Issue>
+    // yona Issue.findByParentIssueIdAndState() 대응 (issue/partial_view_child*.scala.html, 그룹7
+    // #134/#135/#136). 부모 이슈 화면에서 초안/오픈/클로즈 하위이슈를 상태별로 나눠 렌더링한다.
+    fun findByParentIdAndState(parentId: Long, state: State): List<Issue>
+
+    // yona IssueApp.findDraftIssues() 대응 (issue/partial_list_draft.scala.html, 그룹7 #119).
+    // 이슈 목록 첫 페이지 상단에 "작성자 본인의 초안"만 노출한다.
+    fun findByProjectAndAuthorLoginIdAndIsDraftTrueOrderByNumberDesc(project: Project, authorLoginId: String): List<Issue>
+
+    // yona Issue.findParentIssueByProject(project, "", 300) 대응 (issue/partial_select_subtask.scala.html,
+    // 그룹7 #125). 부모가 없는 이슈를 프로젝트 전체(상태 무관)에서 최신순으로 최대 300건까지 후보로 노출한다.
+    fun findByProjectAndParentIsNullOrderByCreatedDateDesc(project: Project, pageable: Pageable): List<Issue>
 
     // yona ProjectApp.getMentionIssueList() 대응 (P1-14): @이슈번호 멘션 자동완성용 최근 이슈 검색
     @Query("""
