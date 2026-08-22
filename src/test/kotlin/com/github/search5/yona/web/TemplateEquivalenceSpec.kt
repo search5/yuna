@@ -429,6 +429,71 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     doc.select("script[src*='lib/viewerjs/jquery-viewer.js']").size shouldBe 1
                     html.contains(".markdown-wrap").shouldBe(true)
                 }
+
+                it("sendYonaUsage 설정 기본값이 꺼져 있으면 메인 레이아웃에도 구글 애널리틱스 스크립트가 렌더링되지 않아야 한다") {
+                    val result = mockMvc.perform(get("/owner/public-proj"))
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    result.response.contentAsString.contains("google-analytics.com/analytics.js") shouldBe false
+                }
+            }
+
+            describe("[Test-19-6] framed 레이아웃(site/layout_framed.html) 동치성 검증") {
+                it("사이드바 프레임 페이지에 og/twitter 메타 태그와 nprogress/magnific-popup 자산이 포함되어야 한다") {
+                    val result = mockMvc.perform(
+                        get("/user/sidebar")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("meta[property='og:title']").size shouldBe 1
+                    doc.select("meta[property='og:url']").size shouldBe 1
+                    doc.select("meta[name='twitter:card']").attr("content") shouldBe "summary"
+                    doc.select("link[href*='lib/nprogress/nprogress.css']").size shouldBe 1
+                    doc.select("link[href*='lib/magnific-popup/magnific-popup.css']").size shouldBe 1
+                }
+
+                it("사이드바 프레임 body 클래스는 theme-default와 framed-body를 모두 가져야 한다") {
+                    val result = mockMvc.perform(
+                        get("/user/sidebar")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    val bodyClass = doc.select("body#html-body").attr("class")
+                    bodyClass.contains("theme-default") shouldBe true
+                    bodyClass.contains("framed-body") shouldBe true
+                }
+
+                it("프로젝트/조직 목록의 popover 마크업이 실제로 초기화되는 스크립트가 포함되어야 한다") {
+                    val result = mockMvc.perform(
+                        get("/user/sidebar")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val html = result.response.contentAsString
+                    html.contains("[data-toggle=\"popover\"]").shouldBe(true)
+                    html.contains(".popover()").shouldBe(true)
+                }
+
+                it("sendYonaUsage 설정 기본값이 꺼져 있으면 구글 애널리틱스 스크립트가 렌더링되지 않아야 한다") {
+                    val result = mockMvc.perform(
+                        get("/user/sidebar")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val html = result.response.contentAsString
+                    html.contains("google-analytics.com/analytics.js") shouldBe false
+                }
             }
         }
     }

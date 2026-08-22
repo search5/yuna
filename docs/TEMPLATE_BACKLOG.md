@@ -64,12 +64,12 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
 | 1 | [x] | `layout.scala.html` | `site/layout.html` | 완료(TASK-0220, TDD). og/twitter 메타태그·업데이트알림배너·NProgress/ViewerJS 자산 이식. `\|:\|` 제목 분리 컨벤션은 미이식(비고 참고) |
-| 2 | [~] | `layout_framed.scala.html` | `site/layout_framed.html` | 상동, "framed"(iframe/팝업용 미니 레이아웃) 버전 |
+| 2 | [x] | `layout_framed.scala.html` | `site/layout_framed.html` | 완료(TASK-0221, TDD). og/twitter 메타태그·nprogress/magnific-popup 자산·popover 초기화·GA 스크립트 이식. sidebar()는 이미 이 파일에 인라인되어 있었음(→ #7과 동일 파일로 처리) |
 | 3 | [ ] | `siteLayout.scala.html` | (없음, 신규) | **사이트 관리자(admin)** 전용 레이아웃 — `site/*` 관리자 화면들이 extends. `layout.scala.html`과 다른 파일임에 주의 |
 | 4 | [ ] | `siteLayout_framed.scala.html` | (없음, 신규) | 상동 framed 버전 |
 | 5 | [ ] | `projectLayout.scala.html` | (없음, 신규) | 프로젝트 컨텍스트 공통 뼈대(project/header 포함해 project/* 전체가 extends) |
 | 6 | [ ] | `organizationLayout.scala.html` | (없음, 신규) | 조직 컨텍스트 공통 뼈대 |
-| 7 | [ ] | `sidebar.scala.html` | (없음, 신규) | 메인 사이드바(최상위, index/sidebar와 다름) |
+| 7 | [i] | `sidebar.scala.html` | `site/layout_framed.html` (인라인) | #2 작업 중 확인: `site/layout_framed.html`의 `#sidebar` div가 이미 이 파일 내용을 인라인 포함(로그인 필수 분기는 컨트롤러 레벨 리다이렉트로 대체) |
 | 8 | [~] | `projectMenu.scala.html` | `project/menu.html` | 프로젝트 상단 탭 메뉴(코드/이슈/PR/게시판/마일스톤) |
 | 9 | [ ] | `restricted.scala.html` | (없음, 신규) | 접근 제한/게스트 안내 화면 |
 
@@ -445,5 +445,40 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   private 필드를 직접 세팅해 결정론적으로 검증했다.
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN),
   `./gradlew compileKotlin compileTestKotlin`, 전체 회귀 `./gradlew test` 모두 통과.
+- **후속**: `GlobalModelAttributeAdvice`에 새로 추가한 `sendYonaUsage` 전역 속성을 이용해, #1 작업 당시 미이식으로
+  남겨뒀던 legacy `layout.scala.html`의 Google Analytics 블록도 #2 작업과 함께 `site/layout.html`의 `scripts`
+  조각에 마저 채워 넣었다(같은 커밋에는 포함되지 않고 TASK-0221에서 함께 처리, 아래 #2 로그 참고).
 
-(아직 없음)
+### #2 `layout_framed.scala.html` → `site/layout_framed.html` (TASK-0221)
+
+- **원인**: legacy와 대조한 결과 `site/layout_framed.html`은 이미 sidebar 콘텐츠(즐겨찾기/프로젝트 탭, 조직·프로젝트
+  목록 루프)와 `iframePath`/`site/layout :: scripts` 재사용까지 상당히 진척돼 있었으나(선행 세션 작업), 다음이
+  빠져 있었다:
+  1. `og:*`/`twitter:*` 메타 태그 전체(이 파일은 `site/layout.html`의 `head` 조각을 공유하지 않고 자체 `<head>`를
+     가지고 있어 #1에서 고친 내용이 적용되지 않는 별도 위치였다)
+  2. `nprogress.css`/`magnific-popup.css` 스타일시트 링크
+  3. 사이드바 프로젝트/조직 목록 항목에 `data-toggle="popover"`가 마크업엔 있는데 `.popover()` 초기화 호출이
+     어디에도 없어 실제로는 동작하지 않는 죽은 마크업 상태였음
+  4. `body` 클래스에 legacy의 `@theme`(다른 `site/*.html` 파일들의 `theme-default` 컨벤션과 동일한 자리)가
+     `framed-body`만 있고 빠져 있었음
+  5. `Application.SEND_YONA_USAGE` 게이팅 Google Analytics 스크립트 전체
+- **구현 내용**:
+  - `GlobalModelAttributeAdvice`에 `sendYonaUsage`(`@Value("\${yuna.analytics.send-usage:false}")`, legacy
+    `application.conf`의 `application.sendYonaUsage` 대응, 기본값은 자체 호스팅 환경 안전을 위해 off) 전역 모델
+    속성 추가.
+  - `site/layout_framed.html`의 자체 `<head>`에 og/twitter 메타 태그 8종, `nprogress.css`, `magnific-popup.css`
+    링크 추가. `body` 클래스에 `theme-default` 추가(형제 파일들 컨벤션과 통일).
+  - 기존 탭 active-state 초기화 스크립트 블록 끝에 `$('[data-toggle="popover"]').popover();` 추가.
+  - `</body>` 직전에 `${sendYonaUsage}` 조건부 GA 스니펫 추가(legacy와 동일한 추적 ID `UA-102735758-1` 그대로 이식
+    — 이식 자체는 충실히 하되 기본값 off로 안전하게 둠).
+  - 같은 커밋에서 `site/layout.html`의 `scripts` 조각에도 동일한 `${sendYonaUsage}` 게이팅 GA 스니펫을 추가해
+    #1에서 미이식으로 남겨뒀던 항목을 마저 닫았다.
+- **legacy와 다르게 처리한 지점**: 없음(둘 다 config 플래그로 게이팅되는 legacy 동작 그대로, 기본값만 자체 호스팅
+  환경에 안전하도록 off로 설정 — legacy도 배포 시 conf에서 별도로 켜야 하는 구조라 동일한 성격의 기본값).
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-6] framed 레이아웃(site/layout_framed.html) 동치성 검증`
+  (og/twitter 메타·nprogress/magnific-popup 자산, body 클래스, popover 초기화 스크립트, GA 기본 비활성 4종) +
+  `[Test-19-5]`에 GA 기본 비활성 케이스 1종 추가. GA가 `sendYonaUsage=true`일 때 실제로 렌더링되는지는 Spring
+  컨텍스트 속성을 테스트에서 안전하게 토글하는 장치가 없어 별도로 검증하지 않았고, 기본값(off) 경로만 검증했다
+  (프로덕션 코드는 legacy와 동일한 조건부 렌더링 구조를 그대로 사용하므로 로직 자체의 리스크는 낮다고 판단).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN),
+  전체 회귀 `./gradlew test` 통과.
