@@ -67,10 +67,20 @@ class CodeViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
+                // yona CodeApp.java:60-62 forbidden(ErrorViews.Forbidden.render("error.forbidden",
+                // project)) 대응 (P-템플릿 #47) — Forbidden의 (String,Project) 2-arg 오버로드는
+                // ErrorViews.java:40-43에서 보듯 실제로 컨텍스트 인지형 forbidden.render(messageKey,
+                // project)로 귀결된다(NotFound/BadRequest의 2-arg와 달리 Forbidden만 이 오버로드가
+                // 진짜 프로젝트 헤더/메뉴를 붙인다). project는 이미 찾았으므로 error/forbidden으로 변환.
+                model.addAttribute("project", project)
+                return "error/forbidden"
             }
         } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // yona CodeApp.codeBrowser()의 클래스/메서드 어노테이션 @IsAllowed(Operation.READ) 대응
+            // (P-템플릿 #47) — actions/IsAllowedAction.java:62-65 forbidden(ErrorViews.Forbidden.render(
+            // "error.forbidden", project)) 그대로, 컨텍스트 인지형 error/forbidden으로 변환.
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val repository = repositoryService.getRepository(project)
@@ -112,9 +122,19 @@ class CodeViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
+                // yona actions/CodeAccessCheckAction.java:22-24 forbidden(ErrorViews.Forbidden.render(
+                // "error.forbidden.or.notfound", context.request().path())) 대응 — 이 (String,String)
+                // 오버로드는 project를 받지 않고 forbidden_default.render(messageKey)(제네릭)로
+                // 귀결된다(ErrorViews.java:45-51). project가 이미 resolve됐어도 legacy 자체가 프로젝트
+                // 컨텍스트를 보여주지 않으므로 신규 컨텍스트 인지형 error/forbidden으로 과잉 변환하지
+                // 않고 제네릭 error/403을 유지한 채 messageKey만 legacy와 동일하게 맞춘다.
+                model.addAttribute("messageKey", "error.forbidden.or.notfound")
                 return "error/403"
             }
         } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            // legacy CodeApp.codeBrowserWithBranch()에는 이 일반 READ 체크에 대응하는 어노테이션/액션이
+            // 없다(메서드 레벨 @With(CodeAccessCheckAction.class)뿐이고 그건 멤버 전용 케이스만 다룬다).
+            // 대응하는 legacy 렌더링이 없어 추측으로 컨텍스트를 만들어 붙이지 않고 제네릭 error/403 유지.
             return "error/403"
         }
 
@@ -124,7 +144,19 @@ class CodeViewController(
         val repository = repositoryService.getRepository(project)
         val branches = repository.getRefNames()
         val recursiveData = repositoryService.getMetaDataFromAncestorDirectories(repository, decodedBranch, normalizedPath)
-            ?: return "error/404"
+            ?: run {
+                // yona CodeApp.java:115-117 notFound(ErrorViews.NotFound.render(branch, project, "code"))
+                // 대응 (P-템플릿 #45) — NotFound의 (String,Project,String type) 3-arg 오버로드만
+                // 컨텍스트 인지형 notfound.render(title, project, targetType)로 귀결된다
+                // (ErrorViews.java:90-93). 여기서 첫 인자 "branch"는 메시지 키가 아니라 title(=브랜치
+                // 이름)이며, error.notfound.code="{0} branch does not exist..."의 {0} 자리에 그대로
+                // 들어간다(TemplateHelper.notFoundMessage). project는 이미 찾았으므로 브랜치/경로를
+                // 못 찾은 서브 리소스 404로 error/notfound(targetType="code")로 변환.
+                model.addAttribute("project", project)
+                model.addAttribute("targetType", "code")
+                model.addAttribute("title", decodedBranch)
+                return "error/notfound"
+            }
 
         model.addAttribute("project", project)
         model.addAttribute("branches", branches)
@@ -328,9 +360,18 @@ class CodeViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
+                // yona actions/CodeAccessCheckAction.java:22-24 대응 — CodeHistoryApp.history()/
+                // historyUntilHead()도 동일하게 @With(CodeAccessCheckAction.class)이며, 이 액션의
+                // (String,String) 오버로드는 project 컨텍스트 없는 forbidden_default로 귀결된다
+                // (ErrorViews.java:45-51). 컨텍스트 인지형으로 과잉 변환하지 않고 제네릭 error/403 유지,
+                // messageKey만 legacy와 동일하게 맞춘다.
+                model.addAttribute("messageKey", "error.forbidden.or.notfound")
                 return "error/403"
             }
         } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            // legacy CodeHistoryApp.history()에는 이 일반 READ 체크에 대응하는 어노테이션/액션이 없다
+            // (CodeAccessCheckAction은 멤버 전용 케이스만 다룬다). 대응하는 legacy 렌더링이 없어
+            // 추측으로 컨텍스트를 만들어 붙이지 않고 제네릭 error/403 유지.
             return "error/403"
         }
 
@@ -404,9 +445,17 @@ class CodeViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
+                // yona actions/CodeAccessCheckAction.java:22-24 대응 — CodeHistoryApp.show()도 동일하게
+                // @With(CodeAccessCheckAction.class)이며, 이 액션의 (String,String) 오버로드는 project
+                // 컨텍스트 없는 forbidden_default로 귀결된다(ErrorViews.java:45-51). 컨텍스트 인지형으로
+                // 과잉 변환하지 않고 제네릭 error/403 유지, messageKey만 legacy와 동일하게 맞춘다.
+                model.addAttribute("messageKey", "error.forbidden.or.notfound")
                 return "error/403"
             }
         } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            // legacy CodeHistoryApp.show()에는 이 일반 READ 체크에 대응하는 어노테이션/액션이 없다
+            // (CodeAccessCheckAction은 멤버 전용 케이스만 다룬다). 대응하는 legacy 렌더링이 없어
+            // 추측으로 컨텍스트를 만들어 붙이지 않고 제네릭 error/403 유지.
             return "error/403"
         }
 
@@ -415,7 +464,16 @@ class CodeViewController(
             repository.getCommit(commitId)
         } catch (e: Exception) {
             null
-        } ?: return "error/404"
+        } ?: run {
+            // yona CodeHistoryApp.show():112-118 notFound(ErrorViews.NotFound.render(
+            // "error.notfound.commit", project)) 대응 — NotFound의 (String,Project) 2-arg 오버로드는
+            // render(messageKey, project, MenuType.PROJECT_HOME) -> notfound_default(messageKey)로
+            // 귀결되어 project를 실질적으로 무시한다(ErrorViews.java:79-82,95-97 — NotFound는 3-arg
+            // String type 오버로드만 컨텍스트 인지형). 컨텍스트 인지형 error/notfound로 과잉 변환하지
+            // 않고 제네릭 error/404를 유지한 채 legacy와 동일한 messageKey만 맞춘다.
+            model.addAttribute("messageKey", "error.notfound.commit")
+            return "error/404"
+        }
 
         val parentCommit = try {
             repository.getParentCommitOf(commitId)
