@@ -932,7 +932,10 @@ class ProjectViewController(
             .orElse(false)
 
         if (!isManager && !loginUser.isSiteManager) {
-            return "error/403"
+            // yona IssueLabelApp.labelsForm() @IsAllowed(Operation.UPDATE) 대응 — 프로젝트는 이미
+            // 찾았으므로(project resolve 성공) error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val labels = issueLabelService.getLabels(project.id!!)
