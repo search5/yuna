@@ -190,28 +190,28 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 88 | [~] | `project/importing.scala.html` | `project/importing.html` | |
 | 89 | [~] | `project/list.scala.html` | `project/list.html` | |
 | 90 | [x] | `project/header.scala.html` | `project/header.html` | 완료(TASK-0236, TDD). **중대 발견**: 프로젝트 가입 요청(enroll/cancelEnroll) 기능 UI 전체가 빠져 있었음(백엔드 `ProjectMemberController`에 `POST /api/projects/{id}/enroll(/cancel)`은 이미 존재) — `TemplateHelper.isEnrolled()` 신규 추가 후 복구. `project.isProtected`(그룹 프로젝트) "G" 배지도 누락돼 있어 추가. 즐겨찾기 별표의 서버사이드 초기 상태(`isFavoriteProject`)는 여러 호출부에 `favoriteProjects` 전파가 필요해 범위가 커 미이식(비고에 기록) |
-| 91 | [~] | `project/home.scala.html` | `project/home.html` | 아래 readme/dashboard* 파샬이 실제로 다 들어있는지 줄 단위 대조 |
-| 92 | [i] | `project/partial_readme.scala.html` | (home.html에 인라인, P2-42로 로직은 이식됨) | 뷰 마크업 자체가 legacy와 일치하는지 확인 |
-| 93 | [i] | `project/partial_dashboard.scala.html` | (home.html에 인라인 추정) | |
-| 94 | [i] | `project/partial_dashboard_issuesbyassignee.scala.html` | (home.html에 인라인 추정) | |
-| 95 | [i] | `project/partial_dashboard_issuesbylabel.scala.html` | (home.html에 인라인 추정) | |
-| 96 | [i] | `project/partial_dashboard_issuesbymilestone.scala.html` | (home.html에 인라인 추정) | |
-| 97 | [i] | `project/partial_dashboard_pullrequests.scala.html` | (home.html에 인라인 추정) | |
-| 98 | [ ] | `project/partial_history.scala.html` | `project/partial_history.html` | 최근 활동(공용 common/partial_history 재사용 가능성 확인) |
-| 99 | [~] | `project/members.scala.html` | `project/members.html` | |
-| 100 | [~] | `project/setting.scala.html` | `project/setting.html` | |
+| 91 | [x] | `project/home.scala.html` | `project/home.html` | 확인 완료(TASK-0237). readme/dashboard* 탭 구조·조건분기 legacy와 일치 |
+| 92 | [i] | `project/partial_readme.scala.html` | (home.html에 인라인, P2-42로 로직은 이식됨) | 확인 완료(TASK-0237). 마크업 legacy와 일치 |
+| 93 | [i] | `project/partial_dashboard.scala.html` | (home.html에 인라인) | 확인 완료(TASK-0237). 마크업 legacy와 일치 |
+| 94 | [i] | `project/partial_dashboard_issuesbyassignee.scala.html` | (home.html에 인라인) | 확인 완료(TASK-0237). 마크업 legacy와 일치 |
+| 95 | [i] | `project/partial_dashboard_issuesbylabel.scala.html` | (home.html에 인라인) | 확인 완료(TASK-0237). 마크업 legacy와 일치 |
+| 96 | [i] | `project/partial_dashboard_issuesbymilestone.scala.html` | (home.html에 인라인) | 확인 완료(TASK-0237). 마크업 legacy와 일치 |
+| 97 | [i] | `project/partial_dashboard_pullrequests.scala.html` | (home.html에 인라인) | 확인 완료(TASK-0237). 마크업 legacy와 일치 |
+| 98 | [i] | `project/partial_history.scala.html` | `project/home.html`(history 탭에 인라인) | 확인 완료(TASK-0237). 최근 활동 목록 마크업 legacy와 일치, 별도 파일로 분리하지 않고 home.html에 인라인된 구조 확인 |
+| 99 | [x] | `project/members.scala.html` | `project/members.html` | 확인 완료(TASK-0237). site/layout 기반 GNB/footer 이미 정상 구성돼 있음(코드 변경 없음) |
+| 100 | [x] | `project/setting.scala.html` | `project/setting.html` | 완료(TASK-0237). site/layout 기반 GNB/footer는 이미 정상이었으나 외부 CDN jQuery(`code.jquery.com`) 중복 로드 발견 — site/layout::scripts와 중복되는 위험한 로드라 제거 |
 | 101 | [x] | `project/partial_settingmenu.scala.html` | `project/setting_menu.html` | 확인 완료 — 설정/멤버/라벨/웹훅/이관/삭제/VCS변경 7개 탭 구조 및 `active` 파라미터명 일치(코드 변경 없음) |
 | 102 | [x] | `project/change_vcs.scala.html` | `project/change_vcs.html` | 완료(TASK-0236, TDD). **독자 GNB 발견**: 검은 `.gnb-wrap`/`.gnb-brand` 하드코딩 가짜 헤더(별도 jQuery 로드까지 포함)로 완전히 독자 구현돼 있었음 — site/layout+project/header+project/menu+setting_menu 조각 기반으로 재작성. 기존 콘텐츠(메시지키/JS모듈 연동)는 이미 정확해 유지 |
 | 103 | [x] | `project/transfer.scala.html` | `project/transfer.html` | 완료(TASK-0236, TDD). #102와 동일한 독자 GNB 패턴 발견, site/layout 조각 기반으로 재작성 |
 | 104 | [x] | `project/delete.scala.html` | `project/delete.html` | 완료(TASK-0236, TDD). #102와 동일한 독자 GNB 패턴 발견, site/layout 조각 기반으로 재작성 |
 | 105 | [x] | `project/watchers.scala.html` | `project/watchers.html` | 완료(TASK-0236, TDD). 독자 GNB뿐 아니라 콘텐츠 자체도 legacy의 `.members.project.row-fluid`/`.member.span6`/`.member-name`/`.member-id` 클래스 대신 독자 `.watcher-list`/`.watcher-item` CSS로 재구현돼 있었고 i18n 메시지키도 미사용이었음 — legacy 클래스/메시지키 그대로 재작성 |
 | 106 | [x] | `project/webhooks.scala.html` | `project/setting_webhook.html` | 완료(TASK-0236, TDD). #102와 동일한 독자 GNB 패턴 발견(외부 CDN jQuery 로드 포함 — site/layout과 중복 로드 위험), site/layout 조각 기반으로 재작성. 기존에 이미 있던 `setting_menu` 호출과 중복되지 않도록 정리 |
-| 107 | [~] | `project/partial_webhooks_list.scala.html` | `setting_webhook.html`(인라인 추정) | 상세 대조 미실시(다음 배치에서 처리) |
-| 108 | [~] | `project/issuelabels.scala.html` | `project/issuelabels.html` | |
-| 109 | [i] | `project/partial_issuelabels_list.scala.html` | (issuelabels.html에 인라인 추정) | |
-| 110 | [i] | `project/partial_issuelabels_editcategory.scala.html` | (issuelabels.html에 인라인 추정) | |
-| 111 | [i] | `project/partial_issuelabels_editlabel.scala.html` | (issuelabels.html에 인라인 추정) | |
-| 112 | [~] | `project/statistics.scala.html` | `project/statistics.html` | |
+| 107 | [x] | `project/partial_webhooks_list.scala.html` | `project/setting_webhook.html`(인라인) | 완료(TASK-0237, TDD). 독자 Bootstrap `<table>` + 하드코딩 한글 텍스트로 재구현돼 있던 것을 발견 — legacy의 `.row-fluid.list-head`/`.list-item` 구조와 메시지키(`project.webhook.payloadUrl`/`secret`/`list.empty`)로 재작성. 삭제 버튼도 커스텀 confirm+AJAX 클릭 핸들러 대신 사이트 공용 `data-request-method`/`data-request-uri` 컨벤션으로 교체(legacy도 confirm 없이 바로 요청) |
+| 108 | [x] | `project/issuelabels.scala.html` | `project/issuelabels.html` | 완료(TASK-0237, TDD). #102와 동일한 독자 GNB(가짜 `.gnb-wrap`) 패턴 발견, site/layout+project/header+project/menu+setting_menu 조각 기반으로 재작성. 프리셋 색상 13개→legacy와 동일한 17개로 복구, `issue-label` 클래스 누락 추가. 라벨/카테고리 CRUD용 커스텀 JS(`yobi.issue.LabelEditor.js` 실사용 모듈로의 교체 여부)는 필드/ID 호환성 재검증이 더 필요해 이번 배치에서는 보류(현행 커스텀 구현 유지) |
+| 109 | [i] | `project/partial_issuelabels_list.scala.html` | (issuelabels.html에 인라인, `#labels-list-container` 비동기 렌더링으로 대체) | 확인 완료(TASK-0237). 목록 렌더링이 서버사이드 파샬 대신 `/api/projects/{id}/labels` 비동기 호출 기반으로 구현돼 있음 — REST 아키텍처 전환에 따른 의도된 차이 |
+| 110 | [i] | `project/partial_issuelabels_editcategory.scala.html` | (issuelabels.html에 인라인, 카테고리 생성 폼으로 대체) | 확인 완료(TASK-0237). 위와 동일하게 REST 기반 구현 |
+| 111 | [i] | `project/partial_issuelabels_editlabel.scala.html` | (issuelabels.html에 인라인, 라벨 생성 폼으로 대체) | 확인 완료(TASK-0237). 위와 동일하게 REST 기반 구현 |
+| 112 | [x] | `project/statistics.scala.html` | `project/statistics.html` | 확인 완료(TASK-0237). legacy 자체가 "Under Construction" 플레이스홀더뿐이며 yuna도 동일하게 이식돼 있음(코드 변경 없음) |
 
 ## 그룹 7 — `issue/*` 이슈 (30개, #113~142)
 
@@ -878,3 +878,39 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   setting_webhook 4종 GNB/footer 일괄 검증).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN). 전체 회귀는
   10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.
+
+### 그룹6 `project/*` 마무리분: #91~100,107~112 (TASK-0237)
+
+- **#91~97(home.html + readme/dashboard* 파샬)**: legacy `home.scala.html`의 탭 구조(readme/dashboard/history)
+  와 각 파샬(`partial_readme`/`partial_dashboard*`)의 마크업을 줄 단위 대조 — 전부 이미 `home.html`에 정확히
+  인라인돼 있음을 확인, 코드 변경 없음.
+- **#98(partial_history)**: `home.html`의 history 탭에 인라인된 최근 활동 목록 마크업이 legacy
+  `partial_history.scala.html`과 일치함을 확인, 코드 변경 없음.
+- **#99(members.html)**: site/layout 기반 GNB/footer가 이미 정상 구성돼 있음을 확인, 코드 변경 없음.
+- **#100(setting.html) 발견**: GNB/footer는 이미 정상(site/layout 기반)이었으나, 화면 하단에 `site/layout ::
+  scripts`가 이미 로드하는 jQuery와 별개로 외부 CDN(`code.jquery.com/jquery-3.6.0.min.js`)을 중복 로드하고
+  있었다 — #102~106에서 발견한 것과 같은 계열의 위험(버전 충돌) — 제거.
+- **#107(partial_webhooks_list) 발견**: `setting_webhook.html`의 웹훅 목록이 legacy의 `.row-fluid list-head`/
+  `list-item` 구조 대신 독자 Bootstrap `<table>` + 하드코딩 한글 텍스트("타입","관리" 등)로 재구현돼 있었다
+  — "yuna식 독자구현 금지" 원칙 위반. legacy 구조·메시지키(`project.webhook.payloadUrl`/`secret`/`list.empty`)
+  그대로 재작성. 삭제 버튼도 커스텀 `confirm()`+수동 AJAX 클릭 핸들러 대신 사이트 공용
+  `data-request-method="delete"`+`data-request-uri` 컨벤션으로 교체(legacy 원본도 confirm 없이 즉시 요청이므로
+  더 충실한 이식).
+- **#108(issuelabels.html) 발견**: #102와 동일한 가짜 `.gnb-wrap` 독자 GNB 패턴 — site/layout+project/header+
+  project/menu+setting_menu 조각 기반으로 재작성(불필요해진 `.gnb-wrap`/`.project-header`/`.setting-container`
+  전용 CSS는 제거, 여전히 필요한 `.label-preset-colors`/`.btn-preset-color`/`.label-item`/`.category-box`만
+  유지). 프리셋 색상이 13개뿐이었으나 legacy는 17개(`03a9f4`/`8bc34a`/`cddc39`/`ffc107` 4개 누락) — 복구.
+  프리셋 버튼 클래스도 legacy가 `class="issue-label btn-preset-color"`(2개)인데 yuna는 `btn-preset-color`만
+  있어 `issue-label` 클래스 추가.
+- **#109~111(issuelabels 3파샬)**: `issuelabels.html`에 인라인돼 있으나, legacy의 서버사이드 파샬 렌더링 대신
+  `/api/projects/{id}/labels` 비동기 호출 기반 REST 아키텍처로 대체돼 있음을 확인 — 이 프로젝트의 REST 전환
+  방침에 따른 의도된 차이로 문제 없음.
+- **#112(statistics.html)**: legacy 원본 자체가 "Under Construction" 플레이스홀더뿐이며 yuna도 동일하게
+  이식돼 있음(GNB/footer 포함 정상), 코드 변경 없음.
+- **legacy와 다르게 처리한 지점**: #108의 라벨/카테고리 CRUD 커스텀 JS(현재 hand-rolled 클릭 핸들러 기반)를
+  legacy가 쓰는 실제 정적 자산 `yobi.issue.LabelEditor.js` 모듈로 교체할지는, 필드명/ID/동작 호환성을 더 면밀히
+  검증해야 해서 이번 배치에서는 보류(현행 유지) — 향후 배치에서 재검토 필요.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-23]`(이슈 라벨 설정 화면 GNB/footer/헤더/setting_menu
+  활성탭/프리셋색상 17개/외부 CDN jQuery 미로드 검증).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN).
+  **그룹6(project/*, #87~112) 26개 항목 전체 처리 완료.** 다음은 그룹7(issue/*, #113~142).

@@ -1052,6 +1052,23 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     webhookDoc.select("footer.page-footer-outer").size shouldBe 1
                 }
             }
+
+            describe("[Test-19-23] 이슈 라벨 설정 화면(project/issuelabels.scala.html) 동치성 검증") {
+                it("이슈 라벨 설정 화면은 site/layout 기반 전체 GNB/footer와 project/header, setting_menu 조각, 17개 프리셋 색상을 포함해야 한다") {
+                    val result = mockMvc.perform(
+                        get("/owner/${settingProj.name}/issue/labelsform")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    ).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("form[name='gnb-search-form']").size shouldBe 1
+                    doc.select("footer.page-footer-outer").size shouldBe 1
+                    doc.select(".project-header-outer").size shouldBe 1
+                    doc.select("#subMenuIssueLabel.active").size shouldBe 1
+                    doc.select("button.issue-label.btn-preset-color").size shouldBe 17
+                    doc.select("script[src*='code.jquery.com']").size shouldBe 0
+                }
+            }
         }
     }
 }
