@@ -1,51 +1,9 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${project.name} + ' - 이슈 라벨 설정'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<head th:replace="~{site/layout :: head(${project.name} + ' - ' + #{issue.label})}">
+</head>
+<body class="prj" id="html-body">
 <style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .setting-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-  }
   .label-preset-colors {
       margin-top: 10px;
       margin-bottom: 10px;
@@ -88,41 +46,17 @@
       margin-bottom: 20px;
   }
 </style>
-</head>
-<body class="theme-default">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'setting')}"></div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <div class="col-md-9">
-        <div class="setting-container">
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
           <div th:replace="~{project/setting_menu :: menu(${project}, 'labels')}"></div>
-          
-          <h3 style="margin-top: 0; margin-bottom: 20px;">이슈 라벨 설정</h3>
+
+          <h3 style="margin-top: 0; margin-bottom: 20px;" th:text="#{issue.label}">이슈 라벨 설정</h3>
 
           <!-- 신규 카테고리 생성 폼 -->
           <div style="border: 1px solid #d8dee2; border-radius: 3px; padding: 15px; margin-bottom: 20px; background: #fafbfc;">
@@ -170,19 +104,23 @@
 
               <!-- 프리셋 색상 선택기 -->
               <div class="label-preset-colors">
-                <button type="button" class="btn-preset-color" style="background-color:#f44336;" data-color="#f44336"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#e91e63;" data-color="#e91e63"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#9c27b0;" data-color="#9c27b0"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#3f51b5;" data-color="#3f51b5"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#2196f3;" data-color="#2196f3"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#00bcd4;" data-color="#00bcd4"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#009688;" data-color="#009688"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#4caf50;" data-color="#4caf50"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#ffeb3b;" data-color="#ffeb3b"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#ff9800;" data-color="#ff9800"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#ff5722;" data-color="#ff5722"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#795548;" data-color="#795548"></button>
-                <button type="button" class="btn-preset-color" style="background-color:#9e9e9e;" data-color="#9e9e9e"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#f44336;" data-color="#f44336"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#e91e63;" data-color="#e91e63"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#9c27b0;" data-color="#9c27b0"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#3f51b5;" data-color="#3f51b5"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#2196f3;" data-color="#2196f3"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#03a9f4;" data-color="#03a9f4"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#00bcd4;" data-color="#00bcd4"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#009688;" data-color="#009688"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#4caf50;" data-color="#4caf50"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#8bc34a;" data-color="#8bc34a"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#cddc39;" data-color="#cddc39"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#ffeb3b;" data-color="#ffeb3b"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#ffc107;" data-color="#ffc107"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#ff9800;" data-color="#ff9800"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#ff5722;" data-color="#ff5722"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#795548;" data-color="#795548"></button>
+                <button type="button" class="issue-label btn-preset-color" style="background-color:#9e9e9e;" data-color="#9e9e9e"></button>
               </div>
 
               <button type="submit" class="btn btn-primary">라벨 추가</button>
@@ -195,12 +133,12 @@
           </div>
 
         </div>
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
 <script th:inline="javascript">
   $(document).ready(function() {
       var projectId = [[${project.id}]];
