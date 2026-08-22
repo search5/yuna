@@ -94,10 +94,10 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 22 | [x] | `common/uploadForm.scala.html` | `common/uploadForm.html`(신규 생성) | 완료(TASK-0227, TDD). **중대 발견**: `issue/view.html`/`board/view.html`의 기존 `#upload-drop-zone`/`input[name=file]` 마크업이 legacy 구조(`upload-wrap`/`data-resource-type`/`input[name=filePath]`)와 전혀 다른 독자 구현이었고, 어떤 정적 JS 파일도 `upload-drop-zone`/`upload-file-input` 셀렉터를 참조하지 않아(grep 확인) 사실상 동작하지 않는 죽은 마크업이었음. legacy 구조로 교체 |
 | 23 | [~] | `common/attachmentFile.scala.html` | (없음, 신규 필요) | 서버사이드 렌더링되는 "이미 첨부된 파일 1건" 표시 조각(수정 화면 등에서 기존 첨부파일 목록에 사용) — 아직 미착수. #21/22와 달리 클라이언트 JS 템플릿(tplAttachedFile)이 아닌 서버 렌더 조각이라 별도 확인 필요 |
 | 24 | [i] | `common/commentForm.scala.html` | `issue/view.html`, `board/view.html` (각 페이지에 인라인) | 확인: `<form id="comment-form" ... enctype="multipart/form-data">` + 에디터 + fileUploader 슬롯 + 제출 버튼 구조는 이미 정확히 대응됨(#22에서 enctype 누락도 함께 수정). `common.editor(...)`/`common.fileUploader(...)` 자리에 해당하는 하위 조각들의 이식 상태는 #20/#21/#22 참고 |
-| 25 | [ ] | `common/commentUpdateForm.scala.html` | `common/commentUpdateForm.html` | 댓글 수정 폼 |
-| 26 | [ ] | `common/commentDeleteModal.scala.html` | `common/commentDeleteModal.html` | 댓글 삭제 확인 모달 |
-| 27 | [ ] | `common/commentCount.scala.html` | `common/commentCount.html` | |
-| 28 | [ ] | `common/commentAndVoterPairDisplay.scala.html` | `common/commentAndVoterPairDisplay.html` | |
+| 25 | [ ] | `common/commentUpdateForm.scala.html` | (없음, 신규 필요 — 규모 큼) | **조사 완료, 미착수**. 댓글 인라인 수정 UI(파일 업로드+알림메일 체크박스+저장/취소 포함) 자체가 yuna에 전혀 없음(`comment-editform`/`comment-update-form` 마크업 grep 0건). 백엔드는 `CommentController`의 `PUT /api/projects/{projectId}/issues|posts/{number}/comments/{commentId}` REST API로 이미 존재하지만, legacy는 `<form action=".../{id}" enctype=multipart/form-data>` 폼 전체제출 방식이라 REST API 기준으로 AJAX 재설계가 필요 — 순수 마크업 포팅을 넘어서는 프론트엔드 설계 작업. 그룹2 완주 후 별도 세션에서 집중 처리 권장 |
+| 26 | [ ] | `common/commentDeleteModal.scala.html` | (없음, 신규 필요) | **조사 완료, 미착수**. 삭제 확인 모달(`#comment-delete-modal`)과 `yobi.Comment.js` 초기화 스크립트가 yuna에 전혀 없음. 삭제 백엔드(`DELETE /api/projects/{projectId}/issues|posts/{number}/comments/{commentId}`)는 존재. #25와 함께 처리하는 게 효율적(같은 JS 초기화 흐름) |
+| 27 | [i] | `common/commentCount.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.comments-count.comments-count-color` 구조 완전 일치(TASK-0227 후속 조사, 코드 변경 없음) |
+| 28 | [i] | `common/commentAndVoterPairDisplay.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.item-count-groups` 조합 표시 구조 완전 일치(코드 변경 없음) |
 | 29 | [ ] | `common/child_commentForm.scala.html` | `common/child_commentForm.html` | 대댓글 작성 폼 |
 | 30 | [ ] | `common/childComments.scala.html` | `common/childComments.html` | 대댓글 목록 |
 | 31 | [ ] | `common/childCommentsAnchorDiv.scala.html` | `common/childCommentsAnchorDiv.html` | |
@@ -646,3 +646,19 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **테스트**: 기존 `[Test-19-2]`/`[Test-19-3]`의 업로드 위젯 관련 단언을 새 구조로 갱신, RED 확인 후 구현.
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
   전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.
+
+### #25~#28 댓글 수정/삭제/카운트 표시 (TASK-0228, 조사만 — 코드 변경 없음)
+
+- **#27(commentCount)/#28(commentAndVoterPairDisplay)**: `issue/list.html`에 이미 완전히 동일한 구조로 인라인돼
+  있음을 확인(`.comments-count.comments-count-color`, `.item-count-groups` 조합 표시). 코드 변경 없음, `[i]`로
+  상태 갱신.
+- **#25(commentUpdateForm)/#26(commentDeleteModal)**: 조사 결과 **댓글 인라인 수정·삭제 UI 자체가 yuna에
+  전혀 존재하지 않음**(`comment-editform`/`comment-update-form`/`comment-delete-modal` 마크업 및
+  `yobi.Comment.js` 초기화 스크립트 grep 0건). 백엔드는 `CommentController`에 `PUT`/`DELETE /api/projects/
+  {projectId}/issues|posts/{number}/comments/{commentId}` REST 엔드포인트로 이미 존재하나, legacy는
+  `<form action=".../{id}" enctype=multipart/form-data method=post>` 전체 폼 제출 방식이라 REST API 프론트엔드를
+  AJAX로 새로 설계해야 한다(단순 마크업 치환을 넘어서는 작업 — 파일 업로드까지 REST 흐름에 맞게 통합 필요).
+  이번 배치에서는 착수하지 않고 백로그에 상세 조사 결과를 기록만 했다 — 그룹2의 나머지 항목(#29~#44)을 마저
+  훑은 뒤, 별도 세션에서 #25/#26을 한 묶음으로 집중 처리할 것을 권장(같은 JS 초기화 경로를 공유하므로 함께
+  설계하는 게 효율적).
+- **검증**: 코드 변경 없음(조사만), 별도 테스트/빌드 불필요.
