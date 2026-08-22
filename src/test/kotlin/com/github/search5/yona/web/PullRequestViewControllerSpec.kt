@@ -25,6 +25,10 @@ import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.project.ProjectUser
+import com.github.search5.yona.domain.vcs.PushedBranchRepository
+import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.attachment.AttachmentRepository
+import org.springframework.context.MessageSource
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -51,7 +55,6 @@ import com.github.search5.yona.domain.pullrequest.PullRequestEvent
 import com.github.search5.yona.domain.enumeration.EventType
 import java.time.Instant
 import com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem
-import io.mockk.verify
 import com.github.search5.yona.domain.pullrequest.CommentThread
 
 class PullRequestViewControllerSpec : DescribeSpec({
@@ -84,6 +87,16 @@ class PullRequestViewControllerSpec : DescribeSpec({
         milestoneRepositoryForAccessControl
     )
 
+    val pushedBranchRepository = mockk<PushedBranchRepository>()
+    val watchService = mockk<WatchService>()
+    val messageSource = mockk<MessageSource>()
+    val attachmentRepository = mockk<AttachmentRepository>()
+    every { pushedBranchRepository.findByProjectAndPushedDateAfter(any(), any()) } returns emptyList()
+    every { pushedBranchRepository.findByOriginalProjectAndOwnerAndPushedDateAfter(any(), any(), any()) } returns emptyList()
+    every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
+    every { watchService.isWatching(any(), any(), any()) } returns false
+    every { messageSource.getMessage(any(), any(), any()) } returns ""
+
     val pullRequestViewController = PullRequestViewController(
         projectRepository,
         pullRequestService,
@@ -96,7 +109,11 @@ class PullRequestViewControllerSpec : DescribeSpec({
         pullRequestCommitRepository,
         issueRepository,
         accessControl,
-        codeReviewService
+        codeReviewService,
+        pushedBranchRepository,
+        watchService,
+        messageSource,
+        attachmentRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(pullRequestViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -116,6 +133,13 @@ class PullRequestViewControllerSpec : DescribeSpec({
             issueRepository
         )
         every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(any()) } returns emptyList()
+        every {
+            pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
+        } returns PageImpl(emptyList())
+        every {
+            pullRequestRepository.count(any<org.springframework.data.jpa.domain.Specification<PullRequest>>())
+        } returns 0L
+        every { pullRequestRepository.findDistinctContributorsByToProject(any()) } returns emptyList()
     }
 
     describe("PullRequestViewController 템플릿 연동 테스트") {
@@ -144,7 +168,9 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
-                every { pullRequestRepository.findByToProjectAndState(project, State.OPEN, any<Pageable>()) } returns PageImpl(listOf(pullRequest), pageRequest, 1)
+                every {
+                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
+                } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/pulls").principal(userAuth))
                     .andExpect(status().isOk)
@@ -169,7 +195,9 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 val pageableSlot = slot<Pageable>()
-                every { pullRequestRepository.findByToProjectAndState(project, State.OPEN, capture(pageableSlot)) } returns PageImpl(listOf(pullRequest), pageRequest, 1)
+                every {
+                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), capture(pageableSlot))
+                } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/pulls").principal(userAuth))
                     .andExpect(status().isOk)
@@ -191,7 +219,9 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "group-project") } returns Optional.of(groupProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(12L, 10L) } returns false
-                every { pullRequestRepository.findByToProjectAndState(groupProject, State.OPEN, any<Pageable>()) } returns PageImpl(emptyList(), pageRequest, 0)
+                every {
+                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
+                } returns PageImpl(emptyList(), pageRequest, 0)
 
                 mockMvc.perform(get("/owner/group-project/pulls").principal(userAuth))
                     .andExpect(status().isOk)
@@ -207,7 +237,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every {
-                    pullRequestRepository.findByToProjectAndStateIn(project, listOf(State.CLOSED, State.MERGED), any<Pageable>())
+                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
                 } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/closedPullRequests").principal(userAuth))
@@ -235,7 +265,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every {
-                    pullRequestRepository.findByFromProject(project, any<Pageable>())
+                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
                 } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/sentPullRequests").principal(userAuth))
@@ -293,6 +323,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     created = Instant.parse("2026-01-03T00:00:00Z")
                 )
                 every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest) } returns listOf(stateEvent, newPrEvent)
+                every { commentThreadRepository.findByPullRequest(pullRequest) } returns emptyList()
 
                 val result = mockMvc.perform(get("/owner/TestProj/pull/1").principal(userAuth))
                     .andExpect(status().isOk)
@@ -302,8 +333,9 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 timeline.size shouldBe 1
                 val eventIds = timeline.map { (it as PullRequestTimelineItem).event.id }
                 eventIds shouldBe listOf(1L)
+                // openThreadCount(addCommonPrAttributes)를 위해 commentThreadRepository는 호출되지만,
+                // 댓글스레드 자체가 timeline 모델 속성에 별도 항목으로 섞여 들어가지는 않아야 한다.
                 result.modelAndView!!.model.containsKey("commentThreads") shouldBe false
-                verify(exactly = 0) { commentThreadRepository.findByPullRequest(pullRequest) }
             }
         }
 

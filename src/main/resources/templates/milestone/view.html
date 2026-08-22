@@ -88,48 +88,13 @@
                         </div>
                         
                         <div id="issue-list-container">
-                            <ul class="setting-list" style="margin-left: 0;">
-                                <!-- 열린 이슈 리스트 -->
-                                <li th:each="issue : ${milestoneDto.openIssues}" class="issue-item open-issue-item" style="border-bottom: 1px solid #eee; padding: 10px 12px; list-style: none; display: flex; align-items: center; justify-content: space-between;">
-                                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
-                                        <input type="checkbox" name="checked-issue" th:value="${issue.id}" style="margin: 0 5px 0 0;" />
-                                        <span class="state-label open" style="margin-right: 5px;"></span>
-                                        <a th:href="@{/{owner}/{projectName}/issue/{number}(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}" target="_blank" style="text-decoration: none; color: #333; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                            <span class="number" th:text="'#' + ${issue.number}" style="color: #999; margin-right: 5px;">#1</span>
-                                            <span th:text="${issue.title}">이슈 제목</span>
-                                        </a>
-                                        <th:block th:each="label : ${issue.labels}">
-                                            <span class="label issue-label active list-label" th:data-category-id="${label.category.id}" th:data-label-id="${label.id}" th:style="'background:' + ${label.color} + '; color: #fff; padding: 1px 4px; border-radius: 2px; font-size: 11px; margin-left: 4px; display: inline-block;'" th:text="${label.name}">라벨명</span>
-                                        </th:block>
-                                    </div>
-                                    <div th:if="${issue.assignee != null}" style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #586069; margin-left: 10px;">
-                                        <span class="avatar-wrap smaller" style="display: inline-block; width: 20px; height: 20px; border-radius: 50%; overflow: hidden;">
-                                            <img th:src="${issue.assignee.user.avatarUrl}" width="20" height="20">
-                                        </span>
-                                        <span th:text="${issue.assignee.user.name}">담당자 이름</span>
-                                    </div>
-                                </li>
-                                <!-- 닫힌 이슈 리스트 -->
-                                <li th:each="issue : ${milestoneDto.closedIssues}" class="issue-item closed-issue-item" style="border-bottom: 1px solid #eee; padding: 10px 12px; list-style: none; display: flex; align-items: center; justify-content: space-between;">
-                                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
-                                        <input type="checkbox" name="checked-issue" th:value="${issue.id}" style="margin: 0 5px 0 0;" />
-                                        <span class="state-label closed" style="margin-right: 5px;"><i class="yobicon-checkmark"></i></span>
-                                        <a th:href="@{/{owner}/{projectName}/issue/{number}(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}" target="_blank" style="text-decoration: none; color: #777; font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: line-through;">
-                                            <span class="number" th:text="'#' + ${issue.number}" style="color: #bbb; margin-right: 5px;">#1</span>
-                                            <span th:text="${issue.title}">이슈 제목</span>
-                                        </a>
-                                        <th:block th:each="label : ${issue.labels}">
-                                            <span class="label issue-label active list-label" th:data-category-id="${label.category.id}" th:data-label-id="${label.id}" th:style="'background:' + ${label.color} + '; color: #fff; padding: 1px 4px; border-radius: 2px; font-size: 11px; margin-left: 4px; display: inline-block;'" th:text="${label.name}">라벨명</span>
-                                        </th:block>
-                                    </div>
-                                    <div th:if="${issue.assignee != null}" style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #586069; margin-left: 10px;">
-                                        <span class="avatar-wrap smaller" style="display: inline-block; width: 20px; height: 20px; border-radius: 50%; overflow: hidden;">
-                                            <img th:src="${issue.assignee.user.avatarUrl}" width="20" height="20">
-                                        </span>
-                                        <span th:text="${issue.assignee.user.name}">담당자 이름</span>
-                                    </div>
-                                </li>
-                            </ul>
+                            <!-- yona: issueState(open/closed/all)에 따라 milestone.sortedByNumberOfXxxIssue()로
+                                 골라낸 컬렉션 하나를 issue.partial_list에 넘긴다. yuna는 서버 왕복 없는 탭
+                                 전환(toggleIssueState)을 쓰므로 열림/닫힘 목록을 각각 미리 렌더링해두고
+                                 JS로 노출을 전환한다 — 행 마크업 자체는 issue/list.html과 동일한
+                                 issue/partial_list 조각을 공유한다. -->
+                            <div class="open-issue-item" th:insert="~{issue/partial_list :: list(${project}, ${milestoneDto.openIssues}, ${currentUser})}"></div>
+                            <div class="closed-issue-item" th:insert="~{issue/partial_list :: list(${project}, ${milestoneDto.closedIssues}, ${currentUser})}"></div>
                         </div>
                     </div>
                 </div>
@@ -149,7 +114,7 @@
         <p th:text="#{post.delete.confirm}">정말 삭제하시겠습니까?</p>
     </div>
     <div class="modal-footer">
-        <button type="button" class="ybtn ybtn-danger" data-request-method="delete" th:data-request-uri="@{/{owner}/{projectName}/milestone/{id}(owner=${project.owner}, projectName=${project.name}, id=${milestoneDto.milestone.id})}">예</button>
+        <button type="button" class="ybtn ybtn-danger" data-request-method="delete" th:data-request-uri="@{/{owner}/{projectName}/milestone/{id}(owner=${project.owner}, projectName=${project.name}, id=${milestoneDto.milestone.id})}" th:text="#{button.yes}">예</button>
         <button type="button" class="ybtn" data-dismiss="modal" th:text="#{button.no}">아니오</button>
     </div>
 </div>

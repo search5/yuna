@@ -140,6 +140,14 @@ class ProjectViewController(
         } ?: false
         val watcherCount = watchService.findWatchers(ResourceType.PROJECT, project.id.toString()).size
 
+        // legacy project/home.scala.html:112-118 대응 — 사이드바에 가장 기한이 임박한 열린 마일스톤의
+        // 진행 상황 카드(milestone/partial_status)를 보여준다.
+        val sidebarMilestone = if (project.isMilestoneEnabled) {
+            milestoneRepository.findByProjectAndState(project, State.OPEN, Sort.by(Sort.Direction.ASC, "dueDate")).firstOrNull()
+        } else {
+            null
+        }
+
         model.addAttribute("project", project)
         model.addAttribute("projectUsers", projectUsers)
         model.addAttribute("currentUser", loginUser)
@@ -149,6 +157,7 @@ class ProjectViewController(
         model.addAttribute("readmeHtml", readmeHtml)
         model.addAttribute("isWatching", isWatching)
         model.addAttribute("watcherCount", watcherCount)
+        model.addAttribute("sidebarMilestone", sidebarMilestone)
 
         return "project/home"
     }

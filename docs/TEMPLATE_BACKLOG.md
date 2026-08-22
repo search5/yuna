@@ -263,11 +263,11 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 149 | [~] | `milestone/list.scala.html` | `milestone/list.html` | |
-| 150 | [~] | `milestone/create.scala.html` | `milestone/create.html` | |
-| 151 | [~] | `milestone/edit.scala.html` | `milestone/edit.html` | |
-| 152 | [~] | `milestone/view.scala.html` | `milestone/view.html` | |
-| 153 | [ ] | `milestone/partial_status.scala.html` | `milestone/partial_status.html` | 진행률 표시 |
+| 149 | [x] | `milestone/list.scala.html` | `milestone/list.html` | 완료(TASK-0253). 정렬 필터/검색창/열림·닫힘 이슈 목록 모두 legacy와 일치 확인(실제 렌더링 테스트로 검증) |
+| 150 | [x] | `milestone/create.scala.html` | `milestone/create.html` | 완료 확인(TASK-0253). 제목/에디터/첨부/상태라디오/기한 필드 전부 legacy와 일치 |
+| 151 | [x] | `milestone/edit.scala.html` | `milestone/edit.html` | 완료 확인(TASK-0253). create.html과 동일 패턴, legacy와 일치 |
+| 152 | [x] | `milestone/view.scala.html` | `milestone/view.html` | 완료(TASK-0253). 이슈 목록 영역이 하드코딩 인라인 스타일(yuna 독자구현)이었던 것을 issue/partial_list 공용 조각 재사용으로 교체 |
+| 153 | [x] | `milestone/partial_status.scala.html` | `milestone/partial_status.html` | 완료(TASK-0253). project/home.html 사이드바에 완전히 빠져있던 위젯(가장 임박한 열린 마일스톤 진행률 카드)을 신규 작성 및 배선 |
 
 ## 그룹 10 — `code/*` 코드브라우저 (13개, #154~166)
 
@@ -1604,3 +1604,110 @@ PR changes 탭 하단 코드리뷰(블록 코멘트) 폼으로 완성.
 - **다음 세션 우선순위**: (1) 병합 후 전체 테스트 실행해 이번 배치 전체(그룹11 26개 + #40/#23/#25/
   #26/#29/#30/#31) 그린 확인, (2) #178 merge 프리뷰 컨트롤러 연결, (3) cross-fork PR 지원(연관
   프로젝트 조회) 여부 검토, (4) fork owner-select 조직 전환 지원.
+
+### TASK-0252: 그룹10~17 병합 후 통합 회귀 그린화 (사용자 지시: "그룹 8부터 나머지 그룹별로 에이전트
+하나씩 다 돌려. 그리고 모든 그룹이 완료되면 통합 회귀 돌리자")
+
+병렬 워크트리 8개(그룹10~17) 병합 완료 후 요청받은 전체 `./gradlew test` 통합 회귀를 실행하며 발견된
+잔여 실패를 전부 고쳤다(`compileTestKotlin` 기준 컴파일 에러 0건, 최종 전체 스위트 1382개 테스트 전부
+green).
+
+- **`PullRequestViewControllerSpec`(6개 실패)**: 그룹11이 `PullRequestViewController.listPullRequests
+  /closedPullRequests/sentPullRequests`를 필터/기여자 검색 지원을 위해 `PullRequestRepository.
+  findByToProjectAndState(...)` 같은 파생 쿼리메서드에서 `JpaSpecificationExecutor.findAll(Specification,
+  Pageable)`/`count(Specification)` 기반의 `buildPullRequestSpec()`으로 재작성했는데, 테스트는 옛 파생
+  쿼리메서드를 그대로 스텁하고 있어 전부 `MockKException: no answer found`로 깨져 있었다. `findAll`/
+  `count`/`findDistinctContributorsByToProject`에 대한 기본 스텁을 `beforeTest`(매 테스트 `clearMocks`
+  직후, `clearMocks`가 지우므로 반드시 여기 위치)에 추가하고, 목록 내용을 검증하는 개별 테스트는
+  `findAll(any(), capture(...))`/`findAll(any(), any())`로 갈아끼웠다. 추가로 "timeline 모델 속성" 테스트는
+  `verify(exactly = 0) { commentThreadRepository.findByPullRequest(pullRequest) }`를 단언하고 있었으나,
+  그룹11이 PR 상세 화면에 `openThreadCount`(미해결 댓글스레드 뱃지) 기능을 정당하게 추가하면서 해당
+  리포지토리가 실제로 호출되게 됐다 — "타임라인에 댓글스레드가 별도 항목으로 섞이지 않는다"는 원래 의도와
+  "리포지토리가 아예 호출 안 된다"는 서로 다른 주장이었으므로, 후자(stale) 단언만 제거하고 스텁을
+  추가했다.
+- **`BoardViewControllerSpec`(4개 실패)/`IssueViewControllerSpec`(2개 실패)**: 그룹11이 이슈/게시글
+  상세 화면에 추가한 댓글 인라인 수정/삭제 권한 판정(`isProjectManager` via
+  `projectUserRepository.findByProjectIdAndUserId(...)`)과 게시판 목록의 `postingRepository.
+  findByProjectAndNotice(project, false, pageable)` 페이지네이션 호출에 대한 기본 스텁이 두 스펙 모두
+  빠져 있어 `beforeTest`에 추가. `BoardViewControllerSpec`의 "페이지 크기는 항상 15로 고정되어야 한다"
+  테스트는 컨트롤러에 더 이상 존재하지 않는 `postingRepository.findByProject(...)`를 슬롯 캡처하고 있어
+  `IllegalStateException`(슬롯 미캡처)으로 실패 — 실제 호출부인 `findByProjectAndNotice(...)`로 교체.
+- **`TimelineTemplateRenderingSpec`(1개 실패)**: `issue/view.html:220`에서
+  `th:replace="~{common/commentUpdateForm :: updateForm(..., ${T(...ResourceType).ISSUE_COMMENT})}"`가
+  `th:each="item : ${timeline}"` 내부(Gathering 제한 컨텍스트)에서 `T(...)` 정적 클래스 접근과 결합돼
+  "Instantiation of new objects and access to static classes... forbidden" 예외 발생(#1 로그에서부터
+  반복된 동일 계열 버그, 그룹11 작업 로그가 이미 이 위험을 경고했으나 실제 렌더링 검증 없이 병합됨).
+  기존 확립된 패턴대로 상위 `<div th:with="comment=...">`에 `canEditThisComment`/
+  `issueCommentResourceType` 변수를 미리 계산해두고 `th:replace` 인자를 `${var}` 참조로 교체해 수정.
+  `board/view.html`의 동일 패턴(`common/commentUpdateForm`, `NONISSUE_COMMENT`)도 이 스펙이 커버하지
+  않을 뿐 완전히 동일한 잠재 버그였음을 발견해 선제적으로 함께 수정(`canEditThisComment`/
+  `postingCommentResourceType`).
+- **`ProjectViewControllerIntegrationSpec`(5개 실패, 개별 실행 시엔 통과하지만 전체 스위트에서만
+  재현되는 테스트 격리 버그)**: `AbstractIntegrationTest`는 JVM 전체에서 Testcontainers MariaDB
+  컨테이너 하나를 스펙 클래스들이 공유한다(스펙 간 DB 리셋 없음). 이 스펙의 `beforeTest`가 매 테스트마다
+  `projectRepository.deleteAll()`(전역!)을 실행하는데, 그룹11이 추가한
+  `PullRequestListTemplateEquivalenceSpec`은 "pr-list-proj"라는 이름의 프로젝트와 그에 딸린
+  `pull_request` 행을 만들고 전혀 정리(cleanup)하지 않는다 — 개별 스펙 실행 시엔 이 데이터가 없어
+  통과하지만, 전체 스위트에서 `PullRequestListTemplateEquivalenceSpec`이 먼저 실행되고 나면 남은 PR이
+  FK로 프로젝트를 물고 있어 `projectRepository.deleteAll()`이
+  `DataIntegrityViolationException(FK8ic1woevj8nrf4gmk98pvytx9)`으로 깨진다.
+  `TimelineTemplateRenderingSpec`이 이미 자체 주석으로 "공유 테스트 DB에서 무관한 프로젝트를 지우다 FK
+  위반이 날 수 있다"고 이 정확한 위험을 경고해뒀음에도 이 스펙만 예전 패턴(전역 deleteAll)을 그대로 쓰고
+  있었던 것 — `beforeTest`를 이 스펙이 소유한 고정 이름 픽스처(owner-dev/member-only-code/member1/
+  nonmember/enrollee1)만 조회해서 지우는 스코프 한정 정리로 교체(다른 스펙의 데이터는 건드리지 않음).
+- **검증**: `./gradlew test`(전체) 1382 tests completed, 0 failed, BUILD SUCCESSFUL. 그룹10~17
+  병합분(그룹6까지 완료 + 그룹7~17 전체) 및 이번 세션에서 되짚어 완료시킨 항목들이 전부 실제 컴파일+
+  실행+템플릿 렌더링까지 통과함을 확인했다.
+
+### TASK-0253: 그룹9 `milestone/*` 마무리 (#149~153) — TASK-0252 통합 회귀 확인 중 그룹9가
+실제로는 미완료 상태로 남아있었음을 발견해 완료시킴
+
+TASK-0252로 그룹10~17 통합 회귀를 green으로 만든 뒤 백로그를 재확인하니 그룹9(milestone) 5개 항목이
+`[~]`/`[ ]`로 남아 있었다(작업 세션 초반 커밋되지 않은 WIP 변경사항이 `git status`에 그대로 잡혀
+있었음) — "모든 그룹이 완료되면 통합 회귀 돌리자"는 사용자 지시를 완전히 만족시키기 위해 그룹9를
+마저 완료했다.
+
+- **#153(`partial_status`) — 완전히 누락돼 있던 기능을 신규 구현**: legacy `project/home.scala.html`은
+  사이드바에 프로젝트의 가장 기한이 임박한 열린 마일스톤 진행률 카드(`milestone.partial_status`)를
+  보여주는데, yuna `project/home.html`에는 이 위젯 자체가 완전히 빠져 있었다(project-btn-wrap과
+  member-info 사이 자리가 통째로 없었음). `TemplateHelper.getMilestoneProgress(milestone)`(열림/닫힘
+  이슈 카운트+완료율+기한초과 여부 계산, 기존 `getDueDateString`/`until` 헬퍼 재사용) 신규 추가 +
+  `milestone/partial_status.html`(`th:fragment="status(milestone, project)"`) 신규 작성 +
+  `ProjectViewController.projectHome()`에 `sidebarMilestone`(dueDate ASC 정렬 첫 번째 열린 마일스톤)
+  모델 속성 추가 + `project/home.html`에 배선. legacy의 나머지 2개 호출부
+  (`issue/partial_searchform.scala.html`, `issue/my_partial_search.scala.html`)는 프로젝트에 종속되지
+  않는 "내 이슈"(cross-project) 화면 전용이고 yuna에 해당 컨트롤러/라우트 자체가 없어(포팅 범위 밖)
+  제외 — 프로젝트 홈 사이드바라는 핵심 호출부는 완전히 이식했다.
+- **#152(`view`) — "yuna식 독자구현" 발견 및 교정**: 마일스톤 상세의 이슈 목록 영역이 legacy
+  `issue.partial_list()`(공용 조각) 재사용 대신 `style="..."` 하드코딩 인라인 스타일로 완전히 새로
+  짜여 있었다(CSS 클래스 `post-item`/`title-wrap`/`infos` 등이 전혀 없음 — "공용 조각 대신 하드코딩
+  중복" 위반). `issue/list.html`에 인라인돼 있던(#117, TASK-0238에서 "확인 완료"로 처리됐던) 동일
+  마크업을 `issue/partial_list.html`(`th:fragment="list(project, issues, currentUser)"`) 공용 조각으로
+  추출해 `issue/list.html`과 `milestone/view.html` 양쪽이 공유하도록 교정(legacy가 실제로 두 화면 모두
+  `issue.partial_list()`를 호출하는 구조와 일치). 탭 전환은 legacy처럼 서버 왕복하는 3-URL 방식 대신
+  기존 yuna의 클라이언트 JS 토글(`toggleIssueState`)을 유지하되(허용 가능한 아키텍처 차이, 이미 3탭
+  UI골격 자체는 있었음), `th:insert`로 `.open-issue-item`/`.closed-issue-item` 래퍼 클래스를 보존해 JS가
+  계속 동작하도록 했다.
+- **`issue/partial_list.html` 추출 중 발견한 기존 버그**: 추출한 마크업을 실제 렌더링하는 테스트가
+  이번 세션 이전에 단 하나도 없었다(#117은 mockk 단위테스트로만 "확인 완료" 처리돼 있었음) — 처음
+  렌더링해보니 `templateHelper.findByParentId(parentIssueId)` 호출이 애초에 존재하지 않는 메서드라
+  `SpelEvaluationException`으로 즉시 깨졌다(자식 이슈가 있는 이슈를 렌더링할 때마다 500 에러가 났을
+  것). `IssueRepository.findByParentId(parentId)`(이미 존재)에 위임하는
+  `TemplateHelper.findByParentId()`를 추가해 수정 — `issue/list.html`이 처음 작성된 시점부터 있었던
+  잠재 버그로 추정된다.
+- **신규 실제 렌더링(real Thymeleaf) 테스트**: `MilestoneTemplateRenderingSpec`(목록/상세/사이드바
+  위젯 3건), `IssueListTemplateRenderingSpec`(라벨/담당자/마일스톤/자식이슈가 있는 이슈 목록 1건) —
+  둘 다 `TimelineTemplateRenderingSpec`이 확립한 패턴(`@Transactional`, 스펙 전용 고유 이름 픽스처,
+  전역 `deleteAll()` 금지)을 따랐다. 추가로 `BootstrapSetupInterceptor`(DB에 유저가 0명이면 무조건
+  `/bootstrap-setup`으로 리다이렉트)가 `@Transactional` 스펙에서 매 테스트 롤백 후 유저가 0명이 되는
+  경우를 처음 발견해, 인증이 필요 없는 화면이라도 최소 유저 1명은 미리 만들어둬야 한다는 점을
+  확인했다(테스트 격리로 인한 아티팩트, 실제 버그 아님).
+- **`ProjectViewControllerIntegrationSpec`에도 사이드바 위젯 테스트 1건 추가**: 기존 owner-dev/
+  member-only-code 픽스처에 마일스톤 2개(임박/먼 기한)를 추가해 "가장 임박한 것만 보인다" 케이스를
+  검증.
+- #150/#151(`create`/`edit`)은 이미 legacy와 필드 단위로 대조해 완전히 일치함을 확인(제목 에러 표시,
+  마크다운 에디터, 첨부파일 업로더, 상태 라디오, 기한 입력+datepicker+에러 표시, mention/atwho 스크립트
+  전부 존재) — 그룹9 완료.
+- **검증**: 새로 추가/영향받은 스펙(`MilestoneTemplateRenderingSpec`, `IssueListTemplateRenderingSpec`,
+  `ProjectViewControllerIntegrationSpec`) 전부 green. `./gradlew test`(전체) 재실행 결과 대기 중 —
+  결과는 다음 로그에 기록.

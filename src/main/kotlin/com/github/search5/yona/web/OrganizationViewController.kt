@@ -184,7 +184,7 @@ class OrganizationViewController(
         model.addAttribute("assigneeId", assigneeId)
         model.addAttribute("mentionId", mentionId)
         model.addAttribute("visibleProjects", visibleProjects)
-        model.addAttribute("selectedProjectNames", projectNames ?: emptyList<String>())
+        model.addAttribute("selectedProjectNames", projectNames ?: mutableListOf<String>())
         model.addAttribute("openCount", issueRepository.countByProjectInAndState(projects, State.OPEN))
         model.addAttribute("closedCount", issueRepository.countByProjectInAndState(projects, State.CLOSED))
         model.addAttribute("currentUser", loginUser)
@@ -243,7 +243,7 @@ class OrganizationViewController(
         model.addAttribute("orderBy", orderBy)
         model.addAttribute("orderDir", orderDir)
         model.addAttribute("visibleProjects", visibleProjects)
-        model.addAttribute("selectedProjectNames", projectNames ?: emptyList<String>())
+        model.addAttribute("selectedProjectNames", projectNames ?: mutableListOf<String>())
         model.addAttribute("currentUser", loginUser)
 
         return "organization/boardList"

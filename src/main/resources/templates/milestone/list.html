@@ -38,7 +38,22 @@
 
             <!-- 마일스톤 목록이 존재할 때 -->
             <th:block th:if="${milestones != null && !milestones.isEmpty()}">
-                <div class="filter-wrap milestone"></div>
+                <div class="filter-wrap milestone" th:if="${milestones.size() > 1}">
+                    <div class="filters">
+                        <a th:href="@{/{owner}/{projectName}/milestones(owner=${project.owner}, projectName=${project.name}, orderBy='dueDate', orderDir=${orderBy == 'dueDate' && orderDir == 'desc' ? 'asc' : 'desc'}, state=${state})}"
+                           th:class="${orderBy == 'dueDate'} ? 'filter active' : 'filter'">
+                            <i class="ico btn-gray-arrow" th:classappend="${orderBy == 'dueDate' && orderDir == 'desc'} ? 'down'"></i><span th:text="#{common.order.dueDate}">기한순</span>
+                        </a>
+                        <a th:href="@{/{owner}/{projectName}/milestones(owner=${project.owner}, projectName=${project.name}, orderBy='completionRate', orderDir=${orderBy == 'completionRate' && orderDir == 'desc' ? 'asc' : 'desc'}, state=${state})}"
+                           th:class="${orderBy == 'completionRate'} ? 'filter active' : 'filter'">
+                            <i class="ico btn-gray-arrow" th:classappend="${orderBy == 'completionRate' && orderDir == 'desc'} ? 'down'"></i><span th:text="#{common.order.completionRate}">진행률순</span>
+                        </a>
+                    </div>
+                    <div class="pull-left search search-bar">
+                        <input name="filter" class="textbox" type="text" th:placeholder="#{search.title}" value="">
+                        <button type="submit" class="search-btn"><i class="yobicon-search"></i></button>
+                    </div>
+                </div>
 
                 <div class="row-fluid">
                     <div>

@@ -129,6 +129,9 @@ class ProjectViewControllerSpec : DescribeSpec({
         )
         every { recentProjectRepository.recordVisit(any(), any()) } just Runs
         every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
+        every {
+            milestoneRepository.findByProjectAndState(any(), any(), any<org.springframework.data.domain.Sort>())
+        } returns emptyList()
     }
 
     describe("ProjectViewController 템플릿 연동 테스트") {

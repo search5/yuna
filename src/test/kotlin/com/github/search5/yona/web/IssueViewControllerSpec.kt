@@ -144,6 +144,7 @@ class IssueViewControllerSpec : DescribeSpec({
         )
         every { titleHeadService.deleteTitleHeadKeyword(any(), any()) } returns Unit
         every { issueEventRepository.findByIssueOrderByCreatedAsc(any()) } returns emptyList()
+        every { projectUserRepository.findByProjectIdAndUserId(any(), any()) } returns Optional.empty()
     }
 
     describe("IssueViewController 템플릿 연동 테스트") {

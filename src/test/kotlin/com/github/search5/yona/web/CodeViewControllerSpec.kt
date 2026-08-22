@@ -69,7 +69,8 @@ class CodeViewControllerSpec : DescribeSpec({
         commentThreadRepository,
         commitCommentRepository,
         accessControl,
-        markdownService
+        markdownService,
+        "Yona"
     )
 
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()

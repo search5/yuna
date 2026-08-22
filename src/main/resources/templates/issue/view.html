@@ -146,7 +146,7 @@
                             <div class="timeline-list">
                                 <!-- 타임라인 영역 (댓글 + 상태/담당자/라벨/마일스톤/이동 이벤트, Thymeleaf Loop) -->
                                 <th:block th:each="item : ${timeline}">
-                                <div th:if="${item.kind == 'COMMENT'}" th:with="comment=${item.comment}, children=${childCommentsByParentId != null ? childCommentsByParentId.get(comment.id) : null}"
+                                <div th:if="${item.kind == 'COMMENT'}" th:with="comment=${item.comment}, children=${childCommentsByParentId != null ? childCommentsByParentId.get(comment.id) : null}, canEditThisComment=${currentUser != null and (item.comment.authorId == currentUser.id or isProjectManager)}, issueCommentResourceType=${T(com.github.search5.yona.domain.enumeration.ResourceType).ISSUE_COMMENT}"
                                     class="comment" th:classappend="${currentUser != null and comment.authorLoginId == currentUser.loginId} ? ' author'" th:id="'comment-' + ${comment.id}">
                                     <div th:replace="~{common/childCommentsAnchorDiv :: anchorDiv(${children})}"></div>
                                     <div class="comment-avatar">
@@ -217,7 +217,7 @@
                                                 </th:block>
                                             </span>
                                         </div>
-                                        <div th:replace="~{common/commentUpdateForm :: updateForm(${comment}, ${commentApiBase}, ${currentUser != null and (comment.authorId == currentUser.id or isProjectManager)}, ${T(com.github.search5.yona.domain.enumeration.ResourceType).ISSUE_COMMENT})}"></div>
+                                        <div th:replace="~{common/commentUpdateForm :: updateForm(${comment}, ${commentApiBase}, ${canEditThisComment}, ${issueCommentResourceType})}"></div>
                                         <div th:id="'comment-body-' + ${comment.id}">
                                             <div class="content markdown-wrap" th:utext="${markdownService.render(comment.contents, true, project)}">댓글내용</div>
                                         </div>
