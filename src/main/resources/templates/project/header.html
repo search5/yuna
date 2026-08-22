@@ -15,7 +15,7 @@
                     <span class="project-separator hide-in-mobile">/</span>
                     <span class="project-name"><a th:href="@{/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.name}">name</a></span>
                     <span class="user-project-list" th:data-project-id="${project.id}">
-                        <i class="star material-icons va-text-top">star</i>
+                        <i class="star material-icons va-text-top" th:classappend="${@templateHelper.isFavoriteProject(project, currentUser)} ? 'starred'">star</i>
                     </span>
                     <span th:if="${project.projectScope == T(com.github.search5.yona.domain.project.ProjectScope).PRIVATE}" class="project-private">
                         <i class="yobicon-lock"></i>

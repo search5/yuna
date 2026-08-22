@@ -35,6 +35,7 @@ import com.github.search5.yona.domain.support.ReviewThreadService
 import com.github.search5.yona.domain.support.ReviewSearchCondition
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.user.FavoriteProjectRepository
 
 @Component("templateHelper")
 class TemplateHelper(
@@ -49,7 +50,8 @@ class TemplateHelper(
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
     private val milestoneRepository: MilestoneRepository,
     private val reviewThreadService: ReviewThreadService,
-    private val organizationUserRepository: OrganizationUserRepository
+    private val organizationUserRepository: OrganizationUserRepository,
+    private val favoriteProjectRepository: FavoriteProjectRepository
 ) {
 
     fun agoOrDateString(instant: Instant?): String {
@@ -248,6 +250,12 @@ class TemplateHelper(
     fun isOrganizationMemberOrAdmin(org: Organization?, user: User?): Boolean {
         if (org == null || user == null) return false
         return organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, user.id!!)
+    }
+
+    // yona project/header.scala.html:48-50 FavoriteProject.findByProjectId(userId, projectId) != null 대응.
+    fun isFavoriteProject(project: Project?, user: User?): Boolean {
+        if (project == null || user == null) return false
+        return favoriteProjectRepository.findByUserIdAndProjectId(user.id!!, project.id!!).isPresent
     }
 
     fun getVotersExceptCurrentUser(voters: Collection<User>, currentUser: User?): List<User> {

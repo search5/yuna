@@ -189,7 +189,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 87 | [x] | `project/create.scala.html` | `project/create.html` | 완료(TASK-0239, TDD). **중대 발견**: PROTECTED(그룹공개) 옵션이 통째로 빠져 있었음(정적 자산 `yobi.project.New.js`는 `#opt-protected`/`#protected` DOM을 이미 참조하고 있어 죽은 JS 훅 상태였음) — 라디오 추가, 백엔드는 이미 `ProjectScope.PROTECTED`/조직 관리자 권한 완비. 검증 실패 시 입력값이 전부 날아가던 문제(legacy Form 자동 재바인딩 부재)도 `NewProjectForm` 모델 추가로 수정 |
 | 88 | [x] | `project/importing.scala.html` | `project/importing.html` | 확인 완료(TASK-0239). PROTECTED 옵션·에러 재바인딩·조직 소유자 토글까지 이미 legacy와 동등하게(오히려 Spring 검증으로 더 엄격하게) 구현돼 있었음, 코드 변경 없음 |
 | 89 | [x] | `project/list.scala.html` | `project/list.html` | 확인 완료(TASK-0239). legacy는 미접근 프로젝트를 렌더링 후 흐리게 가리는 방식(`AccessControl.isAllowed`+회색 placeholder)이지만, yuna 컨트롤러는 `findAllowedProjectIdsForUser`로 쿼리 단계에서 이미 필터링돼 있어 애초에 미접근 프로젝트가 결과에 포함되지 않음 — 동등하거나 더 엄격한 접근제어이므로 placeholder 분기 이식 불필요로 판단(아키텍처 치환) |
-| 90 | [x] | `project/header.scala.html` | `project/header.html` | 완료(TASK-0236, TDD). **중대 발견**: 프로젝트 가입 요청(enroll/cancelEnroll) 기능 UI 전체가 빠져 있었음(백엔드 `ProjectMemberController`에 `POST /api/projects/{id}/enroll(/cancel)`은 이미 존재) — `TemplateHelper.isEnrolled()` 신규 추가 후 복구. `project.isProtected`(그룹 프로젝트) "G" 배지도 누락돼 있어 추가. 즐겨찾기 별표의 서버사이드 초기 상태(`isFavoriteProject`)는 여러 호출부에 `favoriteProjects` 전파가 필요해 범위가 커 미이식(비고에 기록) |
+| 90 | [x] | `project/header.scala.html` | `project/header.html` | 완료(TASK-0236/TASK-0244, TDD). **중대 발견**: 프로젝트 가입 요청(enroll/cancelEnroll) 기능 UI 전체가 빠져 있었음(백엔드 `ProjectMemberController`에 `POST /api/projects/{id}/enroll(/cancel)`은 이미 존재) — `TemplateHelper.isEnrolled()` 신규 추가 후 복구. `project.isProtected`(그룹 프로젝트) "G" 배지도 누락돼 있어 추가. TASK-0244에서 방침 정정에 따라 재작업: 즐겨찾기 별표의 서버사이드 초기 상태(`isFavoriteProject`)는 이전에 "여러 호출부 전파 필요"라고 잘못 판단해 미이식했었으나, 실제로는 `FavoriteProject` 도메인/리포지토리가 이미 존재하고 legacy도 `project/header.scala.html` 프래그먼트 내부에서 로컬로 계산하는 구조라 전파가 전혀 필요 없었음 — `TemplateHelper.isFavoriteProject(project, user)` 신규 추가로 즉시 해결 |
 | 91 | [x] | `project/home.scala.html` | `project/home.html` | 확인 완료(TASK-0237). readme/dashboard* 탭 구조·조건분기 legacy와 일치 |
 | 92 | [i] | `project/partial_readme.scala.html` | (home.html에 인라인, P2-42로 로직은 이식됨) | 확인 완료(TASK-0237). 마크업 legacy와 일치 |
 | 93 | [i] | `project/partial_dashboard.scala.html` | (home.html에 인라인) | 확인 완료(TASK-0237). 마크업 legacy와 일치 |
@@ -1097,3 +1097,23 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   프로젝트" 검색범위 노출 차이, 커스텀 링크 기본(미설정) 상태 검증).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 64 tests).
   다음은 나머지 보류 항목(#12는 재확인 결과 이미 정상이라 스킵, #20,23,45,47,49,50,53,90)을 이어서 처리.
+
+### 방침 정정 후속: #90 즐겨찾기 별표 재작업 (TASK-0244, 메인 세션)
+
+- **#90 재작업**: TASK-0236에서 "여러 호출부에 favoriteProjects 전파가 필요해 범위가 커 미이식"이라고
+  적었던 판단이 실제로는 틀렸음을 확인 — legacy `project/header.scala.html:48-50`의 `isFavoriteProject`는
+  이 프래그먼트 안에서 `FavoriteProject.findByProjectId(UserApp.currentUser().id, project.id) != null`로
+  로컬 계산되는 것이지, 상위 컨트롤러가 목록을 미리 계산해 전파해주는 구조가 아니었다. yuna에도
+  `FavoriteProject`/`FavoriteProjectRepository`/`FavoriteService`가 이미 전부 구현돼 있어(즐겨찾기 토글
+  API까지 존재), `TemplateHelper.isFavoriteProject(project, user)`(`existsByUserIdAndProjectId` 조회)
+  하나만 추가하면 되는 간단한 작업이었음 — `project/header.html`의 별표 아이콘에 `starred` 클래스
+  조건부 적용(기존 JS `yona.Usermenu.js`는 이미 클릭 시 `starred` 토글 로직을 갖고 있었으나 서버사이드
+  초기 렌더 상태만 없었음, "정적 자산은 있는데 초기 상태가 없어 반쪽만 동작하던" 패턴).
+- **legacy와 다르게 처리한 지점**: 없음.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-32]`(즐겨찾기 등록/미등록 프로젝트의 별표
+  starred 클래스 유무 검증).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 66 tests).
+  그룹1~6 범위의 방침-정정 재작업 대상 중 메인 세션이 직접 처리한 항목은 이것으로 마무리
+  (#1,8,10,13,90). 남은 항목(#20,23,45,47,49,50,53)은 백엔드 신규 인프라가 필요해 별도 세션에서
+  집중 처리 권장 — 사유는 각 항목 비고란 참고. #38~41/#25~31/#82~83/#108은 병렬 워크트리 에이전트에게
+  위임 완료(진행 중/일부 완료, 병합 시 별도 기록).
