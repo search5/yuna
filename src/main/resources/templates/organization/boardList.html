@@ -1,144 +1,94 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${org.name} + ' 게시판 - Yona'">조직 게시판 목록</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .org-header {
-      background-color: #f8f9fa;
-      padding: 30px 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 30px;
-  }
-  .org-tab-menu {
-      margin-bottom: 20px;
-  }
-  .post-item {
-      padding: 12px 15px;
-      border-bottom: 1px solid #eee;
-  }
-  .post-item:hover {
-      background: #fcfcfc;
-  }
-  .post-title {
-      font-size: 15px;
-      font-weight: bold;
-      margin-bottom: 5px;
-  }
-  .post-meta {
-      font-size: 12px;
-      color: #777;
-  }
-</style>
+<head th:replace="~{site/layout :: head(${org.name})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
 
-  <!-- 조직 헤더 -->
-  <div class="org-header">
-    <div class="container">
-      <h2><a th:href="@{/org/{orgName}(orgName=${org.name})}" th:text="${org.name}" style="text-decoration: none; color: inherit;">조직 이름</a></h2>
-      <p th:text="${org.descr != null && !org.descr.isEmpty() ? org.descr : '조직 설명이 등록되지 않았습니다.'}" style="color: #666; font-size: 15px; margin-top: 10px;"></p>
-    </div>
-  </div>
+    <div th:replace="~{organization/header :: header(${org})}"></div>
+    <div th:replace="~{organization/menu :: menu(${org}, 'board')}"></div>
 
-  <div class="container">
-    <div class="row">
-      <div class="col-md-12">
-        <!-- 탭 메뉴 -->
-        <div class="org-tab-menu">
-          <ul class="nav nav-tabs">
-            <li><a th:href="@{/org/{orgName}(orgName=${org.name})}">프로젝트</a></li>
-            <li><a th:href="@{/org/{orgName}/issues(orgName=${org.name})}">이슈</a></li>
-            <li class="active"><a th:href="@{/org/{orgName}/boards(orgName=${org.name})}">게시판</a></li>
-            <li><a th:href="@{/org/{orgName}/pullrequests(orgName=${org.name})}">풀 리퀘스트</a></li>
-            <li><a th:href="@{/org/{orgName}/members(orgName=${org.name})}">멤버 관리</a></li>
-          </ul>
-        </div>
-
-        <div style="background: #fff; border: 1px solid #d8dee2; border-radius: 3px; padding: 25px; margin-bottom: 20px;">
-          <h3>조직 게시판 목록</h3>
-          <hr style="margin-top: 10px; margin-bottom: 20px;"/>
-
-          <!-- 게시글 목록 -->
-          <div th:if="${!posts.isEmpty()}">
-            <div th:each="post : ${posts}" class="post-item">
-              <div class="post-title">
-                <a th:href="@{/projects/{projectId}/posts/{postId}(projectId=${post.project.id}, postId=${post.id})}" th:text="'#' + ${post.id} + ' ' + ${post.title}">게시글 제목</a>
-                <span class="label label-info" th:text="${post.project.name}" style="margin-left: 5px;">프로젝트명</span>
-              </div>
-              <div class="post-meta">
-                작성자: <span th:text="${post.authorName != null ? post.authorName : '알수없음'}">작성자</span> | 
-                작성일: <span th:title="${@templateHelper.getDateString(post.createdDate)}" th:text="${@templateHelper.agoOrDateString(post.createdDate)}">작성일</span>
-              </div>
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <div class="search-wrap underline">
+                <form id="option_form" method="get" class="pull-left">
+                    <input type="hidden" name="orderBy" th:value="${orderBy}">
+                    <input type="hidden" name="orderDir" th:value="${orderDir}">
+                    <div class="project-selects span7">
+                        <select id="projects" name="projectNames[]" data-format="projects" multiple th:data-placeholder="#{organization.choose.projects}" data-toggle="select2" data-container-css-class="fullsize">
+                            <option th:each="project : ${visibleProjects}" th:value="${project.name}" th:selected="${selectedProjectNames.contains(project.name)}" th:data-avatar-url="@{/projects/{id}/logo(id=${project.id})}" th:text="${project.name}">project</option>
+                        </select>
+                    </div>
+                    <div class="search-bar span4">
+                        <input name="filter" class="textbox group-board" type="text" th:placeholder="#{title.searchByKeyword}" th:value="${filter}">
+                        <button type="submit" class="search-btn"><i class="yobicon-search"></i></button>
+                    </div>
+                    <div class="two-column-icon mr10 hide-in-mobile" id="two-column-mode-checkbox" th:title="#{common.two.column.mode}" th:data-content="#{common.two.column.mode.desc}">
+                        <label class="checkbox">
+                            <div class="two-column-icon-border">
+                                <input id="two-column-mode" type="checkbox"><span class="two-column-mode-text" th:text="#{common.two.column.view}">2단 보기</span>
+                            </div>
+                        </label>
+                    </div>
+                </form>
             </div>
-            
-            <!-- 페이징 처리 -->
-            <div class="text-center" style="margin-top: 20px;" th:if="${page.totalPages > 1}">
-              <ul class="pagination">
-                <li th:class="${page.first ? 'disabled' : ''}">
-                  <a th:href="@{/org/{orgName}/boards(orgName=${org.name}, page=${page.number - 1})}">&laquo;</a>
-                </li>
-                <li th:each="idx : ${#numbers.sequence(0, page.totalPages - 1)}" th:class="${page.number == idx ? 'active' : ''}">
-                  <a th:href="@{/org/{orgName}/boards(orgName=${org.name}, page=${idx})}" th:text="${idx + 1}">1</a>
-                </li>
-                <li th:class="${page.last ? 'disabled' : ''}">
-                  <a th:href="@{/org/{orgName}/boards(orgName=${org.name}, page=${page.number + 1})}">&raquo;</a>
-                </li>
-              </ul>
+
+            <div th:if="${currentPage.totalElements == 0 and notices.isEmpty()}" class="error-wrap">
+                <i class="ico ico-err1"></i>
+                <p th:text="#{post.is.empty}">게시글이 없습니다.</p>
             </div>
-          </div>
-          
-          <div th:if="${posts.isEmpty()}" class="text-center" style="padding: 50px; color: #999;">
-            등록된 게시글이 존재하지 않습니다.
-          </div>
+
+            <th:block th:if="${currentPage.totalElements > 0 or !notices.isEmpty()}">
+                <div class="filter-wrap board" th:if="${currentPage.totalElements > 1}">
+                    <div class="filters">
+                        <a th:href="@{/org/{orgName}/boards(orgName=${org.name}, orderBy='updatedDate', orderDir=${orderBy == 'updatedDate' && orderDir == 'desc' ? 'asc' : 'desc'})}"
+                           th:class="${orderBy == 'updatedDate'} ? 'filter active' : 'filter'">
+                            <i class="ico btn-gray-arrow" th:classappend="${orderBy == 'updatedDate' && orderDir == 'desc'} ? 'down'"></i><span th:text="#{common.order.updatedDate}">최근 업데이트순</span>
+                        </a>
+                        <a th:href="@{/org/{orgName}/boards(orgName=${org.name}, orderBy='createdDate', orderDir=${orderBy == 'createdDate' && orderDir == 'desc' ? 'asc' : 'desc'})}"
+                           th:class="${orderBy == 'createdDate'} ? 'filter active' : 'filter'">
+                            <i class="ico btn-gray-arrow" th:classappend="${orderBy == 'createdDate' && orderDir == 'desc'} ? 'down'"></i><span th:text="#{common.order.date}">등록일순</span>
+                        </a>
+                        <a th:href="@{/org/{orgName}/boards(orgName=${org.name}, orderBy='numOfComments', orderDir=${orderBy == 'numOfComments' && orderDir == 'desc' ? 'asc' : 'desc'})}"
+                           th:class="${orderBy == 'numOfComments'} ? 'filter active' : 'filter'">
+                            <i class="ico btn-gray-arrow" th:classappend="${orderBy == 'numOfComments' && orderDir == 'desc'} ? 'down'"></i><span th:text="#{common.order.comments}">댓글순</span>
+                        </a>
+                    </div>
+                </div>
+
+                <ul class="post-list-wrap notice-wrap" th:if="${!notices.isEmpty() and currentPage.number == 0}">
+                    <li th:each="post : ${notices}" th:replace="~{organization/boardList_partial :: postItem(post, post.project)}"></li>
+                </ul>
+
+                <ul class="post-list-wrap">
+                    <li th:each="post : ${currentPage.content}" th:replace="~{organization/boardList_partial :: postItem(post, post.project)}"></li>
+                </ul>
+            </th:block>
+
+            <div class="write-btn-wrap"></div>
+
+            <div id="pagination"><!-- pagination.js will fill here. --></div>
         </div>
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
+    <div th:replace="~{site/layout :: scripts}"></div>
 </div>
+<th:block th:replace="~{common/select2 :: select2}"></th:block>
+<script type="text/javascript" src="/javascripts/lib/jquery.pageslide.js"></script>
+<script type="text/javascript" src="/javascripts/service/yona.twoColumnMode.js"></script>
+<script type="text/javascript" th:inline="javascript">
+    $(document).ready(function() {
+        $yobi.loadModule("board.List", {
+            "elPagination": $('#pagination'),
+            "nTotalPages" : [[${currentPage.totalPages}]]
+        });
+
+        $("#projects").on("change", function(){
+            $("#option_form").submit();
+        });
+    });
+</script>
 </body>
 </html>

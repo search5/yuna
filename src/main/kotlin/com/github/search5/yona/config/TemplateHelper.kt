@@ -9,6 +9,10 @@ import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.pullrequest.CommentThread
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.Project
@@ -33,7 +37,6 @@ import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
 import com.github.search5.yona.domain.issue.IssueLabelCategory
 import com.github.search5.yona.domain.support.ReviewThreadService
 import com.github.search5.yona.domain.support.ReviewSearchCondition
-import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.user.FavoriteProjectRepository
 
@@ -51,7 +54,8 @@ class TemplateHelper(
     private val milestoneRepository: MilestoneRepository,
     private val reviewThreadService: ReviewThreadService,
     private val organizationUserRepository: OrganizationUserRepository,
-    private val favoriteProjectRepository: FavoriteProjectRepository
+    private val favoriteProjectRepository: FavoriteProjectRepository,
+    private val commentThreadRepository: CommentThreadRepository
 ) {
 
     fun agoOrDateString(instant: Instant?): String {
@@ -368,6 +372,65 @@ class TemplateHelper(
         } else {
             branch
         }
+    }
+
+    // yona models/OrganizationUser.java:62-68 isAdmin(Organization, User) 대응 (조직 그룹, TASK-0244).
+    // organization.organizationUsers는 컨트롤러에서 이미 로드해 모델에 넘기는 컬렉션이라 여기서는
+    // 추가 조회 없이 그 컬렉션을 순회한다(project 쪽 isManager()가 별도 repository 조회를 쓰는 것과
+    // 달리, organization/header·menu 프래그먼트가 매 페이지에서 반복 호출하므로 N+1을 피하기 위함).
+    fun isOrganizationAdmin(organization: Organization?, user: User?): Boolean {
+        if (organization == null || user == null) return false
+        return organization.organizationUsers.any { it.user.id == user.id && it.role.id == RoleType.ORG_ADMIN.roleType }
+    }
+
+    // yona models/OrganizationUser.java:74-76 isMember(Organization, User) 대응.
+    fun isOrganizationMember(organization: Organization?, user: User?): Boolean {
+        if (organization == null || user == null) return false
+        return organization.organizationUsers.any { it.user.id == user.id && it.role.id == RoleType.ORG_MEMBER.roleType }
+    }
+
+    // yona models/OrganizationUser.java:70-72 isGuest(Organization, User) 대응. 사이트매니저와
+    // 조직 내 역할(관리자/멤버)이 있는 사용자는 게스트가 아니다 — 비로그인 사용자도 게스트가 아니다
+    // (legacy roleTypeOf()가 비로그인이면 ANONYMOUS를 반환하지 GUEST를 반환하지 않음).
+    fun isOrganizationGuest(organization: Organization?, user: User?): Boolean {
+        if (organization == null || user == null || user.isSiteManager) return false
+        return organization.organizationUsers.none { it.user.id == user.id }
+    }
+
+    // yona models/User.java:677-683 enrolled(Organization) 대응.
+    fun isEnrolledOrganization(organization: Organization?, user: User?): Boolean {
+        if (organization == null || user == null) return false
+        return user.enrolledOrganizations.any { it.id == organization.id }
+    }
+
+    // yona organization/group_pullrequest_list_partial.scala.html:49,55 countCommentThreadsByState/
+    // req.commentThreads.size 대응. PullRequest 엔티티에 commentThreads 연관관계가 직접 매핑돼 있지
+    // 않아(다른 화면에서도 CommentThreadRepository.findByPullRequest()로 조회하는 기존 관례를 따름)
+    // 여기서 조회한다.
+    fun getCommentThreads(pullRequest: PullRequest): List<CommentThread> {
+        return commentThreadRepository.findByPullRequest(pullRequest)
+    }
+
+    // yona group_pullrequest_list_partial.scala.html:53 getPercent(countClosed.toDouble,
+    // req.commentThreads.size.toDouble) 대응. 템플릿에서 SpEL로 getPercent(Double, Double) 오버로드를
+    // 직접 호출하면 Long/Int 인자와의 타입 매칭이 불안정하므로, PullRequest 하나를 받아 내부에서
+    // closed/전체 스레드 수를 모두 계산하는 전용 메서드로 둔다.
+    fun getReviewProgressPercent(pullRequest: PullRequest): Double {
+        val threads = commentThreadRepository.findByPullRequest(pullRequest)
+        if (threads.isEmpty()) return 0.0
+        val closed = threads.count { it.state == CommentThread.ThreadState.CLOSED }
+        return getPercent(closed.toDouble(), threads.size.toDouble())
+    }
+
+    fun countCommentThreadsByState(pullRequest: PullRequest, state: CommentThread.ThreadState): Long {
+        return commentThreadRepository.findByPullRequest(pullRequest).count { it.state == state }.toLong()
+    }
+
+    // yona models/User.java isWatching(Project) 대응 — organization/view.scala.html의 프로젝트
+    // 목록 각 항목에서 현재 사용자의 관심(watch) 여부를 표시하는 데 쓰인다.
+    fun isWatchingProject(project: Project?, user: User?): Boolean {
+        if (project == null || user == null || project.id == null) return false
+        return watchRepository.findByUserAndResourceTypeAndResourceId(user, ResourceType.PROJECT, project.id.toString()) != null
     }
 }
 

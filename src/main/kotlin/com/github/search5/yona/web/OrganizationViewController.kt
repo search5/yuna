@@ -3,6 +3,8 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.IssueRepository
+import com.github.search5.yona.domain.issue.IssueSpecification
+import com.github.search5.yona.domain.mention.MentionService
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import org.springframework.beans.factory.annotation.Value
@@ -51,6 +53,8 @@ class OrganizationViewController(
     private val attachmentRepository: AttachmentRepository,
     private val attachmentService: AttachmentService,
     private val accessControl: AccessControl,
+    private val mentionService: MentionService,
+    private val roleRepository: com.github.search5.yona.domain.role.RoleRepository,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
     @Value("\${yuna.application.hide-project-listing:false}")
     private val hideProjectListing: Boolean = false
@@ -111,15 +115,26 @@ class OrganizationViewController(
 
         model.addAttribute("org", org)
         model.addAttribute("orgUsers", org.organizationUsers)
+        // yona organization/members.scala.html:21 roles: List[Role](Role.findOrganizationRoles()) 대응 —
+        // ORG_ADMIN/ORG_MEMBER 역할 드롭다운(memberRole 매크로)에 필요.
+        model.addAttribute("roles", roleRepository.findAllById(listOf(RoleType.ORG_ADMIN.roleType, RoleType.ORG_MEMBER.roleType)))
         model.addAttribute("currentUser", loginUser)
 
         return "organization/members"
     }
 
+    // yona organization/group_issue_list.scala.html + group_issue_search_partial.scala.html 대응.
     @GetMapping(value = ["/org/{orgName}/issues", "/organizations/{orgName}/issues"])
     fun organizationIssues(
         @PathVariable orgName: String,
         @RequestParam(required = false, defaultValue = "open") state: String,
+        @RequestParam(required = false, defaultValue = "") filter: String,
+        @RequestParam(required = false, defaultValue = "createdDate") orderBy: String,
+        @RequestParam(required = false, defaultValue = "desc") orderDir: String,
+        @RequestParam(required = false) authorId: Long?,
+        @RequestParam(required = false) assigneeId: Long?,
+        @RequestParam(required = false) mentionId: Long?,
+        @RequestParam(value = "projectNames[]", required = false) projectNames: List<String>?,
         @PageableDefault(size = 25) pageable: Pageable,
         authentication: Authentication?,
         model: Model
@@ -129,27 +144,62 @@ class OrganizationViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
-        val projects = accessControl.getVisibleProjects(org, loginUser)
-        val issueState = if (state.lowercase() == "closed") State.CLOSED else State.OPEN
-
-        val page = if (projects.isEmpty()) {
-            Page.empty()
+        val visibleProjects = accessControl.getVisibleProjects(org, loginUser)
+        // yona group_issue_search_partial.scala.html:42-46 projectNames[] 다중선택 대응 — 선택되면
+        // 조직에서 보이는 프로젝트 중 선택분으로만 좁혀서 검색·카운트한다.
+        val projects = if (!projectNames.isNullOrEmpty()) {
+            visibleProjects.filter { projectNames.contains(it.name) }
         } else {
-            issueRepository.findByProjectInAndState(projects, issueState, pageable)
+            visibleProjects
         }
 
+        val issueState = if (state.lowercase() == "closed") State.CLOSED else State.OPEN
+        val mentionedIssueIds = mentionId?.let { mentionService.getMentioningIssueIds(it) }
+
+        val sort = if (orderDir.equals("asc", ignoreCase = true)) {
+            Sort.by(Sort.Direction.ASC, orderBy)
+        } else {
+            Sort.by(Sort.Direction.DESC, orderBy)
+        }
+        val sortedPageable = PageRequest.of(pageable.pageNumber, pageable.pageSize, sort)
+
+        val spec = IssueSpecification.filterOrganizationIssues(
+            projects = projects,
+            state = issueState,
+            filter = filter,
+            authorId = authorId,
+            assigneeId = assigneeId,
+            mentionedIssueIds = mentionedIssueIds
+        )
+        val page = if (projects.isEmpty()) Page.empty() else issueRepository.findAll(spec, sortedPageable)
+
         model.addAttribute("org", org)
-        model.addAttribute("issues", page.content)
-        model.addAttribute("page", page)
+        model.addAttribute("currentPage", page)
+        model.addAttribute("state", issueState)
         model.addAttribute("currentState", state)
+        model.addAttribute("filter", filter)
+        model.addAttribute("orderBy", orderBy)
+        model.addAttribute("orderDir", orderDir)
+        model.addAttribute("authorId", authorId)
+        model.addAttribute("assigneeId", assigneeId)
+        model.addAttribute("mentionId", mentionId)
+        model.addAttribute("visibleProjects", visibleProjects)
+        model.addAttribute("selectedProjectNames", projectNames ?: emptyList<String>())
+        model.addAttribute("openCount", issueRepository.countByProjectInAndState(projects, State.OPEN))
+        model.addAttribute("closedCount", issueRepository.countByProjectInAndState(projects, State.CLOSED))
         model.addAttribute("currentUser", loginUser)
 
         return "organization/issueList"
     }
 
+    // yona organization/group_board_list.scala.html 대응.
     @GetMapping(value = ["/org/{orgName}/boards", "/organizations/{orgName}/boards"])
     fun organizationBoards(
         @PathVariable orgName: String,
+        @RequestParam(required = false, defaultValue = "") filter: String,
+        @RequestParam(required = false, defaultValue = "updatedDate") orderBy: String,
+        @RequestParam(required = false, defaultValue = "desc") orderDir: String,
+        @RequestParam(value = "projectNames[]", required = false) projectNames: List<String>?,
         @PageableDefault(size = 25) pageable: Pageable,
         authentication: Authentication?,
         model: Model
@@ -159,21 +209,47 @@ class OrganizationViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
-        val projects = accessControl.getVisibleProjects(org, loginUser)
+        val visibleProjects = accessControl.getVisibleProjects(org, loginUser)
+        val projects = if (!projectNames.isNullOrEmpty()) {
+            visibleProjects.filter { projectNames.contains(it.name) }
+        } else {
+            visibleProjects
+        }
+
+        val sort = if (orderDir.equals("asc", ignoreCase = true)) {
+            Sort.by(Sort.Direction.ASC, orderBy)
+        } else {
+            Sort.by(Sort.Direction.DESC, orderBy)
+        }
+        val sortedPageable = PageRequest.of(pageable.pageNumber, pageable.pageSize, sort)
+
         val page = if (projects.isEmpty()) {
             Page.empty()
         } else {
-            postingRepository.findByProjectIn(projects, pageable)
+            postingRepository.findByProjectInAndKeyword(projects, filter, sortedPageable)
+        }
+
+        // yona group_board_list.scala.html:65 notices — 1페이지에서만 상단에 노출.
+        val notices = if (projects.isEmpty() || page.number != 0) {
+            emptyList()
+        } else {
+            postingRepository.findByProjectInAndNotice(projects, true)
         }
 
         model.addAttribute("org", org)
-        model.addAttribute("posts", page.content)
-        model.addAttribute("page", page)
+        model.addAttribute("currentPage", page)
+        model.addAttribute("notices", notices)
+        model.addAttribute("filter", filter)
+        model.addAttribute("orderBy", orderBy)
+        model.addAttribute("orderDir", orderDir)
+        model.addAttribute("visibleProjects", visibleProjects)
+        model.addAttribute("selectedProjectNames", projectNames ?: emptyList<String>())
         model.addAttribute("currentUser", loginUser)
 
         return "organization/boardList"
     }
 
+    // yona organization/group_pullrequest_list.scala.html + group_pullrequest_list_partial.scala.html 대응.
     @GetMapping(value = [
         "/org/{orgName}/pullrequests", "/organizations/{orgName}/pullrequests",
         "/org/{orgName}/closedPullrequests", "/organizations/{orgName}/closedPullrequests"
@@ -181,6 +257,7 @@ class OrganizationViewController(
     fun organizationPullRequests(
         @PathVariable orgName: String,
         @RequestParam(required = false, defaultValue = "open") category: String,
+        @RequestParam(required = false, defaultValue = "") filter: String,
         @PageableDefault(size = 25) pageable: Pageable,
         request: HttpServletRequest,
         authentication: Authentication?,
@@ -198,16 +275,42 @@ class OrganizationViewController(
         val page = if (projects.isEmpty()) {
             Page.empty()
         } else {
-            pullRequestRepository.findByToProjectInAndState(projects, prState, pageable)
+            pullRequestRepository.searchByToProjectInAndState(projects, prState, filter, pageable)
         }
 
         model.addAttribute("org", org)
-        model.addAttribute("pullRequests", page.content)
-        model.addAttribute("page", page)
+        model.addAttribute("currentPage", page)
+        model.addAttribute("filter", filter)
+        model.addAttribute("requestType", if (isClosed) "closed" else "open")
         model.addAttribute("category", if (isClosed) "closed" else "open")
+        model.addAttribute("openCount", pullRequestRepository.countByToProjectInAndState(projects, State.OPEN))
+        model.addAttribute("closedCount", pullRequestRepository.countByToProjectInAndState(projects, State.CLOSED))
         model.addAttribute("currentUser", loginUser)
 
         return "organization/pullRequestList"
+    }
+
+    // yona OrganizationApp.java:287-311 leave()/validateForLeave() 대응.
+    @ResponseBody
+    @DeleteMapping(value = ["/org/{orgName}/leave", "/organizations/{orgName}/leave"])
+    fun leave(
+        @PathVariable orgName: String,
+        authentication: Authentication?
+    ): ResponseEntity<Map<String, String>> {
+        val org = organizationRepository.findByName(orgName).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("errorMsg" to "organization.member.unknownOrganization"))
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("errorMsg" to "unauthorized"))
+
+        return try {
+            organizationService.leaveOrganization(org.id!!, loginUser.id!!)
+            ResponseEntity.ok(mapOf("location" to "/organizations/${org.name}"))
+        } catch (e: IllegalStateException) {
+            ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("errorMsg" to (e.message ?: "organization.member.leave.unknownerror")))
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf("errorMsg" to (e.message ?: "organization.member.leave.unknownerror")))
+        }
     }
 
     // 1. 조직 생성 폼 화면 (GET /organizations/new)
@@ -239,8 +342,12 @@ class OrganizationViewController(
             val org = organizationService.createOrganization(name, descr, loginUser.id!!)
             "redirect:/organizations/${org.name}"
         } catch (e: Exception) {
+            // yona organization/create.scala.html:35-40 requestHeader.flash.get("warning") 대응 —
+            // 검증 실패 시에도 입력값(name/descr)을 보존한 채로 폼을 재표시한다.
             model.addAttribute("currentUser", loginUser)
             model.addAttribute("error", e.message ?: "Failed to create organization")
+            model.addAttribute("name", name)
+            model.addAttribute("descr", descr)
             "organization/create"
         }
     }

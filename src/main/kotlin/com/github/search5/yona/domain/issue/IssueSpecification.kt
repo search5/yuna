@@ -109,4 +109,52 @@ object IssueSpecification {
             cb.and(*predicates.toTypedArray())
         }
     }
+
+    // yona organization/group_issue_search_partial.scala.html 대응 (조직 그룹, TASK-0244). 프로젝트
+    // 그룹(#filterIssues)과 달리 단일 project가 아니라 조직에 속한(공개 범위로 걸러진) 여러 project를
+    // 대상으로 검색하고, 필터도 authorId/assigneeId/mentionId 3종뿐이다(마일스톤/라벨/댓글단사람/
+    // 마감일 필터는 legacy group_issue_search_partial.scala.html에 아예 없음).
+    fun filterOrganizationIssues(
+        projects: List<Project>,
+        state: State,
+        filter: String?,
+        authorId: Long?,
+        assigneeId: Long?,
+        mentionedIssueIds: List<Long>?
+    ): Specification<Issue> {
+        return Specification { root, query, cb ->
+            val predicates = mutableListOf<Predicate>()
+
+            if (projects.isEmpty()) {
+                predicates.add(cb.disjunction())
+            } else {
+                predicates.add(root.get<Project>("project").`in`(projects))
+            }
+
+            predicates.add(cb.equal(root.get<State>("state"), state))
+
+            if (authorId != null && authorId > 0) {
+                predicates.add(cb.equal(root.get<Long>("authorId"), authorId))
+            }
+
+            if (assigneeId != null && assigneeId > 0) {
+                predicates.add(cb.equal(root.join<Issue, Assignee>("assignee").get<User>("user").get<Long>("id"), assigneeId))
+            }
+
+            if (mentionedIssueIds != null) {
+                if (mentionedIssueIds.isEmpty()) {
+                    predicates.add(cb.disjunction())
+                } else {
+                    predicates.add(root.get<Long>("id").`in`(mentionedIssueIds))
+                }
+            }
+
+            if (!filter.isNullOrBlank()) {
+                val keyword = "%$filter%"
+                predicates.add(cb.or(cb.like(root.get("title"), keyword), cb.like(root.get("body"), keyword)))
+            }
+
+            cb.and(*predicates.toTypedArray())
+        }
+    }
 }

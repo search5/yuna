@@ -1,144 +1,63 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${org.name} + ' - 조직 삭제 - Yona'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .org-header {
-      background-color: #f8f9fa;
-      padding: 30px 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 30px;
-  }
-  .delete-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-  }
-</style>
+<head th:replace="~{site/layout :: head(${org.name})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
 
-  <!-- 조직 헤더 -->
-  <div class="org-header">
-    <div class="container">
-      <h2 th:text="${org.name}">조직 이름</h2>
-    </div>
-  </div>
+    <div th:replace="~{organization/header :: header(${org})}"></div>
+    <div th:replace="~{organization/menu :: menu(${org}, 'setting')}"></div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <div class="col-md-9">
-        <!-- 설정 서브 탭 메뉴 삽입 -->
-        <div th:replace="~{organization/partial_settingmenu :: menu(${org}, 'delete')}"></div>
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <div th:replace="~{organization/partial_settingmenu :: menu(${org}, 'delete')}"></div>
 
-        <div class="delete-container">
-          <h3 style="margin-top: 0; margin-bottom: 20px;" th:text="#{organization.delete}">조직 삭제</h3>
-          
-          <div class="alert alert-danger" style="background-color: #f2dede; border-color: #eed3d7; color: #b94a48; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-            <h4 style="margin: 0 0 5px 0;">⚠️ 경고: 조직을 영구 삭제합니다</h4>
-            조직을 삭제하면 조직 내의 모든 프로젝트, 조직원 관계 및 저장소 정보가 복구 불가능한 상태로 영구 폐기됩니다. 이 조작은 취소할 수 없습니다.
-          </div>
-
-          <div class="box-wrap bottom" style="padding-top: 10px;">
-            <a id="btnDelete" href="#alertDeletion" class="ybtn ybtn-danger" data-toggle="modal" th:text="#{organization.delete.this}">이 조직을 삭제합니다</a>
-          </div>
-
-          <!-- 삭제 확인 모달 -->
-          <div id="alertDeletion" class="modal hide fade" tabindex="-1" role="dialog" style="display: none;">
-            <div class="modal-header">
-              <button type="button" class="close" data-dismiss="modal">×</button>
-              <h3 th:text="#{organization.delete.requestion}">정말 삭제하시겠습니까?</h3>
+            <div class="box-wrap bottom">
+                <a id="btnDelete" href="#alertDeletion" class="ybtn ybtn-danger" data-toggle="modal" th:text="#{organization.delete.this}">Delete this organization</a>
             </div>
-            <div class="modal-body">
-              <p th:text="#{organization.delete.reaccept}">삭제된 모든 데이터는 복구 불가능합니다. 계속 진행하시겠습니까?</p>
-            </div>
-            <div class="modal-footer">
-              <button id="btnDeleteExec" type="button" class="ybtn ybtn-danger" th:text="#{button.yes}">예</button>
-              <button type="button" class="ybtn" data-dismiss="modal" th:text="#{button.no}">아니오</button>
-            </div>
-          </div>
 
+            <!-- Confirm to delete organization -->
+            <div id="alertDeletion" class="modal hide">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h3 th:text="#{organization.delete.requestion}">Delete organization?</h3>
+                </div>
+                <div class="modal-body">
+                    <p th:text="#{organization.delete.reaccept}">Are you sure?</p>
+                </div>
+                <div class="modal-footer">
+                    <button id="btnDeleteExec" type="button" class="ybtn ybtn-danger" th:text="#{button.yes}">Yes</button>
+                    <button type="button" class="ybtn" data-dismiss="modal" th:text="#{button.no}">No</button>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
+    <div th:replace="~{site/layout :: scripts}"></div>
 </div>
-
-<script src="/javascripts/lib/jquery/jquery-1.9.0.js" th:src="@{/webjars/jquery/jquery.min.js}"></script>
-<script src="/bootstrap/js/bootstrap.js" th:src="@{/webjars/bootstrap/js/bootstrap.min.js}"></script>
-<script th:inline="javascript">
-  $(document).ready(function() {
-      var orgName = /*[[${org.name}]]*/ '';
-
-      $("#btnDeleteExec").on("click", function() {
-          $.ajax({
-              type: "DELETE",
-              url: "/organizations/" + encodeURIComponent(orgName),
-              success: function() {
-                  location.href = "/";
-              },
-              error: function(jqXHR, textStatus, errorThrown) {
-                  $("#alertDeletion").modal("hide");
-                  var sErrorMsg = "조직 삭제에 실패했습니다.";
-                  try {
-                      var responseJson = $.parseJSON(jqXHR.responseText);
-                      if (responseJson && responseJson.errorMsg) {
-                          sErrorMsg = responseJson.errorMsg;
-                      }
-                  } catch(e) {}
-                  alert(sErrorMsg);
-              }
-          });
-      });
-  });
+<script language="javascript" th:inline="javascript">
+    $("#btnDeleteExec").on("click", function() {
+        $.ajax({
+            type: "delete",
+            url: /*[[@{/organizations/{orgName}(orgName=${org.name})}]]*/ "",
+            success: function() {
+                location.href = /*[[@{/}]]*/ "/";
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                $("#alertDeletion").modal("hide");
+                var sErrorMsg;
+                try{
+                    sErrorMsg = Messages($.parseJSON(jqXHR.responseText).errorMsg);
+                }catch(e){
+                    sErrorMsg = Messages("organization.delete.error");
+                }
+                $yobi.alert(sErrorMsg);
+                return false;
+            }
+        });
+    });
 </script>
 </body>
 </html>
