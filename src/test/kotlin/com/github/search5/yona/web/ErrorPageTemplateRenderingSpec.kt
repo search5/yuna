@@ -19,8 +19,6 @@ import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-import org.springframework.test.context.DynamicPropertyRegistry
-import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -164,6 +162,60 @@ class ErrorPageTemplateRenderingSpec @Autowired constructor(
                 // MaxUploadSizeExceededException.maxUploadSize(10바이트)가 그대로 메시지 인자로
                 // 전달되는지도 함께 확인한다.
                 body shouldContain "10"
+            }
+
+            it("게시글을 찾지 못하면 error/notfound가 프로젝트 헤더/메뉴와 함께 실제로 렌더링돼야 한다 (BoardViewController#viewPost, #45)") {
+                userRepository.save(User(loginId = "errpage-bootstrap-board", name = "부트스트랩", email = "errpage-bootstrap-board@yona.io"))
+                val project = projectRepository.save(
+                    Project(name = "errpage-board-proj", owner = "errpage-board-owner", projectScope = ProjectScope.PUBLIC)
+                )
+
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/post/999"))
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                // targetType="board_post" -> error.notfound.board_post 메시지 + 게시글 목록으로 가는
+                // 링크(TemplateHelper.notFoundReturnUrl) + 프로젝트 헤더(owner/name breadcrumb)가
+                // 모두 실제 HTML에 나타나야 한다.
+                body shouldContain "존재하지 않는 글입니다"
+                body shouldContain "/${project.owner}/${project.name}/posts"
+                body shouldContain project.name!!
+            }
+
+            it("비공개 프로젝트에 비회원이 게시글 목록에 접근하면 error/forbidden이 프로젝트 헤더와 함께 실제로 렌더링돼야 한다 (BoardViewController#listPosts, #47)") {
+                val project = projectRepository.save(
+                    Project(name = "errpage-board-proj2", owner = "errpage-board-owner2", projectScope = ProjectScope.PRIVATE)
+                )
+                val outsider = userRepository.save(
+                    User(loginId = "errpage-board-outsider", name = "외부인", email = "errpage-board-outsider@yona.io")
+                )
+                val auth = UsernamePasswordAuthenticationToken(outsider.loginId, "pw")
+
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/posts").principal(auth))
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                body shouldContain "권한이 없습니다"
+                body shouldContain project.name!!
+            }
+
+            it("비공개 프로젝트에 비회원이 코드 비교 화면에 접근하면 error/forbidden이 프로젝트 헤더와 함께 실제로 렌더링돼야 한다 (CompareViewController#compare, #47)") {
+                val project = projectRepository.save(
+                    Project(name = "errpage-compare-proj", owner = "errpage-compare-owner", projectScope = ProjectScope.PRIVATE, vcs = "GIT")
+                )
+                val outsider = userRepository.save(
+                    User(loginId = "errpage-compare-outsider", name = "외부인2", email = "errpage-compare-outsider@yona.io")
+                )
+                val auth = UsernamePasswordAuthenticationToken(outsider.loginId, "pw")
+
+                val body = mockMvc.perform(
+                    get("/${project.owner}/${project.name}/compare/aaaaaaa..bbbbbbb").principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                body shouldContain "권한이 없습니다"
+                body shouldContain project.name!!
             }
         }
     }

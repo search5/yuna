@@ -104,7 +104,10 @@ class CompareViewControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/testowner/private-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
                     .andExpect(status().isOk)
-                    .andExpect(view().name("error/403"))
+                    // yona CompareApp.compare() @IsAllowed(READ) -> IsAllowedAction forbidden 분기
+                    // ErrorViews.Forbidden.render("error.forbidden", project) 대응 (P-템플릿 #47).
+                    .andExpect(view().name("error/forbidden"))
+                    .andExpect(model().attributeExists("project"))
             }
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
@@ -138,7 +141,8 @@ class CompareViewControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/testowner/memberonly-project/compare/aaaaaaa..bbbbbbb"))
                     .andExpect(status().isOk)
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
+                    .andExpect(model().attributeExists("project"))
             }
 
             it("[Test-12-1-2] 공개 프로젝트이지만 isCodeAccessibleMemberOnly가 true이고 프로젝트 비멤버가 로그인 상태로 접근 시 403 Forbidden을 반환해야 한다") {
@@ -149,7 +153,8 @@ class CompareViewControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/testowner/memberonly-project/compare/aaaaaaa..bbbbbbb").principal(userAuth))
                     .andExpect(status().isOk)
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
+                    .andExpect(model().attributeExists("project"))
             }
 
             it("[Test-12-1-3] 공개 프로젝트이며 isCodeAccessibleMemberOnly가 true이고 프로젝트 멤버가 접근 시 정상 200 OK를 반환해야 한다") {
