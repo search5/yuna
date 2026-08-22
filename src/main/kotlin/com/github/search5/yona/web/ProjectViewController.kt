@@ -95,7 +95,9 @@ class ProjectViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         if (loginUser != null) {
@@ -290,7 +292,9 @@ class ProjectViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val projectUsers = projectUserRepository.findByProjectId(project.id!!)
@@ -314,7 +318,9 @@ class ProjectViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         // 설정 권한 검사 (MANAGER인지 여부)
@@ -324,7 +330,8 @@ class ProjectViewController(
 
 
         if (!isManager) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val repository = repositoryService.getRepository(project)
@@ -359,7 +366,9 @@ class ProjectViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null || !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!)) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, loginUser.id!!)
@@ -367,7 +376,8 @@ class ProjectViewController(
             .orElse(false)
 
         if (!isManager) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val nextVcs = if ((project.vcs ?: "GIT").uppercase() == "GIT") "SUBVERSION" else "GIT"
@@ -689,7 +699,9 @@ class ProjectViewController(
             .orElse(false)
 
         if (!isManager) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         model.addAttribute("project", project)
@@ -862,7 +874,9 @@ class ProjectViewController(
             .orElse(false)
 
         if (!isManager) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         model.addAttribute("project", project)
