@@ -270,8 +270,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
 
                     // 댓글 작성 폼과 업로드 드롭존 검증
                     doc.select("#comment-form").size shouldBe 1
-                    doc.select("#upload-drop-zone").size shouldBe 1
-                    doc.select("input[name='file']").size shouldBe 1
+                    doc.select(".upload-wrap[data-resource-type]").size shouldBe 1
+                    doc.select("input[name='filePath']").size shouldBe 1
                 }
 
                 it("비로그인 사용자가 상세 조회 시, 비활성화된 알림 메시지와 함께 댓글 등록 창이 제한되어야 한다") {
@@ -315,8 +315,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     val doc = Jsoup.parse(html)
 
                     doc.select("#comment-form").size shouldBe 1
-                    doc.select("#upload-drop-zone").size shouldBe 1
-                    doc.select("input[name='file']").size shouldBe 1
+                    doc.select(".upload-wrap[data-resource-type]").size shouldBe 1
+                    doc.select("input[name='filePath']").size shouldBe 1
                 }
 
                 it("비로그인 사용자가 이슈 조회 시, 댓글 폼이 차단되고 비로그인 대체 마크업이 표시되어야 한다") {

@@ -88,12 +88,12 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 16 | [x] | `common/select2.scala.html` | `common/select2.html` | 확인 완료 — 완전 일치(TASK-0226 조사 중 대조 완료, 코드 변경 없음) |
 | 17 | [x] | `common/calendar.scala.html` | `common/calendar.html` | 확인 완료 — 완전 일치(TASK-0224 조사 중 대조 완료, 코드 변경 없음) |
 | 18 | [x] | `common/mySeriesMenuTab.scala.html` | `common/mySeriesMenuTab.html` | 완료(TASK-0226, TDD). "기본 페이지로 설정" 버튼 가시 조건에 loginDefaultPage 비교 추가, `index/notifications.html`/`user/userFiles.html`의 중복 인라인 탭바를 공용 조각 재사용으로 교체 |
-| 19 | [ ] | `common/markdown.scala.html` | `common/markdown.html` | 마크다운 렌더 영역 공통 래퍼 |
-| 20 | [ ] | `common/editor.scala.html` | `common/editor.html` | 마크다운 에디터(툴바 포함) |
-| 21 | [ ] | `common/fileUploader.scala.html` | `common/fileUploader.html` | 첨부파일 업로더 위젯 |
-| 22 | [ ] | `common/uploadForm.scala.html` | `common/uploadForm.html` | |
-| 23 | [ ] | `common/attachmentFile.scala.html` | `common/attachmentFile.html` | 첨부파일 1건 표시 |
-| 24 | [ ] | `common/commentForm.scala.html` | `common/commentForm.html` | 댓글 작성 폼(이슈/게시글 공용) |
+| 19 | [i] | `common/markdown.scala.html` | `site/layout.html :: markdown(project)` (인라인) | 확인 완료 — 완전 일치(TASK-0227 조사 중 대조 완료, 코드 변경 없음) |
+| 20 | [i] | `common/editor.scala.html` | `site/layout.html :: markdownEditor(name,value,editorMode)` (인라인) | 확인: 현재 호출부(`issue/create,edit`, `board/create,edit,view`, `milestone/create,edit`)는 전부 대시(`-`) 없는 `name`만 넘겨서 legacy의 `wrapIdGen`/`textareaName` 분리 로직·`viaEmail` 파라미터화가 실질적으로 관측되지 않음 — 백엔드에 "via email" 기능 자체가 없어 저가치로 판단해 지금은 미이식(문서에 기록, 필요 시 재검토) |
+| 21 | [x] | `common/fileUploader.scala.html` | `site/layout.html :: scripts`(tplAttachedFile/tplDropFilesHere) + `common/uploadForm.html`(신규) | 완료(TASK-0227, TDD). tplAttachedFile/tplDropFilesHere는 이미 정확히 이식돼 있었음(확인). `common.uploadForm(...)` 호출 부분은 #22에서 처리 |
+| 22 | [x] | `common/uploadForm.scala.html` | `common/uploadForm.html`(신규 생성) | 완료(TASK-0227, TDD). **중대 발견**: `issue/view.html`/`board/view.html`의 기존 `#upload-drop-zone`/`input[name=file]` 마크업이 legacy 구조(`upload-wrap`/`data-resource-type`/`input[name=filePath]`)와 전혀 다른 독자 구현이었고, 어떤 정적 JS 파일도 `upload-drop-zone`/`upload-file-input` 셀렉터를 참조하지 않아(grep 확인) 사실상 동작하지 않는 죽은 마크업이었음. legacy 구조로 교체 |
+| 23 | [~] | `common/attachmentFile.scala.html` | (없음, 신규 필요) | 서버사이드 렌더링되는 "이미 첨부된 파일 1건" 표시 조각(수정 화면 등에서 기존 첨부파일 목록에 사용) — 아직 미착수. #21/22와 달리 클라이언트 JS 템플릿(tplAttachedFile)이 아닌 서버 렌더 조각이라 별도 확인 필요 |
+| 24 | [i] | `common/commentForm.scala.html` | `issue/view.html`, `board/view.html` (각 페이지에 인라인) | 확인: `<form id="comment-form" ... enctype="multipart/form-data">` + 에디터 + fileUploader 슬롯 + 제출 버튼 구조는 이미 정확히 대응됨(#22에서 enctype 누락도 함께 수정). `common.editor(...)`/`common.fileUploader(...)` 자리에 해당하는 하위 조각들의 이식 상태는 #20/#21/#22 참고 |
 | 25 | [ ] | `common/commentUpdateForm.scala.html` | `common/commentUpdateForm.html` | 댓글 수정 폼 |
 | 26 | [ ] | `common/commentDeleteModal.scala.html` | `common/commentDeleteModal.html` | 댓글 삭제 확인 모달 |
 | 27 | [ ] | `common/commentCount.scala.html` | `common/commentCount.html` | |
@@ -611,3 +611,38 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   동치성 검증` 3종(기본페이지 일치 시 버튼 숨김, 불일치 시 노출, 내 파일 페이지의 공용 탭바 공유).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
   전체 회귀는 사용자 지시에 따라 10개 항목당 1회로 배치(다음 배치에서 실행 예정).
+
+### #19~#24 마크다운 에디터·첨부파일 업로드 조각 (TASK-0227)
+
+- **원인**: #19(markdown)는 `site/layout.html :: markdown(project)` 조각과 완전 일치 확인. #20(editor)의
+  `markdownEditor` 조각은 `wrapIdGen`(editorName의 `-` 뒤 ID 재사용)/`textareaName`(`-` 앞부분만 name으로 사용)/
+  `viaEmail` 파라미터화가 legacy에는 있지만 yuna에는 없음 — 그러나 현재 모든 호출부가 대시 없는 단순 이름만
+  넘기고, `viaEmail`을 구동할 "이메일로 이슈/댓글 생성" 백엔드 기능 자체가 yuna에 없어(grep 확인) 실질적으로
+  관측 불가능한 차이로 판단해 이번엔 보류.
+  **#22(uploadForm)에서 중대한 발견**: `issue/view.html`/`board/view.html`의 첨부파일 업로드 위젯이 legacy의
+  `common/uploadForm.scala.html`(`upload-wrap`/`data-resource-type`/`input[name=filePath]`/`attach-wrap`
+  구조, `common.attach.drophere`/`clickbutton`/`pastehere`/`attachIfYouSave` 메시지) 대신 완전히 다른 자체
+  마크업(`upload-drop-zone`/`input[name=file]`/`common.attach.clickToUpload` 단일 메시지)으로 **독자 구현**돼
+  있었다. 정적 JS 전체를 grep해도 `upload-drop-zone`/`upload-file-input` 셀렉터를 참조하는 코드가 전혀 없어,
+  이 마크업은 겉보기엔 그럴듯하지만 실제로는 아무 JS에도 연결되지 않은 죽은 위젯이었다(선행 세션에서 Test-19-2/
+  19-3을 통과시키기 위해 만들어진 것으로 추정). `<form id="comment-form">`에도 legacy가 요구하는
+  `enctype="multipart/form-data"`가 빠져 있었다.
+- **구현 내용**:
+  - 신규 `common/uploadForm.html` 조각(`th:fragment="uploadForm(resourceType, resourceId, formId)"`) 작성 —
+    legacy `common/uploadForm.scala.html` 구조를 그대로 이식(`data-resource-type`/`data-resource-id`는
+    `ResourceType` Kotlin enum 이름 문자열로, `AttachmentController`의 `ResourceType.valueOf(containerType)`과
+    일치시킴).
+  - `issue/view.html`(`ISSUE_COMMENT`)/`board/view.html`(`NONISSUE_COMMENT`)의 댓글 폼에서 죽은 `#upload-drop-zone`
+    마크업을 새 조각으로 교체하고, `<form>`에 `enctype="multipart/form-data"` 추가.
+  - 기존 `TemplateEquivalenceSpec.kt`의 `[Test-19-2]`/`[Test-19-3]`가 옛 마크업(`#upload-drop-zone`, `input[name=
+    file]`)을 검증하고 있던 것을 legacy 구조에 맞는 셀렉터(`.upload-wrap[data-resource-type]`, `input[name=
+    filePath]`)로 수정(이전 세션이 "yuna식 독자 구현"을 그대로 테스트에 박제해뒀던 것을 바로잡음).
+- **legacy와 다르게 처리한 지점**: `data-resource-type` 값은 legacy처럼 소문자 스네이크케이스(`issue_comment`)가
+  아니라 Kotlin enum 상수명(`ISSUE_COMMENT`)을 그대로 썼다 — `AttachmentController`가 `ResourceType.valueOf(...)`
+  로 파싱하므로 enum 상수명이어야 실제로 동작한다(legacy의 소문자 값은 Play의 다른 직렬화 방식 때문).
+  #23(attachmentFile, 기존 첨부파일 서버렌더 표시)은 아직 착수하지 않음 — 별도 조사 필요(비고에 기록).
+  업로드 JS(`yobi.Files.js`)가 이 마크업을 실제로 초기화(`_getUploader`/`_initElement`)하는 호출부는 템플릿
+  범위를 벗어나므로 이번 항목에서 추적하지 않았다 — 순수 마크업의 legacy 동치화만 수행했다.
+- **테스트**: 기존 `[Test-19-2]`/`[Test-19-3]`의 업로드 위젯 관련 단언을 새 구조로 갱신, RED 확인 후 구현.
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
+  전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.
