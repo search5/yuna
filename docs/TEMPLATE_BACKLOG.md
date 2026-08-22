@@ -110,7 +110,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 38 | [x] | `common/commitMsg.scala.html` | `common/commitMsg.html`(신규 fragment) | 완료(TASK-0243). `common/commitMsg.html` fragment 신규 작성(short span/a + 멀티라인일 때 moreBtn + hidden pre.desc). legacy 실사용처는 `code/diff.scala.html`(forceExpand=true)와 `code/history.scala.html`(short+moreBtn) 2곳뿐임을 확인(view/svnDiff는 이 fragment를 쓰지 않고 별도 인라인 span) — 두 곳 모두 fragment 재사용으로 교체 |
 | 39 | [x] | `common/branchItem.scala.html` | `common/branchItem.html`(신규 fragment) | 완료(TASK-0243). legacy 실사용처는 `code/svnDiff.scala.html`의 브랜치 드롭다운(btn-group+dropdown-menu) 한 곳뿐 — 해당 드롭다운 자체가 yuna svnDiff.html에 통째로 빠져 있던 것도 함께 복구. `TemplateHelper.branchItemName`/`branchItemType`/`branchInHtml` 신규 추가(legacy `Branches.itemName/itemType/branchInHTML` 대응) |
 | 40 | [x] | `common/reviewForm.scala.html` | `common/reviewForm.html`(신규) | 완료(TASK-0251, 그룹11). `site/layout::markdownEditor` + `common/uploadForm`으로 정확히 이식 |
-| 41 | [ ] | `common/partial_history.scala.html` | (없음, 백엔드 기능 자체 부재) | **조사 완료, 미착수**. "변경 이력"(edit history) 기능 자체가 yuna `Issue`/`Posting` 엔티티에 없음(`history` 필드 자체가 없음) — 순수 템플릿 이식이 아니라 `docs/PARITY_BACKLOG.md`에 백엔드 항목으로 먼저 등록해야 하는 규모. 이번 배치에서는 조사 결과만 기록 |
+| 41 | [x] | `common/partial_history.scala.html` | `common/partial_history.html` | **완료(TASK-0257)**. 기존 백로그 기록("history 필드 자체가 없음")은 stale — 실제로는 `docs/PARITY_BACKLOG.md` P2-02가 이미 백엔드 인프라 전체(AbstractPosting.kt의 `history: String?` 필드, `HistoryUtil.kt`의 `appendHistory()`(legacy `AbstractPostingApp.addToHistory()`/`getHistoryMadeBy()`/로컬 `getDiffText()` 대응, `history-made-by`/`diff-added`/`diff-deleted`/`diff-ellipsis` 클래스로 diff를 렌더링), `IssueServiceImpl.updateIssue()`/`PostingServiceImpl.updatePosting()`의 append-on-edit 배선)를 완비해뒀음을 재확인 — 새 엔티티 필드나 마이그레이션은 전혀 만들지 않았다. 이번에 한 일은 (1) `common/partial_history.html` 프래그먼트 신규 작성(legacy가 `Markdown.sanitize(posting.history)`로 이미 만들어진 HTML을 그대로 통과시키는 것과 동일하게, `MarkdownService`에 `sanitize(html): String` 메서드를 신규 추가해 그대로 사용 — commonmark 파싱 없이 OWASP 새니타이저 정책만 적용), (2) `issue/view.html`/`board/view.html`에 legacy `@if(StringUtils.isNotEmpty(issue.history))` 블록과 동일한 조건분기(비로그인은 로그인 유도 링크만, 로그인 시 모달+`partial_history`) 배선, (3) legacy `AbstractPosting.updatedByAuthorId`(이슈 "최종 수정자" 표시용, P2-02가 다루지 않았던 별도 필드)를 `AbstractPosting.kt`/`Issue.kt`/`Posting.kt`에 `updatedByAuthorId/LoginId/Name`으로 추가하고 `IssueServiceImpl`/`PostingServiceImpl`의 edit 경로에서 채움. 실제 렌더링 테스트(`PostingHistoryTemplateRenderingSpec.kt`, 4개, 전부 통과) 작성 중 `issue/view.html`/`board/view.html`의 편집 버튼 `th:onclick="|window.location='...'|"`가 Thymeleaf 3.1+ 제약(`TemplateProcessingException: Only variable expressions returning numbers or booleans are allowed in this context`)에 걸려 `isAllowedUpdate=true`인 로그인 사용자(작성자/매니저)가 이슈/게시글을 볼 때마다 500 에러가 나는 기존 버그를 발견해 `data-*` 속성 + 정적 onclick으로 수정(동작은 legacy와 동일) |
 | 42 | [i] | `common/notificationMail.scala.html` | `domain/notification/NotificationMailRenderer.kt`(인라인) | 확인 완료 — Thymeleaf 템플릿이 아니라 Kotlin 코드로 HTML 문자열을 직접 생성하는 방식으로 이미 완전히 동일하게 이식돼 있음(폰트 스택, `hr` 구분선, unwatch/설정변경 푸터 링크, 메시지 키까지 일치). 코드 변경 없음 |
 | 43 | [x] | `common/uservoice.scala.html` | (포팅 제외) | **제외 결정(사유 기록)** — legacy 자체에서도 이 파일을 호출하는 곳이 0건(grep 확인, 죽은 코드). 설령 사용하더라도 원본 Yona 프로젝트 전용 UserVoice 계정(`forum_id`, 위젯 스크립트 URL이 원본 프로젝트에 하드코딩)이라 포크인 yuna에 그대로 심는 것은 부적절 |
 | 44 | [x] | `common/debug.scala.html` | (포팅 제외) | **제외 결정(사유 기록)** — legacy 자체에서도 이 파일을 호출하는 컨트롤러/뷰가 0건(grep 확인, 완전한 죽은 코드) |
@@ -305,7 +305,7 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 | 175 | [x] | `git/partial_forklist.scala.html` | `pullrequest/partial_forklist.html` | 완료(TASK-0243) |
 | 176 | [x] | `git/partial_info.scala.html` | `pullrequest/partial_info.html` | 완료(TASK-0243). 리뷰 참여/뱃지/overview·changes 탭 바 |
 | 177 | [x] | `git/partial_list.scala.html` | `pullrequest/partial_list.html` | 완료(TASK-0243). 기존 yuna 독자 `<table>` 대신 legacy `post-list-wrap`/`post-item` 구조로 교체 |
-| 178 | [~] | `git/partial_merge_result.scala.html` | `pullrequest/partial_merge_result.html` | 마크업은 완료(TASK-0243)했으나, 이 조각을 실제로 채워주는 legacy `PullRequestApp.mergeResult()`(임의 from/to 브랜치 조합의 커밋 프리뷰+충돌 계산) 상당 컨트롤러 엔드포인트는 아직 없음 — RepositoryService에 그런 "두 브랜치 사이 프리뷰" 기능 자체가 없어 이번 배치 범위를 넘는 별도 백엔드 작업으로 보류(PR 생성/수정 자체는 이 프리뷰 없이도 기존 REST로 정상 동작) |
+| 178 | [x] | `git/partial_merge_result.scala.html` | `pullrequest/partial_merge_result.html` | **완료(TASK-0257)**. `PullRequestService.previewMerge(fromProject, toProject, fromBranch, toBranch): MergePreviewResult`를 신규 구현(legacy `PullRequest.attemptMerge()`/`fetchSourceTemporarilly()`와 동일하게 임시 ref로 fetch → `MergeStrategy.RECURSIVE` 3-way merge 시도 → `Git.log().addRange()`로 커밋 diff 계산 → 임시 ref 삭제, 저장된 `PullRequest` 없이 순수 프리뷰만 수행하며 DB에 아무것도 쓰지 않음 — 기존 `attemptMerge(pullRequestId)`는 저장된 PR 전용이라 재사용 불가해 별도 메서드로 분리) + legacy `suggestTitleAndBodyFromDiffCommit()` 대응 제목/본문 추천 로직 포함. `PullRequestViewController`에 `GET /{owner}/{projectName}/pull/mergeResult` 신규 추가(legacy `.../newPullRequest/mergeResult` 라우트 대응, yuna의 기존 "연관 프로젝트(fork) 미지원" 스코프 축소(그룹11 #168)를 그대로 따라 from/to 프로젝트는 항상 자기 자신으로 고정). `partial_merge_result.html`을 실제 `GitCommit`으로 렌더링 가능하도록 수정(마크업만 있던 TASK-0243 버전은 존재하지 않는 `commit.owner`/`commit.projectName`/`commit.authorAvatarUrl`을 참조하던 버그가 있었음 — `code/history.html`과 동일한 `commit.author`(User?)/`common/commitMsg` 프래그먼트 패턴으로 교체). `create.html`/`edit.html`에 AJAX 배선 추가(legacy `yobi.git.Write.js`의 `_checkMergeResult`/`_onSuccessMergeResult`/`_getMergeResultData` 데이터 흐름을 인라인 스크립트로 재구현 — create는 브랜치 select `change` 이벤트에만, edit은 legacy와 동일하게 `state===OPEN`일 때 로드 시 1회만 트리거하고 edit.html에 없던 `#__commits` 탭도 신규 추가). 실제 JGit 병합(충돌/비충돌/변경없음)까지 물리 bare 저장소로 검증하는 서비스 테스트 4개(`PullRequestServiceSpec.kt`) + 실제 HTTP 요청→Thymeleaf 렌더링까지 검증하는 테스트 4개(`PullRequestMergeResultTemplateRenderingSpec.kt`, 커밋 렌더링/충돌 표시/변경없음/비멤버 403) 전부 통과 |
 | 179 | [x] | `git/partial_pull_request_event.scala.html` | `pullrequest/partial_pull_request_event.html` | 완료(TASK-0243). **버그 발견/수정**: 기존 P2-39 코멘트가 "legacy도 PULL_REQUEST_COMMIT_CHANGED를 안 보여준다"고 잘못 기록했었음 — legacy 파샬 재대조 결과 전용 case가 있어 실제로 렌더링함, 컨트롤러 필터에 포함시켜 바로잡음(단, 이벤트별 커밋 목록은 yuna PullRequestEvent 스키마에 없어 메시지+링크만 표시, 문서화된 단순화) |
 | 180 | [x] | `git/partial_recently_pushed_branches.scala.html` | `pullrequest/partial_recently_pushed_branches.html` | 완료(TASK-0243) |
 | 181 | [x] | `git/partial_reviewlist.scala.html` | `pullrequest/partial_reviewlist.html` | 완료(TASK-0243) |
@@ -698,9 +698,10 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **#39(branchItem)**: 브랜치 드롭다운 항목 — 코드 브라우징 화면과 강하게 결합돼 그룹10에서 함께 처리.
 - **#40(reviewForm)**: 코드리뷰 댓글 폼 — PR/리뷰 도메인(그룹11, #167~192)에서 처리. `common.editor`/
   `common.uploadForm` 재사용 구조라 #20/#22가 이미 재료를 준비해뒀음을 확인.
-- **#41(partial_history)**: "변경 이력" 기능 자체가 yuna `Issue`/`Posting` 엔티티에 없음(`history` 필드 부재)
-  — 순수 템플릿 이식 범위를 넘어서는 백엔드 항목이라 `docs/PARITY_BACKLOG.md`에 먼저 등록이 필요함을 확인,
-  이번 배치에서는 조사만.
+- **#41(partial_history)**: (정정, TASK-0257) 이 항목의 원래 기록("history 필드 자체가 없음")은 stale
+  정보였다 — `docs/PARITY_BACKLOG.md` P2-02가 이미 `history` 필드/`HistoryUtil`/edit-time 누적 로직을
+  전부 완비해뒀고, 실제로 남아있던 건 뷰 레이어(프래그먼트+배선)뿐이었다. TASK-0257에서 완료. 상세는 위
+  표 #41 행 참고.
 - **#42(notificationMail)**: `NotificationMailRenderer.kt`가 Kotlin 코드로 이미 완전히 동일한 HTML을 생성 중임을
   확인(폰트 스택, 구분선, 푸터 링크, 메시지 키 전부 일치). 코드 변경 없음.
 - **#43(uservoice)**: legacy 자체에서 호출부 0건(죽은 코드) + 원본 프로젝트 전용 UserVoice 계정 하드코딩이라
@@ -1712,6 +1713,116 @@ TASK-0252로 그룹10~17 통합 회귀를 green으로 만든 뒤 백로그를 �
   `ProjectViewControllerIntegrationSpec`) 전부 green. `./gradlew test`(전체) 재실행 결과 1382+ tests
   green, BUILD SUCCESSFUL 확인(TASK-0254 이후 `ProjectViewControllerSpec`의 신규
   `milestoneRepository.findByProjectAndState` mockk 스텁 누락 1건만 추가 발견해 수정, 이후 전체 green).
+
+### TASK-0257: 변경이력(#41) + PR merge 프리뷰(#178) 백엔드 완성
+
+사용자 지시: "레거시 요나 기준으로 애매하게 남아있는 것 전부 처리하고, 여전히 미해결도 레거시 요나
+들고와 처리해줘. 필요하다면 백엔드 다 수정해. TDD 기반으로. 자의적 판단하지 말고 레거시 요나 들고와"
+— 이 배치에서 백엔드 설계 비중이 가장 큰 두 항목(#41 변경이력, #178 PR merge 프리뷰)을 처리했다.
+작업 도중 코디네이터가 #41에 대해 중요한 정정을 보내왔다: 기존 백로그 기록("history 필드 자체가
+없음")은 stale 정보였고, `docs/PARITY_BACKLOG.md` P2-02가 이미 백엔드 인프라 전체를 완비해뒀다는
+것 — 이 정정을 반영해 #41은 순수 뷰 레이어 작업으로 축소됐다.
+
+**#41 (`common/partial_history.scala.html`, 변경 이력)**
+
+- 재조사 결과 재확인: `AbstractPosting.kt`에 이미 `@Lob history: String? = null` 필드가 있었고
+  (legacy `AbstractPosting.java:43-47`의 `@Lob public String history;`와 동일하게 단일 텍스트 컬럼,
+  별도 이력 테이블 아님), `HistoryUtil.kt`가 legacy `AbstractPostingApp.addToHistory()`/
+  `getHistoryMadeBy()`/로컬 `getDiffText()`를 vendored `diff_match_patch.java`(Java 원본 그대로
+  포팅) 기반으로 이미 완전히 재현해뒀으며, `IssueServiceImpl.updateIssue()`/`PostingServiceImpl.
+  updatePosting()`이 본문이 바뀔 때마다 이미 `HistoryUtil.appendHistory()`로 `history`를 갱신하고
+  있었다. **새 엔티티 필드나 Flyway/Liquibase 마이그레이션은 전혀 만들지 않았다**(이 프로젝트는
+  `ddl-auto: update`로 스키마가 자동 관리되며, `history` 컬럼은 이미 스키마에 존재).
+- 남아있던 진짜 공백은 뷰 레이어뿐이었다:
+  1. `common/partial_history.html` 프래그먼트 신규 작성. legacy는 `@Html(Markdown.sanitize(posting.
+     history))`로 이미 완성된 HTML 조각(diff span들)을 마크다운 파싱 없이 새니타이즈만 거쳐 그대로
+     출력한다 — 이를 위해 `MarkdownService`/`MarkdownServiceImpl`에 `sanitize(html: String): String`
+     메서드를 신규 추가했다(기존 `render()`는 commonmark 전체 파싱을 거치므로 이미 만들어진 HTML
+     조각에는 부적합, 기존 private `sanitize()`가 쓰던 동일한 `SANITIZER_POLICY`를 재사용해 public
+     인터페이스로 노출).
+  2. `issue/view.html`(legacy `issue/view.scala.html:156-174` 대응)과 `board/view.html`(legacy
+     `board/view.scala.html:68-79` 대응)에 `@if(StringUtils.isNotEmpty(issue.history))` 조건분기와
+     동일한 구조로 배선 — 비로그인 사용자는 로그인 유도 링크만, 로그인 사용자는 모달 링크 +
+     `partial_history` 프래그먼트.
+  3. legacy `AbstractPosting.updatedByAuthorId`(이슈 뷰의 "최종 수정자" 표시용, P2-02 범위 밖이던
+     필드)를 `AbstractPosting.kt`/`Issue.kt`/`Posting.kt`에 `updatedByAuthorId`/`updatedByAuthorLoginId`/
+     `updatedByAuthorName`으로 추가(기존 `authorId`/`authorLoginId`/`authorName` 비정규화 컨벤션을
+     그대로 따름 — legacy는 id만 저장하고 뷰에서 매번 `User.find.byId()` 조회하지만, yuna는 이미
+     동일 엔티티의 author 필드들을 비정규화해두는 기존 패턴이 있어 그대로 확장), `IssueServiceImpl.
+     updateIssue()`/`PostingServiceImpl.updatePosting()`의 편집 경로에 채움.
+- **버그 발견/수정**: 실제 렌더링 테스트(`PostingHistoryTemplateRenderingSpec`) 작성 중, 로그인한
+  작성자(=`isAllowedUpdate=true`)로 이슈/게시글 상세를 보면 `issue/view.html`/`board/view.html`의
+  편집 아이콘 `th:onclick="|window.location='/${project.owner}/...'|"`이 Thymeleaf 3.1+의 이벤트핸들러
+  속성 제약(`TemplateProcessingException: Only variable expressions returning numbers or booleans
+  are allowed in this context`)에 걸려 **500 에러가 나는 기존 버그**를 발견했다(이전 렌더링 테스트들은
+  전부 `isAllowedUpdate=false`인 시나리오만 exercise해서 놓치고 있었다). Thymeleaf 공식 에러 메시지가
+  권장하는 대로 `th:data-edit-url` 속성 + 정적(비-th:) `onclick="window.location=this.getAttribute(...)"`
+  로 우회 수정 — 동작은 legacy와 동일(클릭 시 editform으로 이동).
+
+**#178 (`git/partial_merge_result.scala.html`, PR merge 프리뷰)**
+
+- `PullRequestService`에 `previewMerge(fromProject, toProject, fromBranch, toBranch): MergePreviewResult`
+  신규 메서드 추가, `PullRequestServiceImpl`에 구현. legacy `PullRequest.attemptMerge()`(저장되지 않은
+  임의 `PullRequest`용 버전, `fetchSourceTemporarilly()` → `refs/yobi/pull-check/...` 임시 ref로 fetch
+  → `Merger`(`MergeStrategy.RECURSIVE` 3-way) 시도 → `GitRepository.diffCommits()` → 임시 ref 삭제)와
+  동일한 JGit 흐름을 그대로 재현하되, 기존 `attemptMerge(pullRequestId)`는 저장된 `PullRequest` 엔티티를
+  `findById`로 조회하고 `pullRequestRepository.save()`까지 호출하는 부수효과가 있어(프리뷰 시나리오는
+  아직 PR이 생성되기도 전이라 재사용 불가) 별도 메서드로 분리했다 — **DB에 아무것도 쓰지 않는다**(legacy도
+  이 프리뷰 경로의 `PullRequest` 객체를 저장하지 않는다). legacy `suggestTitleAndBodyFromDiffCommit()`
+  (커밋 1개면 첫 줄이 title/나머지가 body, 2개 이상이면 title 없이 각 커밋 첫 줄만 모아 body)도
+  `suggestTitleAndBody()`로 그대로 이식.
+- `PullRequestViewController`에 `GET /{owner}/{projectName}/pull/mergeResult` 신규 라우트 추가
+  (legacy `GET /:ownerName/:project/newPullRequest/mergeResult` 대응, query param `fromBranch`/
+  `toBranch` — legacy의 `fromProjectId`/`toProjectId`는 받지 않는다: yuna는 그룹11 #168에서 이미
+  "연관 프로젝트(fork) 조회" 서브시스템 부재를 문서화하고 from/to 프로젝트를 항상 자기 자신으로 고정하는
+  스코프 축소를 해뒀고, 이 엔드포인트도 그 기존 축소를 그대로 따른다). `createPullRequestForm()`과
+  동일한 멤버/그룹 접근 체크(legacy `validateBeforePullRequest()`의 `ProjectUser.isGuest` 체크 대응)를
+  재사용. JGit 예외는 다른 `attemptMerge()` 호출부(PR 상세 화면 렌더링)와 동일하게 try/catch로 흡수해
+  "변경 사항 없음"으로 완화한다(legacy는 예외를 그대로 던져 500이 되지만, 화면을 깨뜨리지 않는 기존
+  컨트롤러 컨벤션을 따름).
+- `pullrequest/partial_merge_result.html`을 실제 `GitCommit`으로 렌더링 가능하도록 수정 — TASK-0243
+  버전은 `GitCommit`/`Commit`에 존재하지 않는 `commit.owner`/`commit.projectName`/`commit.
+  authorAvatarUrl`을 참조하는 버그가 있었다(마크업만 있고 실제로 렌더링해본 적이 없어 미발견 상태였음).
+  `code/history.html`이 이미 쓰고 있는 검증된 패턴(`commit.author`가 `User?`일 때 아바타/loginId 링크,
+  `null`이면 `commit.authorEmail`/`commit.authorName` 순으로 폴백, `common/commitMsg` 프래그먼트로
+  메시지 셀 렌더링, commit-id 링크는 프래그먼트 인자로 받은 `fromProject`의 owner/name 사용)로 교체.
+- `pullrequest/create.html`/`edit.html`에 AJAX 배선 추가 — legacy `yobi.git.Write.js`의
+  `_checkMergeResult()`/`_onSuccessMergeResult()`/`_getMergeResultData()` 데이터 흐름(GET 응답 HTML을
+  `#__commits`에 삽입 → 그 안의 `#mergeResult`의 `data-commits`/`data-conflict`/`data-pullrequest-title`/
+  `data-pullrequest-body` 속성을 다시 읽어 `#status` 배너 갱신 + 제목/본문 자동채움)을 별도 모듈 로더
+  없이 인라인 스크립트로 재구현. legacy `create.scala.html`은 `#pullRequestState` 엘리먼트가 없어
+  브랜치 select `change` 이벤트로만 트리거되고, `edit.scala.html`은 `state==="OPEN"`이면 로드 시 1회
+  자동 트리거되는 차이를 그대로 재현했다(edit.html에는 애초에 `#__commits` 탭 자체가 없었어서 새로
+  추가함 — legacy `edit.scala.html`도 동일한 탭을 갖고 있었음을 확인).
+
+**신규/수정 백엔드 파일**
+
+- 신규: `domain/support/AbstractPosting.kt`(수정, `updatedByAuthorId`류 필드 추가), `domain/issue/
+  Issue.kt`/`domain/board/Posting.kt`(수정, 생성자 파라미터 threading), `domain/issue/
+  IssueServiceImpl.kt`/`domain/board/PostingServiceImpl.kt`(수정, edit 경로에 `updatedByAuthorId`류
+  채움 추가 — `history` 갱신 로직 자체는 기존 그대로), `domain/support/MarkdownService.kt`/
+  `MarkdownServiceImpl.kt`(수정, `sanitize()` 공개), `domain/pullrequest/PullRequestService.kt`/
+  `PullRequestServiceImpl.kt`(수정, `previewMerge()`/`MergePreviewResult`/`suggestTitleAndBody()`
+  신규), `web/PullRequestViewController.kt`(수정, `mergeResult()` 신규 라우트).
+- 신규 템플릿: `common/partial_history.html`. 수정 템플릿: `issue/view.html`, `board/view.html`,
+  `pullrequest/partial_merge_result.html`, `pullrequest/create.html`, `pullrequest/edit.html`.
+- 엔티티/마이그레이션 신규 항목: **없음**(둘 다 기존 인프라 재사용 또는 순수 애플리케이션 레벨 확장).
+
+**신규 테스트 및 결과**
+
+- `PostingHistoryTemplateRenderingSpec.kt`(신규, 4개, 전부 통과): 이슈 편집→history 렌더링, history
+  없는 이슈는 링크 미노출, 비로그인 사용자는 로그인 유도 링크만, 게시글 편집→history 렌더링.
+- `PullRequestServiceSpec.kt`에 `previewMerge` 테스트 4개 추가(전부 통과, 기존 23개 포함 총 27개
+  green): 충돌 없는 프리뷰(제목/본문 추천 포함, PullRequest 미저장 확인), 충돌 프리뷰, 커밋 2개 이상
+  시 제목 미추천, 변경사항 없음.
+- `PullRequestMergeResultTemplateRenderingSpec.kt`(신규, 4개, 전부 통과): 실제 물리 bare 저장소로
+  충돌 없는/충돌하는/변경없는 시나리오의 실제 HTTP 렌더링 검증 + 비멤버 403.
+- 회귀 확인(타겟 클래스만, 전체 `./gradlew test`는 실행하지 않음 — 병렬 워크트리 OOM 방지 지시 준수):
+  `TimelineTemplateRenderingSpec`(2), `PullRequestViewControllerSpec`(18), `PullRequestListTemplate
+  EquivalenceSpec`(12), `MarkdownServiceImplSpec`(25), `MarkdownControllerSpec`(1), `IssueViewController
+  Spec`, `BoardViewControllerSpec` — 전부 green.
+
+**막힌 부분**: 없음. 두 항목 모두 조사→구현→테스트까지 완료했다.
 
 ### TASK-0258: 사용자 지시("fork.html처럼 todo로 남아있는거 찾아서 확인 후에 코드와 문서도 업데이트")로
 `project/fork.html`의 실제 TODO 주석 발견·수정 + `docs/PARITY_BACKLOG.md` 전수 재검토
