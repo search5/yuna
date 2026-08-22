@@ -79,10 +79,10 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 10 | [x] | `common/navbar.scala.html` | `site/layout.html :: gnb` (인라인) | 완료(TASK-0224, TDD). `HIDE_PROJECT_LISTING`+게스트 가드로 "전체 목록" 링크 숨김 이식. org 검색범위의 좁은 게스트/HIDE 모드 조합 세부조건은 미이식(비고: 저가치 코너케이스로 판단, 문서에 기록) |
+| 10 | [x] | `common/navbar.scala.html` | `site/layout.html :: gnb` (인라인) | 완료(TASK-0224/TASK-0243, TDD). `HIDE_PROJECT_LISTING`+게스트 가드로 "전체 목록" 링크 숨김 이식. TASK-0243에서 방침 정정에 따라 재작업: (1) 조직 페이지의 검색범위 드롭다운에서 "현재 그룹" 링크가 legacy처럼 `HIDE_PROJECT_LISTING||게스트` 모드에서 `isMemberOf(org)||isAdminOf(org)`인 사용자에게만 보이도록 게이트 추가(`TemplateHelper.isOrganizationMemberOrAdmin` 신규), (2) "모든 프로젝트" 검색범위가 legacy처럼 게스트/HIDE모드에서 숨겨지고 사이트관리자는 예외로 보이도록 게이트 추가(기존엔 무조건 노출) |
 | 11 | [x] | `common/footer.scala.html` | `site/layout.html :: footer` (인라인) | 확인 완료 — 완전 일치(TASK-0224 조사 중 대조 완료, 코드 변경 없음) |
 | 12 | [x] | `common/scripts.scala.html` | `site/layout.html :: scripts` (인라인) | 완료(TASK-0224, TDD). tplYobiToast, "U" 단축키, pageshow NProgress 해제, iframe 히스토리 동기화 스크립트 이식. Play flash-scope 제네릭 순회(title/description 특수케이스)는 yuna의 warning/error/info 3키 모델로 이미 아키텍처 치환되어 있었음(선행 세션) |
-| 13 | [x] | `common/usermenu.scala.html` | `site/layout.html :: gnb` (인라인) | 완료(TASK-0224, TDD). 내 이슈 카운터 배지(`myOpenIssueCount`), 게스트 새 그룹 만들기 숨김 이식. `NAVBAR_CUSTOM_LINK_NAME/URL` 커스텀 링크와 OAuth 세션 불일치 경고는 미이식(저가치·백엔드 설정 부재, 문서에 기록) |
+| 13 | [x] | `common/usermenu.scala.html` | `site/layout.html :: gnb` (인라인) | 완료(TASK-0224/TASK-0243, TDD). 내 이슈 카운터 배지(`myOpenIssueCount`), 게스트 새 그룹 만들기 숨김 이식. TASK-0243에서 `NAVBAR_CUSTOM_LINK_NAME/URL` 커스텀 링크를 `yuna.application.navbar.custom-link.name`/`.url` 설정 프로퍼티(기본값 빈 문자열, 미설정 시 기존과 동일하게 안 보임)로 이식 완료. OAuth 세션 불일치 경고는 Spring Security 세션 모델 자체가 달라 대응되는 상태가 없어 계속 미이식(별도 사유, 백로그 유지) |
 | 14 | [x] | `common/usermenu_tab_content_list.scala.html` | `common/usermenu_tab_content_list.html` | 완료(TASK-0225, TDD). legacy가 include하는 3개 파샬(`index/my{OrganizationList,ProjectList,RecentIssueList}.scala.html`) 중 `myRecentIssueList`(최근 방문 이슈 탭)만 완전히 누락돼 있었음을 발견해 이식. yuna가 legacy에 없는 "전체" 탭을 추가로 갖고 있는 점은 그대로 유지(비고: 이미 동작 중인 기능 삭제는 이번 범위 밖) |
 | 15 | [~] | `common/loginDialog.scala.html` | `site/layout.html :: scripts` (인라인) | 부분 완료(TASK-0224). jquery-ui 스크립트 로드 이식(TDD). `useSocialLoginOnly` 폼 숨김 토글과 legacy의 동적 OAuth 프로바이더 목록(`forProviders`)은 yuna가 Spring Security OAuth2 정적 클라이언트 등록 방식이라 구조적으로 다름 — 하드코딩된 github/google 버튼으로 아키텍처적으로 치환된 상태(선행 세션), 토글 자체는 백엔드 설정 부재로 미이식(저가치 코너케이스로 판단, 문서에 기록) |
 | 16 | [x] | `common/select2.scala.html` | `common/select2.html` | 확인 완료 — 완전 일치(TASK-0226 조사 중 대조 완료, 코드 변경 없음) |
@@ -1075,3 +1075,25 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 62 tests).
   다음은 나머지 보류 항목(#10,12,13,20,23,45,47,49,50,53,90) — #38~41은 그룹10/11 담당 에이전트에게,
   #82/83은 그룹14 담당 에이전트에게 위임 완료(병렬 워크트리에서 진행 중).
+
+### 방침 정정 후속: #10/#13 GNB 검색범위·커스텀링크 재작업 (TASK-0243)
+
+- **#10 재작업**: 조직(org) 페이지에서 검색범위 드롭다운의 "현재 그룹" 링크가 legacy는
+  `Application.HIDE_PROJECT_LISTING || 게스트` 모드일 때만, 그것도 `isMemberOf(org) || isAdminOf(org)`인
+  사용자에게만 보이는데(왜 이 조합에서만 보이는지는 legacy 자체도 불명확하지만, 지시대로 그대로 이식),
+  yuna는 무조건 노출하고 있었음 — `TemplateHelper.isOrganizationMemberOrAdmin(org, user)`
+  (`OrganizationUserRepository.existsByOrganizationIdAndUserId`) 신규 추가 후 게이트 적용. "모든
+  프로젝트" 검색범위도 legacy는 `(!HIDE_PROJECT_LISTING && !게스트) || 사이트관리자`인데 yuna는 무조건
+  노출 — 게이트 추가.
+- **#13 재작업**: `NAVBAR_CUSTOM_LINK_NAME`/`NAVBAR_CUSTOM_LINK_URL`(둘 다 기본값 빈 문자열인 설정
+  프로퍼티)을 `yuna.application.navbar.custom-link.name`/`.url`로 이식. `GlobalModelAttributeAdvice`에
+  `@Value` 주입 + `@ModelAttribute` 노출, `site/layout.html`의 `gnb`/`errorGnb` 두 조각 모두에 로그인
+  사용자 전용 커스텀 링크 `<li>`(설정값이 비어있으면 `th:if`로 렌더링 자체가 생략됨, 레거시 기본 동작과
+  동일) 추가.
+- **legacy와 다르게 처리한 지점**: 없음(레거시가 `play.Configuration.root().getString(key, "")` 방식의
+  단순 설정 프로퍼티라 Spring `@Value`로 1:1 대응 가능했음 — OAuth 프로바이더 동적 목록처럼 아키텍처
+  자체가 다른 경우와 달리 이건 순수 문자열 설정값이라 어려움이 없었음).
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-31]`(일반 사용자/게스트/사이트관리자의 "모든
+  프로젝트" 검색범위 노출 차이, 커스텀 링크 기본(미설정) 상태 검증).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 64 tests).
+  다음은 나머지 보류 항목(#12는 재확인 결과 이미 정상이라 스킵, #20,23,45,47,49,50,53,90)을 이어서 처리.

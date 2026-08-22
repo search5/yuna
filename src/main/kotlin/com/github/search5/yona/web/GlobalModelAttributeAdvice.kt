@@ -25,7 +25,10 @@ class GlobalModelAttributeAdvice(
     // yona application.conf의 "application.sendYonaUsage"(Application.SEND_YONA_USAGE) 대응.
     @Value("\${yuna.analytics.send-usage:false}") private val sendYonaUsage: Boolean,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23). 기존 컨트롤러들과 동일 키 재사용.
-    @Value("\${yuna.application.hide-project-listing:false}") private val hideProjectListing: Boolean
+    @Value("\${yuna.application.hide-project-listing:false}") private val hideProjectListing: Boolean,
+    // yona controllers/Application.java:42-43 NAVBAR_CUSTOM_LINK_NAME/URL 대응 — common/usermenu.scala.html:80-82.
+    @Value("\${yuna.application.navbar.custom-link.name:}") private val navbarCustomLinkName: String,
+    @Value("\${yuna.application.navbar.custom-link.url:}") private val navbarCustomLinkUrl: String
 ) {
 
     @ModelAttribute("currentUser")
@@ -80,4 +83,10 @@ class GlobalModelAttributeAdvice(
         val user = currentUser() ?: return null
         return userSettingRepository.findByUserId(user.id!!).orElse(null)?.loginDefaultPage
     }
+
+    @ModelAttribute("navbarCustomLinkName")
+    fun navbarCustomLinkName(): String = navbarCustomLinkName
+
+    @ModelAttribute("navbarCustomLinkUrl")
+    fun navbarCustomLinkUrl(): String = navbarCustomLinkUrl
 }
