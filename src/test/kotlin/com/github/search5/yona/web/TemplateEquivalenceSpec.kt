@@ -105,7 +105,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     name = "public-proj",
                     owner = "owner",
                     projectScope = ProjectScope.PUBLIC,
-                    isCodeAccessibleMemberOnly = false
+                    isCodeAccessibleMemberOnly = false,
+                    vcs = "GIT"
                 )
             )
             val category = issueLabelCategoryRepository.findAll().find { it.project.id == publicProj.id }
@@ -132,7 +133,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     name = "memberonly-proj",
                     owner = "owner",
                     projectScope = ProjectScope.PUBLIC,
-                    isCodeAccessibleMemberOnly = true
+                    isCodeAccessibleMemberOnly = true,
+                    vcs = "GIT"
                 )
             )
 
@@ -1257,6 +1259,28 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     val ogTitle = doc.select("meta[property=og:title]").attr("content")
                     val ogDesc = doc.select("meta[property=og:description]").attr("content")
                     ogTitle shouldBe ogDesc
+                }
+            }
+
+            describe("[Test-19-30] 프로젝트 메뉴(projectMenu.scala.html) 동치성 검증") {
+                it("SVN 프로젝트에서는 Pull Request 탭이 노출되지 않아야 한다(legacy project.vcs==GIT 조건)") {
+                    val svnProj = projectRepository.findAll().find { it.name == "svn-menu-test-proj" } ?: projectRepository.save(
+                        Project(name = "svn-menu-test-proj", owner = "owner", projectScope = ProjectScope.PUBLIC, vcs = "SUBVERSION")
+                    )
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/owner/${svnProj.name}")).andReturn().response.contentAsString
+                    )
+                    doc.select(".project-menu-nav a[href*='/pulls'], .project-menu-nav a[href*='PullRequests']").size shouldBe 0
+                }
+
+                it("매니저에게는 설정 메뉴에 가입요청 대기 인원 수 배지와 키보드 단축키(htKeyMap) 스크립트가 노출되어야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${settingProj.name}").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+                    doc.select("script:containsData(htKeyMap)").size shouldBe 1
+                    doc.select("script:containsData(project.Global)").size shouldBe 1
                 }
             }
         }

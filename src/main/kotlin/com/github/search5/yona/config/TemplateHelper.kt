@@ -31,6 +31,8 @@ import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
 import com.github.search5.yona.domain.issue.IssueLabelCategory
+import com.github.search5.yona.domain.support.ReviewThreadService
+import com.github.search5.yona.domain.support.ReviewSearchCondition
 
 @Component("templateHelper")
 class TemplateHelper(
@@ -43,7 +45,8 @@ class TemplateHelper(
     private val projectUserRepository: ProjectUserRepository,
     private val issueLabelRepository: IssueLabelRepository,
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
-    private val milestoneRepository: MilestoneRepository
+    private val milestoneRepository: MilestoneRepository,
+    private val reviewThreadService: ReviewThreadService
 ) {
 
     fun agoOrDateString(instant: Instant?): String {
@@ -231,6 +234,11 @@ class TemplateHelper(
 
     fun countBoardPosts(project: Project): Long {
         return postingRepository.countByProject(project)
+    }
+
+    // yona projectMenu.scala.html:40-42 CommentThread.countReviewsBy(project.id, null) 대응.
+    fun countReviews(project: Project): Long {
+        return reviewThreadService.countReviewThreads(project, ReviewSearchCondition(state = "OPEN"))
     }
 
     fun getVotersExceptCurrentUser(voters: Collection<User>, currentUser: User?): List<User> {

@@ -70,7 +70,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 5 | [i] | `projectLayout.scala.html` | `project/*.html` 각 파일(인라인 조합) | `navbar+project.header+content+footer` 데코레이터 패턴은 이미 `project/home.html`/`members.html`/`setting.html`/`statistics.html`가 `site/layout::gnb`+`project/header::header`+`project/menu::menu`+`site/layout::footer` 조합으로 실현 중. **단, `change_vcs/delete/fork/issuelabels/setting_webhook/transfer/watchers.html`은 header/footer 조각이 빠져있음을 확인** — 그룹6(#87~112) 작업 시 각 파일 항목에서 직접 채워 넣을 것(지금은 그룹1 범위를 넘어서므로 보류, 그룹6 착수 시 최우선 처리) |
 | 6 | [i] | `organizationLayout.scala.html` | `organization/*.html` 각 파일(인라인 조합 필요) | `navbar(menuType,null,group)+content+footer` 패턴 대응. **`organization/*.html` 10개 파일 전부 `site/layout::gnb`/`footer` 조각이 하나도 포함돼 있지 않음을 확인** — project 그룹보다 미착수 정도가 훨씬 심함. 그룹12(#193~209) 착수 시 최우선 처리 |
 | 7 | [i] | `sidebar.scala.html` | `site/layout_framed.html` (인라인) | #2 작업 중 확인: `site/layout_framed.html`의 `#sidebar` div가 이미 이 파일 내용을 인라인 포함(로그인 필수 분기는 컨트롤러 레벨 리다이렉트로 대체) |
-| 8 | [~] | `projectMenu.scala.html` | `project/menu.html` | 프로젝트 상단 탭 메뉴(코드/이슈/PR/게시판/마일스톤) |
+| 8 | [x] | `projectMenu.scala.html` | `project/menu.html` | 완료(TASK-0242, TDD). 리뷰/설정 카운트 배지 누락, PR 탭의 SVN 프로젝트 숨김 조건(`project.vcs=='GIT'`) 누락, 포크 프로젝트의 sentPullRequests 링크 분기 누락, 키보드 단축키(`htKeyMap`+`yobi.project.Global.js`) 스크립트 전체 누락을 발견해 복구 |
 | 9 | [x] | `restricted.scala.html` | (포팅 보류, 아래 참고) | **보류 결정(사유 기록)** — play-authenticate 모듈의 데모/테스트용 페이지(`Sshhh...don't tell anyone`, 하드코딩된 유튜브 영상, `currentAuth()`/`auth.getProvider()`/`auth.expires()` 등 해당 라이브러리 전용 API 표시). yuna는 Spring Security 기반이라 동등 개념(OAuth2AuthorizedClientService 등)을 새로 엮어야 하는데, 실사용 가치가 없는 라이브러리 데모 화면이라 투입 대비 효과가 지나치게 낮다고 판단해 보류. `docs/PARITY_BACKLOG.md`의 P1-27 최초 보류 결정처럼, 사용자가 이식을 원하면 언제든 재지시 가능 |
 
 ## 그룹 2 — `common/*` 공용 파샬 (35개, #10~44)
@@ -1046,3 +1046,32 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   분리 검증, `\|:\|` 없는 화면의 하위호환 검증).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 60 tests).
   다음은 나머지 보류 항목(#8,10,12,13,20,23,38~41,45,47,49,50,53,57,70,82,83,90,108)을 번호 순으로 재작업.
+
+### 방침 정정 후속: #8 프로젝트 메뉴 재작업 (TASK-0242)
+
+- **#8(projectMenu.scala.html→project/menu.html) 중대 발견**: 상세 대조 결과 4가지 실 기능 격차 발견.
+  (1) 리뷰 탭에 legacy의 `countReviewsBy` 카운트 배지가 아예 없었음 — `TemplateHelper.countReviews()`
+  신규 추가(`ReviewThreadService.countReviewThreads(project, ReviewSearchCondition(state="OPEN"))`).
+  (2) 설정(톱니바퀴) 메뉴에 legacy의 가입 대기 인원 수(`project.enrolledUsers.size`) 배지가 없었음 — 추가.
+  (3) **PR 탭이 SVN 프로젝트에서도 노출되고 있었음** — legacy는 `project.vcs.equals("GIT")` 조건이 있는데
+  yuna엔 전혀 없었음(순수 기능 버그, SVN 프로젝트에 눌러도 404 나는 PR 탭이 보이는 상태였음) — 조건 추가.
+  (4) 포크 프로젝트의 PR 탭 링크가 항상 `/pulls`(받은 PR)였는데, legacy는 `project.isForkedFromOrigin`이면
+  `sentPullRequests`(보낸 PR)로 분기함 — `project.originalProject != null` 체크로 분기 추가(백엔드
+  `sentPullRequests` 엔드포인트는 이미 존재, 프론트만 안 붙어있었음). (5) **가장 중대한 발견**: legacy의
+  키보드 단축키(H/B/C/I/M/P/Q) 스크립트(`$yobi.loadModule("project.Global", {htKeyMap: ...})`)가
+  yuna에는 통째로 없었음 — 정적 자산 `yobi.project.Global.js`는 이미 `htKeyMap` 옵션을 받아 처리하는
+  로직(`_initShortcutKey`)을 갖추고 있어 "정적 자산은 있는데 로드가 아예 없어 죽어있는 기능" 패턴이었음.
+  Thymeleaf 자연템플릿(`/*[# th:if=...]*/`) 문법으로 각 메뉴 활성화 조건에 맞춰 `htKeyMap` 객체를
+  동적 구성하는 스크립트 블록을 신규 추가.
+- **legacy와 다르게 처리한 지점**: "Q"(설정) 단축키의 legacy 가드 조건이 `requestHeader.session.get
+  ("loginId") match { case Some(role) if role.equals("manager") ... }`로, loginId 값을 문자열
+  "manager"와 비교하는 앞뒤가 안 맞는 조건(레거시 버그로 추정)이었다 — 의도가 명백히 "매니저만"이므로
+  이 프래그먼트가 이미 계산해두는 `isManager` 변수로 대체(설정 메뉴 자체의 노출 조건과 동일 기준 적용).
+- **테스트 인프라 수정**: `publicProj`/`codeMemberOnlyProj` 공용 테스트 픽스처에 `vcs` 필드가 아예 없어서
+  (`null`) PR 탭이 우연히 항상 노출되고 있었음 — 실제 서비스에서는 프로젝트 생성 시 항상 vcs가 채워지므로
+  두 픽스처 모두 `vcs = "GIT"`로 명시.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-30]`(SVN 프로젝트 PR 탭 미노출 검증, 매니저의
+  설정 배지+htKeyMap 스크립트 노출 검증).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 62 tests).
+  다음은 나머지 보류 항목(#10,12,13,20,23,45,47,49,50,53,90) — #38~41은 그룹10/11 담당 에이전트에게,
+  #82/83은 그룹14 담당 에이전트에게 위임 완료(병렬 워크트리에서 진행 중).
