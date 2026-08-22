@@ -305,3 +305,30 @@
         <div id="organizations" class="no-result tab-pane user-ul " th:unless="${allOrganizations != null and !allOrganizations.isEmpty()}">결과 없음</div>
     </div>
 </div>
+
+<div class="tab-pane user-project-list" id="myRecentIssueList">
+    <div>
+        <div class="search-result">
+            <div class="tab-pane myproject-list-wrap">
+                <div class="group">
+                    <input class="search-input project-search" type="text" id="query" autocomplete="off" th:placeholder="#{title.type.name}">
+                    <span class="bar"></span>
+                </div>
+                <div class="tab-content">
+                    <ul class="tab-pane user-ul active" id="recentlyVisitedIssues" th:if="${visitedIssues != null and !visitedIssues.isEmpty()}">
+                        <li class="user-li" th:each="visitedIssue : ${visitedIssues}" th:data-location="${visitedIssue.url}">
+                            <div class="project-list project-flex-container" data-toggle="popover" data-trigger="hover" data-placement="right" th:data-content="${visitedIssue.title}">
+                                <div class="project-item project-item-container">
+                                    <div class="issue-item projectName-owner flex-item">
+                                        <div class="issue-title-start">-</div><div class="issue-title flex-item" th:text="${visitedIssue.title}">issue title</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+                    <div id="recentlyVisitedIssues" class="no-result tab-pane user-ul active" th:unless="${visitedIssues != null and !visitedIssues.isEmpty()}" th:text="#{title.no.results}">결과 없음</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -38,6 +38,7 @@ import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
 import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder
 import com.github.search5.yona.domain.issue.IssueLabelCategory
 import com.github.search5.yona.domain.issue.IssueLabel
+import com.github.search5.yona.domain.issue.RecentIssueService
 
 class TemplateEquivalenceSpec @Autowired constructor(
     private val wac: WebApplicationContext,
@@ -50,7 +51,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val assigneeRepository: AssigneeRepository,
     private val issueLabelRepository: IssueLabelRepository,
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
-    private val yonaUpdateService: YonaUpdateService
+    private val yonaUpdateService: YonaUpdateService,
+    private val recentIssueService: RecentIssueService
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -615,6 +617,48 @@ class TemplateEquivalenceSpec @Autowired constructor(
 
                     val doc = Jsoup.parse(result.response.contentAsString)
                     doc.select("script[src*='lib/jquery/jquery-ui-1.10.4.custom.min.js']").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-10] 사용자 메뉴 탭 콘텐츠(common/usermenu_tab_content_list.scala.html) 동치성 검증") {
+                it("최근 방문한 이슈가 있으면 최근 읽은 이슈 탭 패널에 목록이 렌더링되어야 한다") {
+                    val recentIssue = issueRepository.findAll().find { it.title == "최근방문이슈테스트" } ?: issueRepository.save(
+                        Issue(
+                            title = "최근방문이슈테스트",
+                            body = "내용",
+                            project = publicProj,
+                            authorId = owner.id!!,
+                            authorLoginId = owner.loginId,
+                            authorName = owner.name,
+                            number = 901L
+                        )
+                    )
+                    recentIssueService.recordIssueVisit(member, recentIssue)
+
+                    val result = mockMvc.perform(
+                        get("/user/usermenuTabContentList")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    val pane = doc.select("#myRecentIssueList")
+                    pane.size shouldNotBe 0
+                    pane.select("li.user-li").size shouldNotBe 0
+                    pane.select("li.user-li").text().contains("최근방문이슈테스트") shouldBe true
+                }
+
+                it("GNB 사이드바 탭 메뉴에 최근 방문 이슈 탭 버튼이 노출되어야 한다") {
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("#mySidenav a[href='#myRecentIssueList']").size shouldNotBe 0
                 }
             }
         }

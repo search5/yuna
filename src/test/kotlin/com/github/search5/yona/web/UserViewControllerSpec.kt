@@ -4,6 +4,7 @@ import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.mention.MentionService
+import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
@@ -59,6 +60,7 @@ class UserViewControllerSpec : DescribeSpec({
     val userService = mockk<UserService>()
     val accessControl = mockk<AccessControl>()
     val mentionService = mockk<MentionService>(relaxed = true)
+    val recentIssueService = mockk<RecentIssueService>(relaxed = true)
 
     val userViewController = UserViewController(
         userRepository,
@@ -76,7 +78,8 @@ class UserViewControllerSpec : DescribeSpec({
         organizationRepository,
         userService,
         accessControl,
-        mentionService
+        mentionService,
+        recentIssueService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(userViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -199,7 +202,7 @@ class UserViewControllerSpec : DescribeSpec({
             userRepository, projectUserRepository, issueRepository, pullRequestRepository, watchRepository,
             projectRepository, userProjectNotificationRepository, attachmentRepository, postingRepository,
             favoriteProjectRepository, favoriteOrganizationRepository, organizationUserRepository,
-            organizationRepository, userService, accessControl, mentionService, hideProjectListing = true
+            organizationRepository, userService, accessControl, mentionService, recentIssueService, hideProjectListing = true
         )
         val model = ExtendedModelMap()
 

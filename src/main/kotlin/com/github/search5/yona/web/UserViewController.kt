@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.mention.MentionService
 import jakarta.servlet.http.HttpServletRequest
@@ -65,6 +66,8 @@ class UserViewController(
     private val accessControl: AccessControl,
     // yona Mention.getMentioningIssueIds() 대응 (P2-41).
     private val mentionService: MentionService,
+    // yona User.getVisitedIssues() 대응.
+    private val recentIssueService: RecentIssueService,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
     @Value("\${yuna.application.hide-project-listing:false}")
     private val hideProjectListing: Boolean = false
@@ -407,6 +410,9 @@ class UserViewController(
         // 4. 전체 조직 목록 (All 탭)
         val allOrganizations = organizationRepository.findAll()
 
+        // 5. 최근 방문한 이슈/게시글 (yona User.getVisitedIssues() 대응)
+        val visitedIssues = recentIssueService.getRecentIssues(loginUser)
+
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("favoriteProjects", favoriteProjects)
         model.addAttribute("favoriteOrganizations", favoriteOrganizations)
@@ -416,6 +422,7 @@ class UserViewController(
         model.addAttribute("watching", watching)
         model.addAttribute("joinmember", joinmember)
         model.addAttribute("allOrganizations", allOrganizations)
+        model.addAttribute("visitedIssues", visitedIssues)
 
         return "common/usermenu_tab_content_list"
      }
