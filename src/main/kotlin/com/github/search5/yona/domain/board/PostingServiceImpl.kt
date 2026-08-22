@@ -146,6 +146,14 @@ class PostingServiceImpl(
         posting.readme = readme
         posting.updatedDate = Instant.now()
 
+        // yona AbstractPostingApp.editPosting()의 "posting.updatedByAuthorId = UserApp.currentUser().id"
+        // 대응 (P2-02) — history 유무와 무관하게 편집이 있을 때마다 항상 갱신된다.
+        if (updater != null) {
+            posting.updatedByAuthorId = updater.id
+            posting.updatedByAuthorLoginId = updater.loginId
+            posting.updatedByAuthorName = updater.name
+        }
+
         // yona AbstractPostingApp.editPosting()의 history 갱신 대응 (P2-02).
         if (updater != null && (originalBody ?: "") != body) {
             posting.history = HistoryUtil.appendHistory(

@@ -16,10 +16,17 @@
   arrow/#pullRequestState/#status/#title/#__commits)는 legacy와 동일하게 유지해 향후 연관 프로젝트
   지원이 추가될 때 이 마크업을 그대로 재사용할 수 있게 했다.
 
-  legacy는 $yobi.loadModule("git.Write", {...})로 커밋 탭(#__commits)을 비동기로 채우는데, 이 모듈은
-  legacy 전용 JSON 엔드포인트(예: pullRequestMessages)에 의존해 yuna에는 대응 REST 엔드포인트가
-  없다 — #__commits 탭 셸(빈 nav-tabs 구조)만 이식하고 모듈 로드는 생략한다(문서화된 결손, 최종
-  보고 참고). 실제 폼 제출은 기존 REST 엔드포인트(POST /api/projects/{projectId}/pullrequests)로
+  legacy는 $yobi.loadModule("git.Write", {...})(public/javascripts/service/yobi.git.Write.js)로
+  브랜치 select가 바뀔 때마다 PullRequestApp.mergeResult()를 GET AJAX로 호출해 커밋 탭(#__commits)을
+  채운다 — 이 흐름을 PullRequestViewController#mergeResult()(#178, TASK-0257)로 신설한 대응 엔드포인트
+  호출로 직접 재구현했다(별도 모듈 로더 없이 인라인 스크립트로, legacy git.Write.js의
+  _checkMergeResult()/_onSuccessMergeResult()/_getMergeResultData()와 동일한 데이터 흐름:
+  GET 응답 HTML을 #__commits에 삽입 → 갓 삽입된 #mergeResult의 data-commits/data-conflict/
+  data-pullrequest-title/data-pullrequest-body 속성을 다시 읽어 #status 배너와 title/body
+  자동채움에 반영). legacy create.scala.html에는 #pullRequestState 엘리먼트가 없어(state="OPEN"
+  체크가 항상 거짓) 페이지 로드시 자동 실행되지 않고 브랜치 select의 change 이벤트로만 트리거된다 —
+  이 파일도 동일하게 change 이벤트에만 바인딩한다(edit.html은 로드시 1회 자동 실행, edit.html
+  주석 참고). 실제 폼 제출은 기존 REST 엔드포인트(POST /api/projects/{projectId}/pullrequests)로
   AJAX 전송한다(허용된 Play→Thymeleaf 변환 범위).
 -->
 <head th:replace="~{site/layout :: head(title=${pageTitle})}">
@@ -132,6 +139,49 @@
             "target": 'textarea[id^=editor-]',
             "url"   : /*[[@{/{owner}/{projectName}/mentionList(owner=${project.owner}, projectName=${project.name})}]]*/ ""
         });
+
+        // legacy yobi.git.Write.js _checkMergeResult()/_onSuccessMergeResult()/_getMergeResultData()
+        // 대응 (#178, TASK-0257). 브랜치 select가 바뀔 때마다 GET /pull/mergeResult로 커밋 프리뷰
+        // 조각을 받아와 #__commits에 꽂고, 그 조각이 렌더링한 #mergeResult의 data-* 속성을 다시 읽어
+        // #status 배너를 갱신한다.
+        var mergeResultURL = /*[[@{/{owner}/{projectName}/pull/mergeResult(owner=${project.owner}, projectName=${project.name})}]]*/ "";
+
+        function checkMergeResult() {
+            var fromBranch = $("#fromBranch").val();
+            var toBranch = $("#toBranch").val();
+            if (!fromBranch || !toBranch) {
+                return;
+            }
+            $("#status").attr("class", "alert alert-info").text([[#{pullRequest.is.merging}]]).show();
+            $.ajax({
+                url: mergeResultURL,
+                data: { fromBranch: fromBranch, toBranch: toBranch }
+            }).done(function(resultHTML) {
+                $("#__commits").html(resultHTML);
+                var $result = $("#mergeResult");
+                var numOfCommits = parseInt($result.attr("data-commits"), 10) || 0;
+                var isConflict = $result.attr("data-conflict") === "true";
+
+                if (numOfCommits > 0 && isConflict) {
+                    $("#status").attr("class", "alert alert-error").text([[#{pullRequest.is.not.safe}]]).show();
+                } else if (numOfCommits > 0) {
+                    $("#status").attr("class", "alert alert-success").text([[#{pullRequest.is.safe}]]).show();
+                } else {
+                    $("#status").attr("class", "alert alert-info").text([[#{pullRequest.diff.noChanges}]]).show();
+                }
+
+                var suggestedTitle = $result.attr("data-pullrequest-title");
+                var suggestedBody = $result.attr("data-pullrequest-body");
+                if (suggestedTitle && $.trim($("#title").val()) === "") {
+                    $("#title").val(suggestedTitle);
+                }
+                if (suggestedBody && $.trim($('textarea[data-editor-mode="content-body"]').val()) === "") {
+                    $('textarea[data-editor-mode="content-body"]').val(suggestedBody);
+                }
+            });
+        }
+
+        $("#fromBranch, #toBranch").on("change", checkMergeResult);
 
         $("#pull-request-form").submit(function(e) {
             e.preventDefault();

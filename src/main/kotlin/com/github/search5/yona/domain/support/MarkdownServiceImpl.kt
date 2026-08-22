@@ -295,7 +295,12 @@ override fun renderFileInCodeBrowser(source: String, project: Project): String {
         }
     }
 
-    private fun sanitize(html: String): String {
+    private fun sanitizeInternal(html: String): String {
         return SANITIZER_POLICY.sanitize(html)
+    }
+
+    // yona Markdown.java:215-217 sanitize() 대응 (P2-02).
+    override fun sanitize(html: String): String {
+        return sanitizeInternal(html)
     }
 }
