@@ -176,6 +176,12 @@ class IssueServiceImpl(
         issue.body = (body)
         issue.updatedDate = Instant.now()
 
+        // yona AbstractPostingApp.editPosting()의 "posting.updatedByAuthorId = UserApp.currentUser().id"
+        // 대응 (P2-02) — history 유무와 무관하게 편집이 있을 때마다 항상 갱신된다.
+        issue.updatedByAuthorId = updater.id
+        issue.updatedByAuthorLoginId = updater.loginId
+        issue.updatedByAuthorName = updater.name
+
         // yona AbstractPostingApp.editPosting()의 history 갱신 대응 (P2-02).
         if ((oldBody ?: "") != body) {
             issue.history = HistoryUtil.appendHistory(

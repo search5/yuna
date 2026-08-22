@@ -37,7 +37,16 @@
                             <span class="loginid"> <strong>@</strong><span th:text="${post.authorLoginId}">loginId</span></span>
                         </a>
                     </div>
-                    
+
+                    <!-- legacy board/view.scala.html:78 "@if(StringUtils.isNotEmpty(post.history))" 블록 대응 (#41, TASK-0257) -->
+                    <div class="posting-history" th:if="${post.history != null and !#strings.isEmpty(post.history)}">
+                        <a th:if="${currentUser == null}" th:href="@{/users/loginform}" th:text="#{change.history}">변경 이력</a>
+                        <th:block th:if="${currentUser != null}">
+                            <a href="#-yona-posting-history" data-toggle="modal" th:text="#{change.history}">변경 이력</a>
+                            <div th:replace="~{common/partial_history :: partial_history(${post})}"></div>
+                        </th:block>
+                    </div>
+
                     <div th:id="'post-' + ${post.number}" class="hide">
                         <form th:action="@{/api/{owner}/{projectName}/posts/{number}/content(owner=${project.owner}, projectName=${project.name}, number=${post.number})}">
                             <textarea th:text="${post.body}"></textarea>
@@ -70,7 +79,9 @@
                         <div class="watcher-list" style="margin-top: 10px;"></div>
 
                         <span class="act-row">
-                            <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:onclick="|window.location='/${project.owner}/${project.name}/post/${post.number}/editform'|"><i class="yobicon-edit-2"></i></button>
+                            <!-- issue/view.html과 동일한 이유로 th:onclick 대신 data-* + 정적 onclick으로
+                                 우회한다(TASK-0257, TemplateProcessingException 실제 발견/수정). -->
+                            <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:data-edit-url="@{/{owner}/{projectName}/post/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${post.number})}" onclick="window.location=this.getAttribute('data-edit-url')"><i class="yobicon-edit-2"></i></button>
                             <a th:if="${!isAllowedUpdate}" th:href="@{/{owner}/{projectName}/post/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${post.number})}">
                                 <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.show.original}"><i class="yobicon-edit-2"></i></button>
                             </a>

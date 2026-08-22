@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.vcs.GitRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
@@ -101,6 +102,76 @@ class PullRequestServiceImpl(
 
             result
         }
+    }
+
+    // yona PullRequestApp.mergeResult()/PullRequest.attemptMerge()/getPullRequestMergeResult() 대응
+    // (#178, TASK-0257). attemptMerge(pullRequestId)와 동일한 JGit 흐름(임시 ref로 fetch → 3-way
+    // merge 시도 → 커밋 diff 계산 → 임시 ref 삭제)이지만, 저장된 PullRequest 엔티티를 조회/저장하지
+    // 않고 임의의 fromProject/toProject/fromBranch/toBranch만으로 동작한다(legacy도 이 프리뷰 액션에서
+    // 만드는 PullRequest 객체를 저장하지 않는다 — PullRequest.createNewPullRequest()는 순수 in-memory
+    // 객체 생성일 뿐이다).
+    @Transactional(readOnly = true)
+    override fun previewMerge(fromProject: Project, toProject: Project, fromBranch: String, toBranch: String): MergePreviewResult {
+        val playRepo = repositoryService.getRepository(toProject)
+        val gitDir = playRepo.getDirectory()
+
+        return FileRepositoryBuilder().setGitDir(gitDir).build().use { repo ->
+            val fromGitDir = repositoryService.getRepository(fromProject).getDirectory().absolutePath
+            val tempBranch = "refs/yobi/pull-check/${fromProject.owner}/${fromProject.name}/$fromBranch"
+
+            // 소스 리포지토리로부터 임시 브랜치로 fetch (legacy fetchSourceTemporarilly() 대응)
+            Git(repo).fetch()
+                .setRemote(fromGitDir)
+                .setRefSpecs(
+                    RefSpec()
+                        .setSource(fromBranch)
+                        .setDestination(tempBranch)
+                        .setForceUpdate(true)
+                )
+                .call()
+
+            val merger = MergeStrategy.RECURSIVE.newMerger(repo, true) as ThreeWayMerger
+            val leftParent = repo.resolve(toBranch)
+                ?: throw IllegalArgumentException("Target branch '$toBranch' not found")
+            val rightParent = repo.resolve(tempBranch)
+                ?: throw IllegalArgumentException("Source branch '$fromBranch' not found")
+
+            val success = merger.merge(leftParent, rightParent)
+            val commits = diffCommits(repo, leftParent, rightParent)
+            val (suggestedTitle, suggestedBody) = suggestTitleAndBody(commits)
+
+            // 임시 브랜치 삭제 (legacy attemptMerge()가 fetchSourceTemporarilly()로 만든 임시 ref를
+            // 병합 성공/실패와 무관하게 매번 정리하는 것과 동일)
+            val refUpdate = repo.updateRef(tempBranch)
+            refUpdate.isForceUpdate = true
+            refUpdate.delete()
+
+            MergePreviewResult(
+                commits = commits,
+                conflict = !success,
+                suggestedTitle = suggestedTitle,
+                suggestedBody = suggestedBody
+            )
+        }
+    }
+
+    // yona PullRequest.suggestTitleAndBodyFromDiffCommit() 대응 (#178, TASK-0257). 커밋이 1개면 첫
+    // 줄을 title로, 나머지 줄들을 body로 쓰고, 2개 이상이면 title 없이 각 커밋의 첫 줄만 모아 body로
+    // 쓴다(legacy와 동일하게 title 키 자체가 없음 = null).
+    private fun suggestTitleAndBody(commits: List<GitCommit>): Pair<String?, String?> {
+        if (commits.isEmpty()) {
+            return null to null
+        }
+        if (commits.size == 1) {
+            val messages = (commits[0].getMessage() ?: "").split("\n")
+            return if (messages.size > 1) {
+                messages[0] to messages.drop(1).joinToString("\n").trim()
+            } else {
+                messages[0] to ""
+            }
+        }
+        val firstMessages = commits.map { (it.getMessage() ?: "").split("\n").firstOrNull() ?: "" }
+        return null to firstMessages.joinToString("\n")
     }
 
     // yona actors/PullRequestActor.processPullRequestMerging() 대응 (P1-52). attemptMerge()는

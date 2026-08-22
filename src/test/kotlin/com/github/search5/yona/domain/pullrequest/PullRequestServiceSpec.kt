@@ -1010,6 +1010,94 @@ class PullRequestServiceSpec @Autowired constructor(
                 issue2Events.first().newValue shouldBe pr.id.toString()
                 issue2Events.first().senderLoginId shouldBe contributor.loginId
             }
+
+            // yona PullRequestApp.mergeResult()/PullRequest.attemptMerge()(전용 프리뷰 경로) 대응
+            // (#178, TASK-0257). attemptMerge(pullRequestId)와 달리 저장된 PullRequest가 전혀 없는
+            // 임의의 from/to 브랜치 조합에 대해 부수효과 없이 커밋 프리뷰 + 충돌 여부를 계산한다.
+            it("previewMerge - 충돌이 없는 임의 브랜치 조합의 커밋 프리뷰와 제목/본문 추천을 반환하고 PullRequest를 저장하지 않아야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "preview-feature", "test2.txt", "preview change", "Preview commit title\n\nPreview commit body line1\nline2")
+
+                val preview = pullRequestService.previewMerge(
+                    fromProject = fromProject,
+                    toProject = toProject,
+                    fromBranch = "refs/heads/preview-feature",
+                    toBranch = "refs/heads/master"
+                )
+
+                preview.conflict shouldBe false
+                preview.commits.size shouldBe 1
+                preview.commits.first().getShortMessage() shouldBe "Preview commit title"
+                // yona suggestTitleAndBodyFromDiffCommit() 대응 - 커밋이 1개면 첫 줄이 title, 나머지가 body.
+                preview.suggestedTitle shouldBe "Preview commit title"
+                preview.suggestedBody shouldBe "Preview commit body line1\nline2"
+
+                // 저장된 PullRequest가 전혀 생기지 않아야 한다(legacy도 이 프리뷰 경로에서 PullRequest를
+                // 저장하지 않는다 - createNewPullRequest()는 순수 in-memory 객체).
+                pullRequestRepository.findAll().size shouldBe 0
+            }
+
+            it("previewMerge - 충돌이 발생하는 임의 브랜치 조합은 conflict=true를 반환해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(toBareDir, "master", "test.txt", "hello common\ntarget edit", "Target conflict commit")
+                createCommit(fromBareDir, "preview-conflict", "test.txt", "hello common\nsource edit", "Source conflict commit")
+
+                val preview = pullRequestService.previewMerge(
+                    fromProject = fromProject,
+                    toProject = toProject,
+                    fromBranch = "refs/heads/preview-conflict",
+                    toBranch = "refs/heads/master"
+                )
+
+                preview.conflict shouldBe true
+                preview.commits.size shouldBe 1
+            }
+
+            it("previewMerge - 커밋이 2개 이상이면 제목 추천 없이 각 커밋의 첫 줄만 모아 본문을 추천해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "preview-multi", "test2.txt", "change1", "First commit")
+                createCommit(fromBareDir, "preview-multi", "test3.txt", "change2", "Second commit")
+
+                val preview = pullRequestService.previewMerge(
+                    fromProject = fromProject,
+                    toProject = toProject,
+                    fromBranch = "refs/heads/preview-multi",
+                    toBranch = "refs/heads/master"
+                )
+
+                preview.commits.size shouldBe 2
+                preview.suggestedTitle shouldBe null
+                preview.suggestedBody shouldBe "Second commit\nFirst commit"
+            }
+
+            it("previewMerge - 변경 사항이 없으면 빈 커밋 목록과 conflict=false를 반환해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+
+                val preview = pullRequestService.previewMerge(
+                    fromProject = toProject,
+                    toProject = toProject,
+                    fromBranch = "refs/heads/master",
+                    toBranch = "refs/heads/master"
+                )
+
+                preview.commits.size shouldBe 0
+                preview.conflict shouldBe false
+                preview.suggestedTitle shouldBe null
+                preview.suggestedBody shouldBe null
+            }
         }
     }
 }

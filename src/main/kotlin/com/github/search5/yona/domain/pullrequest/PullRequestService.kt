@@ -1,17 +1,27 @@
 package com.github.search5.yona.domain.pullrequest
 
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.http.HttpStatus
 
 import com.github.search5.yona.domain.vcs.FileDiff
+import com.github.search5.yona.domain.vcs.GitCommit
 
 interface PullRequestService {
     /**
      * 풀 리퀘스트의 충돌 가능성을 판단하고, 임시 머지 결과를 반환합니다.
      */
     fun attemptMerge(pullRequestId: Long): PullRequestMergeResult
+
+    /**
+     * yona PullRequestApp.mergeResult()/PullRequest.attemptMerge()/getPullRequestMergeResult() 대응
+     * (#178, TASK-0257). [attemptMerge]와 달리 아직 저장되지 않은(=PR로 생성되기 전) 임의의 from/to
+     * 프로젝트·브랜치 조합에 대해 커밋 프리뷰 + 충돌 여부만 계산한다(부수효과 없음, DB 저장 없음) —
+     * PR 생성/수정 화면에서 브랜치를 바꿀 때마다 AJAX로 호출하는 용도.
+     */
+    fun previewMerge(fromProject: Project, toProject: Project, fromBranch: String, toBranch: String): MergePreviewResult
 
     /**
      * yona actors/PullRequestActor.processPullRequestMerging() 대응 (P1-52). attemptMerge()의
@@ -81,6 +91,17 @@ interface PullRequestService {
      */
     fun restoreFromBranch(pullRequestId: Long): PullRequest
 }
+
+// yona PullRequest.attemptMerge()가 반환하는 PullRequestMergeResult(getGitCommits()/conflicts())와
+// suggestTitleAndBodyFromDiffCommit()의 title/body 두 결과를 하나로 합친 값 — 대응하는 PR 엔티티가
+// 없는 프리뷰 전용 시나리오라 기존 PullRequestMergeResult(비-null PullRequest 필수)를 재사용하지
+// 않고 별도 타입으로 둔다.
+data class MergePreviewResult(
+    val commits: List<GitCommit>,
+    val conflict: Boolean,
+    val suggestedTitle: String?,
+    val suggestedBody: String?
+)
 
 @ResponseStatus(value = HttpStatus.BAD_REQUEST, reason = "리뷰어 수가 부족하여 머지할 수 없습니다.")
 class LackingReviewerException(message: String) : RuntimeException(message)
