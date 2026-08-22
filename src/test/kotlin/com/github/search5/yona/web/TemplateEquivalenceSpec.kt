@@ -495,6 +495,20 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     html.contains("google-analytics.com/analytics.js") shouldBe false
                 }
             }
+
+            describe("[Test-19-7] 사이트 관리자 레이아웃(siteLayout.scala.html 대응) 동치성 검증") {
+                it("사이트 관리자 화면은 legacy siteLayout처럼 공통 footer를 포함해야 한다") {
+                    val result = mockMvc.perform(
+                        get("/sites/userList")
+                            .with(SecurityMockMvcRequestPostProcessors.user(siteAdminDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("footer.page-footer-outer").size shouldBe 1
+                }
+            }
         }
     }
 }

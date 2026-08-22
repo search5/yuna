@@ -65,7 +65,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 |---|---|---|---|---|
 | 1 | [x] | `layout.scala.html` | `site/layout.html` | 완료(TASK-0220, TDD). og/twitter 메타태그·업데이트알림배너·NProgress/ViewerJS 자산 이식. `\|:\|` 제목 분리 컨벤션은 미이식(비고 참고) |
 | 2 | [x] | `layout_framed.scala.html` | `site/layout_framed.html` | 완료(TASK-0221, TDD). og/twitter 메타태그·nprogress/magnific-popup 자산·popover 초기화·GA 스크립트 이식. sidebar()는 이미 이 파일에 인라인되어 있었음(→ #7과 동일 파일로 처리) |
-| 3 | [ ] | `siteLayout.scala.html` | (없음, 신규) | **사이트 관리자(admin)** 전용 레이아웃 — `site/*` 관리자 화면들이 extends. `layout.scala.html`과 다른 파일임에 주의 |
+| 3 | [x] | `siteLayout.scala.html` | `site/{data,diagnostic,issueList,mail,massMail,postList,projectList,update,userList}.html` (각 파일에 인라인 조합) | 완료(TASK-0222, TDD). 신규 데코레이터 파일 대신, 관리자 화면 9개가 이미 `head`/`gnb`/`breadcrumb`/`sidebar`/`scripts` 조각을 조합하고 있었음 — 빠져있던 `footer` 조각만 9개 파일에 공통 추가(legacy `siteLayout`이 `@content` 뒤에 `@common.footer()`를 감싸는 것과 동일 동작) |
 | 4 | [ ] | `siteLayout_framed.scala.html` | (없음, 신규) | 상동 framed 버전 |
 | 5 | [ ] | `projectLayout.scala.html` | (없음, 신규) | 프로젝트 컨텍스트 공통 뼈대(project/header 포함해 project/* 전체가 extends) |
 | 6 | [ ] | `organizationLayout.scala.html` | (없음, 신규) | 조직 컨텍스트 공통 뼈대 |
@@ -480,5 +480,29 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   `[Test-19-5]`에 GA 기본 비활성 케이스 1종 추가. GA가 `sendYonaUsage=true`일 때 실제로 렌더링되는지는 Spring
   컨텍스트 속성을 테스트에서 안전하게 토글하는 장치가 없어 별도로 검증하지 않았고, 기본값(off) 경로만 검증했다
   (프로덕션 코드는 legacy와 동일한 조건부 렌더링 구조를 그대로 사용하므로 로직 자체의 리스크는 낮다고 판단).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN),
+  전체 회귀 `./gradlew test` 통과.
+
+### #3 `siteLayout.scala.html` → 사이트 관리자 화면 9개 (TASK-0222)
+
+- **원인**: legacy `siteLayout.scala.html`은 `layout()`을 `@common.navbar(menuType, null, null)` + `@content` +
+  `@common.footer()`로 감싸는 얇은 데코레이터다. yuna 쪽을 확인해보니 `site/{data,diagnostic,issueList,mail,
+  massMail,postList,projectList,update,userList}.html` 9개 관리자 화면이 이미 각자 `site/layout.html`의
+  `head`/`gnb`/`breadcrumb`/`sidebar`/`scripts` 조각을 개별적으로 조합해 사실상 `siteLayout`과 동등한 뼈대를
+  구성하고 있었다(선행 세션 작업) — 즉 legacy처럼 파일 하나를 extends하는 대신, Thymeleaf의 표준 관용구인
+  "조각 여러 개를 각 페이지가 직접 조합"하는 방식으로 이미 아키텍처 치환이 이뤄져 있었다. 다만 9개 파일 모두
+  `footer` 조각만 빠져 있었고(`data.html`은 `scripts` 조각조차 빠져 있었음), legacy는 `@content` 바로 뒤에
+  `@common.footer()`를 렌더링하므로 명백한 누락이었다.
+- **구현 내용**: 9개 파일 전부에 `<footer th:replace="~{site/layout :: footer}"></footer>`를 본문 콘텐츠와
+  `scripts` 조각 사이에 추가(`data.html`은 `scripts` 조각도 함께 추가 — 다른 8개 파일과의 일관성 확보, 나머지
+  8개는 이미 있었음).
+- **legacy와 다르게 처리한 지점**: "레이아웃 파일 하나가 여러 화면을 extends"하는 구조를, "여러 화면이 각자
+  조각을 조합"하는 구조로 치환 — 이는 Thymeleaf에 Play의 curried 데코레이터 템플릿과 동일한 문법이 없어
+  아키텍처적으로 불가피한 치환이며(선행 세션에서 이미 이렇게 확립된 컨벤션), 신규 `siteLayout.html` 데코레이터
+  파일을 새로 만들지 않고 기존 컨벤션을 따라 누락분만 채웠다.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-7] 사이트 관리자 레이아웃(siteLayout.scala.html 대응)
+  동치성 검증` — `/sites/userList`를 사이트 관리자 권한으로 조회해 `footer.page-footer-outer` 렌더링 확인.
+  나머지 8개 파일은 동일한 패턴의 기계적 반복 수정이라 별도 테스트를 추가하지 않고 회귀 스위트로 컴파일/렌더링
+  깨짐 여부만 확인했다.
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN),
   전체 회귀 `./gradlew test` 통과.
