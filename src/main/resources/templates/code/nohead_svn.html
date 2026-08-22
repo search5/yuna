@@ -1,45 +1,26 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head(${project.name} + ' - 코드')}">
-<style>
-  .code-browse-wrap {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 25px;
-  }
-</style>
+<head th:replace="~{site/layout :: head(#{title.commitHistory} + ' - ' + ${project.name})}">
 </head>
 <body class="theme-default">
 <div id="main" class="main">
   <div th:replace="~{site/layout :: gnb}"></div>
+  <div th:replace="~{project/header :: header(${project})}"></div>
+  <div th:replace="~{project/menu :: menu(${project}, 'code')}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header" style="background-color: #f8f9fa; padding: 20px; border-bottom: 1px solid #e9ecef; margin-bottom: 20px;">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+  <div class="page-wrap-outer">
+    <div class="project-page-wrap">
+      <div class="row-fluid">
+        <div class="span12">
+          <div th:utext="#{code.nohead}">저장소가 비어 있습니다.</div>
 
-  <div class="container">
-    <div class="code-browse-wrap">
-        <div class="row-fluid">
-            <div class="span12">
-                <div class="alert alert-info">
-                    <strong>안내:</strong> 이 SVN 리포지토리는 아직 비어 있습니다. 아래의 가이드를 따라 체크아웃 후 커밋을 수행해 주십시오.
-                </div>
-                
-                <h5>SVN 체크아웃 및 최초 커밋</h5>
-                <pre><code id="svn-guide">svn co [URL] --username [username]
-cd [name]/
-echo "# [name]" > README.md
-svn add README.md
-svn commit -m "first commit"</code></pre>
-            </div>
+          <!-- yona code/nohead_svn.scala.html:33 isAllowed(currentUser, project.asResource, UPDATE) 대응 -->
+          <th:block th:if="${canManage}">
+            <h5 th:text="#{code.nohead.svn.clone(${siteName})}">SVN 체크아웃 가이드</h5>
+            <pre><code id="svn-guide"></code></pre>
+          </th:block>
         </div>
+      </div>
     </div>
   </div>
 
@@ -49,22 +30,28 @@ svn commit -m "first commit"</code></pre>
 <div th:replace="~{site/layout :: scripts}"></div>
 <script th:inline="javascript">
     $(document).ready(function(){
-        var currentUser = /*[[${#authentication != null ? #authentication.name : null}]]*/ null;
+        var currentUser = /*[[${currentUser != null ? currentUser.loginId : null}]]*/ null;
         var owner = /*[[${project.owner}]]*/ '';
         var name = /*[[${project.name}]]*/ '';
-        
+
         var protocol = window.location.protocol;
         var host = window.location.host;
-        
+
         var svnUrl = protocol + "//" + host + "/svn/" + owner + "/" + name;
-        
+
         var svnGuide = "svn co " + svnUrl + " --username " + (currentUser ? currentUser : "아이디") + "\n" +
                        "cd " + name + "/\n" +
                        "echo \"# " + name + "\" > README.md\n" +
                        "svn add README.md\n" +
                        "svn commit -m \"first commit\"";
-                          
+
         $("#svn-guide").text(svnGuide);
+
+        if (window.$yobi && $yobi.loadModule) {
+            $yobi.loadModule("code.Nohead", {
+                "sProjectName": name
+            });
+        }
     });
 </script>
 </body>

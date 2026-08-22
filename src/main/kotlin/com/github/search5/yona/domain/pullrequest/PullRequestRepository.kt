@@ -74,5 +74,14 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long> {
         @Param("project") project: Project,
         @Param("branch") branch: String
     ): List<PullRequest>
+
+    // yona GitRepository.setTheLatestPullRequest()가 위임하는 PullRequest.findTheLatestOneFrom(project, branch)
+    // 대응 (그룹10 #157, code/branches.html "보낸 코드" 컬럼) — 이 브랜치에서 이 프로젝트로 보낸(포크 없는
+    // 일반적인 경우) 가장 최근 PR 1건(상태 무관, open/closed/merged 다 포함).
+    fun findFirstByFromProjectAndFromBranchAndToProjectOrderByNumberDesc(
+        fromProject: Project,
+        fromBranch: String,
+        toProject: Project
+    ): PullRequest?
 }
 
