@@ -69,7 +69,8 @@
                         </a>
                         <div class="title-wrap">
                             <span class="label label-notice" th:text="#{post.notice}">공지</span>&nbsp;
-                            <a th:href="@{/{owner}/{projectName}/post/{number}(owner=${project.owner}, projectName=${project.name}, number=${notice.number})}" class="title" th:text="${notice.title}">
+                            <span class="bracket-word" th:text="${@templateHelper.showHeaderWordsInBracketsIfExist(notice.title)}"></span>
+                            <a th:href="@{/{owner}/{projectName}/post/{number}(owner=${project.owner}, projectName=${project.name}, number=${notice.number})}" class="title" th:text="${@templateHelper.removeHeaderWords(notice.title)}">
                                 공지 제목
                             </a>
                             <span th:each="label : ${notice.labels}" class="label issue-label list-label active" th:style="'background: ' + ${label.color} + '; color: #fff; padding: 1px 4px; border-radius: 2px; font-size: 11px; margin-left: 4px; display: inline-block;'" th:text="${label.name}">라벨</span>
@@ -98,9 +99,11 @@
                             <img src="/images/default-avatar-128.png" width="32" height="32"/>
                         </a>
                         <div class="title-wrap">
+                            <span th:if="${post.notice}" class="label label-notice" th:text="#{post.notice}">공지</span>&nbsp;
                             <span th:if="${post.readme}" class="label label-important">README</span>&nbsp;
                             <span th:if="${!post.readme}" class="post-id" th:text="${post.number}">1</span>
-                            <a th:href="@{/{owner}/{projectName}/post/{number}(owner=${project.owner}, projectName=${project.name}, number=${post.number})}" class="title" th:text="${post.title}">
+                            <span class="bracket-word" th:text="${@templateHelper.showHeaderWordsInBracketsIfExist(post.title)}"></span>
+                            <a th:href="@{/{owner}/{projectName}/post/{number}(owner=${project.owner}, projectName=${project.name}, number=${post.number})}" class="title" th:text="${@templateHelper.removeHeaderWords(post.title)}">
                                 게시글 제목
                             </a>
                             <span th:each="label : ${post.labels}" class="label issue-label list-label active" th:style="'background: ' + ${label.color} + '; color: #fff; padding: 1px 4px; border-radius: 2px; font-size: 11px; margin-left: 4px; display: inline-block;'" th:text="${label.name}">라벨</span>

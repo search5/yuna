@@ -96,7 +96,7 @@ class BoardViewController(
         } else if (!filter.isNullOrBlank()) {
             postingRepository.searchPostingsInProject(project, "%$filter%", pageable)
         } else {
-            postingRepository.findByProject(project, pageable)
+            postingRepository.findByProjectAndNotice(project, false, pageable)
         }
         val notices = postingService.getNotices(project.id!!)
 

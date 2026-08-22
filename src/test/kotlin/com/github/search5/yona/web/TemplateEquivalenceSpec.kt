@@ -1166,7 +1166,7 @@ class TemplateEquivalenceSpec @Autowired constructor(
                 }
             }
 
-            describe("[Test-19-25] 게시판 목록 화면(board/list.scala.html) 동치성 검증") {
+            describe("[Test-19-27] 게시판 목록 화면(board/list.scala.html) 동치성 검증") {
                 val noticePost = postingRepository.findAll().find { it.project.id == publicProj.id && it.number == 20L }
                     ?: postingRepository.save(
                         Posting(
@@ -1217,7 +1217,7 @@ class TemplateEquivalenceSpec @Autowired constructor(
                 }
             }
 
-            describe("[Test-19-26] 게시판 상세 화면(board/view.scala.html) 삭제 확인 모달 i18n 검증") {
+            describe("[Test-19-28] 게시판 상세 화면(board/view.scala.html) 삭제 확인 모달 i18n 검증") {
                 it("삭제 확인 모달의 예/아니오 버튼은 하드코딩 텍스트가 아니라 메시지 키를 사용해야 한다") {
                     val post = postingRepository.findAll().find { it.project.id == publicProj.id }!!
                     val doc = Jsoup.parse(
