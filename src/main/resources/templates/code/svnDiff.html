@@ -5,10 +5,25 @@
 <body class="theme-default">
 <div id="main" class="main">
   <div th:replace="~{site/layout :: gnb}"></div>
+  <div th:replace="~{project/header :: header(${project})}"></div>
+  <div th:replace="~{project/menu :: menu(${project}, 'code')}"></div>
 
-  <div class="site-breadcrumb-outer">
-    <div class="site-breadcrumb-inner">
-      <div class="title_area">
+  <div class="page-wrap-outer">
+    <div class="project-page-wrap">
+      <div id="code-browse-wrap" class="code-browse-wrap">
+        <!-- 브랜치 선택 드롭다운 (yona code/svnDiff.scala.html:37-50, common/branchItem.scala.html 대응 — 그룹2 #39) -->
+        <div id="branches" class="btn-group branches pull-right" data-name="branch" data-activate="manual">
+          <button class="btn dropdown-toggle large" type="button" data-toggle="dropdown">
+            <span class="d-label" th:text="${#strings.isEmpty(selectedBranch)} ? 'HEAD' : ${selectedBranch}">HEAD</span>
+            <span class="d-caret"><span class="caret"></span></span>
+          </button>
+          <ul class="dropdown-menu">
+            <th:block th:each="branchName : ${branches}">
+              <div th:replace="~{common/branchItem :: branchItem(${project}, ${branchName}, ${branchName == selectedBranch})}"></div>
+            </th:block>
+          </ul>
+        </div>
+
         <ul class="nav nav-tabs" style="margin-bottom:20px;">
           <li>
             <a th:href="@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}" th:text="#{code.files}">Files</a>
@@ -17,19 +32,14 @@
             <a th:href="@{/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}" th:text="#{code.commits}">Commits</a>
           </li>
         </ul>
-      </div>
-    </div>
-  </div>
 
-  <div class="page-wrap-outer">
-    <div class="project-page-wrap">
-      <div id="code-browse-wrap" class="code-browse-wrap">
         <p class="commitInfo" style="background-color: #fafbfc; border: 1px solid #d1d5da; padding: 15px; border-radius: 3px;">
           <span class="avatar-wrap smaller">
             <img src="/images/default-avatar-128.png" width="32" height="32">
           </span>
           <strong th:text="${commit.authorName}">Author Name</strong>
-          <span class="ago" th:text="${commit.authorDate != null ? #dates.format(commit.authorDate, 'yyyy-MM-dd HH:mm') : ''}">Date</span>
+          <span class="ago" th:title="${commit.authorDate != null ? templateHelper.getDateString(commit.authorDate.toInstant()) : ''}"
+                th:text="${commit.authorDate != null ? templateHelper.agoOrDateString(commit.authorDate.toInstant()) : ''}">Date</span>
           <strong class="commitId pull-right" th:text="'@' + ${commit.id}">Commit ID</strong>
         </p>
 
@@ -49,7 +59,7 @@
               <div class="media-body" style="flex: 1;">
                 <div class="meta-info" style="font-size: 12px; color: #586069; margin-bottom: 4px;">
                   <strong style="color: #24292e;" th:text="${comment.author?.loginId}">작성자</strong>
-                  <span th:text="${#temporals.format(comment.createdDate, 'yyyy-MM-dd HH:mm')}">작성일</span>
+                  <span th:text="${templateHelper.getDateString(comment.createdDate)}">작성일</span>
                   <span class="edit pull-right" th:if="${currentUser != null && comment.author?.id == currentUser.id}">
                     <button type="button" class="btn-transparent btn-comment-delete" th:data-comment-id="${comment.id}" style="background: none; border: none; font-size: 13px; cursor: pointer; color: #cb2431;">
                       <i class="yobicon-trash"></i>
@@ -81,6 +91,7 @@
   <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
+<div th:replace="~{site/layout :: scripts}"></div>
 <script type="text/javascript" src="/javascripts/lib/diff.js"></script>
 <script type="text/javascript" th:inline="javascript">
     $(document).ready(function(){

@@ -107,8 +107,8 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 35 | [x] | `common/tasklistBar.scala.html` | `issue/view.html`, `board/view.html`(인라인, 신규 추가) | 완료(TASK-0229, TDD). **발견**: `yona.Tasklist.js`/`gfm-task-list.js` 정적 자산은 이미 존재했지만 `.tasklist` 셸 마크업과 스크립트 로드가 두 페이지 모두에 전혀 없어 죽어있던 기능이었음. legacy와 동일 위치(본문 markdown-wrap 바로 앞)에 셸 추가 + `yona.Tasklist.js` 로드 추가 |
 | 36 | [i] | `common/twoColumnModeCheckboxArea.scala.html` | `issue/list.html` 등(인라인) | 확인 완료 — `#two-column-mode-checkbox`/`#two-column-mode` 구조 일치(코드 변경 없음) |
 | 37 | [x] | `common/issueLabelColor.scala.html` | `web/LabelStyleController.kt`(`GET /{owner}/{project}/issue/labels.css`) | 완료(TASK-0229, TDD). **발견**: 이 legacy 파일은 뷰가 아니라 `IssueLabelApp.labelStyles()` 컨트롤러가 `text/css`로 직접 렌더링하는 동적 스타일시트였고, yuna의 `LabelStyleController`가 이미 완전히 동일한 로직(RGB/hex 파싱+휘도 계산 포함)으로 이식돼 있었음(선행 세션) — 단 legacy가 이 스타일시트를 링크하는 10개 화면 중 `issue/view`/`issue/create`/`issue/edit`/`board/view`/`board/list` 5곳에 `<link>` 태그 자체가 빠져 있어 추가. `project/partial_dashboard_issuesbylabel`/`project/partial_issuelabels_list`(프로젝트 대시보드·라벨 설정 화면)는 대응 파일 존재 여부 확인 필요 — 미착수로 남김 |
-| 38 | [~] | `common/commitMsg.scala.html` | `code/{view,diff,svnDiff}.html`(부분 인라인) | 조사: `.commitMsg` 클래스는 이미 3개 code/* 파일에 존재하나 legacy의 short/desc/moreBtn 펼침 구조까지 일치하는지 미확인 — `code/*` 그룹(그룹10, #154~166) 착수 시 함께 정밀 대조 예정 |
-| 39 | [ ] | `common/branchItem.scala.html` | (미확인) | `code/*` 그룹(그룹10, #154~166) 착수 시 함께 처리 예정 — 브랜치 선택 드롭다운 관련이라 코드 브라우징 화면과 강하게 결합 |
+| 38 | [x] | `common/commitMsg.scala.html` | `common/commitMsg.html`(신규 fragment) | 완료(TASK-0243). `common/commitMsg.html` fragment 신규 작성(short span/a + 멀티라인일 때 moreBtn + hidden pre.desc). legacy 실사용처는 `code/diff.scala.html`(forceExpand=true)와 `code/history.scala.html`(short+moreBtn) 2곳뿐임을 확인(view/svnDiff는 이 fragment를 쓰지 않고 별도 인라인 span) — 두 곳 모두 fragment 재사용으로 교체 |
+| 39 | [x] | `common/branchItem.scala.html` | `common/branchItem.html`(신규 fragment) | 완료(TASK-0243). legacy 실사용처는 `code/svnDiff.scala.html`의 브랜치 드롭다운(btn-group+dropdown-menu) 한 곳뿐 — 해당 드롭다운 자체가 yuna svnDiff.html에 통째로 빠져 있던 것도 함께 복구. `TemplateHelper.branchItemName`/`branchItemType`/`branchInHtml` 신규 추가(legacy `Branches.itemName/itemType/branchInHTML` 대응) |
 | 40 | [ ] | `common/reviewForm.scala.html` | (미확인) | 코드리뷰 댓글 폼 — PR/리뷰 도메인(그룹11, #167~192) 착수 시 함께 처리 예정. `common.editor`+`common.uploadForm` 재사용 구조라 #20/#22 완료로 재료는 준비됨 |
 | 41 | [ ] | `common/partial_history.scala.html` | (없음, 백엔드 기능 자체 부재) | **조사 완료, 미착수**. "변경 이력"(edit history) 기능 자체가 yuna `Issue`/`Posting` 엔티티에 없음(`history` 필드 자체가 없음) — 순수 템플릿 이식이 아니라 `docs/PARITY_BACKLOG.md`에 백엔드 항목으로 먼저 등록해야 하는 규모. 이번 배치에서는 조사 결과만 기록 |
 | 42 | [i] | `common/notificationMail.scala.html` | `domain/notification/NotificationMailRenderer.kt`(인라인) | 확인 완료 — Thymeleaf 템플릿이 아니라 Kotlin 코드로 HTML 문자열을 직접 생성하는 방식으로 이미 완전히 동일하게 이식돼 있음(폰트 스택, `hr` 구분선, unwatch/설정변경 푸터 링크, 메시지 키까지 일치). 코드 변경 없음 |
@@ -273,19 +273,19 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 154 | [~] | `code/view.scala.html` | `code/view.html` | |
-| 155 | [i] | `code/partial_view_file.scala.html` | (view.html에 인라인 추정) | |
-| 156 | [i] | `code/partial_view_folder.scala.html` | (view.html에 인라인 추정) | |
-| 157 | [~] | `code/branches.scala.html` | `code/branches.html` | |
-| 158 | [i] | `code/partial_branchrow.scala.html` | (branches.html에 인라인 추정) | |
-| 159 | [~] | `code/history.scala.html` | `code/history.html` | |
-| 160 | [~] | `code/diff.scala.html` | `code/diff.html` | |
-| 161 | [~] | `code/svnDiff.scala.html` | `code/svnDiff.html` | |
-| 162 | [~] | `code/compare.scala.html` | `code/compare.html` | |
-| 163 | [~] | `code/compare_svn.scala.html` | `code/compare_svn.html` | |
-| 164 | [~] | `code/nohead.scala.html` | `code/nohead.html` | |
-| 165 | [~] | `code/nohead_svn.scala.html` | `code/nohead_svn.html` | |
-| 166 | [ ] | `code/partial_nonrange_codecomment_thread.scala.html` | `code/partial_nonrange_codecomment_thread.html` | 코드리뷰 스레드(범위 없는 커밋 댓글) |
+| 154 | [x] | `code/view.scala.html` | `code/view.html` | 완료(TASK-0243). 대규모 재작성 — 상세는 하단 진행 로그 참고 |
+| 155 | [x] | `code/partial_view_file.scala.html` | `code/view.html`(인라인) | 완료 — view.html에 인라인, 필드 전부 채움(작성자/아바타/댓글수/Raw/Edit/열기/이력 링크, 바이너리/이미지/과대용량/마크다운/일반코드 분기) |
+| 156 | [x] | `code/partial_view_folder.scala.html` | `code/view.html`(인라인) | 완료 — view.html에 인라인, 폴더 우선순 정렬, 빈 폴더 안내, 커밋 아바타/메시지/날짜 채움 |
+| 157 | [x] | `code/branches.scala.html` | `code/branches.html` | 완료(TASK-0243). "보낸 코드" 컬럼 PR 링크, 액션 컬럼 조건부 렌더링 복구 — 상세는 하단 진행 로그 |
+| 158 | [x] | `code/partial_branchrow.scala.html` | `code/branches.html`(인라인) | 완료 — branches.html에 인라인, PR 링크/상태뱃지 포함 |
+| 159 | [x] | `code/history.scala.html` | `code/history.html` | 완료(TASK-0243). 전면 재작성 — 상세는 하단 진행 로그 |
+| 160 | [x] | `code/diff.scala.html` | `code/diff.html` | 완료(TASK-0243). GNB/프로젝트헤더/메뉴 프래그먼트 복구, commitMsg fragment 적용, #166 스레드 fragment 연결, 리뷰 사이드바(open/closed 탭) 추가 — 상세는 하단 진행 로그 |
+| 161 | [x] | `code/svnDiff.scala.html` | `code/svnDiff.html` | 완료(TASK-0243). GNB/프로젝트헤더/메뉴, site/layout::scripts 누락 복구, 브랜치 드롭다운(#39) 추가 |
+| 162 | [x] | `code/compare.scala.html` | `code/compare.html` | 완료(TASK-0243). **가짜 GNB(하드코딩 로그인/로그아웃 마크업) 발견·제거** — 알려진 버그 패턴(e) 실사례. 실제 site/layout::gnb/project/header/menu/scripts로 교체, `th:with` 내 중첩 따옴표 구문 오류 수정 |
+| 163 | [x] | `code/compare_svn.scala.html` | `code/compare_svn.html` | 완료(TASK-0243). 위와 동일한 가짜 GNB 버그, 동일하게 수정 |
+| 164 | [x] | `code/nohead.scala.html` | `code/nohead.html` | 완료(TASK-0243). project/header·menu 프래그먼트 누락 복구, UPDATE 권한 게이트 복구, 메시지 키 적용 |
+| 165 | [x] | `code/nohead_svn.scala.html` | `code/nohead_svn.html` | 완료(TASK-0243). nohead.html과 동일 |
+| 166 | [x] | `code/partial_nonrange_codecomment_thread.scala.html` | `code/partial_nonrange_codecomment_thread.html` | 완료(TASK-0243) — 신규 작성. `common/commentFormOnThread.html`(legacy `views/partial_comment_form_on_thread.scala.html` 대응)도 함께 신규 작성해 답글 폼 + 스레드 상태 토글 재사용 가능하게 구성 |
 
 ## 그룹 11 — Pull Request(legacy `git/*`) + 코드리뷰 diff 파샬 + `reviewthread/*` (26개, #167~192)
 
@@ -1213,3 +1213,100 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **전체 242개 배치 완료**: 그룹1~17 전 항목 처리 완료(병렬 워크트리 에이전트 병합 진행 중). 남은
   미완료(`[ ]`/`[~]`/`[i]`) 마커는 각 진행 로그에 사유가 문서화된 상태 — 상세는 이 문서를 전체 검색해
   확인.
+### 그룹10 `code/*` 코드브라우저 (#154~166) + #38/#39 (TASK-0243)
+
+- **범위**: 그룹10 13개 항목(#154~166) 전부 + 이전 그룹2에서 그룹10 착수 시 처리하기로 미뤄둔 #38
+  (`common/commitMsg`), #39(`common/branchItem`) 2건.
+- **핵심 발견(알려진 버그 패턴 (e) 실사례)**: `code/compare.html`/`code/compare_svn.html`이 `site/layout::gnb`를
+  쓰지 않고 로그인/회원가입/로그아웃 링크를 **하드코딩한 가짜 GNB**를 통째로 갖고 있었고, `<head>`도
+  `site/layout::head`를 쓰지 않는 독자 `<meta>`/`<link>` 나열이었으며, `project/header`/`project/menu`
+  프래그먼트도 아예 없었음(project-menu 탭 자체가 없어 프로젝트 내 다른 화면으로 이동 불가) — 실제
+  서비스에 붙었다면 사이트 전역 CSRF 메타태그/알림/검색 등이 전부 빠진 상태로 렌더링됐을 것.
+  `code/history.html`/`code/diff.html`/`code/svnDiff.html`/`code/nohead.html`/`code/nohead_svn.html`도
+  정도는 약하지만 같은 패턴 — project/header를 손으로 흉내낸 `<div class="project-header">...`만 있고
+  `project/menu`(탭 네비게이션)가 전부 빠져 있었음. **13개 파일 전부에 site/layout::gnb + project/header
+  + project/menu(+scripts/footer) 표준 프래그먼트 조합을 복구.**
+- **`code/diff.html`/`code/svnDiff.html`**: `site/layout::scripts`(전역 jQuery/CSRF/알림 JS 번들) 자체가
+  누락되어 있어서, 두 파일의 `$(document).ready(...)` 스크립트가 jQuery 없이 실행되며 전부 죽어있던 상태
+  (알려진 버그 패턴 (a)/(e)의 변형) — 복구.
+- **`code/view.html`(#154/155/156)**: 브랜치 선택 `<option>`이 `RepositoryService.getRefNames()`가 돌려주는
+  `refs/heads/xxx` 전체 ref 이름을 그대로 URL 세그먼트로 써서 브랜치 전환 시 깨진 URL로 이동하던 버그 →
+  `TemplateHelper.branchItemName()`(legacy `Branches.itemName()` 대응, 신규) 적용. 파일뷰에서
+  아바타/작성자링크/커밋 revision 링크(+댓글수 배지)/Raw 다운로드/Edit/브라우저로 열기/변경이력 버튼이
+  전부 빠져 있던 것 복구(legacy `partial_view_file.scala.html` 그대로). 폴더뷰는 legacy가 폴더 우선
+  정렬 후 파일을 나중에 순회하는데 yuna는 파일명 알파벳순으로 폴더/파일을 뒤섞어 정렬하던 버그 →
+  두 단계 순회로 수정. "새 파일"/"Edit" 링크가 실제로는 어디에도 연결되지 않은 채였는데
+  `BoardViewController.createPostForm`(`/post/new?path=&branch=&edit=`)이 이미 해당 파라미터를 전부
+  지원하고 있어 연결. **"ZIP 다운로드" 버튼이 가리키는 컨트롤러 엔드포인트 자체가 없어 죽은 링크였음** —
+  `GitRepository.getArchive()`(zip 스트리밍 로직)는 이미 구현돼 있었는데 이를 호출하는 컨트롤러가 없던
+  전형적인 "백엔드 일부만 있고 배선 안 됨" 케이스 → `CodeViewController.download()` 신규 추가로 연결.
+  파일 리비전 링크 옆 댓글 수 배지(legacy `CommentThread.countOnCommit`/`CommitComment.count`)를 위해
+  `CommentThreadRepository.countByProjectAndCommitIdAndCodeRangePath`(TREAT를 쓴 명시적 JPQL —
+  `codeRange`는 `CodeCommentThread` 서브클래스 전용 필드라 파생 쿼리로는 베이스 타입에서 참조 불가),
+  `CommitCommentRepository.countByProjectAndCommitIdAndPath` 신규 추가.
+- **`code/branches.html`(#157/158)**: "보낸 코드" 컬럼이 항상 "보낸 코드 없음"만 표시하도록 하드코딩돼
+  있었음(PR 조회 자체가 없었음) → legacy `GitRepository.setTheLatestPullRequest()`/
+  `PullRequest.findTheLatestOneFrom()` 대응으로 `PullRequestRepository.
+  findFirstByFromProjectAndFromBranchAndToProjectOrderByNumberDesc` 신규 추가(포크 프로젝트 체인 케이스는
+  단순화해 미지원 — 별도 이슈로 남김). 액션(기본 브랜치 설정/삭제) 컬럼이 권한 무관하게 항상
+  `<th></th>`/`<td></td>`를 렌더링하던 것을 legacy처럼 DELETE/UPDATE 권한이 있을 때만 컬럼 자체를
+  렌더링하도록 수정. `templateHelper.agoOrDateString(...)`에 `java.util.Date`를 그대로 넘기고 있어
+  (헬퍼는 `Instant`만 받음) 타입 불일치로 렌더링 시 깨졌을 지점을 `.toInstant()` 추가로 수정.
+- **`code/history.html`(#159)**: 커밋별 댓글 수 배지, 커밋 작성자 아바타/익명 처리, "코드 보기" 브라우즈
+  버튼, `common/commitMsg` fragment(짧은 메시지+펼침 버튼) 전부 빠져 있던 것 복구. 파일 경로별 이력을 볼
+  때만 표시돼야 하는 브레드크럼을 문자열 `indexOf` 기반으로 재구성하려던(동일 세그먼트 반복 시 깨지는)
+  시도 대신 컨트롤러에서 누적 경로 리스트를 직접 계산하도록 변경(view.html과 동일한 방식).
+- **`code/diff.html`(#160)**: 커밋 메시지가 `common/commitMsg`(forceExpand=true) 대신 `<pre>` 그대로였던
+  것 교체. **`#166`(`partial_nonrange_codecomment_thread`) 신규 작성**해 범위 없는 코드리뷰 스레드 렌더링에
+  연결(기존엔 스레드 컴포넌트 구조 없이 손으로 흉내낸 마크업이었음) — 답글 폼/스레드 상태 토글을 위해
+  `common/commentFormOnThread.html`(legacy `views/partial_comment_form_on_thread.scala.html` 대응)도 신규
+  작성. 리뷰 스레드 사이드바(열림/닫힘 탭 + 카드 목록, legacy `review-wrap`)가 통째로 없던 것 복구.
+  댓글 삭제 버튼이 아예 존재하지 않는 하드코딩 fetch 핸들러를 쓰고 있었던 것을 실제 존재하는
+  `ReviewApiController`(`DELETE /comments/{type}/{id}`)와 이미 전역 로드되는 `data-request-method`
+  컨벤션(`yona-common.js`의 `jquery.requestAs.js`)으로 교체.
+- **`code/svnDiff.html`(#161, #39)**: **브랜치 선택 드롭다운(`common/branchItem` 대응)이 통째로 빠져
+  있던 것**을 `common/branchItem.html`(신규 fragment) + `TemplateHelper.branchItemName/branchItemType/
+  branchInHtml`(legacy `Branches.itemName/itemType/branchInHTML` 대응, 신규) 조합으로 복구. 이 드롭다운을
+  위해 `CodeViewController.showCommit()`에 `branches` 모델 속성 추가.
+- **`code/compare.html`/`code/compare_svn.html`(#162/163)**: 위 가짜 GNB 수정 외에, "변경된 내역이
+  없습니다" 안내가 `#{code.noChanges}` 메시지 키 대신 하드코딩 한글이었던 것 복구, `commitInfo` 표시가
+  legacy는 "비교 범위: " 같은 접두어 없이 `@commitA..commitB` 그대로인데 yuna는 "비교 범위: " 라벨을
+  붙이고 있던 차이 복구. `code/compare.html`의 라인댓글 렌더 fragment(`renderLineComments`) 안에서
+  `th:with="lineVal=..., pathVal="${diff.pathB}", sideVal='B'"`처럼 **따옴표가 중첩된 깨진 Thymeleaf
+  구문**(파싱 자체가 안 됐을 것) 2곳 발견·수정(쓰이지도 않는 미사용 변수였어서 제거).
+- **`code/nohead.html`/`code/nohead_svn.html`(#164/165)**: 클론/초기화 안내 가이드가 legacy는
+  `isAllowed(currentUser, project, UPDATE)`일 때만 보이는데 yuna는 로그인 여부와 무관하게 항상 노출하던
+  것을 권한 게이트 복구(`CodeViewController.addNoHeadAttributes()` 헬퍼 신규, `canManage`/`siteName` 모델
+  속성 추가). 안내 문구를 하드코딩 한글 대신 `#{code.nohead}`/`#{code.nohead.clone(${siteName})}` 등
+  메시지 키로 교체(`{0}` 자리에 legacy `utils.Config.getSiteName()` 대응 `yuna.site-name` 프로퍼티 값을
+  채움).
+- **Jackson 3.x(`tools.jackson`) API 차이로 인한 수정**: `code/view.html` 작성 중 `ObjectNode.fieldNames()`가
+  legacy(Jackson 2.x)에는 있지만 이 프로젝트가 쓰는 Jackson 3.x(`tools.jackson.databind`)에는 **존재하지
+  않고** `propertyNames(): Collection<String>`으로 이름이 바뀌었음을 실제 jar 바이트코드(`javap`)로 확인,
+  전부 교체(`#lists.sort(#lists.toList(...propertyNames()))`). 같은 이유로 `#temporals`(java8time 확장
+  객체)가 이 프로젝트의 `build.gradle.kts`에 `thymeleaf-extras-java8time` 의존성이 없어 등록되지 않는데도
+  `code/svnDiff.html`/`code/compare.html`에 `#temporals.format(...)`가 쓰이고 있던 것을 발견 —
+  `templateHelper.getDateString(...)`으로 교체.
+- **legacy와 다르게 처리한 지점**:
+  1. `code/branches.html`의 "보낸 코드" PR 조회는 포크 프로젝트 체인(`fromProject.isForkedFromOrigin()`)
+     케이스를 지원하지 않음(단순화) — 포크 아닌 일반적인 프로젝트만 정확.
+  2. `code/view.html`의 파일 크기 초과("too big") 케이스: legacy는 바이너리와 별개로 "파일이 너무 커서
+     표시할 수 없음" 안내를 보여주지만, yuna 백엔드(`GitRepository.fileAsJson`)는 이미 크기 초과 파일을
+     `isBinary=true`로 뭉뚱그려 판정하고 있어(다른 기존 테스트들이 이 표현에 의존) 별도 3번째 분기를 새로
+     만들지 않고 기존 binary-비-이미지 케이스(파일명+크기+다운로드 링크)로 렌더링되도록 둠 — 시각적으로는
+     legacy와 다른 안내 문구지만 "파일을 볼 수 없다"는 결과는 동일.
+  3. "감시(watch)" 버튼(`code/diff.html`/`code/svnDiff.html`): `WatchController`의 범용 `/watch` 엔드포인트가
+     `ResourceType.COMMIT`을 지원하지 않고(커밋은 숫자 PK가 아니라 SHA 문자열이라 기존 `resourceId.
+     toLongOrNull()` 파싱 자체가 안 맞음) 이를 지원하려면 Watch 리소스 추상화 자체를 확장해야 하는 별도
+     범위의 작업이라 판단, 이번 배치에서는 보류 — `docs/PARITY_BACKLOG.md`에 등록 필요(다음 세션 확인).
+  4. select2 방식 브랜치 드롭다운(`data-toggle="select2"`)은 `code/view.html`/`code/history.html`에서
+     기존에 이미 일반 `<select>`+`onchange` 방식으로 단순화돼 있던 것을 그대로 유지(이번 배치 범위 아님,
+     구조는 legacy와 동일하고 위젯 라이브러리만 다름).
+- **주의 — 이번 배치는 테스트를 작성/실행하지 못함.** 8개 워크트리 동시 실행으로 Gradle 데몬 자원 경합이
+  심해 코디네이터 지시에 따라 `./gradlew` 실행을 전면 중단하고 읽기/추론만으로 구현을 마무리, 커밋만
+  먼저 했다(코디네이터가 병합 후 중앙에서 순차적으로 테스트 실행 예정). 구현 중 실제 jar 바이트코드
+  검사(Jackson `ObjectNode`, Thymeleaf `Lists`/`Strings` 유틸리티)로 API 존재 여부는 검증했지만, 전체
+  Spring 컨텍스트 기동/Thymeleaf 렌더링/신규 JPQL(`TREAT` 쿼리) 파싱은 **미검증** — 다음 세션에서
+  `./gradlew test --tests "com.github.search5.yona.web.*"` 실행 후 발견되는 문제를 우선 수정 필요.
+  `TemplateEquivalenceSpec.kt`(또는 신규 `CodeTemplateEquivalenceSpec.kt`)에 그룹10 검증 테스트를 추가하는
+  작업 자체도 이번 배치에서 못함 — 다음 세션 최우선 후속 작업.
