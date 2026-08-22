@@ -7,6 +7,8 @@
     <div th:replace="~{site/layout :: gnb}"></div>
     <div th:replace="~{project/header :: header(${project})}"></div>
     <div th:replace="~{project/menu :: menu(${project}, 'board')}"></div>
+    <link rel="stylesheet" th:href="@{/{owner}/{projectName}/issue/labels.css(owner=${project.owner}, projectName=${project.name})}" type="text/css" />
+
 
     <div class="page-wrap-outer">
         <div class="post-list project-page-wrap">

@@ -716,6 +716,73 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     tabs.select("li.active a[href='/user/files']").size shouldBe 1
                 }
             }
+
+            describe("[Test-19-12] 태스크리스트 진행률 바(common/tasklistBar.scala.html) 동치성 검증") {
+                it("이슈 상세 페이지의 본문 영역에 태스크리스트 진행률 바 셸과 yona.Tasklist.js 로드가 있어야 한다") {
+                    val issue = issueRepository.findAll().find { it.project.id == publicProj.id && it.title == "테스트이슈" }!!
+
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj/issue/${issue.number}")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val html = result.response.contentAsString
+                    val doc = Jsoup.parse(html)
+
+                    val bar = doc.select("#issue-body-${issue.number} > .tasklist")
+                    bar.size shouldBe 1
+                    bar.select(".task-title .done-counter").size shouldBe 1
+                    bar.select(".task-progress .bar.red").size shouldBe 1
+                    doc.select("script[src*='common/yona.Tasklist.js']").size shouldBe 1
+                }
+
+                it("게시판 상세 페이지의 본문 영역에도 태스크리스트 진행률 바 셸과 스크립트 로드가 있어야 한다") {
+                    val post = postingRepository.findAll().find { it.project.id == publicProj.id }!!
+
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj/post/${post.number}")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+
+                    val bar = doc.select("#post-body-${post.number} > .tasklist")
+                    bar.size shouldBe 1
+                    doc.select("script[src*='common/yona.Tasklist.js']").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-13] 이슈 라벨 동적 CSS(common/issueLabelColor.scala.html, LabelStyleController) 링크 이식 검증") {
+                it("이슈 상세/게시판 상세/게시판 목록 페이지가 프로젝트별 labels.css를 링크해야 한다") {
+                    val issue = issueRepository.findAll().find { it.project.id == publicProj.id && it.title == "테스트이슈" }!!
+                    val post = postingRepository.findAll().find { it.project.id == publicProj.id }!!
+
+                    val issueViewDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/public-proj/issue/${issue.number}").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    issueViewDoc.select("link[href*='/owner/public-proj/issue/labels.css']").size shouldBe 1
+
+                    val boardViewDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/public-proj/post/${post.number}").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    boardViewDoc.select("link[href*='/owner/public-proj/issue/labels.css']").size shouldBe 1
+
+                    val boardListDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/public-proj/posts").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    boardListDoc.select("link[href*='/owner/public-proj/issue/labels.css']").size shouldBe 1
+                }
+            }
         }
     }
 }

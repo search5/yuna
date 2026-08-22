@@ -98,15 +98,15 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 26 | [ ] | `common/commentDeleteModal.scala.html` | (없음, 신규 필요) | **조사 완료, 미착수**. 삭제 확인 모달(`#comment-delete-modal`)과 `yobi.Comment.js` 초기화 스크립트가 yuna에 전혀 없음. 삭제 백엔드(`DELETE /api/projects/{projectId}/issues|posts/{number}/comments/{commentId}`)는 존재. #25와 함께 처리하는 게 효율적(같은 JS 초기화 흐름) |
 | 27 | [i] | `common/commentCount.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.comments-count.comments-count-color` 구조 완전 일치(TASK-0227 후속 조사, 코드 변경 없음) |
 | 28 | [i] | `common/commentAndVoterPairDisplay.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.item-count-groups` 조합 표시 구조 완전 일치(코드 변경 없음) |
-| 29 | [ ] | `common/child_commentForm.scala.html` | `common/child_commentForm.html` | 대댓글 작성 폼 |
-| 30 | [ ] | `common/childComments.scala.html` | `common/childComments.html` | 대댓글 목록 |
-| 31 | [ ] | `common/childCommentsAnchorDiv.scala.html` | `common/childCommentsAnchorDiv.html` | |
-| 32 | [ ] | `common/voteCount.scala.html` | `common/voteCount.html` | 이슈 추천수 |
-| 33 | [ ] | `common/sharerCount.scala.html` | `common/sharerCount.html` | 이슈 공유대상 수 |
-| 34 | [ ] | `common/showSubtasksCheckbox.scala.html` | `common/showSubtasksCheckbox.html` | |
-| 35 | [ ] | `common/tasklistBar.scala.html` | `common/tasklistBar.html` | 마크다운 체크리스트 진행률 바 |
-| 36 | [ ] | `common/twoColumnModeCheckboxArea.scala.html` | `common/twoColumnModeCheckboxArea.html` | 에디터 2단 모드 토글 |
-| 37 | [ ] | `common/issueLabelColor.scala.html` | `common/issueLabelColor.html` | 라벨 색상 표시 |
+| 29 | [ ] | `common/child_commentForm.scala.html` | (없음, #25/#26과 함께 처리) | **조사 완료, 미착수**. 대댓글(child comment) 작성 원라인 폼. 백엔드는 `CommentController`가 `parentCommentId`를 이미 받아 처리(`IssueComment.parentComment` 필드 존재) — REST API는 준비됐으나 프론트 UI가 전혀 없음. #25/#26과 같은 "댓글 UI 전체 AJAX 재설계" 묶음으로 처리 권장 |
+| 30 | [ ] | `common/childComments.scala.html` | (없음, #25/#26과 함께 처리) | **조사 완료, 미착수**. 대댓글 목록+인라인 답글폼 조합. 마크업(`subcomment-media-body`/`one-line-comment`/`child-comment-input-form`) 자체가 yuna에 없음. #25/#26/#29와 같은 묶음 |
+| 31 | [ ] | `common/childCommentsAnchorDiv.scala.html` | (없음, #25/#26과 함께 처리) | **조사 완료, 미착수**. 대댓글 앵커(`#comment-N`) div — #29/#30 없이는 의미 없어 함께 처리 |
+| 32 | [i] | `common/voteCount.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.vote-count.vote-color` 구조 완전 일치(코드 변경 없음) |
+| 33 | [i] | `common/sharerCount.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.sharer-color` 구조 완전 일치(코드 변경 없음) |
+| 34 | [i] | `common/showSubtasksCheckbox.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `#two-column-mode-checkbox`/`#toggle-show-subtasks` 구조 완전 일치(코드 변경 없음) |
+| 35 | [x] | `common/tasklistBar.scala.html` | `issue/view.html`, `board/view.html`(인라인, 신규 추가) | 완료(TASK-0229, TDD). **발견**: `yona.Tasklist.js`/`gfm-task-list.js` 정적 자산은 이미 존재했지만 `.tasklist` 셸 마크업과 스크립트 로드가 두 페이지 모두에 전혀 없어 죽어있던 기능이었음. legacy와 동일 위치(본문 markdown-wrap 바로 앞)에 셸 추가 + `yona.Tasklist.js` 로드 추가 |
+| 36 | [i] | `common/twoColumnModeCheckboxArea.scala.html` | `issue/list.html` 등(인라인) | 확인 완료 — `#two-column-mode-checkbox`/`#two-column-mode` 구조 일치(코드 변경 없음) |
+| 37 | [x] | `common/issueLabelColor.scala.html` | `web/LabelStyleController.kt`(`GET /{owner}/{project}/issue/labels.css`) | 완료(TASK-0229, TDD). **발견**: 이 legacy 파일은 뷰가 아니라 `IssueLabelApp.labelStyles()` 컨트롤러가 `text/css`로 직접 렌더링하는 동적 스타일시트였고, yuna의 `LabelStyleController`가 이미 완전히 동일한 로직(RGB/hex 파싱+휘도 계산 포함)으로 이식돼 있었음(선행 세션) — 단 legacy가 이 스타일시트를 링크하는 10개 화면 중 `issue/view`/`issue/create`/`issue/edit`/`board/view`/`board/list` 5곳에 `<link>` 태그 자체가 빠져 있어 추가. `project/partial_dashboard_issuesbylabel`/`project/partial_issuelabels_list`(프로젝트 대시보드·라벨 설정 화면)는 대응 파일 존재 여부 확인 필요 — 미착수로 남김 |
 | 38 | [ ] | `common/commitMsg.scala.html` | `common/commitMsg.html` | 커밋 메시지 표시(이슈 참조 링크화 포함) |
 | 39 | [ ] | `common/branchItem.scala.html` | `common/branchItem.html` | 브랜치 1건 표시 |
 | 40 | [ ] | `common/reviewForm.scala.html` | `common/reviewForm.html` | 코드리뷰 댓글 폼 |
@@ -662,3 +662,29 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   훑은 뒤, 별도 세션에서 #25/#26을 한 묶음으로 집중 처리할 것을 권장(같은 JS 초기화 경로를 공유하므로 함께
   설계하는 게 효율적).
 - **검증**: 코드 변경 없음(조사만), 별도 테스트/빌드 불필요.
+
+### #29~#37 대댓글 조사, 카운트 조각 확인, 태스크리스트·라벨 CSS 이식 (TASK-0229)
+
+- **#29~#31(child_commentForm/childComments/childCommentsAnchorDiv)**: 조사 결과 대댓글(reply) 기능 자체가
+  yuna에 전혀 없음(백엔드는 `CommentController`가 `parentCommentId`를 이미 받아 처리하나 프론트 UI 없음).
+  #25/#26과 같은 "댓글 UI 전체 AJAX 재설계" 묶음으로 별도 세션 처리 권장, 백로그에 기록만 하고 미착수.
+- **#32~#34(voteCount/sharerCount/showSubtasksCheckbox)/#36(twoColumnModeCheckboxArea)**: `issue/list.html`에
+  이미 legacy와 완전히 동일한 구조로 인라인돼 있음을 확인, 코드 변경 없음.
+- **#35(tasklistBar)**: `issue/view.html`/`board/view.html` 어디에도 태스크리스트 진행률 바 셸이 없었음을 발견.
+  정적 자산(`yona.Tasklist.js`, `gfm-task-list.js`)은 이미 존재했으나 아무 페이지에서도 로드되지 않는 죽은
+  코드 상태였다. legacy와 동일하게 본문(`#issue-body-N`/`#post-body-N`) 안, markdown-wrap 바로 앞에 `.tasklist`
+  셸(`task-title`+`done-counter`+`task-progress`+`bar red`)을 추가하고 `yona.Tasklist.js`를 로드했다(legacy도
+  `gfm-task-list.js`는 어디서도 로드하지 않아 그대로 미로드 유지).
+- **#37(issueLabelColor)**: 이 legacy 파일은 Thymeleaf 뷰가 아니라 `IssueLabelApp.labelStyles()` 컨트롤러가
+  `text/css`로 직접 렌더링하는 동적 스타일시트임을 확인. yuna의 `LabelStyleController.kt`가 RGB/hex 파싱과
+  YCC 휘도 계산까지 포함해 이미 완전히 동일한 로직으로 이식돼 있었다(선행 세션). 다만 legacy가 이 스타일시트를
+  `<link>`하는 10개 화면 중 `issue/list`/`milestone/list`/`milestone/view` 3곳만 링크가 있었고, `issue/view`/
+  `issue/create`/`issue/edit`/`board/view`/`board/list` 5곳은 빠져 있어 추가했다. 나머지 2곳(`project/
+  partial_dashboard_issuesbylabel`, `project/partial_issuelabels_list`)은 yuna 쪽 대응 파일이 있는지 확실치
+  않아 이번엔 손대지 않고 비고에 기록만 했다(그룹6 project/* 작업 시 재확인 권장).
+- **legacy와 다르게 처리한 지점**: 없음(순수 누락 복원).
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-12]`(태스크리스트 셸+스크립트 로드, 이슈/게시판 2종)와
+  `[Test-19-13]`(labels.css 링크, 이슈상세/게시판상세/게시판목록 3종) 추가, RED 확인 후 구현.
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
+  전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행(이번 배치로 #16~#37 총 22개 항목 누적,
+  다음 응답에서 전체 회귀 실행 예정).

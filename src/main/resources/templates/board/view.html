@@ -7,6 +7,8 @@
     <div th:replace="~{site/layout :: gnb}"></div>
     <div th:replace="~{project/header :: header(${project})}"></div>
     <div th:replace="~{project/menu :: menu(${project}, 'board')}"></div>
+    <link rel="stylesheet" th:href="@{/{owner}/{projectName}/issue/labels.css(owner=${project.owner}, projectName=${project.name})}" type="text/css" />
+
 
     <div class="page-wrap-outer">
         <div class="project-page-wrap board-view">
@@ -42,6 +44,12 @@
                         </form>
                     </div>
                     <div th:id="'post-body-' + ${post.number}">
+                        <div class="tasklist">
+                            <div class="task-title">Tasks<span class="done-counter"></span></div>
+                            <div class="task-progress">
+                                <div class="bar red" style="width: 0;" title="Tasklist"></div>
+                            </div>
+                        </div>
                         <div class="content markdown-wrap" th:data-allowed-update="${isAllowedUpdate}" th:utext="${markdownService.render(post.body, true, project)}">본문 내용</div>
                     </div>
                     
@@ -171,6 +179,7 @@
 </div>
 
 <th:block th:replace="~{site/layout :: scripts}"></th:block>
+<script type="text/javascript" src="/javascripts/common/yona.Tasklist.js"></script>
 <script type="text/javascript">
     $(function(){
         $yobi.loadModule("board.View", {
