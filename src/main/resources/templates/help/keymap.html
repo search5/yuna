@@ -1,4 +1,4 @@
-<th:block xmlns:th="http://www.thymeleaf.org" th:with="isMac=${@templateHelper.isMac()}, ctrl=${isMac ? '⌘' : 'CTRL'}">
+<th:block xmlns:th="http://www.thymeleaf.org" th:fragment="keymap(section, project)" th:with="isMac=${@templateHelper.isMac()}, ctrl=${isMac ? '⌘' : 'CTRL'}">
 <div class="pull-left" style="padding:10px 0; margin-left: 55px;">
     <a href="#helpKeys" data-toggle="modal" class="ybtn ybtn-inverse ybtn-mini" th:text="#{title.keymap}">
         단축키 도움말

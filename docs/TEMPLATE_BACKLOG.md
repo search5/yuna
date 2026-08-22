@@ -383,11 +383,11 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 234 | [~] | `help/toc.scala.html` | `help/toc.html` | |
-| 235 | [~] | `help/markdown.scala.html` | `help/markdown.html` | |
-| 236 | [~] | `help/keymap.scala.html` | `help/keymap.html` | |
-| 237 | [~] | `help/UIKit.scala.html` | `help/UIKit.html` | |
-| 238 | [~] | `help/experimental.scala.html` | `help/experimental.html` | |
+| 234 | [x] | `help/toc.scala.html` | `help/toc.html` | 완료(TASK-0249, TDD). `<title>`이 하드코딩 `'도움말'`이었던 것을 `#{title.help}` 메시지 키로 교체 |
+| 235 | [x] | `help/markdown.scala.html` | `help/markdown.html` | 확인 완료(TASK-0249). 이슈/게시글 작성 에디터에 포함되어 10개 문법 탭 legacy와 일치, 코드 변경 없음 |
+| 236 | [x] | `help/keymap.scala.html` | `help/keymap.html` | 완료(TASK-0249, TDD). 파라미터(`section`,`project`)를 못 받는 `th:replace` 전체 include 방식이었던 것을 `th:fragment="keymap(section, project)"`로 교체(board/list.html, board/view.html 두 호출부도 함께 수정) |
+| 237 | [x] | `help/UIKit.scala.html` | `help/UIKit.html` | 확인 완료(TASK-0249). site GNB/footer 없는 완전 standalone 페이지로 legacy와 동일하게 렌더링됨, 코드 변경 없음 |
+| 238 | [x] | `help/experimental.scala.html` | `help/experimental.html` | 확인 완료(TASK-0249). legacy도 미참조 상태의 독립 모달 조각이며 마크업 일치, 코드 변경 없음 |
 
 ## 그룹 16 — `migration/*` (2개, #239~240)
 
@@ -1405,3 +1405,25 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **검증**: 병렬 워크트리 에이전트는 Gradle 데몬 OOM 경합으로 `./gradlew` 실행 없이 수작업 검토만
   수행(코디네이터 지시에 따름) — 메인 세션 병합 후 중앙에서 재검증 예정.
   **그룹14(search/*, #224~233) 10개 항목 + #82/#83 전체 처리 완료.**
+
+### 그룹15 `help/*` (#234~238) (TASK-0249, 병렬 워크트리 에이전트 작업 병합)
+
+- **범위**: 정적 콘텐츠 위주 5개 항목 전부 legacy와 줄 단위 대조 완료.
+- **#234(toc.html) 발견**: `<title>`이 `head('도움말')`처럼 하드코딩 문자열이었음(다른 화면들의
+  `#{메시지키}` 컨벤션 위반) — `head(#{title.help})`로 수정.
+- **#236(keymap.html) 중대 발견**: legacy `help/keymap.scala.html`은 `section`(화면 구분)과 `project`
+  2개 파라미터를 받아 화면별로 다른 단축키 안내를 보여주는데, yuna는 `th:replace="~{help/keymap}"`
+  (파라미터 없는 전체 include) 방식이라 `section`을 실제로 전달할 방법이 없었음 — `th:fragment=
+  "keymap(section, project)"`로 전환하고, 호출부인 `board/list.html`/`board/view.html`의 `th:replace`도
+  `~{help/keymap :: keymap('boardList'|'boardDetail', ${project})}` 형태로 함께 수정.
+- **#235(markdown.html)/#237(UIKit.html)/#238(experimental.html)**: 대조 결과 이미 legacy와 정확히
+  일치(문법탭 10개, standalone 페이지 구조, 미참조 모달 조각), 코드 변경 없음.
+- **legacy와 다르게 처리한 지점**: 없음.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-35]`(toc 6개 Q&A + 메시지키 검증, UIKit
+  standalone 검증, markdown 10개 문법탭 검증, keymap section별 노출 차이 검증, experimental 모달
+  마크업 직접 렌더링 검증) — 병렬 워크트리 병합 시 이미 존재하던 `[Test-19-30]`(프로젝트 메뉴, 메인
+  세션 작업)과 번호가 겹쳐 `[Test-19-35]`로 재번호 부여.
+- **검증**: 병렬 워크트리 에이전트는 Gradle 데몬 OOM 경합으로 `./gradlew` 실행 없이 수작업 검토만
+  수행(코디네이터 지시에 따름). 진행 로그/백로그 상태 갱신 자체도 에이전트가 누락해 메인 세션이 병합
+  중 직접 작성. 메인 세션 병합 후 중앙에서 재검증 예정.
+  **그룹15(help/*, #234~238) 5개 항목 전체 처리 완료.**

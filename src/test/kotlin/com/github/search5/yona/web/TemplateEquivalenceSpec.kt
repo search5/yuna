@@ -65,6 +65,9 @@ import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.SimpleCommentThread
 import com.github.search5.yona.domain.user.UserIdent
+import org.thymeleaf.spring6.SpringTemplateEngine
+import org.thymeleaf.context.Context as ThymeleafContext
+import java.util.Locale
 
 @TestPropertySource(properties = ["github.allow.migration=true"])
 class TemplateEquivalenceSpec @Autowired constructor(
@@ -90,7 +93,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val postingCommentRepository: PostingCommentRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val commentThreadRepository: CommentThreadRepository,
-    private val reviewCommentRepository: ReviewCommentRepository
+    private val reviewCommentRepository: ReviewCommentRepository,
+    private val templateEngine: SpringTemplateEngine
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -1645,6 +1649,90 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     val issueTab = doc.select("a[data-type=issue]").first()!!.parent()!!
                     issueTab.hasClass("active") shouldBe true
                     issueTab.hasClass("empty") shouldBe false
+                }
+            }
+
+            describe("[Test-19-35] 도움말 화면(help/*.scala.html, 그룹15 #234~238) 동치성 검증") {
+                it("toc.html(#234)은 legacy와 동일하게 6개의 Q&A 항목을 렌더링해야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/_help")).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+
+                    doc.select("ul.qas > li.qa").size shouldBe 6
+                    doc.select(".site-breadcrumb-inner h3").text() shouldBe "도움말"
+                }
+
+                it("toc.html(#234)의 <title>은 하드코딩 문자열이 아니라 title.help 메시지 키를 사용해야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/_help")).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    doc.select("title").text() shouldBe "도움말 - Yona"
+
+                    val tocSource = com.github.search5.yona.web.TemplateEquivalenceSpec::class.java
+                        .getResourceAsStream("/templates/help/toc.html")!!
+                        .bufferedReader(Charsets.UTF_8).readText()
+                    tocSource.contains("head(#{title.help})") shouldBe true
+                    tocSource.contains("head('도움말')") shouldBe false
+                }
+
+                it("UIKit.html(#237)은 site GNB/footer 없이 독자적인 standalone 페이지로 렌더링되어야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/_UIKit")).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+
+                    doc.select("title").text() shouldBe "Yobi UI"
+                    doc.select("header.gnb-outer > span.subtitle").text() shouldBe "Yobi UI"
+                    doc.select(".ybtn.ybtn-primary").text() shouldBe "Primary"
+                    doc.select(".avatar-wrap.xlarge").size shouldBe 1
+                    doc.select(".switch.switch-square").size shouldBe 1
+                    doc.select(".gnb-search").size shouldBe 0
+                }
+
+                it("markdown.html(#235)은 이슈 작성 에디터에 포함되어 legacy와 동일하게 10개의 문법 탭을 제공해야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/public-proj/issueform").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+
+                    doc.select(".markdown-help .markdown-help-nav li.help-nav").size shouldBe 10
+                    doc.select(".markdown-help .markdown-help-wrap li.markdown-help-item").size shouldBe 10
+                    doc.select(".markdown-help-item.markdownShortLinks .markdown-wrap a").first()?.attr("href") shouldBe
+                        "http://demo.yobi.io/yobi/yobi/issue/2"
+                }
+
+                it("keymap.html(#236)은 section 값에 따라 게시판 목록/상세에서 서로 다른 안내 항목을 노출해야 한다") {
+                    val listDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/public-proj/posts").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    listDoc.select("#helpKeys").select("span.help-inline:containsOwn(글쓰기)").size shouldBe 1
+                    listDoc.select("#helpKeys").select("span.help-inline:containsOwn(이전 페이지)").size shouldBe 1
+                    listDoc.select("#helpKeys").select("span.help-inline:containsOwn(다음 페이지)").size shouldBe 1
+                    listDoc.select("#helpKeys").select("span.help-inline:containsOwn(목록)").size shouldBe 0
+
+                    val post = postingRepository.findAll().find { it.project.id == publicProj.id }!!
+                    val viewDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/public-proj/post/${post.number}").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    viewDoc.select("#helpKeys").select("span.help-inline:containsOwn(목록)").size shouldBe 1
+                    viewDoc.select("#helpKeys").select("span.help-inline:containsOwn(수정)").size shouldBe 1
+                    viewDoc.select("#helpKeys").select("span.help-inline:containsOwn(이전 페이지)").size shouldBe 0
+                    viewDoc.select("#helpKeys").select("span.help-inline:containsOwn(다음 페이지)").size shouldBe 0
+                }
+
+                it("experimental.html(#238)은 legacy와 동일하게 실험실 안내 모달 마크업을 렌더링해야 한다(legacy도 미참조 상태의 독립 조각)") {
+                    val html = templateEngine.process("help/experimental", ThymeleafContext(Locale.KOREAN))
+                    val doc = Jsoup.parse(html)
+
+                    doc.select("#experimentalHelp.modal.hide.fade").size shouldBe 1
+                    doc.select("#experimentalHelp h4").text() shouldBe "실험적인 기능: 새롭게 개발 중인 기능을 선보입니다"
+                    doc.select("#experimentalHelp .modal-body.center-txt").html().replace("\n", "") shouldBe
+                        "이 기능은 아직 개발 진행 중으로 언제든지 변경되거나 개발 중단될 수 있습니다.<br>너그러운 마음으로 응원해주세요."
+                    doc.select("#experimentalHelp button.ybtn-info[data-dismiss=modal]").text() shouldBe "확인"
                 }
             }
         }
