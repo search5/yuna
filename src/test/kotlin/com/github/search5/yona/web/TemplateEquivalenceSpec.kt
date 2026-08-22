@@ -796,6 +796,30 @@ class TemplateEquivalenceSpec @Autowired constructor(
                 }
             }
 
+            describe("[Test-19-15] 로그인 홈(index.scala.html → index.html)의 3탭 메뉴 중복 이식 검증") {
+                it("루트 경로(/)는 공용 mySeriesMenuTab 조각을 공유하고, legacy처럼 루트 경로에서는 기본 페이지 설정 버튼이 숨겨져야 한다") {
+                    // IndexController.index()는 loginDefaultPage가 설정돼 있으면 그 경로로 리다이렉트하므로,
+                    // index.html 본문을 직접 검증하려면 loginDefaultPage가 비어 있어야 한다.
+                    userSettingRepository.findByUserId(member.id!!).ifPresent {
+                        it.loginDefaultPage = null
+                        userSettingRepository.save(it)
+                    }
+
+                    val result = mockMvc.perform(
+                        get("/").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    ).andExpect(status().isOk).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    val tabs = doc.select("ul.nav-tabs")
+                    tabs.select("a[href='/notifications']").size shouldBe 1
+                    tabs.select("a[href='/user/issues']").size shouldBe 1
+                    tabs.select("a[href='/user/files']").size shouldBe 1
+                    tabs.select("li.active a[href='/notifications']").size shouldBe 1
+                    // legacy mySeriesMenuTab의 !path.equals("/") 조건과 동일 — 루트 경로에서는 항상 숨김
+                    doc.select("#setDefaultLoginPage").size shouldBe 0
+                }
+            }
+
             describe("[Test-19-13] 이슈 라벨 동적 CSS(common/issueLabelColor.scala.html, LabelStyleController) 링크 이식 검증") {
                 it("이슈 상세/게시판 상세/게시판 목록 페이지가 프로젝트별 labels.css를 링크해야 한다") {
                     val issue = issueRepository.findAll().find { it.project.id == publicProj.id && it.title == "테스트이슈" }!!

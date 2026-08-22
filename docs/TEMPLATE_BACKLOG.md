@@ -140,22 +140,22 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 54 | [~] | `index/index.scala.html` | `index.html` | 최상위 위치(yuna는 `index/` 하위가 아니라 루트) — 기존 배치 유지 |
+| 54 | [x] | `index/index.scala.html` | `index.html` | 완료(TASK-0232, TDD). 확인: legacy `index.scala.html`은 사실상 `index/notifications.scala.html`을 그대로 위임 호출하는 얇은 래퍼 — 내용은 #68과 동일. `index.html`이 `common/mySeriesMenuTab` 대신 3번째로 중복 하드코딩한 탭바(#14/#18에서 고친 것과 동일 버그, 이 파일은 놓쳤었음)를 발견해 공용 조각으로 교체 |
 | 55 | [i] | `index/sidebar.scala.html` | `site/layout_framed.html` | #4/#7과 동일 발견: `siteLayout_framed(...){}`을 빈 content로 호출하는 것이 이 파일의 전부라, `site/layout_framed.html`(→`/user/sidebar`)이 이미 이 화면을 대체 |
-| 56 | [ ] | `index/partial_intro.scala.html` | `index/partial_intro.html` | 비로그인 방문자용 소개 영역 |
-| 57 | [ ] | `index/displayProjects.scala.html` | `index/displayProjects.html` | 프로젝트 카드 그리드 공용 렌더러 |
-| 58 | [ ] | `index/myProjectList.scala.html` | `index/myProjectList.html` | |
-| 59 | [ ] | `index/myProjectList_partial.scala.html` | `index/myProjectList_partial.html` | AJAX 갱신용 |
-| 60 | [ ] | `index/myOrganizationList.scala.html` | `index/myOrganizationList.html` | |
-| 61 | [ ] | `index/myOrganizationList_partial.scala.html` | `index/myOrganizationList_partial.html` | |
-| 62 | [ ] | `index/myRecentIssueList.scala.html` | `index/myRecentIssueList.html` | |
-| 63 | [ ] | `index/myRecentIssueList_partial.scala.html` | `index/myRecentIssueList_partial.html` | |
-| 64 | [ ] | `index/allProjectList.scala.html` | `index/allProjectList.html` | |
-| 65 | [ ] | `index/allProjectList_partial.scala.html` | `index/allProjectList_partial.html` | |
-| 66 | [ ] | `index/allOrganizationList.scala.html` | `index/allOrganizationList.html` | |
-| 67 | [ ] | `index/allOrganizationList_partial.scala.html` | `index/allOrganizationList_partial.html` | |
-| 68 | [~] | `index/notifications.scala.html` | `index/notifications.html` | |
-| 69 | [~] | `index/partial_notifications.scala.html` | `index/partial_notifications.html` | |
+| 56 | [i] | `index/partial_intro.scala.html` | `index.html`(인라인) | 확인 완료 — 헤딩·기능 6종 아이콘(cgicenter/code/articles/lock/preview/friends) 전부 일치(코드 변경 없음) |
+| 57 | [i] | `index/displayProjects.scala.html` | `common/usermenu_tab_content_list.html`(인라인) | 확인 완료 — legacy의 인라인 헬퍼 함수를 Thymeleaf `th:if`/`th:each`로 동일 인라인 처리(아키텍처적으로 불가피한 치환, 별도 파일 불필요) |
+| 58 | [i] | `index/myProjectList.scala.html` | `common/usermenu_tab_content_list.html`(인라인) | 확인 완료 — recentlyVisited/watching/createdByMe/joinmember 4탭 순서·구조 전부 일치(코드 변경 없음) |
+| 59 | [i] | `index/myProjectList_partial.scala.html` | `common/usermenu_tab_content_list.html`(인라인) | 확인 완료 — 프로젝트 1건 렌더링 구조 일치(코드 변경 없음) |
+| 60 | [i] | `index/myOrganizationList.scala.html` | `common/usermenu_tab_content_list.html`(인라인) | 확인 완료 — 개인프로젝트→즐겨찾기조직→일반조직→즐겨찾기프로젝트 순서 전부 일치(코드 변경 없음) |
+| 61 | [i] | `index/myOrganizationList_partial.scala.html` | `common/usermenu_tab_content_list.html`(인라인) | 확인 완료(코드 변경 없음) |
+| 62 | [x] | `index/myRecentIssueList.scala.html` | `common/usermenu_tab_content_list.html`(인라인) | #14에서 이미 완료(TASK-0225) |
+| 63 | [x] | `index/myRecentIssueList_partial.scala.html` | `common/usermenu_tab_content_list.html`(인라인) | #14에서 이미 완료(TASK-0225) |
+| 64 | [x] | `index/allProjectList.scala.html` | (포팅 제외) | **제외 결정** — legacy 자체에서 호출부 0건(어떤 뷰/컨트롤러도 참조 안 함, grep 확인). 완전한 죽은 코드 |
+| 65 | [i] | `index/allProjectList_partial.scala.html` | `common/usermenu_tab_content_list.html`(인라인) | **살아있는 코드였음** — `myOrganizationList.scala.html`이 조직 하위 프로젝트 렌더링에 이 파샬을 재사용 중(이름과 달리 "전체 목록" 전용이 아님). 이미 인라인 확인 완료 |
+| 66 | [x] | `index/allOrganizationList.scala.html` | (포팅 제외) | **제외 결정** — legacy 자체에서 호출부 0건, 죽은 코드 |
+| 67 | [x] | `index/allOrganizationList_partial.scala.html` | (포팅 제외) | **제외 결정** — 오직 #66(죽은 코드)에서만 참조돼 간접적으로도 죽은 코드. (참고: yuna의 "전체" 탭은 이 죽은 legacy 코드와 무관한 yuna 자체 추가 기능 — #14/TASK-0225에서 이미 유지하기로 결정했음) |
+| 68 | [x] | `index/notifications.scala.html` | `index/notifications.html` | #18에서 mySeriesMenuTab 중복 문제 해결 완료(TASK-0226). 나머지 구조(welcome-table, siteLayout 위임)도 대조 확인 완료 |
+| 69 | [x] | `index/partial_notifications.scala.html` | `index/partial_notifications.html` | 확인 완료 — 아이콘 타입 분기, Edit 특수케이스, 제목 링크/일반 텍스트 분기, 아바타 폴백, More 버튼+AJAX 페이지네이션 스크립트까지 전부 정확히 일치(코드 변경 없음) |
 
 ## 그룹 5 — `user/*` 인증/프로필 (17개, #70~86)
 
@@ -740,3 +740,28 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   조건 구성이 복잡해 템플릿 파일 내용 직접 검사로 대체(gnb/footer 조각 참조 여부, errorGnb 미사용 확인).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
   전체 회귀는 10개 항목 배치 규칙에 따라 이번 응답 마지막에 실행.
+
+### 그룹4 `index/*` 홈/대시보드 (TASK-0232)
+
+- **원인**: legacy `index/index.scala.html`은 `index/notifications.scala.html`을 그대로 위임 호출하는 얇은
+  래퍼임을 확인(내용은 #68과 동일). yuna의 `index.html`이 `common/mySeriesMenuTab` 공용 조각 대신 **3번째로**
+  탭바를 하드코딩 중복(이미 #14/#18에서 `index/notifications.html`/`user/userFiles.html` 2곳을 고쳤는데 이
+  파일은 놓쳤었음)하고 있었고, "기본 페이지로 설정" 버튼이 legacy의 `!path.equals("/")` 조건 없이 항상
+  노출되고 있었다.
+  `index/myProjectList`/`myOrganizationList`(+각 `_partial`)/`displayProjects`/`partial_intro` 6개 파일은
+  이미 `common/usermenu_tab_content_list.html`과 `index.html`에 legacy와 정확히 동일한 구조(탭 순서, 필드,
+  CSS 클래스)로 인라인돼 있음을 확인.
+  `index/allProjectList.scala.html`/`allOrganizationList.scala.html`/`allOrganizationList_partial.scala.html`
+  은 legacy 자체에서도 호출부가 0건인 죽은 코드임을 확인(grep). 단 `allProjectList_partial.scala.html`은
+  이름과 달리 `myOrganizationList.scala.html`이 조직 하위 프로젝트를 그릴 때 재사용하는 살아있는 코드였다
+  (이미 `common/usermenu_tab_content_list.html`에 인라인 확인됨). yuna의 "전체"(All) 탭은 이 죽은 legacy
+  코드와 무관하게 존재하는 yuna 자체 추가 기능임이 이번 조사로 재확인됐다(#14/TASK-0225에서 유지 결정한 그대로).
+- **구현 내용**: `index.html`의 하드코딩된 탭바를 `th:replace="~{common/mySeriesMenuTab :: menu('notifications')}"`
+  로 교체.
+- **legacy와 다르게 처리한 지점**: 없음(순수 중복 제거 + 누락 복원).
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-15]` — 루트 경로(`/`)에서 legacy와 동일하게 "기본
+  페이지로 설정" 버튼이 숨겨지는지 검증(루트 경로 자체가 `currentRequestPath == '/'`라 항상 숨김 조건에
+  해당하는 것을 활용). `IndexController.index()`가 `loginDefaultPage` 설정 시 리다이렉트하는 기존 동작
+  때문에 테스트에서 `loginDefaultPage`를 명시적으로 null로 초기화해야 했다(발견 및 대응).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
+  전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.
