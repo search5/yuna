@@ -1,175 +1,70 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${project.name} + ' - VCS 변경'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .setting-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-  }
-</style>
-<script src="/javascripts/lib/jquery-1.11.1.min.js" type="text/javascript"></script>
-<script src="/bootstrap/js/bootstrap.min.js" type="text/javascript"></script>
+<head th:replace="~{site/layout :: head(${project.name} + ' - ' + #{project.changeVCS})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'setting')}"></div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <div class="col-md-9">
-        <div class="setting-container">
-          <div th:replace="~{project/setting_menu :: menu(${project}, 'setting')}"></div>
-          <h3 style="margin-top: 0; margin-bottom: 20px;">VCS 변경</h3>
-          
-          <div class="bubble-wrap gray wp" style="background: #f8f9fa; border: 1px solid #ddd; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
-            <div class="row-fluid">
-              <h3>
-                <span th:text="${project.vcs}">VCS</span> 
-                <i class="yobicon-right-2 vmiddle"></i> 
-                <span th:text="${nextVcs}">NEXT_VCS</span>
-              </h3>
-              <div class="cu-desc" style="margin-top: 15px;">
-                <ul>
-                  <li class="notice" style="color: #d9534f; margin-bottom: 10px;">
-                    <strong>VCS 변경 시 기존의 모든 코드 및 저장소 히스토리가 완전 삭제되고 복구할 수 없습니다!</strong>
-                  </li>
-                  <li class="notice">
-                    <strong>새로운 VCS(<span th:text="${nextVcs}">NEXT_VCS</span>) 기반의 빈 저장소가 생성됩니다.</strong>
-                  </li>
-                </ul>
-                <p style="margin-top: 20px;">
-                  <input id="acceptChangeVCS" type="checkbox" class="checkbox" autocomplete="off" style="display:inline-block; margin-right: 5px;">
-                  <label for="acceptChangeVCS" class="bg-checkbox label-agreement" style="cursor: pointer; font-weight: bold; color: #d9534f;">위 유의사항을 확인했으며, VCS 변경에 동의합니다.</label>
-                </p>
-              </div>
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <div th:replace="~{project/setting_menu :: menu(${project}, 'changeVCS')}"></div>
+
+            <div class="bubble-wrap gray wp">
+                <div class="row-fluid">
+                    <h3>
+                        <span th:text="${project.vcs}">VCS</span>
+                        <i class="yobicon-right-2 vmiddle"></i>
+                        <span th:text="${nextVcs}">NEXT_VCS</span>
+                    </h3>
+                    <div class="cu-desc">
+                        <ul>
+                            <li class="notice"><strong th:text="#{project.changeVCS.description1(${nextVcs})}">설명1</strong></li>
+                            <li class="notice"><strong th:text="#{project.changeVCS.description2}">설명2</strong></li>
+                        </ul>
+                        <p>
+                            <input id="acceptChangeVCS" type="checkbox" class="checkbox" autocomplete="off">
+                            <label for="acceptChangeVCS" class="bg-checkbox label-agreement" th:text="#{project.changeVCS.accept}">동의합니다.</label>
+                        </p>
+                    </div>
+                </div>
             </div>
-          </div>
-          
-          <div class="box-wrap bottom">
-            <button id="btnChangeVCS" type="button" class="btn btn-danger" disabled>
-              <i class="yobicon-database"></i> 이 프로젝트의 VCS 변경 실행
-            </button>
-          </div>
+            <div class="box-wrap bottom">
+                <a id="btnChangeVCS" href="#alertChangeVCS" class="ybtn ybtn-danger" data-toggle="modal">
+                    <i class="yobicon-database"></i> <span th:text="#{project.changeVCS.this}">변경 실행</span>
+                </a>
+            </div>
+
+            <!-- Confirm to change VCS -->
+            <div id="alertChangeVCS" class="modal hide">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h3 th:text="#{project.changeVCS.requestion(${nextVcs})}">정말로 변경하시겠습니까?</h3>
+                </div>
+                <div class="modal-body">
+                    <p th:text="#{project.changeVCS.description2}">설명2</p>
+                    <p th:text="#{project.changeVCS.reaccept}">다시 확인</p>
+                </div>
+                <div class="modal-footer">
+                    <button id="btnChangeVCSExec" type="button" class="ybtn ybtn-danger" th:text="#{button.yes}">예</button>
+                    <button type="button" class="ybtn" data-dismiss="modal" th:text="#{button.no}">아니요</button>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
-<!-- Modal -->
-<div id="alertChangeVCS" class="modal fade" tabindex="-1" role="dialog">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title">정말로 VCS를 변경하시겠습니까?</h4>
-      </div>
-      <div class="modal-body">
-        <p>프로젝트의 모든 코드 저장소 정보가 완전히 초기화됩니다.</p>
-        <p>동의하시는 경우 아래 버튼을 눌러 진행하십시오.</p>
-      </div>
-      <div class="modal-footer">
-        <button id="btnChangeVCSExec" type="button" class="btn btn-danger">예</button>
-        <button type="button" class="btn btn-default" data-dismiss="modal">아니오</button>
-      </div>
-    </div>
-  </div>
-</div>
-
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
+<script type="text/javascript" src="/javascripts/service/yobi.project.ChangeVCS.js"></script>
 <script type="text/javascript" th:inline="javascript">
     $(document).ready(function(){
-        $("#acceptChangeVCS").change(function() {
-            if ($(this).is(":checked")) {
-                $("#btnChangeVCS").removeAttr("disabled");
-            } else {
-                $("#btnChangeVCS").attr("disabled", "disabled");
-            }
-        });
-
-        $("#btnChangeVCS").click(function() {
-            $("#alertChangeVCS").modal("show");
-        });
-
-        $("#btnChangeVCSExec").click(function() {
-            var owner = [[${project.owner}]];
-            var projectName = [[${project.name}]];
-            
-            $.ajax({
-                url: "/" + owner + "/" + projectName + "/changeVCS",
-                type: "POST",
-                beforeSend: function(xhr) {
-                    // CSRF
-                },
-                success: function() {
-                    window.location.href = "/projects/" + owner + "/" + projectName;
-                },
-                error: function(xhr) {
-                    alert("VCS 변경 처리 중 오류가 발생했습니다.");
-                }
-            });
+        $yobi.loadModule("project.ChangeVCS", {
+            "sTransferURL": /*[[@{/{owner}/{name}/changeVCS(owner=${project.owner}, name=${project.name})}]]*/ ""
         });
     });
 </script>

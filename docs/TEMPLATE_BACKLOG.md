@@ -189,7 +189,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 87 | [~] | `project/create.scala.html` | `project/create.html` | |
 | 88 | [~] | `project/importing.scala.html` | `project/importing.html` | |
 | 89 | [~] | `project/list.scala.html` | `project/list.html` | |
-| 90 | [ ] | `project/header.scala.html` | `project/header.html` | 프로젝트 상단 헤더(이름/설명/워치버튼 등) — projectLayout이 include |
+| 90 | [x] | `project/header.scala.html` | `project/header.html` | 완료(TASK-0236, TDD). **중대 발견**: 프로젝트 가입 요청(enroll/cancelEnroll) 기능 UI 전체가 빠져 있었음(백엔드 `ProjectMemberController`에 `POST /api/projects/{id}/enroll(/cancel)`은 이미 존재) — `TemplateHelper.isEnrolled()` 신규 추가 후 복구. `project.isProtected`(그룹 프로젝트) "G" 배지도 누락돼 있어 추가. 즐겨찾기 별표의 서버사이드 초기 상태(`isFavoriteProject`)는 여러 호출부에 `favoriteProjects` 전파가 필요해 범위가 커 미이식(비고에 기록) |
 | 91 | [~] | `project/home.scala.html` | `project/home.html` | 아래 readme/dashboard* 파샬이 실제로 다 들어있는지 줄 단위 대조 |
 | 92 | [i] | `project/partial_readme.scala.html` | (home.html에 인라인, P2-42로 로직은 이식됨) | 뷰 마크업 자체가 legacy와 일치하는지 확인 |
 | 93 | [i] | `project/partial_dashboard.scala.html` | (home.html에 인라인 추정) | |
@@ -200,13 +200,13 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 98 | [ ] | `project/partial_history.scala.html` | `project/partial_history.html` | 최근 활동(공용 common/partial_history 재사용 가능성 확인) |
 | 99 | [~] | `project/members.scala.html` | `project/members.html` | |
 | 100 | [~] | `project/setting.scala.html` | `project/setting.html` | |
-| 101 | [~] | `project/partial_settingmenu.scala.html` | `project/setting_menu.html` | 파일명 다름 — 내용 대조 |
-| 102 | [~] | `project/change_vcs.scala.html` | `project/change_vcs.html` | |
-| 103 | [~] | `project/transfer.scala.html` | `project/transfer.html` | |
-| 104 | [~] | `project/delete.scala.html` | `project/delete.html` | |
-| 105 | [~] | `project/watchers.scala.html` | `project/watchers.html` | |
-| 106 | [~] | `project/webhooks.scala.html` | `project/setting_webhook.html` | 파일명 다름 |
-| 107 | [ ] | `project/partial_webhooks_list.scala.html` | (setting_webhook.html에 인라인 추정) | |
+| 101 | [x] | `project/partial_settingmenu.scala.html` | `project/setting_menu.html` | 확인 완료 — 설정/멤버/라벨/웹훅/이관/삭제/VCS변경 7개 탭 구조 및 `active` 파라미터명 일치(코드 변경 없음) |
+| 102 | [x] | `project/change_vcs.scala.html` | `project/change_vcs.html` | 완료(TASK-0236, TDD). **독자 GNB 발견**: 검은 `.gnb-wrap`/`.gnb-brand` 하드코딩 가짜 헤더(별도 jQuery 로드까지 포함)로 완전히 독자 구현돼 있었음 — site/layout+project/header+project/menu+setting_menu 조각 기반으로 재작성. 기존 콘텐츠(메시지키/JS모듈 연동)는 이미 정확해 유지 |
+| 103 | [x] | `project/transfer.scala.html` | `project/transfer.html` | 완료(TASK-0236, TDD). #102와 동일한 독자 GNB 패턴 발견, site/layout 조각 기반으로 재작성 |
+| 104 | [x] | `project/delete.scala.html` | `project/delete.html` | 완료(TASK-0236, TDD). #102와 동일한 독자 GNB 패턴 발견, site/layout 조각 기반으로 재작성 |
+| 105 | [x] | `project/watchers.scala.html` | `project/watchers.html` | 완료(TASK-0236, TDD). 독자 GNB뿐 아니라 콘텐츠 자체도 legacy의 `.members.project.row-fluid`/`.member.span6`/`.member-name`/`.member-id` 클래스 대신 독자 `.watcher-list`/`.watcher-item` CSS로 재구현돼 있었고 i18n 메시지키도 미사용이었음 — legacy 클래스/메시지키 그대로 재작성 |
+| 106 | [x] | `project/webhooks.scala.html` | `project/setting_webhook.html` | 완료(TASK-0236, TDD). #102와 동일한 독자 GNB 패턴 발견(외부 CDN jQuery 로드 포함 — site/layout과 중복 로드 위험), site/layout 조각 기반으로 재작성. 기존에 이미 있던 `setting_menu` 호출과 중복되지 않도록 정리 |
+| 107 | [~] | `project/partial_webhooks_list.scala.html` | `setting_webhook.html`(인라인 추정) | 상세 대조 미실시(다음 배치에서 처리) |
 | 108 | [~] | `project/issuelabels.scala.html` | `project/issuelabels.html` | |
 | 109 | [i] | `project/partial_issuelabels_list.scala.html` | (issuelabels.html에 인라인 추정) | |
 | 110 | [i] | `project/partial_issuelabels_editcategory.scala.html` | (issuelabels.html에 인라인 추정) | |
@@ -844,3 +844,37 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-19]`(비밀번호 재설정 화면 GNB+footer+모듈스크립트).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
   **그룹5(user/*, #70~86) 17개 항목 전체 처리 완료.** 다음은 그룹6(project/*, #87~112).
+
+### 그룹6 `project/*` 착수분: #90,101~107 (TASK-0236)
+
+- **#90(header) 중대 발견**: 프로젝트 가입 요청(멤버 등록 신청) UI 전체가 빠져 있었다 — 백엔드
+  `ProjectMemberController`에 `POST /api/projects/{id}/enroll`/`enroll/cancel`은 이미 존재했으나 프론트가 없었음.
+  `TemplateHelper`에 `isEnrolled(project, user)`(`User.enrolledProjects` 기반) 신규 추가 후, 비멤버에게 "가입
+  요청하기"/이미 요청한 경우 "가입 요청 취소" 드롭다운을 복구(신규 REST 엔드포인트라 legacy의 GET 링크 대신
+  기존 `data-request-method="post"`+`data-request-uri` AJAX 컨벤션 재사용 — 아키텍처적으로 필요한 치환).
+  `project.isProtected`(그룹 프로젝트) "G" 배지도 legacy엔 있는데 yuna엔 없어서 추가.
+- **#102~#106(change_vcs/transfer/delete/watchers/setting_webhook) 조사 중 시스템적 문제 발견**: TASK-0223에서
+  이미 플래그해뒀던 7개 파일 중 6개(`fork.html` 제외)가 전부 **동일한 하드코딩 가짜 GNB**(`.gnb-wrap`/
+  `.gnb-brand`/`.gnb-menu`, 검정 배경의 독자 디자인)를 복붙해 갖고 있었다. `change_vcs.html`/`setting_webhook.html`
+  은 심지어 `site/layout`이 이미 로드하는 jQuery와 별개로 자체 jQuery(`jquery-1.9.0.js`, 혹은 CDN
+  `jquery-3.6.0.min.js`)를 추가로 로드하고 있어 버전 충돌/중복 로드 위험까지 있었다. 전부 `site/layout`+
+  `project/header`+`project/menu`+`project/setting_menu` 조각 기반으로 재작성했다.
+  - `watchers.html`은 GNB뿐 아니라 콘텐츠 자체도 legacy 클래스(`.members.project.row-fluid` 등)와 i18n
+    메시지키를 안 쓰는 독자 구현이었어서 콘텐츠까지 legacy에 맞춰 재작성했다.
+  - `change_vcs.html`/`delete.html`/`transfer.html`은 콘텐츠(메시지키, JS 모듈 연동)는 이미 정확했어서 GNB만
+    교체했다. 단 `change_vcs.html`의 `setting_menu` 활성 탭 값이 `'setting'`으로 잘못돼 있어(`'changeVCS'`가
+    맞음, `project/setting_menu.html`과 대조해 발견) 함께 수정.
+  - `setting_webhook.html`은 이미 존재하던 올바른 `setting_menu(..., 'webhooks')` 호출과 별개로 처음에 실수로
+    잘못된 값(`'webhook'`)의 중복 호출을 추가했다가 즉시 발견해 제거했다(자체 실수 교정 기록).
+- **#107(partial_webhooks_list)**: 상세 대조 미실시, 다음 배치로 이월.
+- **fork.html 관련 별도 발견(그룹6 표에는 없음)**: `project/fork.html`도 동일한 가짜 GNB 패턴이었으나, 실제
+  legacy 대응 파일이 `project/fork.scala.html`(존재하지 않음)이 아니라 `git/fork.scala.html`(그룹11 대상)임을
+  확인했다. 콘텐츠 전체 재작성은 그룹11에서 legacy `git/fork.scala.html`과 정밀 대조해 처리하기로 하고, 이번엔
+  가짜 GNB만 site/layout 조각으로 교체해 최소한의 위험 요소(중복 CSS/독자 헤더)만 제거했다.
+- **legacy와 다르게 처리한 지점**: #90의 가입 요청 버튼 링크가 legacy의 단순 GET `<a href>` 대신
+  `data-request-method="post"`+AJAX인 것은 백엔드가 REST(POST) 엔드포인트로 이식돼 있어 불가피함.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-20]`(프로젝트 헤더 가입요청 버튼 3종),
+  `[Test-19-21]`(change_vcs 화면 GNB/footer/조각/스크립트), `[Test-19-22]`(delete/transfer/watchers/
+  setting_webhook 4종 GNB/footer 일괄 검증).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN). 전체 회귀는
+  10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.

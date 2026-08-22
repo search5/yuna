@@ -251,6 +251,12 @@ class TemplateHelper(
             .orElse(false)
     }
 
+    // yona User.enrolled(project) 대응 — 프로젝트에 가입 신청(대기)한 상태인지 확인.
+    fun isEnrolled(project: Project?, user: User?): Boolean {
+        if (project == null || user == null) return false
+        return user.enrolledProjects.any { it.id == project.id }
+    }
+
     fun getLabelCategories(project: Project?): List<IssueLabelCategory> {
         if (project == null) return emptyList()
         return issueLabelCategoryRepository.findByProject(project)

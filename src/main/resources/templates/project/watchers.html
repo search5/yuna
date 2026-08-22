@@ -1,145 +1,33 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${project.name} + ' - 프로젝트를 지켜보는 사람들'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .watchers-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-  }
-  .watcher-list {
-      list-style: none;
-      padding: 0;
-      margin: 20px 0 0 0;
-  }
-  .watcher-item {
-      display: inline-block;
-      width: 48%;
-      margin-right: 2%;
-      margin-bottom: 20px;
-      background: #fafbfc;
-      border: 1px solid #e1e4e8;
-      border-radius: 3px;
-      padding: 15px;
-      vertical-align: top;
-  }
-  .watcher-avatar {
-      border-radius: 3px;
-      margin-right: 15px;
-      float: left;
-  }
-  .watcher-info {
-      overflow: hidden;
-  }
-  .watcher-name {
-      font-size: 16px;
-      font-weight: bold;
-      margin-bottom: 5px;
-  }
-  .watcher-id {
-      color: #586069;
-      font-size: 13px;
-  }
-</style>
+<head th:replace="~{site/layout :: head(${project.name} + ' - ' + #{project.watcher.title})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, '')}"></div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <div class="col-md-9">
-        <div class="watchers-container">
-          <h3 style="margin-top: 0; margin-bottom: 10px;">프로젝트를 지켜보는 사람들</h3>
-          <p style="color: #6a737d;">이 프로젝트의 새 이슈, 새 글, 풀 리퀘스트에 대한 알림을 수신하는 사용자 목록입니다.</p>
-
-          <div th:if="${#lists.isEmpty(watchers)}" class="alert alert-info" style="margin-top: 20px;">
-            이 프로젝트를 지켜보는 사람이 아직 없습니다.
-          </div>
-
-          <ul th:if="${!#lists.isEmpty(watchers)}" class="watcher-list clearfix">
-            <li th:each="watcher : ${watchers}" class="watcher-item">
-              <a th:href="@{/user/{loginId}(loginId=${watcher.loginId})}" class="watcher-avatar-link">
-                <img th:src="${watcher.avatarUrl != null ? watcher.avatarUrl : '/images/default-avatar-64.png'}" class="watcher-avatar" width="64" height="64" alt="avatar"/>
-              </a>
-              <div class="watcher-info">
-                <div class="watcher-name">
-                  <a th:href="@{/user/{loginId}(loginId=${watcher.loginId})}" th:text="${watcher.name}" style="color: #333; text-decoration: none;">홍길동</a>
-                </div>
-                <div class="watcher-id" th:text="'@' + ${watcher.loginId}">@loginId</div>
-              </div>
-            </li>
-          </ul>
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <h4><strong th:text="#{project.watcher.title}">이 프로젝트를 지켜보는 사람</strong></h4>
+            <p th:text="#{project.watcher.description}">지켜보기 한 멤버 목록입니다</p>
+            <ul class="members project row-fluid">
+                <li th:each="watcher : ${watchers}" th:if="${watcher != null}" class="member span6 span-hard-wrap">
+                    <a th:href="@{/user/{loginId}(loginId=${watcher.loginId})}" class="avatar-wrap mlarge pull-left mr10">
+                        <img th:src="${watcher.avatarUrl != null ? watcher.avatarUrl : '/images/default-avatar-64.png'}" width="64" height="64" alt="avatar">
+                    </a>
+                    <div class="member-name" th:text="${watcher.name}">홍길동</div>
+                    <div class="member-id" th:text="'@' + ${watcher.loginId}">@loginId</div>
+                </li>
+            </ul>
         </div>
-
-        <div>
-          <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" class="btn btn-default">프로젝트 홈으로</a>
-        </div>
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
+
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
 </body>
 </html>
