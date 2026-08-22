@@ -930,10 +930,13 @@ class ProjectViewController(
     }
 
     // 11. 프로젝트 포크 화면 (GET /{ownerName}/{projectName}/newFork)
+    // legacy conf/routes:297 forkOwner:String ?= null 대응 — 지정한 조직을 현재 사용자가 관리하면 그
+    // 조직을, 아니면(파라미터가 없거나 관리 권한이 없으면) 현재 사용자 본인을 fork 대상으로 본다.
     @GetMapping("/{ownerName}/{projectName}/newFork")
     fun newFork(
         @PathVariable ownerName: String,
         @PathVariable projectName: String,
+        @RequestParam(required = false) forkOwner: String?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -947,8 +950,17 @@ class ProjectViewController(
         val orgUserList = organizationUserRepository.findByUserIdAndRoleId(loginUser.id!!, RoleType.ORG_ADMIN.roleType)
         val organizations = orgUserList.map { it.organization }
 
+        // legacy PullRequestApp.findDestination(forkOwner) 대응.
+        val destination = organizations.find { it.name == forkOwner }?.name ?: loginUser.loginId
+
+        // legacy PullRequestApp.newFork()의 Project.findByOwnerAndOriginalProject(destination, project)
+        // 대응(project/fork.html의 "이미 동일한 원본을 복사한 프로젝트가 있습니다" 경고에 사용) — 이전엔
+        // 이 GET 진입점에서 아예 계산되지 않아 forkedProjects가 항상 비어 있었다(TODO로 남아있던 항목).
+        val forkedProjects = projectRepository.findByOwnerAndOriginalProject(destination, originalProject)
+
         model.addAttribute("project", originalProject)
         model.addAttribute("organizations", organizations)
+        model.addAttribute("forkedProjects", forkedProjects)
         model.addAttribute("currentUser", loginUser)
 
         return "project/fork"

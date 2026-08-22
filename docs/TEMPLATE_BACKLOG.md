@@ -300,7 +300,7 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 | 170 | [x] | `git/view.scala.html` | `pullrequest/view.html` | 완료(TASK-0243, 전면 재작성). "commits" 탭은 legacy에 없는 yuna 자체 확장이었음을 확인해 제거, tab 쿼리파라미터도 제거하고 legacy와 동일하게 단일 overview 페이지로 되돌림 |
 | 171 | [x] | `git/viewChanges.scala.html` | `pullrequest/view.html`(tab=changes) | 완료(TASK-0243). 별도 URL(`/pull/{number}/changes`)은 유지(허용된 아키텍처 차이), 콘텐츠는 legacy viewChanges와 대조해 review-wrap/reviewlist/non-ranged 댓글까지 재현 |
 | 172 | [x] | `git/clone.scala.html` | `pullrequest/clone.html` | 완료(TASK-0243). **비고 정정**: 이 파일은 "클론 방법 안내"가 아니라 fork 진행 중 보여주는 인터스티셜 화면이었음(재조사로 확인) — `ProjectViewController.fork()`가 이름검증만 하고 이 화면을 렌더, 화면의 JS가 3초 후 신설 `doClone()` 엔드포인트를 호출해 실제 fork 수행 |
-| 173 | [x] | `git/fork.scala.html` | `project/fork.html` | 완료(TASK-0243). 콘텐츠 전면 재작성(owner-select/scope radio/이미 포크된 프로젝트 안내). `ProjectRepository.findByOwnerAndOriginalProject` 신설해 forkedProjects 연결. owner-select의 조직별 목적지 전환(newFork 3-arg 라우트)은 yuna 라우트가 목적지 owner 파라미터를 안 받아 단순화(문서화된 보류) |
+| 173 | [x] | `git/fork.scala.html` | `project/fork.html` | 완료(TASK-0243, TASK-0258에서 마무리). 콘텐츠 전면 재작성(owner-select/scope radio/이미 포크된 프로젝트 안내). `ProjectRepository.findByOwnerAndOriginalProject`는 TASK-0243 당시 신설만 되고 실제로는 POST `fork()`의 이름중복 에러 분기에서만 호출돼, 정작 legacy가 항상 계산하는 최초 GET 진입점(`newFork()`)에서는 호출된 적이 없어 "이미 포크된 프로젝트 있음" 경고가 실제로는 절대 뜨지 않는 죽은 코드였다(템플릿에 TODO로 남아있던 것을 재검토하며 발견) — `newFork()`에 legacy `PullRequestApp.findDestination(forkOwner)` 대응 로직과 함께 추가해 완료. owner-select의 조직별 목적지 전환(newFork 3-arg 라우트)은 yuna 라우트가 목적지 owner 파라미터를 안 받아 단순화(문서화된 보류) |
 | 174 | [x] | `git/partial_branch.scala.html` | `pullrequest/partial_branch.html` | 완료(TASK-0243) |
 | 175 | [x] | `git/partial_forklist.scala.html` | `pullrequest/partial_forklist.html` | 완료(TASK-0243) |
 | 176 | [x] | `git/partial_info.scala.html` | `pullrequest/partial_info.html` | 완료(TASK-0243). 리뷰 참여/뱃지/overview·changes 탭 바 |
@@ -1709,5 +1709,58 @@ TASK-0252로 그룹10~17 통합 회귀를 green으로 만든 뒤 백로그를 �
   마크다운 에디터, 첨부파일 업로더, 상태 라디오, 기한 입력+datepicker+에러 표시, mention/atwho 스크립트
   전부 존재) — 그룹9 완료.
 - **검증**: 새로 추가/영향받은 스펙(`MilestoneTemplateRenderingSpec`, `IssueListTemplateRenderingSpec`,
-  `ProjectViewControllerIntegrationSpec`) 전부 green. `./gradlew test`(전체) 재실행 결과 대기 중 —
-  결과는 다음 로그에 기록.
+  `ProjectViewControllerIntegrationSpec`) 전부 green. `./gradlew test`(전체) 재실행 결과 1382+ tests
+  green, BUILD SUCCESSFUL 확인(TASK-0254 이후 `ProjectViewControllerSpec`의 신규
+  `milestoneRepository.findByProjectAndState` mockk 스텁 누락 1건만 추가 발견해 수정, 이후 전체 green).
+
+### TASK-0258: 사용자 지시("fork.html처럼 todo로 남아있는거 찾아서 확인 후에 코드와 문서도 업데이트")로
+`project/fork.html`의 실제 TODO 주석 발견·수정 + `docs/PARITY_BACKLOG.md` 전수 재검토
+
+`src/main/resources/templates/`와 `src/main/kotlin/`을 `grep -rn "TODO\|FIXME"`로 전수 검색한 결과:
+- **`project/fork.html`**: `forkedProjects` 모델 속성이 `ProjectViewController.newFork()`(최초 GET
+  진입점)에서 전혀 계산되지 않는다는 TODO 주석 발견 — #173(TASK-0243)이 "완료"로 기록해뒀던
+  `ProjectRepository.findByOwnerAndOriginalProject` 신설이 실제로는 POST `fork()`의 이름중복 에러
+  분기에서만 쓰이고 있었고, legacy `PullRequestApp.newFork()`가 매 GET 요청마다 무조건 계산하는
+  것과 달리 최초 진입점에는 배선이 안 돼 있어 "이미 포크된 프로젝트가 있습니다" 경고가 실제로는
+  절대 뜨지 않는 죽은 코드였다. `newFork()`에 legacy `findDestination(forkOwner)`(지정한 조직을
+  현재 사용자가 관리하면 그 조직을, 아니면 본인을 목적지로) 대응 로직과 함께
+  `findByOwnerAndOriginalProject(destination, originalProject)` 호출을 추가해 완료 —
+  `ProjectForkAndReviewThreadTemplateEquivalenceSpec.kt`에 실제 포크 이력이 있을 때 경고 분기가
+  렌더링되는지 검증하는 테스트 신규 추가(기존 "포크된 프로젝트 없음" 전제를 쓰는 테스트들과의 순서
+  간섭을 피하려 describe 블록 맨 끝에 배치).
+- **`site/setting.html`의 "TODO"**: legacy `site/setting.scala.html` 자체가
+  `@siteMngLayout(message) { TODO }` 형태의 도달 불가능한 죽은 스텁 파일이라, 그 상태를 그대로
+  1:1 이식한 의도적인 것임을 `SiteAdminTemplateEquivalenceSpec.kt`의 기존 테스트로 재확인 — 손대지
+  않음(legacy 자체가 미완성이므로 이게 legacy에 대한 정확한 이식이다).
+- **`AttachmentCleanupScheduler.kt`의 "TODO"(P2-26 참조)**: 코드 자체는 legacy
+  `Attachment.java:438-477`의 비교 방향(`createdDate >= threshold`)을 사용자 지시로 이미 문자
+  그대로 포팅 완료한 상태 — 주석은 "이 비교 방향이 legacy의 버그가 아닌지" 판단을 백로그에 남겨둔
+  것일 뿐 실제 미완료 작업이 아님. 손대지 않음.
+
+**`docs/PARITY_BACKLOG.md` "범위 조정" 표기 전수 재검토**: 사용자가 "범위조정이라고 쓰여진것들은
+실제 다 완료됐으면 범위조정이란 말 빼줘"라고 지시해 `grep -n "범위 조정"`으로 전체(약 40건) 재검토.
+"범위조정"이 실제로는 두 가지 다른 의미로 혼용되고 있었음을 확인:
+1. **완료됐지만 이후 발견된 후속 항목으로 별도 등록된 뒤 그 후속 항목도 이미 완료된 경우**(가장
+   많은 케이스) — 예: P1-29("HTML 서식 보존·cid 치환은 P1-47로 분리")는 P1-47이 이미 `[x]`
+   완료였는데도 P1-29 자체가 "범위조정"이라는 미완료 뉘앙스의 표기를 달고 있었음. 이런 식으로
+   P1-05→P1-52, P1-07→P1-37/38, P1-08→P1-39/40, P1-09→P1-41, P1-14→P1-42/43,
+   P1-18→P1-44, P1-19(편집이력)→P2-02, P1-25/26(P0-03/04에서 분리)→둘 다 완료,
+   P1-27/28(P0-01에서 분리)→둘 다 완료, P1-29~32(P0-02에서 분리)→전부 완료, P1-24(P0-11에서
+   분리)→완료, P1-35/36(P0-14에서 분리)→둘 다 완료, P1-32(P1-28에서 참조)→완료,
+   P1-42/43(P1-81에서 발견)→완료, P1-83(P1-81에서 발견)→완료, P1-84(P1-82에서 발견)→완료,
+   **P1-65(이슈 초안→발행 전환 플로우, P1-48/P1-27/P2-02가 각각 "yuna엔 아직 이 플로우 자체가
+   없다"고 반복 기록해뒀던 바로 그 결손)→완료**, P1-100(P1-76에서 발견)→완료, P1-60(P1-28 완료
+  로그의 "발신 Message-ID 추적 안 됨" 미해결 gap, 실제로는 다른 방식으로 해소)→완료 총 20여 건을
+   찾아 각 표 행과 완료 로그 본문의 "범위조정" 표기를 "완료" + 후속 항목 완료 사실 명시로 교정.
+   **특히 P1-65 발견이 중요** — #41(`common/partial_history.scala.html`) 작업 중이던 병렬
+   에이전트에게도 즉시 공유해 "history 필드 자체가 없다"는 낡은 전제로 불필요한 스키마 재설계를
+   하지 않도록 긴급 정정 메시지를 보냈다(이미 `Posting.history`/`Issue.history` 필드와
+   `HistoryUtil`/`DiffUtil`이 P2-02에서 완비돼 있었음).
+2. **의도적이고 영구적인 축소 결정으로, 후속 항목이 아예 없거나(P1-03의 계정 수동병합 UI 미이식,
+   PR-67에서 사용자가 명시적으로 "UI는 나중에" 정책을 확정한 P1-09/41의 최근본목록 드롭다운
+   UI) 순서만 설명하는 메모(P1-111/135 처리 순서, 그룹11 처리 순서)인 경우** — 이런 것들은
+   "범위조정"이 정확한 표기이므로 그대로 유지했다(약 6건: P1-03, P1-09/41의 UI 배선 부분,
+   P1-111/135 순서 메모, PullRequestEvent.oldValue 아키텍처 선택).
+- **검증**: 문서 편집만 진행, 코드 변경 없음(순수 문서 정확성 교정). 참고로 표 행 상태(`[x]`) 자체는
+  전부 이미 정확했다 — 문제는 "완료"와 나란히 붙어있던 "범위조정, 아래참고" 라벨이 실제로는 해소된
+  과거 결손을 마치 지금도 미해결인 것처럼 읽히게 하는 낡은 표현이었다는 것.
