@@ -67,11 +67,11 @@
           <li>
             <a href="/" class="logo logo-letter">Y</a>
           </li>
-          <li class="hide-in-mobile">
+          <li class="hide-in-mobile" th:if="${!hideProjectListing and (currentUser == null or !currentUser.isGuest)}">
             <a href="/projects" class="show-progress-bar" th:text="#{title.list}">전체 목록</a>
           </li>
-          <li class="divider hide-in-mobile"></li>
-          
+          <li class="divider hide-in-mobile" th:if="${!hideProjectListing and (currentUser == null or !currentUser.isGuest)}"></li>
+
           <li class="hide-in-mobile">
             <a th:href="${#strings.isEmpty(feedbackUrl) ? 'https://github.com/yona-projects/yona/issues' : feedbackUrl}" target="_blank" th:text="#{title.yobi.feedback}">개발팀에게 문의하기</a>
           </li>
@@ -156,7 +156,7 @@
         <ul class="gnb-usermenu">
           <th:block sec:authorize="isAuthenticated()">
             <li class="gnb-usermenu-item" data-toggle="tooltip" data-placement="bottom" th:title="#{title.shortcut} + ' (A)'">
-              <a href="/user/issues" class="user-item-btn loggged-in" th:text="#{issue.myIssue}">내 이슈</a>
+              <a href="/user/issues" class="user-item-btn loggged-in" th:inline="text">[[#{issue.myIssue}]]<span th:if="${myOpenIssueCount > 0}" class="counter-badge" th:text="${myOpenIssueCount}">0</span></a>
             </li>
             <li class="divider"></li>
             <li sec:authorize="hasAuthority('ROLE_SITE_ADMIN')" class="gnb-usermenu-item">
@@ -192,7 +192,7 @@
                 <li>
                   <a href="/projectform" th:text="#{button.newProject}">새 프로젝트 만들기</a>
                 </li>
-                <li>
+                <li th:if="${currentUser == null or !currentUser.isGuest}">
                   <a href="/organizations/new" th:text="#{button.newGroup}">새 그룹 만들기</a>
                 </li>
               </ul>
@@ -273,7 +273,7 @@
         <ul class="gnb-usermenu">
           <th:block sec:authorize="isAuthenticated()">
             <li class="gnb-usermenu-item" data-toggle="tooltip" data-placement="bottom" th:title="#{title.shortcut} + ' (A)'">
-              <a href="/user/issues" class="user-item-btn loggged-in" th:text="#{issue.myIssue}">내 이슈</a>
+              <a href="/user/issues" class="user-item-btn loggged-in" th:inline="text">[[#{issue.myIssue}]]<span th:if="${myOpenIssueCount > 0}" class="counter-badge" th:text="${myOpenIssueCount}">0</span></a>
             </li>
             <li class="divider"></li>
             <li sec:authorize="hasAuthority('ROLE_SITE_ADMIN')" class="gnb-usermenu-item">
@@ -309,7 +309,7 @@
                 <li>
                   <a href="/projectform" th:text="#{button.newProject}">새 프로젝트 만들기</a>
                 </li>
-                <li>
+                <li th:if="${currentUser == null or !currentUser.isGuest}">
                   <a href="/organizations/new" th:text="#{button.newGroup}">새 그룹 만들기</a>
                 </li>
               </ul>
@@ -545,7 +545,16 @@
     
     <!-- yobi.ui.Toast -->
     <div id="yobiToasts" class="yobiToasts"></div>
-    
+    <script type="text/x-jquery-tmpl" id="tplYobiToast">
+    <div class="toast" tabindex="-1">
+        <div class="btn-dismiss"><button type="button" class="btn-transparent">&times;</button></div>
+        <div class="center-text">
+            <span class="v"></span>
+            <div class="msg"></div>
+        </div>
+    </div>
+    </script>
+
     <!-- loginDialog (익명 사용자용) -->
     <div sec:authorize="isAnonymous()" id="loginDialog" class="modal hide loginDialog" tabindex="-1" role="dialog">
       <div class="modal-body">
@@ -609,6 +618,7 @@
     <script type="text/javascript" src="/javascripts/lib/tippy/popper.min.js"></script>
     <script type="text/javascript" src="/javascripts/lib/tippy/tippy-bundle.umd.min.js"></script>
     <script type="text/javascript" src="/javascripts/common/yona.Usermenu.js"></script>
+    <script type="text/javascript" src="/javascripts/lib/jquery/jquery-ui-1.10.4.custom.min.js"></script>
     <script type="text/javascript" src="/javascripts/common/yobi.LoginDialog.js"></script>
     <script type="text/javascript" src="/javascripts/lib/nprogress/nprogress.js"></script>
     <script type="text/javascript" src="/javascripts/lib/viewerjs/viewer.js"></script>
@@ -673,6 +683,11 @@
             yobi.ShortcutKey.setKeymapLink({
                 "A": "/user/issues"
             });
+            /*[# th:if="${currentUser != null}"]*/
+            yobi.ShortcutKey.setKeymapLink({
+                "U": [[${'/user/' + currentUser.loginId}]]
+            });
+            /*[/]*/
 
             // yobi.Files 초기화
             yobi.Files.init({
@@ -740,6 +755,12 @@
                 NProgress.start();
             });
 
+            window.addEventListener('pageshow', (event) => {
+                if (event.persisted) {
+                    NProgress.done();
+                }
+            });
+
             $('.markdown-wrap').find('a[href]').each(function () {
                 var $link = $(this);
                 var linkUrl = $link.attr("href");
@@ -771,6 +792,17 @@
                     $textarea.val(textBefore + tasklistTemplate + textAfter);
                     $textarea.focus();
                     $textarea.get(0).setSelectionRange(cursorPos + tasklistTemplate.length, cursorPos + tasklistTemplate.length);
+                });
+            }
+
+            if (window.parent !== window) {
+                $("a.ago, .head-anchor, .share-link").on("click", function () {
+                    var $this = $(this);
+                    if (!history.state) {
+                        window.parent.history.pushState({ startPath: location.pathname }, $this.text(), $this.attr("href"));
+                    } else {
+                        window.parent.history.replaceState(history.state, $this.text(), $this.attr("href"));
+                    }
                 });
             }
         });

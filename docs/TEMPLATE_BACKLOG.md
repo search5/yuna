@@ -79,15 +79,15 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 10 | [ ] | `common/navbar.scala.html` | `common/navbar.html` | 상단 내비게이션 — layout.html이 include |
-| 11 | [ ] | `common/footer.scala.html` | `common/footer.html` | |
-| 12 | [ ] | `common/scripts.scala.html` | `common/scripts.html` | 전역 JS 로딩 블록 |
-| 13 | [ ] | `common/usermenu.scala.html` | `common/usermenu.html` | 우상단 사용자 드롭다운 |
-| 14 | [~] | `common/usermenu_tab_content_list.scala.html` | `common/usermenu_tab_content_list.html` | |
-| 15 | [ ] | `common/loginDialog.scala.html` | `common/loginDialog.html` | 로그인 모달 |
-| 16 | [~] | `common/select2.scala.html` | `common/select2.html` | select2 위젯 초기화 스니펫 |
-| 17 | [~] | `common/calendar.scala.html` | `common/calendar.html` | 날짜선택기 위젯 |
-| 18 | [~] | `common/mySeriesMenuTab.scala.html` | `common/mySeriesMenuTab.html` | "내 이슈/PR/마일스톤" 탭 메뉴 |
+| 10 | [x] | `common/navbar.scala.html` | `site/layout.html :: gnb` (인라인) | 완료(TASK-0224, TDD). `HIDE_PROJECT_LISTING`+게스트 가드로 "전체 목록" 링크 숨김 이식. org 검색범위의 좁은 게스트/HIDE 모드 조합 세부조건은 미이식(비고: 저가치 코너케이스로 판단, 문서에 기록) |
+| 11 | [x] | `common/footer.scala.html` | `site/layout.html :: footer` (인라인) | 확인 완료 — 완전 일치(TASK-0224 조사 중 대조 완료, 코드 변경 없음) |
+| 12 | [x] | `common/scripts.scala.html` | `site/layout.html :: scripts` (인라인) | 완료(TASK-0224, TDD). tplYobiToast, "U" 단축키, pageshow NProgress 해제, iframe 히스토리 동기화 스크립트 이식. Play flash-scope 제네릭 순회(title/description 특수케이스)는 yuna의 warning/error/info 3키 모델로 이미 아키텍처 치환되어 있었음(선행 세션) |
+| 13 | [x] | `common/usermenu.scala.html` | `site/layout.html :: gnb` (인라인) | 완료(TASK-0224, TDD). 내 이슈 카운터 배지(`myOpenIssueCount`), 게스트 새 그룹 만들기 숨김 이식. `NAVBAR_CUSTOM_LINK_NAME/URL` 커스텀 링크와 OAuth 세션 불일치 경고는 미이식(저가치·백엔드 설정 부재, 문서에 기록) |
+| 14 | [~] | `common/usermenu_tab_content_list.scala.html` | `common/usermenu_tab_content_list.html` | 확인: yuna 파일이 307줄로 legacy(16줄)보다 훨씬 크며 이미 여러 조각이 통합된 것으로 보임 — 상세 줄단위 대조는 아직 미실시(향후 세션에서 처리) |
+| 15 | [~] | `common/loginDialog.scala.html` | `site/layout.html :: scripts` (인라인) | 부분 완료(TASK-0224). jquery-ui 스크립트 로드 이식(TDD). `useSocialLoginOnly` 폼 숨김 토글과 legacy의 동적 OAuth 프로바이더 목록(`forProviders`)은 yuna가 Spring Security OAuth2 정적 클라이언트 등록 방식이라 구조적으로 다름 — 하드코딩된 github/google 버튼으로 아키텍처적으로 치환된 상태(선행 세션), 토글 자체는 백엔드 설정 부재로 미이식(저가치 코너케이스로 판단, 문서에 기록) |
+| 16 | [~] | `common/select2.scala.html` | `common/select2.html` | 상세 줄단위 대조 미실시(향후 세션에서 처리) |
+| 17 | [x] | `common/calendar.scala.html` | `common/calendar.html` | 확인 완료 — 완전 일치(TASK-0224 조사 중 대조 완료, 코드 변경 없음) |
+| 18 | [~] | `common/mySeriesMenuTab.scala.html` | `common/mySeriesMenuTab.html` | 상세 줄단위 대조 미실시(향후 세션에서 처리) |
 | 19 | [ ] | `common/markdown.scala.html` | `common/markdown.html` | 마크다운 렌더 영역 공통 래퍼 |
 | 20 | [ ] | `common/editor.scala.html` | `common/editor.html` | 마크다운 에디터(툴바 포함) |
 | 21 | [ ] | `common/fileUploader.scala.html` | `common/fileUploader.html` | 첨부파일 업로더 위젯 |
@@ -523,3 +523,42 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   API를 노출하는 디버그용 화면)라 이식 가치 대비 비용이 과도하다고 판단해 보류 결정, 사유를 표에 기록(`docs/
   PARITY_BACKLOG.md`의 보류 항목 기록 관행과 동일 형식).
 - **검증**: 문서만 수정, 코드 변경 없음 — 별도 테스트/빌드 불필요.
+
+### #10~#18 `common/*` 공용 파샬 그룹2 착수분 (TASK-0224)
+
+- **원인**: #10(navbar)/#11(footer)/#12(scripts)/#13(usermenu)/#15(loginDialog)는 이미 `site/layout.html`의
+  `gnb`/`footer`/`scripts` 조각에 인라인 조합돼 있었으나(선행 세션), legacy와 줄 단위 대조 결과 다음이 누락:
+  1. `common/navbar.scala.html`: `HIDE_PROJECT_LISTING` 설정 또는 게스트 사용자일 때 "전체 목록" 링크를 숨기는
+     분기(`!Application.HIDE_PROJECT_LISTING && !UserApp.currentUser().isGuest`)가 없어 항상 노출되고 있었음.
+     백엔드는 이미 `hideProjectListing`(P0-23) 설정과 `User.isGuest` 필드를 갖추고 있었음.
+  2. `common/usermenu.scala.html`: "내 이슈" 링크 옆 미해결 이슈 카운터 배지(`Issue.countOpenIssuesByUser`
+     대응)가 없었음. "새 그룹 만들기" 링크가 게스트에게도 노출되고 있었음(legacy는 `!currentUser.isGuest`로 숨김).
+  3. `common/scripts.scala.html`: 토스트 알림 jquery-tmpl(`tplYobiToast`), 로그인 사용자 전용 "U" 단축키
+     (`/user/{loginId}`), bfcache 복원 시 `NProgress.done()` 호출(`pageshow` 이벤트), iframe 내부 페이지에서
+     부모 창의 히스토리를 동기화하는 클릭 핸들러(`.ago`/`.head-anchor`/`.share-link`)가 빠져 있었음.
+  4. `common/loginDialog.scala.html`: `yobi.LoginDialog.js`가 의존하는 `jquery-ui-1.10.4.custom.min.js`
+     스크립트 로드가 빠져 있었음(정적 자산 자체는 이미 존재).
+  #11(footer)와 #17(calendar)은 대조 결과 완전히 일치함을 확인(코드 변경 없음).
+- **구현 내용**:
+  - `GlobalModelAttributeAdvice`에 `hideProjectListing`(`@Value`, 기존 컨트롤러들과 동일 프로퍼티 키 재사용)과
+    `myOpenIssueCount`(`IssueRepository.countByAssigneeAndState(userId, OPEN)` 재사용, 로그인 사용자 기준)
+    전역 모델 속성 추가.
+  - `site/layout.html`의 `gnb`/`errorGnb`에서 "전체 목록" 링크에 `th:if` 가드 추가, "내 이슈" 링크에
+    `.counter-badge` 배지 추가(`th:inline="text"` + `[[...]]`로 기존 텍스트 노드 구조 보존), "새 그룹 만들기"에
+    게스트 가드 추가.
+  - `scripts` 조각에 `tplYobiToast` 템플릿, "U" 단축키(`th:if`+인라인 JS 문자열 결합), `pageshow`/`NProgress.done()`
+    리스너, iframe 히스토리 동기화 스크립트, `jquery-ui` 스크립트 로드 추가.
+- **legacy와 다르게 처리한 지점**:
+  - navbar의 조직 검색범위 세부조건(`HIDE_PROJECT_LISTING||게스트`일 때만 조직 멤버/관리자에게 그룹 검색범위
+    노출)은 좁은 코너케이스라 미이식.
+  - usermenu의 `NAVBAR_CUSTOM_LINK_NAME/URL`(운영자 지정 커스텀 링크)과 OAuth 세션 불일치 경고는 대응 백엔드
+    설정이 없고 실사용 가치가 낮아 미이식.
+  - loginDialog의 `useSocialLoginOnly` 토글과 동적 OAuth 프로바이더 목록은 yuna가 Spring Security OAuth2
+    정적 클라이언트 등록 구조라 근본적으로 다르며(선행 세션에서 이미 github/google 고정 버튼으로 아키텍처
+    치환), 토글 자체를 위한 백엔드 설정 신설은 이번 범위에서 보류.
+  - 세 가지 모두 사유를 백로그 표 비고에 명시했다(침묵 생략이 아님).
+- **테스트**: `TemplateEquivalenceSpec.kt`에 `[Test-19-8]`(게스트/일반회원 GNB 링크 노출, 미해결 이슈 배지)
+  3종, `[Test-19-9]`(토스트 템플릿, U 단축키, pageshow, iframe 히스토리 동기화, jquery-ui 로드) 2종 추가.
+  각각 RED 확인 후 구현.
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN),
+  전체 회귀 `./gradlew test` 통과.
