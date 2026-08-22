@@ -131,22 +131,6 @@ class UserControllerSpec : DescribeSpec({
             }
         }
 
-        describe("GET /user/verify") {
-            it("회원가입 계정 인증코드가 맞으면 가입완료 화면을 표시해야 한다") {
-                // Given
-                every { userService.verifyUser("gildong", "verification-code") } returns true
-
-                // When & Then
-                mockMvc.perform(
-                    get("/user/verify")
-                        .param("loginId", "gildong")
-                        .param("code", "verification-code")
-                )
-                    .andExpect(status().isOk)
-                    .andExpect(content().string(Matchers.containsString("회원가입 계정 인증이 완료되었습니다.")))
-            }
-        }
-
         describe("POST /api/users/profile/update") {
             it("프로필 정보를 정상 수정해야 한다") {
                 // Given

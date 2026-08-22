@@ -186,27 +186,6 @@ class UserController(
         }
     }
 
-    @GetMapping("/verify/{loginId}/{verificationCode}", produces = ["text/html;charset=UTF-8"])
-    fun verifyUserLegacy(
-        @PathVariable loginId: String,
-        @PathVariable verificationCode: String
-    ): ResponseEntity<String> {
-        return verifyUser(loginId, verificationCode)
-    }
-
-    @GetMapping("/user/verify", produces = ["text/html;charset=UTF-8"])
-    fun verifyUser(
-        @RequestParam("loginId") loginId: String,
-        @RequestParam("code") code: String
-    ): ResponseEntity<String> {
-        val success = userService.verifyUser(loginId, code)
-        return if (success) {
-            ResponseEntity.ok("<h3>회원가입 계정 인증이 완료되었습니다.</h3><p><a href='/login'>로그인 화면으로 이동</a></p>")
-        } else {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST).body("<h3>잘못되거나 만료된 인증 링크입니다.</h3>")
-        }
-    }
-
     @PostMapping("/api/users/profile/update")
     fun updateProfile(
         @RequestParam("name") name: String,

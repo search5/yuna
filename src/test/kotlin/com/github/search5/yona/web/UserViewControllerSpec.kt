@@ -161,6 +161,33 @@ class UserViewControllerSpec : DescribeSpec({
             }
         }
 
+        describe("GET /user/verify") {
+            it("인증 코드가 유효하면 200 OK와 user/verified 뷰, loginId 모델 속성을 반환해야 한다") {
+                every { userService.verifyUser("gildong", "verification-code") } returns true
+
+                mockMvc.perform(
+                    get("/user/verify")
+                        .param("loginId", "gildong")
+                        .param("code", "verification-code")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("user/verified"))
+                    .andExpect(model().attribute("loginId", "gildong"))
+            }
+
+            it("인증 코드가 유효하지 않으면 404와 error/404 뷰를 반환해야 한다") {
+                every { userService.verifyUser("gildong", "wrong-code") } returns false
+
+                mockMvc.perform(
+                    get("/user/verify")
+                        .param("loginId", "gildong")
+                        .param("code", "wrong-code")
+                )
+                    .andExpect(status().isNotFound)
+                    .andExpect(view().name("error/404"))
+            }
+        }
+
         describe("GET /user/editform") {
             it("로그인된 사용자라면 200 OK와 user/edit 뷰를 반환해야 한다") {
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)

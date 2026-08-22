@@ -41,6 +41,8 @@ import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.domain.user.UserSetting
 import com.github.search5.yona.domain.user.UserSettingRepository
+import com.github.search5.yona.domain.user.UserVerification
+import com.github.search5.yona.domain.user.UserVerificationRepository
 
 class TemplateEquivalenceSpec @Autowired constructor(
     private val wac: WebApplicationContext,
@@ -55,7 +57,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
     private val yonaUpdateService: YonaUpdateService,
     private val recentIssueService: RecentIssueService,
-    private val userSettingRepository: UserSettingRepository
+    private val userSettingRepository: UserSettingRepository,
+    private val userVerificationRepository: UserVerificationRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -845,6 +848,40 @@ class TemplateEquivalenceSpec @Autowired constructor(
                         ).andExpect(status().isOk).andReturn().response.contentAsString
                     )
                     boardListDoc.select("link[href*='/owner/public-proj/issue/labels.css']").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-16] 회원가입 이메일 인증 완료 화면(user/verified.scala.html) 동치성 검증") {
+                it("유효한 인증 코드로 접근 시 siteLayout 기반(전체 GNB+footer) 인증 완료 화면이 렌더링되어야 한다") {
+                    val verifyUser = userRepository.findByLoginId("verify-target-user").orElseGet {
+                        userRepository.save(User(loginId = "verify-target-user", name = "인증대상", email = "verify-target@yona.io"))
+                    }
+                    userVerificationRepository.findByLoginIdAndVerificationCode(verifyUser.loginId, "test-code-123")
+                        ?: userVerificationRepository.save(
+                            UserVerification(
+                                user = verifyUser,
+                                loginId = verifyUser.loginId,
+                                verificationCode = "test-code-123",
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+
+                    val result = mockMvc.perform(
+                        get("/user/verify").param("loginId", verifyUser.loginId).param("code", "test-code-123")
+                    ).andExpect(status().isOk).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("form[name='gnb-search-form']").size shouldBe 1
+                    doc.select("footer.page-footer-outer").size shouldBe 1
+                    doc.text().contains(verifyUser.loginId) shouldBe true
+                }
+            }
+
+            describe("[Test-19-17] 로그인 화면(user/login.scala.html) 동치성 검증") {
+                it("로그인 화면에 이메일 인증 안내 문구가 노출되어야 한다") {
+                    val result = mockMvc.perform(get("/users/loginform")).andReturn()
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select(".email-verification-help").size shouldBe 1
                 }
             }
         }

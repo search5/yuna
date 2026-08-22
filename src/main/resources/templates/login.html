@@ -15,6 +15,7 @@
       </div>
       
       <div class="login-form-wrap frm-wrap">
+        <div class="email-verification-help" th:text="#{notification.confirm.mail.will.be.sent}">최초 로그인일 경우 확인 메일이 발송됩니다.</div>
         <!-- 에러 및 성공 메시지 -->
         <div class="alert alert-danger" th:if="${loginError}" th:text="${loginError}" style="margin: 10px 0; color: #b94a48; background-color: #f2dede; border: 1px solid #eed3d7; padding: 8px 14px; border-radius: 4px; text-align: left;"></div>
         <div class="alert alert-success" th:if="${param.signupSuccess}" style="margin: 10px 0; color: #468847; background-color: #dff0d8; border: 1px solid #d6e9c6; padding: 8px 14px; border-radius: 4px; text-align: left;" th:text="#{title.signUpSuccess}">회원가입이 완료되었습니다. 로그인해 주세요.</div>
