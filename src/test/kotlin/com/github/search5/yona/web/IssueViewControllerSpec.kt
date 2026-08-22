@@ -174,6 +174,8 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
                 every { projectUserRepository.findByProjectId(any<Long>()) } returns emptyList()
                 every { issueLabelRepository.findByProject(any<Project>()) } returns emptyList()
+                // 그룹7 #119: 이슈 목록 첫 페이지에서 로그인 본인의 초안 이슈를 조회한다.
+                every { issueRepository.findByProjectAndAuthorLoginIdAndIsDraftTrueOrderByNumberDesc(any(), any()) } returns emptyList()
 
                 mockMvc.perform(get("/owner/TestProj/issues").principal(userAuth))
                     .andExpect(status().isOk)
@@ -198,6 +200,8 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
                 every { projectUserRepository.findByProjectId(any<Long>()) } returns emptyList()
                 every { issueLabelRepository.findByProject(any<Project>()) } returns emptyList()
+                // 그룹7 #119: 이슈 목록 첫 페이지에서 로그인 본인의 초안 이슈를 조회한다.
+                every { issueRepository.findByProjectAndAuthorLoginIdAndIsDraftTrueOrderByNumberDesc(any(), any()) } returns emptyList()
                 val pageableSlot = slot<Pageable>()
                 every { issueRepository.findAll(any<Specification<Issue>>(), capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
                 every { issueRepository.count(any<Specification<Issue>>()) } returns 1L
@@ -216,6 +220,8 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
                 every { projectUserRepository.findByProjectId(any<Long>()) } returns emptyList()
                 every { issueLabelRepository.findByProject(any<Project>()) } returns emptyList()
+                // 그룹7 #119: 이슈 목록 첫 페이지에서 로그인 본인의 초안 이슈를 조회한다.
+                every { issueRepository.findByProjectAndAuthorLoginIdAndIsDraftTrueOrderByNumberDesc(any(), any()) } returns emptyList()
                 val pageableSlot = slot<Pageable>()
                 every { issueRepository.findAll(any<Specification<Issue>>(), capture(pageableSlot)) } returns PageImpl(listOf(issue), pageRequest, 1)
                 every { issueRepository.count(any<Specification<Issue>>()) } returns 1L
@@ -236,6 +242,8 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { watchService.isWatching(any(), any(), any()) } returns false
                 every { favoriteIssueRepository.findByUserIdAndIssueId(10L, 5L) } returns Optional.empty()
                 every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
+                // 그룹7 #127: 인라인 마일스톤 수정 위젯용 open/closed 마일스톤 목록.
+                every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
 
                 mockMvc.perform(get("/owner/TestProj/issue/1").principal(userAuth))
                     .andExpect(status().isOk)
@@ -271,6 +279,8 @@ class IssueViewControllerSpec : DescribeSpec({
                     created = Instant.parse("2026-01-03T00:00:00Z")
                 )
                 every { issueEventRepository.findByIssueOrderByCreatedAsc(issue) } returns listOf(stateEvent, bodyChangedEvent)
+                // 그룹7 #127: 인라인 마일스톤 수정 위젯용 open/closed 마일스톤 목록.
+                every { milestoneService.getMilestones(any<Long>(), any<State>()) } returns emptyList()
 
                 val result = mockMvc.perform(get("/owner/TestProj/issue/1").principal(userAuth))
                     .andExpect(status().isOk)
@@ -306,7 +316,8 @@ class IssueViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.findByProjectId(1L) } returns emptyList()
                 every { projectUserRepository.findByUserId(10L) } returns emptyList()
                 every { issueLabelRepository.findByProject(project) } returns emptyList()
-                every { issueRepository.findByProjectAndState(project, State.OPEN) } returns emptyList()
+                // 그룹7 #125: 부모 이슈 후보군 — 상태 무관, 최신순 최대 300건.
+                every { issueRepository.findByProjectAndParentIsNullOrderByCreatedDateDesc(any(), any()) } returns emptyList()
 
                 mockMvc.perform(get("/user/issues/new").param("commentId", "200").principal(userAuth))
                     .andExpect(status().isOk)

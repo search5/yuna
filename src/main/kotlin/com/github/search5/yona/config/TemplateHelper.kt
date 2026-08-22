@@ -183,6 +183,11 @@ class TemplateHelper(
         return issueRepository.findByParentId(parentId)
     }
 
+    // yona Issue.findByParentIssueIdAndState() 대응 (issue/partial_view_childIssueList.html, 그룹7 #135).
+    fun findByParentIdAndState(parentId: Long, state: State): List<Issue> {
+        return issueRepository.findByParentIdAndState(parentId, state)
+    }
+
     fun getPercent(numerator: Double, denominator: Double): Double {
         if (denominator == 0.0) return 0.0
         return (numerator / denominator) * 100.0

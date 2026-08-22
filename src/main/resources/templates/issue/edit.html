@@ -24,19 +24,28 @@
                                         </div>
                                         <div class="span1 subtask-message" th:classappend="${parentIssue != null} ? 'option-on' : ''" th:text="#{issue.option}">Option</div>
                                     </div>
-                                    <!-- 하위 태스크 설정 영역 -->
-                                    <div class="subtask-wrap" th:classappend="${parentIssue != null} ? 'show' : ''">
+                                    <!-- 하위 태스크 설정 영역 — yona partial_select_subtask.scala.html 대응 (그룹7 #125).
+                                         legacy의 showOption = parentIssueId.isDefined || currentIssueId.isDefined 이며,
+                                         수정 화면은 currentIssueId(=이 이슈 자신)가 항상 존재하므로 showOption은 항상
+                                         참이다 — parentIssue 유무와 무관하게 항상 펼쳐져 있고 활성화돼 있어야 한다
+                                         (이 이슈에 부모가 아직 없어도 수정 화면에서 새로 부모를 지정할 수 있어야 함). -->
+                                    <div class="subtask-wrap show">
                                         <div class="span3">
-                                            <select id="targetProjectId" name="targetProjectId" data-format="projects" th:data-placeholder="#{organization.choose.projects}" data-toggle="select2" data-container-css-class="fullsize" th:disabled="${parentIssue == null}">
+                                            <select id="targetProjectId" name="targetProjectId" data-format="projects" th:data-placeholder="#{organization.choose.projects}" data-toggle="select2" data-container-css-class="fullsize">
                                                 <option th:value="${project.id}" th:data-avatar-url="@{/projects/{projectId}/logo(projectId=${project.id})}" th:text="${project.name}"></option>
                                                 <option th:each="movable : ${movableProjects}" th:if="${movable.id != project.id}" th:value="${movable.id}" th:data-owner="${movable.owner} + ' /'" th:data-avatar-url="@{/projects/{projectId}/logo(projectId=${movable.id})}" th:text="${movable.name}"></option>
                                             </select>
                                         </div>
                                         <div class="span6">
-                                            <select id="parentId" name="parentIssueId" data-format="issues" th:data-placeholder="#{organization.choose.projects}" data-toggle="select2" data-container-css-class="fullsize" th:disabled="${parentIssue == null}">
-                                                <option value="" th:text="#{issue.subtask.select}">부모 이슈 선택</option>
+                                            <!-- hasChildIssue: 이 이슈가 이미 하위이슈를 갖고 있으면(=이미 부모 이슈) 다른
+                                                 이슈의 하위이슈로 만들 수 없다 — placeholder만 안내 문구로 바뀌고 후보
+                                                 목록은 비운다(legacy와 동일하게 매니저 이슈 그대로 재현). -->
+                                            <select id="parentId" name="parentIssueId" data-format="issues" th:data-placeholder="#{organization.choose.projects}" data-toggle="select2" data-container-css-class="fullsize">
+                                                <option value="" th:text="${hasChildIssue} ? '이미 부모 이슈입니다.' : #{issue.subtask.select}">부모 이슈 선택</option>
                                                 <option th:if="${parentIssue != null}" th:value="${parentIssue.id}" selected th:text="'#' + ${parentIssue.number} + '. ' + ${parentIssue.title}"></option>
-                                                <option th:each="parentCandidate : ${parentCandidates}" th:value="${parentCandidate.id}" th:text="'#' + ${parentCandidate.number} + '. ' + ${parentCandidate.title}"></option>
+                                                <th:block th:unless="${hasChildIssue}">
+                                                    <option th:each="parentCandidate : ${parentCandidates}" th:if="${parentIssue == null || parentCandidate.id != parentIssue.id}" th:value="${parentCandidate.id}" th:text="'#' + ${parentCandidate.number} + '. ' + ${parentCandidate.title}"></option>
+                                                </th:block>
                                             </select>
                                         </div>
                                     </div>
