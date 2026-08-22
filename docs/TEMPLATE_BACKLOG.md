@@ -217,36 +217,36 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 113 | [~] | `issue/create.scala.html` | `issue/create.html` | |
-| 114 | [~] | `issue/edit.scala.html` | `issue/edit.html` | |
-| 115 | [~] | `issue/list.scala.html` | `issue/list.html` | |
-| 116 | [ ] | `issue/partial_searchform.scala.html` | `issue/partial_searchform.html` | 목록 상단 검색/필터 폼 |
-| 117 | [ ] | `issue/partial_list.scala.html` | `issue/partial_list.html` | AJAX 목록 갱신용 |
-| 118 | [ ] | `issue/partial_list_wrap.scala.html` | `issue/partial_list_wrap.html` | |
-| 119 | [ ] | `issue/partial_list_draft.scala.html` | `issue/partial_list_draft.html` | 초안 이슈 표시 |
-| 120 | [ ] | `issue/partial_list_subtask.scala.html` | `issue/partial_list_subtask.html` | |
-| 121 | [ ] | `issue/partial_list_quicksearch.scala.html` | `issue/partial_list_quicksearch.html` | |
-| 122 | [~] | `issue/partial_massupdate.scala.html` | `issue/partial_massupdate.html` | |
-| 123 | [~] | `issue/partial_select_label.scala.html` | `issue/partial_select_label.html` | |
-| 124 | [~] | `issue/partial_show_selected_label.scala.html` | `issue/partial_show_selected_label.html` | |
-| 125 | [ ] | `issue/partial_select_subtask.scala.html` | `issue/partial_select_subtask.html` | |
-| 126 | [~] | `issue/view.scala.html` | `issue/view.html` | 아래 partial들이 실제로 다 들어있는지 대조 |
-| 127 | [i] | `issue/partial_assignee.scala.html` | (view.html에 인라인 추정) | |
-| 128 | [i] | `issue/partial_comment.scala.html` | (view.html에 인라인 추정) | |
-| 129 | [i] | `issue/partial_comments.scala.html` | (view.html에 인라인 추정) | |
-| 130 | [i] | `issue/partial_event_timeline.scala.html` | (view.html에 인라인 추정) | 상태변경 이벤트 타임라인 |
-| 131 | [ ] | `issue/partial_index_comment.scala.html` | `issue/partial_index_comment.html` | (홈/검색 등에서 쓰는 축약형) |
-| 132 | [ ] | `issue/partial_index_comments.scala.html` | `issue/partial_index_comments.html` | |
-| 133 | [ ] | `issue/partial_index_event_timeline.scala.html` | `issue/partial_index_event_timeline.html` | |
-| 134 | [i] | `issue/partial_view_child.scala.html` | (view.html에 인라인 추정) | 하위 이슈 1건 |
-| 135 | [i] | `issue/partial_view_childIssueList.scala.html` | (view.html에 인라인 추정) | 하위 이슈 목록 |
-| 136 | [i] | `issue/partial_view_childIssueListOnly.scala.html` | (view.html에 인라인 추정) | AJAX 갱신용 |
-| 137 | [i] | `issue/partial_voters.scala.html` | (view.html에 인라인 추정) | |
-| 138 | [i] | `issue/partial_voter_list.scala.html` | (view.html에 인라인 추정) | |
-| 139 | [~] | `issue/my_list.scala.html` | `issue/my_list.html` | |
-| 140 | [~] | `issue/my_partial_list.scala.html` | `issue/my_partial_list.html` | |
-| 141 | [~] | `issue/my_partial_list_quicksearch.scala.html` | `issue/my_partial_list_quicksearch.html` | |
-| 142 | [~] | `issue/my_partial_search.scala.html` | `issue/my_partial_search.html` | |
+| 113 | [x] | `issue/create.scala.html` | `issue/create.html` | 완료(TASK-0238). 마일스톤 선택 영역이 `project.menuSetting.milestone` 게이트 없이 항상 노출되던 것을 `project.isMilestoneEnabled` 조건으로 복구. 담당자 선택 영역의 `isProjectResourceCreatable(ISSUE_ASSIGNEE)` 게이트는 이슈 생성 폼 접근 자체가 이미 동일 권한을 요구해 실질적으로 항상 참이라 생략해도 무해하다고 판단, 미이식 |
+| 114 | [x] | `issue/edit.scala.html` | `issue/edit.html` | 완료(TASK-0238). #113과 동일하게 마일스톤 선택 영역에 `project.isMilestoneEnabled` 게이트 복구 |
+| 115 | [x] | `issue/list.scala.html` | `issue/list.html` | 완료(TASK-0238, TDD). 아래 #116~125 조사에서 발견된 3건(닫힌 마일스톤 optgroup 누락/마일스톤 비활성 시에도 일괄수정 마일스톤 옵션 노출/라벨 관리 링크 권한 미검사)을 이 파일에서 수정 |
+| 116 | [i] | `issue/partial_searchform.scala.html` | `issue/list.html`에 인라인 | 완료(TASK-0238). 대체로 일치하나 **마일스톤 select가 열림 optgroup만 있고 닫힌 마일스톤 optgroup이 통째로 빠져** 있었음(legacy는 열림/닫힘 2개 optgroup) — `IssueViewController.list()`에 `closedMilestones` 모델 속성 신규 추가 후 복구. **라벨 관리 링크도 legacy `isManagerOf(project)` 권한 체크 없이 항상 노출**되고 있었음(실제 라벨 설정 화면은 매니저/사이트관리자만 접근 가능해 일반 멤버에게 403 유발) — `templateHelper.isManager` 게이트 추가 |
+| 117 | [i] | `issue/partial_list.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). 이슈 행 마크업(제목/작성자/날짜/서브태스크 진행률/마일스톤/댓글·공감·공유 카운트) legacy와 일치 |
+| 118 | [i] | `issue/partial_list_wrap.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). 좌측 필터+우측 목록 2단 레이아웃, 정렬 필터 링크(마감일/최근업데이트/등록일/댓글순) 구조 일치 |
+| 119 | [~] | `issue/partial_list_draft.scala.html` | (미이식) | **미이식 확인(TASK-0238)**: legacy는 초안(isDraft=true) 이슈를 작성자 본인에게만 목록 최상단에 노출하는 별도 파샬을 갖고 있으나, yuna는 이슈 목록 쿼리가 `State.OPEN`/`State.CLOSED`만 조회해 `State.DRAFT` 이슈는 목록에서 완전히 안 보임(직접 URL 접근 시에만 열람 가능, `IssueController`에 작성자 본인 검증 로직은 있음). 백엔드에 작성자별 초안 조회 쿼리 신규 추가 + 목록 템플릿에 초안 섹션 추가가 필요해 순수 템플릿 포팅 범위를 넘어 보류 — 후속 배치에서 별도 작업으로 처리 필요 |
+| 120 | [i] | `issue/partial_list_subtask.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). 서브태스크 진행률 바(`done-outline`/`red-outline`)와 부모 이슈 링크 구조 일치 |
+| 121 | [i] | `issue/partial_list_quicksearch.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). 좌측 퀵링크(전체/할당된/작성한/댓글단 이슈) 구조·카운트 배지 일치 |
+| 122 | [x] | `issue/partial_massupdate.scala.html` | `issue/list.html`에 인라인 | 완료(TASK-0238). 일괄 수정 폼(상태/담당자/마일스톤/라벨 추가·제거) 구조는 대체로 일치하나, **마일스톤 드롭다운이 `project.menuSetting.milestone`(마일스톤 메뉴 활성화 여부) 게이트 없이 마일스톤 데이터만 있으면 노출**되고 있었음 — `project.isMilestoneEnabled` 조건 추가로 복구 |
+| 123 | [i] | `issue/partial_select_label.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). select2 기반 카테고리별 라벨 다중선택 구조는 일치하나, legacy는 라벨 dt 안에 `isManagerOf(project)`일 때만 보이는 `[편집]` 인라인 링크를 두는 반면 yuna는 별도 `.labels-wrap` 아이콘 버튼(#116에서 권한 게이트 복구함)으로 분리 배치 — 기능은 동등, DOM 구조만 소폭 차이(수용 가능한 수준으로 판단) |
+| 124 | [i] | `issue/partial_show_selected_label.scala.html` | `issue/partial_show_selected_label.html`(프래그먼트) | 확인 완료(TASK-0238). `dl`/`dt`/라벨 앵커 구조 일치, 수정 불필요 |
+| 125 | [~] | `issue/partial_select_subtask.scala.html` | (미이식) | **미이식 확인(TASK-0238)**: 이슈 생성/수정 폼에서 부모 이슈를 select2로 검색해 지정하는 위젯. yuna의 create.html/edit.html에 부모이슈 지정 UI가 없음(현재는 URL 쿼리파라미터 `parentIssueId`로만 하위이슈 생성 가능, 기존 이슈의 부모를 나중에 바꾸는 기능 없음) — REST 검색 엔드포인트 신규 필요, 순수 템플릿 포팅 범위를 넘어 보류 |
+| 126 | [x] | `issue/view.scala.html` | `issue/view.html` | 대체로 정밀 이식돼 있음을 확인(TASK-0238). 아래 #127,134~136에서 발견된 2건의 실질적 기능 누락은 백엔드 작업이 필요해 별도 보류 항목으로 기록 |
+| 127 | [~] | `issue/partial_assignee.scala.html` | (view.html에 정적 텍스트로만 존재, 인터랙티브 위젯 없음) | **중대 발견(TASK-0238), 미이식**: view.html 우측 패널의 담당자/마일스톤이 항상 읽기전용 `<span>` 텍스트뿐이며, legacy처럼 `isAllowedUpdate`(매니저 등)일 때 select2 기반 인라인 수정 위젯으로 바뀌는 기능이 없음. 정적 자산 `yobi.issue.View.js`에는 이미 `[data-toggle=select2]` change 이벤트로 `massUpdate` 엔드포인트에 AJAX 저장하는 로직이 구현돼 있으나(`_onChangeIssueInfo`/`_requestUpdateIssue`), (a) view.html에 해당 select 마크업 자체가 없고, (b) 템플릿의 `$yobi.loadModule("issue.View", {...})` 호출에도 `urls.massUpdate`가 전달되지 않아 이중으로 죽어있는 상태. 참고로 legacy 자체도 `_onSelectingAssignee`가 리스닝하는 `[name="assignee.user.id"]` 셀렉터가 실제 렌더링되는 `partial_assignee`의 `name="assigneeLoginId"`와 불일치해 legacy에서도 일부 핸들러는 이미 죽어있었음(주 동작 경로는 `data-toggle=select2`의 범용 change 핸들러). 라벨은 이미 동일 패턴(#123)으로 정상 작동 중이라 참고 구현으로 재사용 가능. REST 계약 검증이 필요해 순수 템플릿 포팅 범위를 넘어 보류 — 후속 배치에서 (1) view.html에 assignee/milestone/dueDate select2 마크업 추가, (2) `massUpdate` URL을 JS 초기화 옵션에 전달, (3) 실제 massUpdate 컨트롤러가 단건 필드 갱신 요청을 올바르게 처리하는지 검증까지 함께 처리 필요 |
+| 128 | [i] | `issue/partial_comment.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238). 댓글 아바타/작성자/날짜/공감 리스트·모달/공감토글 버튼/마크다운 본문 구조 legacy와 일치 |
+| 129 | [i] | `issue/partial_comments.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238, 이전 P1-106에서 이미 이식). 댓글+이벤트 통합 타임라인(`issue.getTimeline()`) 구조 일치 |
+| 130 | [i] | `issue/partial_event_timeline.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238, 이전 P1-106에서 이미 이식). 상태변경 이벤트 렌더링 구조 일치 |
+| 131 | [i] | `issue/partial_index_comment.scala.html` | (미이식, 기능적으로 불필요) | 조사 완료(TASK-0238): legacy에서 `issue.isDraft`일 때만 쓰이는 축약형 댓글 뷰(줄임말 텍스트 등)이며, yuna는 draft 여부와 무관하게 항상 풀 타임라인(#129와 동일)을 렌더링해 기능적으로 상위호환 — 별도 이식 불필요로 판단 |
+| 132 | [i] | `issue/partial_index_comments.scala.html` | (미이식, 기능적으로 불필요) | #131과 동일 사유로 별도 이식 불필요 |
+| 133 | [i] | `issue/partial_index_event_timeline.scala.html` | (미이식, 기능적으로 불필요) | #131과 동일 사유로 별도 이식 불필요 |
+| 134 | [~] | `issue/partial_view_child.scala.html` | (미이식) | **중대 발견(TASK-0238), 미이식**: 하위 이슈 1건 렌더링 파샬. #135와 함께 보류 |
+| 135 | [~] | `issue/partial_view_childIssueList.scala.html` | (미이식) | **중대 발견(TASK-0238), 미이식**: 이슈 상세 화면에 부모+하위이슈 목록(진행률 바 포함)을 보여주는 기능이 view.html에 전혀 없음(하위 이슈 "등록" 버튼만 있고 등록된 하위 이슈 목록을 볼 방법이 없음). `Issue.findByParentIssueIdAndState` 상당의 리포지토리 메서드 신규 필요 + `partial_view_child`(#134)/`partial_view_childIssueListOnly`(#136) 렌더링 로직까지 함께 필요해 순수 템플릿 포팅 범위를 넘어 보류 — 후속 배치에서 전용 작업으로 처리 필요 |
+| 136 | [~] | `issue/partial_view_childIssueListOnly.scala.html` | (미이식) | #135의 AJAX 갱신용 파샬, #135와 함께 보류 |
+| 137 | [i] | `issue/partial_voters.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238). 공감 버튼 토글/투표자 아바타 목록/더보기 툴팁 구조 legacy와 일치 |
+| 138 | [i] | `issue/partial_voter_list.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238). 투표자 목록 모달 구조 legacy와 일치 |
+| 139 | [x] | `issue/my_list.scala.html` | `issue/my_list.html` | 확인 완료(TASK-0238). site/layout 기반 GNB, mySeriesMenuTab/my_partial_search 조각 호출, 로그인기본페이지 설정 스크립트까지 legacy와 정확히 일치, 코드 변경 없음 |
+| 140 | [i] | `issue/my_partial_list.scala.html` | `issue/my_partial_search.html`에 인라인 | 확인 완료(TASK-0238). CSS 클래스 구조 legacy와 일치(동적 값만 th:class로 치환) |
+| 141 | [i] | `issue/my_partial_list_quicksearch.scala.html` | `issue/my_partial_list_quicksearch.html` | 확인 완료(TASK-0238). 코드 변경 없음 |
+| 142 | [x] | `issue/my_partial_search.scala.html` | `issue/my_partial_search.html` | 확인 완료(TASK-0238). 상태 탭/정렬 필터/2단보기/서브태스크펼치기 체크박스 구조 legacy와 일치, 코드 변경 없음 |
 
 ## 그룹 8 — `board/*` 게시판 (6개, #143~148)
 
@@ -914,3 +914,46 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   활성탭/프리셋색상 17개/외부 CDN jQuery 미로드 검증).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN).
   **그룹6(project/*, #87~112) 26개 항목 전체 처리 완료.** 다음은 그룹7(issue/*, #113~142).
+
+### 그룹7 `issue/*` (#113~142) (TASK-0238)
+
+- **패턴 점검**: 가짜 GNB/`.gnb-wrap`/외부 CDN jQuery 중복 로드 등 그룹6에서 반복 발견된 안티패턴은
+  issue/* 11개 파일 전부에서 발견되지 않음(전부 site/layout 조각 정상 사용 중) — 이 그룹은 대신 "권한
+  게이트 누락"과 "정적 자산은 있는데 마크업이 빠져 죽어있는 기능" 두 계열의 새로운 버그가 다수 발견됨.
+- **#116(partial_searchform) 발견**: 마일스톤 검색 필터가 열림 마일스톤만 조회해 **닫힌 마일스톤
+  optgroup 자체가 없었음**(legacy는 열림/닫힘 2개 optgroup) — `IssueViewController.list()`에
+  `closedMilestones` 모델 속성을 신규 추가(`milestoneService.getMilestones(id, State.CLOSED)`)하고
+  `issue/list.html`에 두 번째 optgroup 추가로 복구. 같은 파일에서 **"라벨 관리" 링크가 legacy의
+  `isManagerOf(project)` 권한 체크 없이 항상 노출**되고 있던 것도 발견 — 실제 라벨 설정 화면
+  (`ProjectViewController.labelsForm`)은 매니저/사이트관리자만 접근 가능해 일반 멤버가 클릭하면 403이
+  뜨는 상태였음. `templateHelper.isManager(project, currentUser) || currentUser.isSiteManager` 게이트로
+  복구.
+- **#113,114,122(create/edit/massupdate) 발견**: 마일스톤 선택 UI 3곳 전부 `project.menuSetting.milestone`
+  (마일스톤 메뉴 활성화 여부) 게이트 없이 마일스톤 데이터만 있으면 노출되고 있었음 — `project.isMilestoneEnabled`
+  조건을 세 곳 모두에 추가.
+- **#127(partial_assignee) 중대 발견, 미이식**: 이슈 상세 화면 우측 패널의 담당자/마일스톤이 항상
+  읽기전용 텍스트뿐이고, legacy처럼 매니저가 select2로 인라인 재할당하는 기능이 없음. 정적 자산
+  `yobi.issue.View.js`에는 이미 해당 AJAX 저장 로직(`_onChangeIssueInfo`→`massUpdate`)이 구현돼 있으나
+  (a) 템플릿에 select2 마크업 자체가 없고 (b) JS 모듈 초기화 옵션에 `urls.massUpdate`가 전달되지 않아
+  이중으로 죽어있음 — "정적 자산은 있는데 마크업/로드가 빠져 죽어있는 기능" 패턴. REST 계약 검증이 필요해
+  이번 배치에서는 보류, 백로그에 구체적 구현 방향(라벨의 기존 패턴 재사용, 3단계 작업 순서) 기록.
+- **#134~136(partial_view_child 계열) 중대 발견, 미이식**: 이슈 상세 화면에 하위 이슈 등록 버튼은 있으나
+  등록된 하위 이슈 "목록"을 보여주는 기능이 전혀 없음. 신규 리포지토리 쿼리(부모ID+상태별 조회)가 필요해
+  보류.
+- **#119(partial_list_draft) 발견, 미이식**: 초안(draft) 이슈가 목록에서 완전히 안 보임(작성자 본인이
+  직접 URL로 접근해야만 열람 가능). `State.DRAFT`가 목록 쿼리의 OPEN/CLOSED 필터에서 자연히 제외되기
+  때문 — 작성자별 초안 조회 쿼리 신규 필요해 보류.
+- **#125(partial_select_subtask) 발견, 미이식**: 이슈 생성/수정 폼에 부모 이슈를 검색해 지정하는 UI가
+  없음(현재는 URL 쿼리파라미터로만 하위이슈 생성 가능) — REST 검색 엔드포인트 신규 필요해 보류.
+- **#131~133(partial_index_comment 계열)**: legacy에서 draft 이슈 전용 축약형 댓글 뷰였으나, yuna는
+  draft 여부와 무관하게 항상 풀 타임라인을 보여줘 기능적으로 상위호환 — 별도 이식 불필요로 판단.
+- **나머지(#117,118,120,121,123,124,126,128~130,137~142)**: 상세 대조 결과 legacy와 구조/메시지키/JS
+  훅이 모두 일치함을 확인, 코드 변경 없음.
+- **legacy와 다르게 처리한 지점**: #123의 라벨 관리 링크를 legacy처럼 `<dt>` 안 인라인 링크가 아니라
+  기존 yuna 구조(`.labels-wrap` 별도 아이콘 버튼)로 유지 — 기능/권한은 동등하고 DOM 구조만 소폭 다름,
+  대규모 재작성 없이도 수용 가능한 수준으로 판단.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-24]`(이슈 목록 화면 — 마일스톤 열림/닫힘 optgroup
+  검증, 라벨 관리 링크 매니저/일반멤버 권한 노출 차이 검증).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN).
+  **그룹7(issue/*, #113~142) 30개 항목 전체 처리 완료(구현 26개 + 백엔드 필요로 명확히 보류 4개: #119,
+  #125, #127, #134~136).** 다음은 그룹8(board/*, #143~148).

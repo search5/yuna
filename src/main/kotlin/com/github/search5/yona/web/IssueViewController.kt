@@ -209,6 +209,7 @@ class IssueViewController(
 
         // 마일스톤 및 멤버 목록 (어드밴스드 검색 폼용)
         val milestones = milestoneService.getMilestones(project.id!!, State.OPEN)
+        val closedMilestones = milestoneService.getMilestones(project.id!!, State.CLOSED)
         val projectUsers = projectUserRepository.findByProjectId(project.id!!)
         val members = projectUsers.map { it.user }
         val labels = issueLabelRepository.findByProject(project)
@@ -235,6 +236,7 @@ class IssueViewController(
         model.addAttribute("commentedByMeCount", commentedByMeCount)
 
         model.addAttribute("milestones", milestones)
+        model.addAttribute("closedMilestones", closedMilestones)
         model.addAttribute("members", members)
         model.addAttribute("labels", labels)
         model.addAttribute("templateHelper", templateHelper)
