@@ -36,15 +36,36 @@ class BranchViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (project.isCodeAccessibleMemberOnly == true) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
+                // yona actions/CodeAccessCheckAction.java:22-24 forbidden(ErrorViews.Forbidden.render(
+                // "error.forbidden.or.notfound", context.request().path())) 대응 — 이 (String,String)
+                // 오버로드는 ErrorViews.java:45-51에서 보듯 project를 받지 않고
+                // forbidden_default.render(messageKey)(제네릭, 헤더/메뉴 없음)로 귀결된다(비로그인이면
+                // 로그인 화면으로 보내지만 그 부분은 이 P-템플릿 작업 범위 밖). 즉 project가 이미
+                // resolve됐어도 legacy 자체가 프로젝트 컨텍스트를 보여주지 않으므로, 신규 컨텍스트 인지형
+                // error/forbidden으로 과잉 변환하지 않고 제네릭 error/403을 유지한 채 messageKey만
+                // legacy와 동일하게 맞춘다.
+                model.addAttribute("messageKey", "error.forbidden.or.notfound")
                 return "error/403"
             }
         } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            // legacy BranchApp.branches()에는 이 일반 READ 체크에 대응하는 어노테이션/액션이 없다
+            // (클래스 레벨 @IsOnlyGitAvailable, 메서드 레벨 @With(CodeAccessCheckAction.class)뿐 —
+            // CodeAccessCheckAction은 멤버 전용 케이스만 다룬다). 대응하는 legacy 렌더링이 없어
+            // 추측으로 컨텍스트를 만들어 붙이지 않고 기존 제네릭 error/403 그대로 둔다.
             return "error/403"
         }
 
         val vcsType = project.vcs?.uppercase() ?: "GIT"
         if (vcsType != "GIT") {
-            return "error/403"
+            // yona actions/IsOnlyGitAvailableAction.java:44-45
+            // badRequest(ErrorViews.BadRequest.render("error.badrequest.only.available.for.git"))
+            // 대응 — BadRequest의 (String) 1-arg 오버로드는 ErrorViews.java:134-137에서 보듯
+            // badrequest_default.render(messageKey)(제네릭)로 귀결된다(컨텍스트 인지형
+            // badrequest.render(messageKey, project, menuType)은 2-arg/3-arg Project 오버로드 전용).
+            // 기존 코드는 이 경우를 error/403(403)으로 잘못 매핑하고 있었다 — legacy는 400이므로
+            // error/400으로 바로잡되, project 헤더가 없는 legacy 실제 동작 그대로 제네릭 유지.
+            model.addAttribute("messageKey", "error.badrequest.only.available.for.git")
+            return "error/400"
         }
 
         val repository = repositoryService.getRepository(project)
