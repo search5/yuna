@@ -293,4 +293,26 @@ class OrganizationServiceImpl(
             notificationEventRecorder.record(notiEvent)
         }
     }
+
+    @Transactional
+    override fun leaveOrganization(orgId: Long, userId: Long) {
+        val organization = organizationRepository.findById(orgId)
+            .orElseThrow { IllegalArgumentException("Organization with ID $orgId not found") }
+
+        val isAdmin = organizationUserRepository.findByOrganizationIdAndUserId(orgId, userId)
+            .map { it.role.id == RoleType.ORG_ADMIN.roleType }
+            .orElse(false)
+
+        // yona OrganizationApp.java:288-309 validateForLeave() 그대로 이식 — 관리자는 이 가드를
+        // 완전히 우회하고(마지막 관리자라도 탈퇴 가능), 관리자가 아니면 "조직 전체 관리자 수 == 1"일
+        // 때 탈퇴 요청자와 무관하게 거부한다.
+        if (!isAdmin) {
+            val adminCount = organizationUserRepository.countByOrganizationIdAndRoleId(orgId, RoleType.ORG_ADMIN.roleType)
+            if (adminCount == 1L) {
+                throw IllegalStateException("organization.member.atLeastOneAdmin")
+            }
+        }
+
+        organizationUserRepository.deleteByOrganizationIdAndUserId(orgId, userId)
+    }
 }
