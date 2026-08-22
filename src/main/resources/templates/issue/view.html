@@ -240,16 +240,11 @@
 
                         <!-- 댓글 등록 폼 영역 -->
                         <th:block sec:authorize="isAuthenticated()">
-                            <form id="comment-form" th:action="@{/{owner}/{projectName}/issue/{issueNumber}/comment(owner=${project.owner}, projectName=${project.name}, issueNumber=${issue.number})}" method="post">
+                            <form id="comment-form" th:action="@{/{owner}/{projectName}/issue/{issueNumber}/comment(owner=${project.owner}, projectName=${project.name}, issueNumber=${issue.number})}" method="post" enctype="multipart/form-data">
                                 <div class="write-comment-box">
                                     <div th:replace="~{site/layout :: markdownEditor('contents', '', 'comment-body')}"></div>
 
-                                    <!-- 파일 드롭존 영역 -->
-                                    <div id="upload-drop-zone" class="upload-drop-zone">
-                                        <span class="upload-drop-message" th:text="#{common.attach.clickToUpload}">여기를 클릭하거나 파일을 끌어다 놓으세요</span>
-                                        <input type="file" name="file" class="upload-file-input" multiple="multiple" style="display:none;">
-                                    </div>
-                                    <ul class="attached-files-list"></ul>
+                                    <div th:replace="~{common/uploadForm :: uploadForm('ISSUE_COMMENT', null, null)}"></div>
 
                                     <div class="write-comment-wrap">
                                         <div class="right-txt">
