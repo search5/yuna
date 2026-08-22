@@ -121,15 +121,15 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 45 | [~] | `error/notfound.scala.html` | `error/404.html` | 파일명 규칙(HTTP 코드 vs 의미명) 차이 — 내용 대조 필수 |
-| 46 | [ ] | `error/notfound_default.scala.html` | (없음) | 레이아웃 없는 최소 404(예: framed 컨텍스트) |
-| 47 | [~] | `error/forbidden.scala.html` | `error/403.html` | |
-| 48 | [ ] | `error/forbidden_default.scala.html` | (없음) | |
-| 49 | [ ] | `error/forbidden_organization.scala.html` | (없음) | 조직 컨텍스트 전용 403 변형 |
-| 50 | [~] | `error/badrequest.scala.html` | `error/400.html` | |
-| 51 | [ ] | `error/badrequest_default.scala.html` | (없음) | |
-| 52 | [~] | `error/internalServerError_default.scala.html` | `error/500.html` | |
-| 53 | [ ] | `error/requestTextEntityTooLarge.scala.html` | (없음) | 업로드 용량 초과 에러 페이지 |
+| 45 | [ ] | `error/notfound.scala.html` | (없음, 신규 필요 — 규모 큼) | **보류 결정(사유 기록)**. 프로젝트 컨텍스트 전용 404(projectLayout+projectMenu 사용). yuna는 대부분 컨트롤러가 직접 `return "error/404"`(제네릭 뷰)로 처리하는 단순한 패턴이라, 프로젝트 메뉴가 있는 별도 404 뷰를 쓰려면 그 뷰를 리턴하는 모든 컨트롤러를 프로젝트 컨텍스트 인지형으로 바꿔야 하는 광범위한 리팩터 — 투입 대비 효과(에러 페이지에 프로젝트 메뉴 표시)가 낮다고 판단해 보류. `[없음, 신규]`가 아니라 실제로 정확히는 실제 매핑 대상이 #46이었음이 재확인 조사로 드러남(비고 참고) |
+| 46 | [x] | `error/notfound_default.scala.html` | `error/404.html` | 완료(TASK-0231, TDD). **재확인**: yuna의 `error/404.html`(project 파라미터 없는 제네릭 뷰)이 실제로는 `notfound.scala.html`이 아니라 이 `_default` 변형에 대응함(siteLayout이 아닌 별도의 최소 헤더+**전용 D2 Program footer**를 쓰는 legacy의 유일한 예외 케이스). `errorGnb`(간소 헤더)는 이미 이 파일의 커스텀 헤더와 일치했으나, 전용 footer가 통째로 빠져 있어 추가 |
+| 47 | [ ] | `error/forbidden.scala.html` | (없음, 신규 필요 — 규모 큼) | **보류 결정** — #45와 동일 사유(프로젝트 컨텍스트 전용 403, 실제 매핑 대상은 #48) |
+| 48 | [x] | `error/forbidden_default.scala.html` | `error/403.html` | 완료(TASK-0231, TDD). **재확인**: yuna의 `error/403.html`이 실제로 대응하는 legacy 파일은 이것 — `siteLayout`을 쓰므로 검색폼 있는 **전체 GNB**와 **사이트 공용 footer**가 필요한데, 잘못 `errorGnb`(간소 헤더, notfound_default 전용)를 쓰고 있었고 footer도 없었음. `gnb`+`footer`로 교체 |
+| 49 | [ ] | `error/forbidden_organization.scala.html` | (없음, 신규 필요) | **보류 결정** — 조직 컨텍스트 전용 403 변형. #45/#47과 같은 사유(yuna 컨트롤러들이 조직 컨텍스트 인지형 에러뷰를 쓰지 않는 단순 패턴) |
+| 50 | [ ] | `error/badrequest.scala.html` | (없음, 신규 필요 — 규모 큼) | **보류 결정** — #45와 동일 사유(프로젝트 컨텍스트 전용 400, 실제 매핑 대상은 #51) |
+| 51 | [x] | `error/badrequest_default.scala.html` | `error/400.html` | 완료(TASK-0231, TDD). #48과 동일한 문제(errorGnb+footer없음 → gnb+footer)를 수정 |
+| 52 | [x] | `error/internalServerError_default.scala.html` | `error/500.html` | 완료(TASK-0231, TDD). #48/#51과 동일한 문제 수정. 유일하게 legacy에 "non-default" 대응 파일이 없어(이 파일이 유일한 500 변형) 원래 매핑이 맞았음 |
+| 53 | [ ] | `error/requestTextEntityTooLarge.scala.html` | (없음, 신규 필요) | **조사 완료, 미착수**. 업로드 용량 초과(413) 에러 페이지 자체가 yuna에 없음. `MaxUploadSizeExceededException` 등을 잡는 전역 `@ExceptionHandler`/`@ControllerAdvice`가 현재 하나도 없어 순수 템플릿 이식이 아니라 백엔드 예외처리 신설이 선행돼야 함 — `docs/PARITY_BACKLOG.md`에 등록 후 처리 권장 |
 
 > yuna `error/401.html`은 legacy에 직접 대응 파일이 없음(legacy는 401을 별도 페이지로 안 두는 것으로 보임) — 이식 작업 중
 > legacy 라우팅/에러 핸들러에서 401이 실제로 어떻게 처리되는지(302 로그인 리다이렉트인지) 재확인 필요.
@@ -710,3 +710,33 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   (#25,26,29,30,31,41), 제외 결정 2개(#43,44), 다음 그룹 착수 시 처리하기로 미룬 항목 3개(#38,39,40) — 그룹2
   전체 처리 완료.
 - **검증**: 문서만 수정, 코드 변경 없음.
+
+### 그룹3 `error/*` 에러 페이지 (TASK-0231)
+
+- **원인**: legacy는 각 HTTP 에러마다 "프로젝트 컨텍스트 버전"(`notfound`/`forbidden`/`badrequest`, `projectLayout`
+  사용)과 "제네릭 버전"(`*_default`, `siteLayout`/단독 `layout` 사용) 두 벌을 갖고 있다. yuna의 `error/{400,403,
+  404,500}.html`은 모두 `project` 파라미터가 없는 제네릭 뷰이므로(대부분 컨트롤러가 직접 `return "error/404"`
+  식으로 리턴), 실제로는 legacy의 **"_default" 변형**에 대응한다는 것을 재조사로 확인했다(기존 백로그 표는
+  이 구분 없이 `notfound`/`forbidden`/`badrequest`에 매핑해뒀던 게 부정확했음).
+  - `notfound_default`는 다른 세 `_default` 파일과 달리 `siteLayout`이 아니라 자체 최소 헤더+**전용 footer**
+    (`Copyright © NAVER Corp. Supported by ... D2 Program`, 메인 사이트 footer와 다른 문구)를 쓰는 유일한
+    예외였다. yuna의 `errorGnb` 조각은 이미 이 최소 헤더와 일치했으나 전용 footer가 아예 없었다.
+  - `forbidden_default`/`badrequest_default`/`internalServerError_default`는 `siteLayout`(=검색폼 있는 전체
+    GNB + 메인 사이트 footer)을 쓰는데, yuna의 `error/403,400,500.html` 세 개 다 `errorGnb`(간소 헤더, 원래는
+    notfound_default 전용)를 잘못 쓰고 있었고 footer도 전부 빠져 있었다.
+- **구현 내용**:
+  - `error/404.html`: `errorGnb`는 유지하고, legacy `notfound_default` 전용 D2 Program footer를 그대로 추가.
+  - `error/403.html`, `400.html`, `500.html`: `errorGnb` → `gnb`로 교체하고 `site/layout :: footer`(메인 사이트
+    footer) 추가.
+- **legacy와 다르게 처리한 지점**: 없음(순수 오분류 수정 + 누락 복원).
+- **보류 결정**: #45(notfound)/#47(forbidden)/#49(forbidden_organization)/#50(badrequest) — 프로젝트/조직
+  컨텍스트 인지형 에러 뷰. yuna는 대부분 컨트롤러가 제네릭 에러 뷰 이름을 직접 리턴하는 단순한 패턴이라, 이걸
+  프로젝트/조직 컨텍스트별로 분기하려면 그 뷰를 리턴하는 모든 컨트롤러를 고쳐야 하는 광범위한 리팩터 — 투입
+  대비 효과(에러 페이지에 프로젝트/조직 메뉴 표시)가 낮다고 판단해 보류, 사유 기록.
+  #53(requestTextEntityTooLarge) — 업로드 용량 초과(413) 처리 자체가 yuna에 없어(전역 `@ExceptionHandler` 부재)
+  순수 템플릿 이식 범위를 넘는 백엔드 항목이라 `docs/PARITY_BACKLOG.md` 등록 후 처리 권장, 조사만 기록.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-14]` 3종 — 존재하지 않는 프로젝트 접근 시 404의 D2
+  footer, 비공개 프로젝트 비로그인 접근 시 403의 전체 GNB+footer(실제 HTTP 트리거로 검증), 400/500은 트리거
+  조건 구성이 복잡해 템플릿 파일 내용 직접 검사로 대체(gnb/footer 조각 참조 여부, errorGnb 미사용 확인).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
+  전체 회귀는 10개 항목 배치 규칙에 따라 이번 응답 마지막에 실행.

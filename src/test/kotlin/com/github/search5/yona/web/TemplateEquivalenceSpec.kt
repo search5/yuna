@@ -756,6 +756,46 @@ class TemplateEquivalenceSpec @Autowired constructor(
                 }
             }
 
+            describe("[Test-19-14] 에러 페이지(error/*_default.scala.html) 동치성 검증") {
+                it("존재하지 않는 프로젝트 접근 시 404 뷰는 legacy notfound_default 전용 D2 Program footer를 포함해야 한다") {
+                    val result = mockMvc.perform(
+                        get("/owner/__no-such-project-xyz__")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    ).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("footer.page-footer-outer .d2-program").size shouldBe 1
+                }
+
+                it("비공개 프로젝트에 비로그인 접근 시 403 뷰는 siteLayout처럼 검색폼 있는 전체 GNB와 사이트 공용 footer를 가져야 한다") {
+                    val privateProj = projectRepository.findAll().find { it.name == "private-proj-403test" } ?: projectRepository.save(
+                        Project(
+                            name = "private-proj-403test",
+                            owner = "owner",
+                            projectScope = ProjectScope.PRIVATE,
+                            isCodeAccessibleMemberOnly = true
+                        )
+                    )
+
+                    val result = mockMvc.perform(get("/owner/${privateProj.name}")).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("form[name='gnb-search-form']").size shouldBe 1
+                    doc.select("footer.page-footer-outer").size shouldBe 1
+                }
+
+                it("400/500 에러 뷰 템플릿 파일이 전체 GNB(gnb 조각)와 사이트 공용 footer 조각을 참조해야 한다") {
+                    for (viewName in listOf("400", "500")) {
+                        val content = java.io.File(
+                            "src/main/resources/templates/error/$viewName.html"
+                        ).readText()
+                        content.contains("site/layout :: gnb") shouldBe true
+                        content.contains("site/layout :: footer") shouldBe true
+                        content.contains("site/layout :: errorGnb") shouldBe false
+                    }
+                }
+            }
+
             describe("[Test-19-13] 이슈 라벨 동적 CSS(common/issueLabelColor.scala.html, LabelStyleController) 링크 이식 검증") {
                 it("이슈 상세/게시판 상세/게시판 목록 페이지가 프로젝트별 labels.css를 링크해야 한다") {
                     val issue = issueRepository.findAll().find { it.project.id == publicProj.id && it.title == "테스트이슈" }!!
