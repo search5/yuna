@@ -193,9 +193,13 @@ class TemplateHelper(
         return (numerator / denominator) * 100.0
     }
 
+    // yona TemplateHelper.scala의 getPercent(unit, total) = ((unit/total)*100).toInt 대응.
+    // Scala의 Double.toInt는 반올림이 아니라 0쪽으로 절삭(truncate)한다 — 그룹7 #135 검증 중
+    // String.format("%.0f", ...)로 반올림하던 이전 구현이 legacy와 다른 값(예: 66.66% → legacy
+    // 66, 반올림 67)을 낼 수 있음을 확인해 legacy와 동일한 절삭 방식으로 맞춘다.
     fun getPercentFormatted(numerator: Long, denominator: Long): String {
         val pct = getPercent(numerator.toDouble(), (numerator + denominator).toDouble())
-        return String.format(Locale.US, "%.0f", pct)
+        return pct.toInt().toString()
     }
 
     fun isOverDueDate(issue: Issue): Boolean {
