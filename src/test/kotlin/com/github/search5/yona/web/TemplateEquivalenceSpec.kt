@@ -1283,6 +1283,48 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     doc.select("script:containsData(project.Global)").size shouldBe 1
                 }
             }
+
+            describe("[Test-19-31] GNB 검색범위/커스텀링크 권한 게이트(common/navbar.scala.html) 동치성 검증") {
+                val guest2 = userRepository.findByLoginId("guestuser2").orElseGet {
+                    userRepository.save(User(loginId = "guestuser2", name = "게스트2", email = "guestuser2@yona.io", isGuest = true))
+                }
+                val guest2Details = YonaUserDetails(
+                    id = guest2.id!!,
+                    loginId = guest2.loginId,
+                    passwordVal = "hashed",
+                    passwordSalt = "salt",
+                    authoritiesVal = AuthorityUtils.createAuthorityList("ROLE_ACTIVE")
+                )
+
+                it("일반 로그인 사용자에게는 '모든 프로젝트' 검색범위가 노출되어야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/owner/public-proj").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))).andReturn().response.contentAsString
+                    )
+                    doc.select("a[data-toggle=search-scope][data-action=/search]").size shouldBe 1
+                }
+
+                it("게스트 사용자에게는 '모든 프로젝트' 검색범위가 legacy와 동일하게 숨겨져야 한다(HIDE_PROJECT_LISTING||guest 게이트)") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/owner/public-proj").with(SecurityMockMvcRequestPostProcessors.user(guest2Details))).andReturn().response.contentAsString
+                    )
+                    doc.select("a[data-toggle=search-scope][data-action=/search]").size shouldBe 0
+                }
+
+                it("사이트관리자는 게스트여도 '모든 프로젝트' 검색범위가 보여야 한다(legacy isSiteManager 예외)") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/owner/public-proj").with(SecurityMockMvcRequestPostProcessors.user(siteAdminDetails))).andReturn().response.contentAsString
+                    )
+                    doc.select("a[data-toggle=search-scope][data-action=/search]").size shouldBe 1
+                }
+
+                it("커스텀 네비게이션 링크는 기본 설정(빈 값)에서는 렌더링되지 않아야 한다(yuna.application.navbar.custom-link.name 미설정 시)") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))).andReturn().response.contentAsString
+                    )
+                    // myIssue 항목 하나만 남아야 한다 — 커스텀 링크 <li>는 th:if로 렌더링에서 제외됨
+                    doc.select("a.user-item-btn.loggged-in").size shouldBe 1
+                }
+            }
         }
     }
 }

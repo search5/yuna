@@ -101,14 +101,14 @@
                       현재 그룹
                     </a>
                   </li>
-                  <li th:if="${project == null and org != null}">
-                    <a href="#" data-toggle="search-scope" 
+                  <li th:if="${project == null and org != null and (hideProjectListing or (currentUser != null and currentUser.isGuest)) and @templateHelper.isOrganizationMemberOrAdmin(org, currentUser)}">
+                    <a href="#" data-toggle="search-scope"
                        th:data-action="@{/org/{orgName}/search(orgName=${org.name})}"
                        th:text="#{search.scope.group}">
                       현재 그룹
                     </a>
                   </li>
-                  <li>
+                  <li th:if="${(!hideProjectListing and (currentUser == null or !currentUser.isGuest)) or (currentUser != null and currentUser.isSiteManager)}">
                     <a href="#" data-toggle="search-scope" data-action="/search"
                        th:text="#{search.scope.all}">
                       모든 프로젝트
@@ -158,6 +158,9 @@
         <!-- GNB 사용자 메뉴 -->
         <ul class="gnb-usermenu">
           <th:block sec:authorize="isAuthenticated()">
+            <li th:if="${!#strings.isEmpty(navbarCustomLinkName)}" class="gnb-usermenu-item">
+              <a th:href="${navbarCustomLinkUrl}" class="user-item-btn loggged-in" th:text="${navbarCustomLinkName}">custom link</a>
+            </li>
             <li class="gnb-usermenu-item" data-toggle="tooltip" data-placement="bottom" th:title="#{title.shortcut} + ' (A)'">
               <a href="/user/issues" class="user-item-btn loggged-in" th:inline="text">[[#{issue.myIssue}]]<span th:if="${myOpenIssueCount > 0}" class="counter-badge" th:text="${myOpenIssueCount}">0</span></a>
             </li>
@@ -278,6 +281,9 @@
         <!-- GNB 사용자 메뉴 -->
         <ul class="gnb-usermenu">
           <th:block sec:authorize="isAuthenticated()">
+            <li th:if="${!#strings.isEmpty(navbarCustomLinkName)}" class="gnb-usermenu-item">
+              <a th:href="${navbarCustomLinkUrl}" class="user-item-btn loggged-in" th:text="${navbarCustomLinkName}">custom link</a>
+            </li>
             <li class="gnb-usermenu-item" data-toggle="tooltip" data-placement="bottom" th:title="#{title.shortcut} + ' (A)'">
               <a href="/user/issues" class="user-item-btn loggged-in" th:inline="text">[[#{issue.myIssue}]]<span th:if="${myOpenIssueCount > 0}" class="counter-badge" th:text="${myOpenIssueCount}">0</span></a>
             </li>

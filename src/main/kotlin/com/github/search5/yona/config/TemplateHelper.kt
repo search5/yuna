@@ -33,6 +33,8 @@ import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
 import com.github.search5.yona.domain.issue.IssueLabelCategory
 import com.github.search5.yona.domain.support.ReviewThreadService
 import com.github.search5.yona.domain.support.ReviewSearchCondition
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 
 @Component("templateHelper")
 class TemplateHelper(
@@ -46,7 +48,8 @@ class TemplateHelper(
     private val issueLabelRepository: IssueLabelRepository,
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
     private val milestoneRepository: MilestoneRepository,
-    private val reviewThreadService: ReviewThreadService
+    private val reviewThreadService: ReviewThreadService,
+    private val organizationUserRepository: OrganizationUserRepository
 ) {
 
     fun agoOrDateString(instant: Instant?): String {
@@ -239,6 +242,12 @@ class TemplateHelper(
     // yona projectMenu.scala.html:40-42 CommentThread.countReviewsBy(project.id, null) 대응.
     fun countReviews(project: Project): Long {
         return reviewThreadService.countReviewThreads(project, ReviewSearchCondition(state = "OPEN"))
+    }
+
+    // yona User.isMemberOf(org)/isAdminOf(org) 대응 — common/navbar.scala.html:84 검색범위 노출 조건.
+    fun isOrganizationMemberOrAdmin(org: Organization?, user: User?): Boolean {
+        if (org == null || user == null) return false
+        return organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, user.id!!)
     }
 
     fun getVotersExceptCurrentUser(voters: Collection<User>, currentUser: User?): List<User> {
