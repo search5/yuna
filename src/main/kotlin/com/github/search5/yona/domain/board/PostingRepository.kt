@@ -14,6 +14,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
     fun countByProject(project: Project): Long
     fun findByProject(project: Project, pageable: Pageable): Page<Posting>
     fun findByProjectAndNotice(project: Project, notice: Boolean): List<Posting>
+    fun findByProjectAndNotice(project: Project, notice: Boolean, pageable: Pageable): Page<Posting>
     fun findByProjectAndNumber(project: Project, number: Long): Posting?
     fun findByProjectIn(projects: List<Project>, pageable: Pageable): Page<Posting>
     fun findByProjectAndReadme(project: Project, readme: Boolean): List<Posting>
@@ -39,17 +40,19 @@ interface PostingRepository : JpaRepository<Posting, Long> {
     fun countSearchPostings(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?): Int
 
     @Query("""
-        SELECT p FROM Posting p 
-        WHERE p.project = :project 
-          AND (p.title LIKE :keyword 
+        SELECT p FROM Posting p
+        WHERE p.project = :project
+          AND p.notice = false
+          AND (p.title LIKE :keyword
                OR p.body LIKE :keyword)
     """)
     fun searchPostingsInProject(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<Posting>
 
     @Query("""
-        SELECT COUNT(p) FROM Posting p 
-        WHERE p.project = :project 
-          AND (p.title LIKE :keyword 
+        SELECT COUNT(p) FROM Posting p
+        WHERE p.project = :project
+          AND p.notice = false
+          AND (p.title LIKE :keyword
                OR p.body LIKE :keyword)
     """)
     fun countSearchPostingsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
@@ -61,6 +64,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         SELECT DISTINCT p FROM Posting p
         JOIN p.labels l
         WHERE p.project = :project
+          AND p.notice = false
           AND l.id IN :labelIds
           AND (:keyword IS NULL OR p.title LIKE :keyword OR p.body LIKE :keyword)
     """)

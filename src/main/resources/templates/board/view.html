@@ -170,8 +170,8 @@
             <p th:text="#{post.delete.confirm}">정말 이 글을 삭제하시겠습니까?</p>
         </div>
         <div class="modal-footer">
-            <button type="button" class="ybtn ybtn-danger" data-request-method="delete" th:data-request-uri="@{/api/projects/{projectId}/posts/{number}(projectId=${project.id}, number=${post.number})}">네</button>
-            <button type="button" class="ybtn" data-dismiss="modal">아니요</button>
+            <button type="button" class="ybtn ybtn-danger" data-request-method="delete" th:data-request-uri="@{/api/projects/{projectId}/posts/{number}(projectId=${project.id}, number=${post.number})}" th:text="#{button.yes}">예</button>
+            <button type="button" class="ybtn" data-dismiss="modal" th:text="#{button.no}">아니요</button>
         </div>
     </div>
 

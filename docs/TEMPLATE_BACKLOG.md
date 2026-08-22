@@ -252,12 +252,12 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 143 | [~] | `board/list.scala.html` | `board/list.html` | |
-| 144 | [ ] | `board/partial_list.scala.html` | `board/partial_list.html` | |
-| 145 | [~] | `board/create.scala.html` | `board/create.html` | |
-| 146 | [~] | `board/edit.scala.html` | `board/edit.html` | |
-| 147 | [~] | `board/view.scala.html` | `board/view.html` | |
-| 148 | [i] | `board/partial_comments.scala.html` | (view.html에 인라인 추정) | |
+| 143 | [x] | `board/list.scala.html` | `board/list.html` | 완료(TASK-0240, TDD). #144 조사에서 발견된 2건 수정 |
+| 144 | [i] | `board/partial_list.scala.html` | `board/list.html`에 인라인 | **발견(TASK-0240)**: (1) 제목의 `showHeaderWordsInBracketsIfExist`/`removeHeaderWords`(대괄호 접두어 분리 표시)가 통째로 빠져 있었음 — 복구. (2) **더 중대한 발견**: 공지글이 상단 공지 영역뿐 아니라 일반 페이징 목록 쿼리(`postingRepository.findByProject`)에도 필터링 없이 포함되어 화면에 중복 노출되고 있었음(legacy는 `el.eq("notice", false)`로 명시적 제외) — `PostingRepository`에 `findByProjectAndNotice(project, notice, pageable)` 페이징 버전 신규 추가 + `searchPostingsInProject`/`findByProjectAndLabelIdsIn` 쿼리에도 `notice=false` 조건 추가, `BoardViewController.posts()`가 기본 조회 시 이를 사용하도록 수정 |
+| 145 | [x] | `board/create.scala.html` | `board/create.html` | 확인 완료(TASK-0240). 파일업로더/README 연동/커밋메시지 연동 필드까지 legacy와 정확히 일치. `isProjectResourceCreatable(COMMIT)` 게이트가 걸린 README 체크박스는 그룹10/11의 코드-연동 범위라 이번 배치에서는 미이식(그룹10/11에서 처리 예정) |
+| 146 | [x] | `board/edit.scala.html` | `board/edit.html` | 확인 완료(TASK-0240). #145와 동일하게 README 지정 체크박스(`post.readmefy`)만 그룹10/11 범위로 미이식, 나머지 일치 |
+| 147 | [x] | `board/view.scala.html` | `board/view.html` | 완료(TASK-0240, TDD). 삭제 확인 모달의 예/아니오 버튼이 `#{button.yes}`/`#{button.no}` 메시지 키 대신 하드코딩 한글("네"/"아니요")이었던 것을 복구. `common.noAuthor`(작성자 없는 경우 표시)는 yuna의 Posting이 작성자 정보를 비정규화 저장해 항상 값이 있어 해당 없음. `change.history`(게시글 수정 이력 모달)는 이력 추적 테이블 자체가 없어 순수 템플릿 포팅 범위를 넘어 보류 |
+| 148 | [i] | `board/partial_comments.scala.html` | (view.html에 인라인, P1-106에서 이미 이식) | 확인 완료(TASK-0240). issue와 동일한 댓글+이벤트 타임라인 구조 재사용, 일치 |
 
 ## 그룹 9 — `milestone/*` 마일스톤 (5개, #149~153 중 4개 + 사이 여백)
 
@@ -990,3 +990,31 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   보존 + opt-protected 노출 상태 재확인 2종).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 55 tests).
   다음은 나머지 34개 보류 항목(그룹1~5 범위)을 번호 순으로 재작업.
+
+### 그룹8 `board/*` (#143~148) (TASK-0240)
+
+- **#144(partial_list) 중대 발견**: 공지글이 상단 공지 영역에 노출된 것과 별개로, 하단 일반 페이징 목록
+  쿼리(`postingRepository.findByProject`)가 공지 여부를 필터링하지 않아 **같은 게시글이 화면에 두 번
+  노출**되고 있었음(legacy `BoardApp.posts()`는 `el.eq("notice", false)`로 명시적 제외). `PostingRepository`에
+  `findByProjectAndNotice(project, notice, pageable)` 페이징 버전을 신규 추가하고, 라벨필터/검색 쿼리
+  (`findByProjectAndLabelIdsIn`/`searchPostingsInProject`)에도 `p.notice = false` 조건을 추가해 세 갈래
+  쿼리 경로 모두 일관되게 공지 제외 처리, `BoardViewController.posts()`의 기본(무필터) 조회를 새 메서드로
+  교체. 같은 파일에서 **`showHeaderWordsInBracketsIfExist`/`removeHeaderWords`(제목 대괄호 접두어를
+  `.bracket-word`로 분리 표시)가 통째로 빠져있던 것**도 발견해 `issue/list.html`과 동일한 패턴으로 복구.
+- **#147(view) 발견**: 삭제 확인 모달의 예/아니오 버튼이 `#{button.yes}`/`#{button.no}` 메시지 키 대신
+  하드코딩 한글("네"/"아니요", legacy 메시지 원문인 "예"와도 실제로 다른 문구였음)이었던 것을 복구.
+- **#145,146(create/edit) 조사**: README 자동 지정 체크박스(`post.readmefy`, `isProjectResourceCreatable
+  (COMMIT)` 게이트)는 코드 저장소 연동(커밋으로부터 게시글 생성) 기능의 일부라 그룹10/11(code/git) 범위로
+  판단, 이번 배치에서는 미이식 — 향후 그룹10/11 작업 시 board/create·edit.html도 함께 재검토 필요.
+- **#148(partial_comments)**: 이슈와 동일한 댓글+이벤트 타임라인 구조를 재사용해 이미 정확히 이식돼
+  있음을 확인, 코드 변경 없음.
+- **legacy와 다르게 처리한 지점**: 없음(발견된 격차 전부 순수 버그 수정/기능 복구).
+- **참고**: `board/view.scala.html`의 `common.noAuthor`(작성자 없음 표시)는 yuna의 `Posting`이 작성자
+  정보를 비정규화 저장해 항상 값이 존재하므로 해당 없음. `change.history`(게시글 수정 이력 모달)는 이력
+  추적 테이블 자체가 없어 순수 템플릿 포팅 범위를 넘어 보류.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-27]`(게시판 목록 — 공지글 중복노출 방지, 대괄호
+  접두어 분리 표시 검증), `[Test-19-28]`(게시판 상세 삭제모달 예/아니오 메시지키 검증). 다른 세션이 동시에
+  같은 파일에 `[Test-19-25]`(프로젝트 생성 화면)를 추가해둔 것을 발견해 번호 충돌을 피하기 위해 내 항목을
+  `[Test-19-27]`/`[Test-19-28]`로 조정.
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN).
+  **그룹8(board/*, #143~148) 6개 항목 전체 처리 완료.** 다음은 그룹9(milestone/*, #149~153).
