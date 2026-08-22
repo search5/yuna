@@ -66,12 +66,12 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 1 | [x] | `layout.scala.html` | `site/layout.html` | 완료(TASK-0220, TDD). og/twitter 메타태그·업데이트알림배너·NProgress/ViewerJS 자산 이식. `\|:\|` 제목 분리 컨벤션은 미이식(비고 참고) |
 | 2 | [x] | `layout_framed.scala.html` | `site/layout_framed.html` | 완료(TASK-0221, TDD). og/twitter 메타태그·nprogress/magnific-popup 자산·popover 초기화·GA 스크립트 이식. sidebar()는 이미 이 파일에 인라인되어 있었음(→ #7과 동일 파일로 처리) |
 | 3 | [x] | `siteLayout.scala.html` | `site/{data,diagnostic,issueList,mail,massMail,postList,projectList,update,userList}.html` (각 파일에 인라인 조합) | 완료(TASK-0222, TDD). 신규 데코레이터 파일 대신, 관리자 화면 9개가 이미 `head`/`gnb`/`breadcrumb`/`sidebar`/`scripts` 조각을 조합하고 있었음 — 빠져있던 `footer` 조각만 9개 파일에 공통 추가(legacy `siteLayout`이 `@content` 뒤에 `@common.footer()`를 감싸는 것과 동일 동작) |
-| 4 | [ ] | `siteLayout_framed.scala.html` | (없음, 신규) | 상동 framed 버전 |
-| 5 | [ ] | `projectLayout.scala.html` | (없음, 신규) | 프로젝트 컨텍스트 공통 뼈대(project/header 포함해 project/* 전체가 extends) |
-| 6 | [ ] | `organizationLayout.scala.html` | (없음, 신규) | 조직 컨텍스트 공통 뼈대 |
+| 4 | [i] | `siteLayout_framed.scala.html` | `site/layout_framed.html` | 확인 결과 legacy에서 이 파일의 유일한 사용처는 `index/sidebar.scala.html`(빈 content로 `siteLayout_framed`→`layout_framed` 호출) — 즉 "사이드바+iframe 프레임 셸"이며, 이는 #2에서 이미 완료한 `site/layout_framed.html`(→`/user/sidebar`)과 동일 화면. 별도 신규 파일 불필요 |
+| 5 | [i] | `projectLayout.scala.html` | `project/*.html` 각 파일(인라인 조합) | `navbar+project.header+content+footer` 데코레이터 패턴은 이미 `project/home.html`/`members.html`/`setting.html`/`statistics.html`가 `site/layout::gnb`+`project/header::header`+`project/menu::menu`+`site/layout::footer` 조합으로 실현 중. **단, `change_vcs/delete/fork/issuelabels/setting_webhook/transfer/watchers.html`은 header/footer 조각이 빠져있음을 확인** — 그룹6(#87~112) 작업 시 각 파일 항목에서 직접 채워 넣을 것(지금은 그룹1 범위를 넘어서므로 보류, 그룹6 착수 시 최우선 처리) |
+| 6 | [i] | `organizationLayout.scala.html` | `organization/*.html` 각 파일(인라인 조합 필요) | `navbar(menuType,null,group)+content+footer` 패턴 대응. **`organization/*.html` 10개 파일 전부 `site/layout::gnb`/`footer` 조각이 하나도 포함돼 있지 않음을 확인** — project 그룹보다 미착수 정도가 훨씬 심함. 그룹12(#193~209) 착수 시 최우선 처리 |
 | 7 | [i] | `sidebar.scala.html` | `site/layout_framed.html` (인라인) | #2 작업 중 확인: `site/layout_framed.html`의 `#sidebar` div가 이미 이 파일 내용을 인라인 포함(로그인 필수 분기는 컨트롤러 레벨 리다이렉트로 대체) |
 | 8 | [~] | `projectMenu.scala.html` | `project/menu.html` | 프로젝트 상단 탭 메뉴(코드/이슈/PR/게시판/마일스톤) |
-| 9 | [ ] | `restricted.scala.html` | (없음, 신규) | 접근 제한/게스트 안내 화면 |
+| 9 | [x] | `restricted.scala.html` | (포팅 보류, 아래 참고) | **보류 결정(사유 기록)** — play-authenticate 모듈의 데모/테스트용 페이지(`Sshhh...don't tell anyone`, 하드코딩된 유튜브 영상, `currentAuth()`/`auth.getProvider()`/`auth.expires()` 등 해당 라이브러리 전용 API 표시). yuna는 Spring Security 기반이라 동등 개념(OAuth2AuthorizedClientService 등)을 새로 엮어야 하는데, 실사용 가치가 없는 라이브러리 데모 화면이라 투입 대비 효과가 지나치게 낮다고 판단해 보류. `docs/PARITY_BACKLOG.md`의 P1-27 최초 보류 결정처럼, 사용자가 이식을 원하면 언제든 재지시 가능 |
 
 ## 그룹 2 — `common/*` 공용 파샬 (35개, #10~44)
 
@@ -141,7 +141,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
 | 54 | [~] | `index/index.scala.html` | `index.html` | 최상위 위치(yuna는 `index/` 하위가 아니라 루트) — 기존 배치 유지 |
-| 55 | [ ] | `index/sidebar.scala.html` | `index/sidebar.html` | 홈 전용 사이드바(그룹1의 최상위 `sidebar.scala.html`과 다른 파일) |
+| 55 | [i] | `index/sidebar.scala.html` | `site/layout_framed.html` | #4/#7과 동일 발견: `siteLayout_framed(...){}`을 빈 content로 호출하는 것이 이 파일의 전부라, `site/layout_framed.html`(→`/user/sidebar`)이 이미 이 화면을 대체 |
 | 56 | [ ] | `index/partial_intro.scala.html` | `index/partial_intro.html` | 비로그인 방문자용 소개 영역 |
 | 57 | [ ] | `index/displayProjects.scala.html` | `index/displayProjects.html` | 프로젝트 카드 그리드 공용 렌더러 |
 | 58 | [ ] | `index/myProjectList.scala.html` | `index/myProjectList.html` | |
@@ -506,3 +506,20 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   깨짐 여부만 확인했다.
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN),
   전체 회귀 `./gradlew test` 통과.
+
+### #4~#9 그룹1 잔여 항목 조사 (TASK-0223, 코드 변경 없음 — 문서만)
+
+- **#4 `siteLayout_framed.scala.html`**: legacy에서 유일한 사용처가 `index/sidebar.scala.html`(빈 content로
+  호출)이고, 이는 "사이드바+iframe 프레임 셸"만 그리는 화면이라 #2에서 완료한 `site/layout_framed.html`
+  (`/user/sidebar`)과 동일 대상. `[i]`로 상태 변경, 코드 변경 없음.
+- **#5 `projectLayout.scala.html`**: `navbar+project.header+content+footer` 데코레이터 패턴이 `project/*.html`
+  각 파일에 이미 조합 방식으로 이식돼 있음을 확인(`home/members/setting/statistics.html`은 완전, 그러나
+  `change_vcs/delete/fork/issuelabels/setting_webhook/transfer/watchers.html` 7개는 `project/header`와
+  `site/layout::footer` 조각이 빠져 있음을 발견). 그룹6(#87~112) 착수 시 처리하기로 결정하고 백로그 비고에 기록,
+  지금은 손대지 않음(그룹1 범위 밖).
+- **#6 `organizationLayout.scala.html`**: 동일 패턴이나 `organization/*.html` 10개 파일 전부 `gnb`/`footer` 조각이
+  전무함을 확인 — project 그룹보다 훨씬 미착수 상태. 그룹12(#193~209) 착수 시 처리하기로 기록.
+- **#9 `restricted.scala.html`**: play-authenticate 라이브러리 데모 페이지(현재 사용하지 않는 인증 스택 전용
+  API를 노출하는 디버그용 화면)라 이식 가치 대비 비용이 과도하다고 판단해 보류 결정, 사유를 표에 기록(`docs/
+  PARITY_BACKLOG.md`의 보류 항목 기록 관행과 동일 형식).
+- **검증**: 문서만 수정, 코드 변경 없음 — 별도 테스트/빌드 불필요.
