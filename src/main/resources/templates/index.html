@@ -115,14 +115,7 @@
             <div class="page on-fold-intro">
                 <div class="row-fluid content-container">
                     <div class="span8 main-stream">
-                        <ul class="nav nav-tabs">
-                            <li class="active"><a href="/notifications" th:text="#{notification}">Notification</a></li>
-                            <li><a href="/user/issues" th:text="#{issue.myIssue}">My Issues</a></li>
-                            <li><a href="/user/files" th:text="#{user.files}">My Files</a></li>
-                            <li>
-                                <button id="setDefaultLoginPage" type="button" class="ybtn hide-in-mobile" data-url="notifications" th:title="#{button.setDefaultLoginPage}" data-trigger="hover" data-placement="bottom" data-toggle="popover" th:data-content="#{button.setDefaultLoginPage.desc}" th:text="#{button.setDefaultLoginPage}">기본 페이지로 지정</button>
-                            </li>
-                        </ul>
+                        <div th:replace="~{common/mySeriesMenuTab :: menu('notifications')}"></div>
                         <ul class="activity-streams notification-wrap unstyled">
                             <th:block th:replace="~{index/partial_notifications :: html}"></th:block>
                         </ul>
