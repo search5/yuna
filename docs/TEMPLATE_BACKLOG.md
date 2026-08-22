@@ -393,8 +393,8 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 239 | [ ] | `migration/migrationPageLayout.scala.html` | (없음, 신규) | migration 화면 전용 레이아웃 |
-| 240 | [~] | `migration/home.scala.html` | `migration/home.html` | |
+| 239 | [x] | `migration/migrationPageLayout.scala.html` | `migration/home.html`(인라인 조합) | 완료(TASK-0245, TDD). 그룹1(#4~#6) 선례와 동일하게 별도 데코레이터 파일 대신 `migration/home.html`이 `site/layout::head/gnb/footer/scripts` 조각을 직접 조합해 이 레이아웃의 역할(관리자 로그인 알림+전체 GNB+`common.scripts()`+사이드바/즐겨찾기 토글 스크립트)을 대체함 |
+| 240 | [x] | `migration/home.scala.html` | `migration/home.html` | 완료(TASK-0245, TDD). **중대 발견**: 기존 yuna 파일이 legacy 구조를 거의 통째로 재작성한 "yuna식 독자 구현"이었음 — 컨테이너 div로 감싸기, 인라인 스타일 대량 추가, "주의 사항!!" 행 누락, `import-warning` 커스텀 엘리먼트 누락, 진행률 바 클래스(`bar`/`bar-danger`/`bar-success`→`progress-bar`류로 변경) 및 담당자 경고(`warn-no-worker`/`warn-user-project`) 마크업 상당수 누락, GNB/footer는 있었으나 `site/layout::scripts`(yobiDialog/toast/로그인모달/`yona-common.js` 등) 및 migrationPageLayout 전용 자산(구글 폰트 3종, `jquery-1.9.0.js`/`jquery.browser.js`/`jquery.pjax.js`/`yobi.Common.js`/`vendor.js`/`yona.Migration.js`, 사이드바·즐겨찾기 토글 인라인 스크립트)이 전혀 없었음. legacy 그대로 재작성(Play `ng-if="'@token'"`→`th:if`, `@if(StringUtils.isNotBlank(token))`→`th:attr` 삼항식, `@api.routes.UserApi.*`→`/-_-api/v1/favorite*` 경로로 치환) |
 
 ## 그룹 17 — `welcome/*` 초기 설치 (2개, #241~242)
 
@@ -1117,3 +1117,46 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   (#1,8,10,13,90). 남은 항목(#20,23,45,47,49,50,53)은 백엔드 신규 인프라가 필요해 별도 세션에서
   집중 처리 권장 — 사유는 각 항목 비고란 참고. #38~41/#25~31/#82~83/#108은 병렬 워크트리 에이전트에게
   위임 완료(진행 중/일부 완료, 병합 시 별도 기록).
+
+### 그룹16 `migration/*` (#239~240) (TASK-0245, 병렬 워크트리 에이전트 작업 병합)
+
+- **#240(home) 중대 발견**: 기존 `migration/home.html`이 legacy `home.scala.html`을 거의 통째로
+  "yuna식 독자 구현"으로 재작성한 상태였음(표준 규칙 3번 위반 사례) — `ng-app` 컨테이너를 불필요한
+  `.container` div로 감싸기, 인라인 `style` 대량 추가, 진행률 바 클래스를 legacy `bar`/`bar-danger`/
+  `bar-success`에서 부트스트랩 4류 `progress-bar`/`progress-bar-danger`/`progress-bar-success`로 임의
+  변경, "주의 사항!!" 안내 행 통째로 누락, `<import-warning>` 커스텀 엘리먼트(마일스톤/이슈/게시글 3곳)
+  전부 누락, destination 프로젝트의 `warn-no-worker`/`warn-user-project`/organization 미관리자 경고
+  마크업 상당수 누락, 담당자 테이블에 legacy에 없는 "Yona 유저"/"Github 유저 ID" 헤더 임의 추가.
+- **#239(migrationPageLayout) 확인**: 그룹1 #4~#6 선례(별도 신규 데코레이터 파일 대신, 소비 화면이
+  `site/layout::head/gnb/footer/scripts` 조각을 직접 조합)와 동일한 아키텍처로 처리 — legacy
+  `migrationPageLayout.scala.html`의 역할(관리자 로그인 알림+전체 GNB=`site/layout::gnb`,
+  `@common.scripts()`=`site/layout::scripts`, `@content`+`@common.navbar`)을 `migration/home.html`이
+  직접 조합하도록 재작성. 단, `<head th:replace=...>`는 자식 마크업을 전부 버리므로(Thymeleaf `th:replace`
+  의미상 호스트 엘리먼트+자식 전체가 대체됨) legacy `<head>`에만 있고 공용 `site/layout::head`엔 없는
+  자산(구글 폰트 Montserrat/Indie Flower/Muli 3종, `cache-control` meta)은 `board/view.html` 선례를 따라
+  `<body>` 최상단에 배치. 마찬가지로 legacy가 `<head>`에서 미리 로드하던 `jquery-1.9.0.js`/
+  `jquery.browser.js`/`jquery.pjax.js`/`yobi.Common.js`/`vendor.js`/`yona.Migration.js`(구버전 jQuery를
+  `site/layout::scripts`가 로드하는 `yona-common.js`/`yona.Usermenu.js`와 별개로 중복 로드하는 legacy의
+  실제 동작)도 `<body>` 상단에 그대로 포팅 — 진짜 legacy 동작이므로 "중복 로드라서 하나로 합치는" 임의
+  개선은 하지 않음. migrationPageLayout 하단의 사이드바 열기/닫기 및 프로젝트/조직 즐겨찾기 토글 인라인
+  스크립트(`site/layout::scripts`가 로드하는 `yona.Usermenu.js`와 기능이 중복되는 legacy 자체 구현)도
+  그대로 포팅, `@api.routes.UserApi.toggleFoveriteProject/toggleFoveriteOrganization/getFoveriteProjects`
+  Play 라우트는 yuna `FavoriteController`의 실제 매핑(`POST /-_-api/v1/favoriteProjects/{id}`,
+  `POST /-_-api/v1/favoriteOrganizations/{id}`, `GET /-_-api/v1/favoriteProjects`)으로 치환.
+- **Play→Thymeleaf 치환**: `ng-if="'@token'"`(빈 문자열이면 항상 falsy)는 `th:if="${token != null and
+  !token.isEmpty()}"`로, `@if(StringUtils.isNotBlank(token)) { ng-init="..." }`(조건부 속성 자체 추가/
+  생략)는 `th:attr="ng-init=(${...} ? |...| : null)"` 삼항식(null이면 속성 자체가 생략됨)으로 치환.
+  AngularJS `ng-*`/`{{ }}` 디렉티브는 클라이언트 사이드 문법이라 원문 그대로 유지(Play 템플릿 엔진과
+  무관). 속성값 내 리터럴 `<` 문자(`vm.importResult.count/...*100<100 ? ...`)는 Thymeleaf 파서가
+  속성값 안의 `<`를 태그 시작으로 오인하지 않도록 `&lt;` 엔티티로 이스케이프(렌더링 결과는 legacy와 동일).
+- **legacy와 다르게 처리한 지점**: `<body class="@theme">`(legacy는 `theme` 파라미터로 빈 문자열 전달돼
+  실질적으로 `class=""`)는 그룹1에서 이미 확립된 관례대로 `class="theme-default"` 고정값 사용(다른 모든
+  site-admin류 yuna 화면과 동일 관례, 순수 테마 CSS 클래스 이름 선택이라 마크업/동작에 영향 없음).
+- **테스트**: `TemplateEquivalenceSpec.kt`에 `[Test-19-33]` 신규 — GNB 검색폼/footer/migration 전용
+  JS·폰트 자산 포함 검증, `code`(token) 파라미터가 없을 때 `.header-pannel` 전체가 렌더링되지 않는지
+  검증(legacy `ng-if="'@token'"` 동치), 비로그인 시 로그인 폼 리다이렉트 검증. `github.allow.migration`
+  기본값이 `false`라 `/migration`이 403을 반환하므로 클래스에 `@TestPropertySource(properties =
+  ["github.allow.migration=true"])` 추가.
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN).
+  **그룹16(migration/*, #239~240) 2개 항목 전체 처리 완료.** (병렬 워크트리 에이전트가 작업, 메인
+  세션이 TASK 번호/테스트 번호 재부여 후 병합)
