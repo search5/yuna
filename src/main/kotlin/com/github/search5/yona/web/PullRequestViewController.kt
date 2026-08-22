@@ -82,7 +82,11 @@ class PullRequestViewController(
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!checkMemberAccess(project, loginUser)) {
-            return "error/403"
+            // yona PullRequestApp.pullRequests()의 forbidden(ErrorViews.Forbidden.render(
+            // "error.forbidden", project)) 대응(P-템플릿 #47) — 2-arg render(key, project)는
+            // 컨텍스트 인지형 error/forbidden.html로 귀결된다.
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val stateEnum = when (state.lowercase()) {
@@ -114,7 +118,8 @@ class PullRequestViewController(
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!checkMemberAccess(project, loginUser)) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val pageable = PageRequest.of(page, ITEMS_PER_PAGE, Sort.by(Sort.Direction.DESC, "id"))
@@ -138,7 +143,8 @@ class PullRequestViewController(
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!checkMemberAccess(project, loginUser)) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val pageable = PageRequest.of(page, ITEMS_PER_PAGE, Sort.by(Sort.Direction.DESC, "id"))
@@ -265,10 +271,23 @@ class PullRequestViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // yona IsAllowedAction의 forbidden(ErrorViews.Forbidden.render("error.forbidden",
+            // project)) 대응(P-템플릿 #47) — 2-arg render(key, project)는 컨텍스트 인지형
+            // error/forbidden.html로 귀결된다.
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
-        val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: return "error/404"
+        // yona IsAllowedAction의 resourceObject==null 분기(notFound(ErrorViews.NotFound.render(
+        // "error.notfound", project, resourceType.resource()))) 대응(P-템플릿 #45) — 3-arg
+        // render(key, project, type)는 컨텍스트 인지형 error/notfound.html로 귀결되지만,
+        // PULL_REQUEST.resource()=="pull_request"는 notfound.html의 4개 targetType case(issue_post/
+        // board_post/milestone/code) 중 어느 것과도 매치되지 않아 항상 제네릭 문구로 빠진다 —
+        // targetType을 비워 그 실제 도달 분기를 그대로 재현한다(프로젝트 헤더/메뉴는 유지).
+        val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: run {
+            model.addAttribute("project", project)
+            return "error/notfound"
+        }
 
         val mergeResult = try {
             pullRequestService.attemptMerge(pullRequest.id!!)
@@ -424,7 +443,15 @@ class PullRequestViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-            return "error/403"
+            // yona validateBeforePullRequest()의 forbidden(ErrorViews.BadRequest.render(
+            // "Guest is not allowed this request", project)) 대응 — HTTP 상태는 403이지만 뷰는
+            // badrequest.html(2-arg render(key, project)가 컨텍스트 인지형으로 귀결)이고 메시지가
+            // 메시지 키가 아닌 리터럴 영어 문장이라는 legacy의 특이 케이스다. Thymeleaf #{...}는
+            // 실제 메시지 키를 요구해 리터럴 문자열을 그대로 재현할 수 없어, 같은 "프로젝트
+            // 리소스에 대한 권한 없음" 성격의 다른 호출부들과 동일하게 error/forbidden(project)로
+            // 단순화한다(문서화된 근사치, #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         // 브랜치 목록 획득
@@ -473,7 +500,9 @@ class PullRequestViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-            return "error/403"
+            // createPullRequestForm()과 동일한 guest 체크(위 주석 참고) — error/forbidden(project)로 단순화.
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val repository = repositoryService.getRepository(project)
@@ -530,10 +559,16 @@ class PullRequestViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: return "error/404"
+        val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: run {
+            // viewPullRequest()와 동일한 IsAllowedAction notFound 분기 대응(P-템플릿 #45, 위 주석 참고).
+            model.addAttribute("project", project)
+            return "error/notfound"
+        }
 
         if (!isManagerOrContributor(project, pullRequest.contributor.id, loginUser)) {
-            return "error/403"
+            // viewPullRequest()와 동일한 IsAllowedAction forbidden 분기 대응(P-템플릿 #47, 위 주석 참고).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         model.addAttribute("project", project)
@@ -622,10 +657,16 @@ class PullRequestViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // viewPullRequest()와 동일한 IsAllowedAction forbidden 분기 대응(P-템플릿 #47, 위 주석 참고).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
-        val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: return "error/404"
+        // viewPullRequest()와 동일한 IsAllowedAction notFound 분기 대응(P-템플릿 #45, 위 주석 참고).
+        val pullRequest = pullRequestService.getPullRequest(project.id!!, number) ?: run {
+            model.addAttribute("project", project)
+            return "error/notfound"
+        }
 
         val mergeResult = try {
             pullRequestService.attemptMerge(pullRequest.id!!)

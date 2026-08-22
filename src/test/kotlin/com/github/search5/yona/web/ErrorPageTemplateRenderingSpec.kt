@@ -347,6 +347,40 @@ class ErrorPageTemplateRenderingSpec @Autowired constructor(
                 body shouldContain project.name!!
             }
 
+            it("비공개 프로젝트의 PR 목록에 프로젝트 멤버가 아닌 사용자가 접근하면 error/forbidden이 프로젝트 헤더와 함께 렌더링돼야 한다 (PullRequestViewController#listPullRequests, P-템플릿 #47)") {
+                val project = projectRepository.save(
+                    Project(name = "errpage-pr-proj1", owner = "errpage-pr-owner1", projectScope = ProjectScope.PRIVATE, vcs = "GIT")
+                )
+                val outsider = userRepository.save(
+                    User(loginId = "errpage-pr-outsider1", name = "PR외부인1", email = "errpage-pr-outsider1@yona.io")
+                )
+                val auth = UsernamePasswordAuthenticationToken(outsider.loginId, "pw")
+
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/pulls").principal(auth))
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                body shouldContain "권한이 없습니다"
+                body shouldContain project.name!!
+            }
+
+            it("존재하지 않는 PR 번호로 상세화면에 접근하면 error/notfound가 프로젝트 헤더와 함께 렌더링돼야 한다 (PullRequestViewController#viewPullRequest, P-템플릿 #45)") {
+                userRepository.save(User(loginId = "errpage-pr-bootstrap1", name = "부트스트랩", email = "errpage-pr-bootstrap1@yona.io"))
+                val project = projectRepository.save(
+                    Project(name = "errpage-pr-proj2", owner = "errpage-pr-owner2", projectScope = ProjectScope.PUBLIC, vcs = "GIT")
+                )
+
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/pull/999"))
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                // targetType이 비어있는(레거시 IsAllowedAction의 resourceType.resource()=="pull_request"가
+                // notfound.html의 4개 case 중 어느 것과도 안 맞아 항상 제네릭 문구로 빠지는) 경로이므로
+                // 제네릭 error.notfound 메시지가 그대로 나오되, 프로젝트 헤더는 유지돼야 한다.
+                body shouldContain "페이지를 찾을 수 없습니다"
+                body shouldContain project.name!!
+            }
+
             it("비공개 프로젝트의 리뷰 스레드 목록(reviewThreads)을 코드 접근 권한 없는 사용자가 요청하면 error/forbidden이 프로젝트 헤더와 함께 렌더링돼야 한다 (ReviewThreadController#reviewThreads, P-템플릿 #47)") {
                 // yona ReviewThreadApp.java:41 @IsAllowed(Operation.READ) 대응.
                 val project = projectRepository.save(

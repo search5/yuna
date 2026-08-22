@@ -184,7 +184,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
                 mockMvc.perform(get("/owner/TestProj/pulls").principal(userAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
             }
 
             // yona models/PullRequest.java:66 ITEMS_PER_PAGE 대응 (P1-105) — PR 목록은 항상 고정 15.
@@ -253,7 +253,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
                 mockMvc.perform(get("/owner/TestProj/closedPullRequests").principal(userAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
             }
         }
 
@@ -516,7 +516,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.of(projectMemberUser)
 
                 mockMvc.perform(get("/owner/TestProj/pull/1/edit").principal(otherAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
             }
 
             it("로그인하지 않았다면 403 Forbidden 뷰를 반환해야 한다") {
@@ -524,7 +524,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
 
                 mockMvc.perform(get("/owner/TestProj/pull/1/edit"))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
             }
         }
     }
