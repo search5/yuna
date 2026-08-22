@@ -83,7 +83,7 @@
                                     </dd>
                                 </dl>
 
-                                <dl id="milestoneOption" class="issue-option">
+                                <dl id="milestoneOption" class="issue-option" th:if="${project.isMilestoneEnabled}">
                                     <dt th:text="#{milestone}">마일스톤</dt>
                                     <dd>
                                         <div th:if="${milestones == null || milestones.isEmpty()}">

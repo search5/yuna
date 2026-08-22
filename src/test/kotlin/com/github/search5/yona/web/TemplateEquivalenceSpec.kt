@@ -43,6 +43,9 @@ import com.github.search5.yona.domain.user.UserSetting
 import com.github.search5.yona.domain.user.UserSettingRepository
 import com.github.search5.yona.domain.user.UserVerification
 import com.github.search5.yona.domain.user.UserVerificationRepository
+import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.enumeration.State
 
 class TemplateEquivalenceSpec @Autowired constructor(
     private val wac: WebApplicationContext,
@@ -58,7 +61,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val yonaUpdateService: YonaUpdateService,
     private val recentIssueService: RecentIssueService,
     private val userSettingRepository: UserSettingRepository,
-    private val userVerificationRepository: UserVerificationRepository
+    private val userVerificationRepository: UserVerificationRepository,
+    private val milestoneRepository: MilestoneRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -1067,6 +1071,43 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     doc.select("#subMenuIssueLabel.active").size shouldBe 1
                     doc.select("button.issue-label.btn-preset-color").size shouldBe 17
                     doc.select("script[src*='code.jquery.com']").size shouldBe 0
+                }
+            }
+
+            describe("[Test-19-24] 이슈 목록 화면(issue/list.scala.html) 동치성 검증") {
+                val openMilestone = milestoneRepository.findAll()
+                    .find { it.project.id == settingProj.id && it.title == "열린 마일스톤" }
+                    ?: milestoneRepository.save(Milestone(title = "열린 마일스톤", project = settingProj, state = State.OPEN))
+                val closedMilestone = milestoneRepository.findAll()
+                    .find { it.project.id == settingProj.id && it.title == "닫힌 마일스톤" }
+                    ?: milestoneRepository.save(Milestone(title = "닫힌 마일스톤", project = settingProj, state = State.CLOSED))
+
+                it("마일스톤 검색 필터는 legacy와 동일하게 열림/닫힘 optgroup을 모두 포함해야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${settingProj.name}/issues").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    doc.select("select#milestoneId optgroup").size shouldBe 2
+                    doc.select("select#milestoneId option[value='${openMilestone.id}']").size shouldBe 1
+                    doc.select("select#milestoneId option[value='${closedMilestone.id}']").size shouldBe 1
+                }
+
+                it("라벨 관리 링크는 매니저에게만 노출되고 일반 멤버에게는 노출되지 않아야 한다(legacy isManagerOf 권한 이식)") {
+                    val managerDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${settingProj.name}/issues").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+                    managerDoc.select("div.labels-wrap").size shouldBe 1
+
+                    val memberDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${codeMemberOnlyProj.name}/issues").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+                    memberDoc.select("div.labels-wrap").size shouldBe 0
                 }
             }
         }

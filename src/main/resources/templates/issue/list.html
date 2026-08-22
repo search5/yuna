@@ -124,7 +124,7 @@
                             </dl>
 
                             <!-- 마일스톤 -->
-                            <dl class="issue-option" th:if="${!milestones.isEmpty()}">
+                            <dl class="issue-option" th:if="${!milestones.isEmpty() || !closedMilestones.isEmpty()}">
                                 <dt th:text="#{milestone}">마일스톤</dt>
                                 <dd>
                                     <select id="milestoneId" name="milestoneId" data-search="milestoneId" data-toggle="select2" data-format="milestone" data-container-css-class="fullsize">
@@ -132,6 +132,11 @@
                                         <option value="-1" th:selected="${milestoneId == -1}" th:text="#{issue.noMilestone}">마일스톤 없음</option>
                                         <optgroup th:label="#{milestone.state.open}">
                                             <th:block th:each="milestone : ${milestones}">
+                                                <option th:value="${milestone.id}" th:selected="${milestoneId == milestone.id}" th:data-state="${milestone.state}" th:text="${milestone.title}"></option>
+                                            </th:block>
+                                        </optgroup>
+                                        <optgroup th:label="#{milestone.state.closed}">
+                                            <th:block th:each="milestone : ${closedMilestones}">
                                                 <option th:value="${milestone.id}" th:selected="${milestoneId == milestone.id}" th:data-state="${milestone.state}" th:text="${milestone.title}"></option>
                                             </th:block>
                                         </optgroup>
@@ -169,10 +174,10 @@
                             </dl>
 
                             <!-- 라벨 관리 -->
-                            <div class="labels-wrap">
+                            <div class="labels-wrap" th:if="${templateHelper.isManager(project, currentUser) || (currentUser != null && currentUser.isSiteManager)}">
                                 <a th:href="@{/{owner}/{projectName}/issue/labelsform(owner=${project.owner}, projectName=${project.name})}" class="ybtn ybtn-default ybtn-mini pull-right">
                                     <i class="yobicon-cog vmiddle"></i>
-                                    <span class="vmiddle" style="margin-left:2px;" th:text="#{label.manage}">라벨 관리</span>
+                                    <span th:if="${labels.isEmpty()}" class="vmiddle" style="margin-left:2px;" th:text="#{label.manage}">라벨 관리</span>
                                 </a>
                             </div>
                         </div>
@@ -273,7 +278,7 @@
                                         </ul>
                                     </div>
                                     <!-- 마일스톤 변경 -->
-                                    <div id="milestone" class="btn-group" data-name="milestone.id" th:if="${!milestones.isEmpty()}">
+                                    <div id="milestone" class="btn-group" data-name="milestone.id" th:if="${project.isMilestoneEnabled && !milestones.isEmpty()}">
                                         <button class="btn dropdown-toggle medium" data-toggle="dropdown" disabled="disabled">
                                             <span class="d-label" th:text="#{issue.update.milestone.id}">마일스톤 지정</span>
                                             <span class="d-caret"><span class="caret"></span></span>
