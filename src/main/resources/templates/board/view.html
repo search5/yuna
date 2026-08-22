@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head(title=${post.title} + ' - Yona')}">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko" th:with="pageTitle=${post.title + ' |:| ' + @templateHelper.ogDescriptionPreview(post.body)}">
+<head th:replace="~{site/layout :: head(title=${pageTitle})}">
 </head>
 <body class="theme-default prj" id="html-body">
 <div id="main" class="main">

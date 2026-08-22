@@ -137,6 +137,26 @@ class TemplateHelper(
         return title.replace(regex, "")
     }
 
+    // yona layout.scala.html:8 titleArray = title.split(" |:| ") 대응 — 페이지 제목에
+    // " |:| "로 og:description/twitter:description용 부가 설명이 덧붙는 컨벤션 이식.
+    fun titleMain(title: String?): String {
+        if (title.isNullOrEmpty()) return ""
+        return title.split(" |:| ").first()
+    }
+
+    fun titleOgDescription(title: String?): String {
+        if (title.isNullOrEmpty()) return ""
+        return title.split(" |:| ").last()
+    }
+
+    // yona issue/view.scala.html:53, board/view.scala.html:26 대응 —
+    // 본문 앞부분 200자를 og:description/twitter:description 미리보기로 사용.
+    @JvmOverloads
+    fun ogDescriptionPreview(body: String?, maxLen: Int = 200): String {
+        if (body.isNullOrEmpty()) return ""
+        return body.substring(0, minOf(body.length, maxLen))
+    }
+
     fun hasChildIssue(issue: Issue): Boolean {
         val issueId = issue.id ?: return false
         return issueRepository.countByParentId(issueId) > 0

@@ -63,7 +63,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 1 | [x] | `layout.scala.html` | `site/layout.html` | 완료(TASK-0220, TDD). og/twitter 메타태그·업데이트알림배너·NProgress/ViewerJS 자산 이식. `\|:\|` 제목 분리 컨벤션은 미이식(비고 참고) |
+| 1 | [x] | `layout.scala.html` | `site/layout.html` | 완료(TASK-0220/TASK-0241, TDD). og/twitter 메타태그·업데이트알림배너·NProgress/ViewerJS 자산 이식. `\|:\|` 제목 분리 컨벤션도 TASK-0241에서 추가 이식 완료(`TemplateHelper.titleMain/titleOgDescription`) — issue/view, board/view, project/home 3개 호출부에 적용, 부가로 issue/create·board/create·milestone/create의 `' - Yona'` 중복 접미사 버그도 함께 수정 |
 | 2 | [x] | `layout_framed.scala.html` | `site/layout_framed.html` | 완료(TASK-0221, TDD). og/twitter 메타태그·nprogress/magnific-popup 자산·popover 초기화·GA 스크립트 이식. sidebar()는 이미 이 파일에 인라인되어 있었음(→ #7과 동일 파일로 처리) |
 | 3 | [x] | `siteLayout.scala.html` | `site/{data,diagnostic,issueList,mail,massMail,postList,projectList,update,userList}.html` (각 파일에 인라인 조합) | 완료(TASK-0222, TDD). 신규 데코레이터 파일 대신, 관리자 화면 9개가 이미 `head`/`gnb`/`breadcrumb`/`sidebar`/`scripts` 조각을 조합하고 있었음 — 빠져있던 `footer` 조각만 9개 파일에 공통 추가(legacy `siteLayout`이 `@content` 뒤에 `@common.footer()`를 감싸는 것과 동일 동작) |
 | 4 | [i] | `siteLayout_framed.scala.html` | `site/layout_framed.html` | 확인 결과 legacy에서 이 파일의 유일한 사용처는 `index/sidebar.scala.html`(빈 content로 `siteLayout_framed`→`layout_framed` 호출) — 즉 "사이드바+iframe 프레임 셸"이며, 이는 #2에서 이미 완료한 `site/layout_framed.html`(→`/user/sidebar`)과 동일 화면. 별도 신규 파일 불필요 |
@@ -1018,3 +1018,31 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   `[Test-19-27]`/`[Test-19-28]`로 조정.
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN).
   **그룹8(board/*, #143~148) 6개 항목 전체 처리 완료.** 다음은 그룹9(milestone/*, #149~153).
+
+### 방침 정정 후속: #1 `\|:\|` 제목 분리 컨벤션 이식 (TASK-0241)
+
+- **#1 재작업**: 이전에 "저가치 판단"으로 미이식 처리했던 `\|:\|` 제목 분리 컨벤션을 실제로 이식.
+  legacy `layout.scala.html:8`은 `title.split(" |:| ")`로 `<title>`/og:title엔 앞부분만, og:description/
+  twitter:description엔 뒷부분(또는 구분자 없으면 동일값)을 사용한다. `TemplateHelper.titleMain()`/
+  `titleOgDescription()` 신규 추가, `site/layout.html :: head(title)` 프래그먼트에서 이 두 헬퍼로 계산한
+  값을 사용하도록 변경(기존 호출부는 전부 구분자 없는 단일 문자열이라 `first()==last()`로 하위호환 보장).
+  실제 `\|:\|` 조합을 사용하는 3개 파일(`project/home.html`, `issue/view.html`, `board/view.html`)에
+  적용 — `issue.body`/`post.body` 200자 미리보기는 `TemplateHelper.ogDescriptionPreview()` 신규 추가.
+- **부수 발견**: `board/create.html`/`issue/create.html`/`milestone/create.html` 3개 파일이 `head(title=...
+  + ' - Yona')`처럼 `' - Yona'` 접미사를 직접 붙이고 있었는데, `head()` 프래그먼트 자체가 `<title>`에서
+  이미 `' - Yona'`를 붙이고 있어 **`<title>프로젝트명 - Yona - Yona</title>`처럼 접미사가 중복 노출되던
+  버그**였음 — legacy 어디에도 title 파라미터에 사이트명이 포함되지 않음을 확인 후 3개 파일 모두 제거.
+- **구현 중 발견한 문제**: (1) `~{...}` 프래그먼트 지정 표현식 안에 `@bean.method(...)` 같은 복잡한
+  표현식을 명명 파라미터 값으로 직접 넣으면 Thymeleaf가 파싱 자체를 못함(`Could not parse as expression`)
+  — `<html>` 태그의 `th:with`로 미리 변수화한 뒤 그 변수만 프래그먼트 호출에 넘기도록 수정. (2) `th:with`
+  값은 전체가 하나의 `${...}` 블록이어야 함(문자열 리터럴과 섞어 쓸 수 없음). (3) `${...}` SpringEL 블록
+  안에는 Thymeleaf 전용 `#{...}` i18n 문법을 중첩할 수 없어, `project/home.html`은 `th:with`를
+  `menuHomeLabel=#{menu.home}, pageTitle=${...menuHomeLabel...}` 형태로 2단계로 분리. (4) Kotlin 기본
+  파라미터(`maxLen: Int = 200`)는 리플렉션 기반 SpEL 메서드 탐색에서 안 보여서(`@JvmOverloads` 없으면
+  1-arg 오버로드 자체가 생성 안 됨) `EL1004E: Method call ... cannot be found` 에러 발생 — `@JvmOverloads`
+  추가로 해결.
+- **legacy와 다르게 처리한 지점**: 없음(순수 버그 수정 + 기능 이식).
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-29]`(이슈 상세 화면 title/og:title/og:description
+  분리 검증, `\|:\|` 없는 화면의 하위호환 검증).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 60 tests).
+  다음은 나머지 보류 항목(#8,10,12,13,20,23,38~41,45,47,49,50,53,57,70,82,83,90,108)을 번호 순으로 재작업.

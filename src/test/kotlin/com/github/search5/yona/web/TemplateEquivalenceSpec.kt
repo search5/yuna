@@ -1230,6 +1230,35 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     doc.select("#deleteConfirm .modal-footer button[data-dismiss=modal]").text() shouldBe "아니요"
                 }
             }
+
+            describe("[Test-19-29] 페이지 제목 |:| 컨벤션(layout.scala.html:8) 동치성 검증") {
+                val ogIssue = issueRepository.findAll().find { it.project.id == publicProj.id && it.title == "테스트이슈" }!!
+
+                it("이슈 상세 화면은 <title>/og:title엔 이슈 제목만, og:description엔 본문 미리보기를 사용해야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/public-proj/issue/${ogIssue.number}").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    doc.select("title").text() shouldBe "테스트이슈 - Yona"
+                    doc.select("meta[property=og:title]").attr("content") shouldBe "테스트이슈"
+                    doc.select("meta[property=og:description]").attr("content") shouldBe "이슈내용"
+                    doc.select("meta[name=twitter:description]").attr("content") shouldBe "이슈내용"
+                }
+
+                it("|:| 구분자가 없는 일반 화면은 title을 og:title/og:description에 그대로 동일하게 사용해야 한다(하위호환)") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/${settingProj.owner}/${settingProj.name}/issue/labelsform").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    val ogTitle = doc.select("meta[property=og:title]").attr("content")
+                    val ogDesc = doc.select("meta[property=og:description]").attr("content")
+                    ogTitle shouldBe ogDesc
+                }
+            }
         }
     }
 }
