@@ -1,0 +1,170 @@
+package com.github.search5.yona.web
+
+import com.github.search5.yona.AbstractIntegrationTest
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleRepository
+import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserRepository
+import io.kotest.matchers.string.shouldContain
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.context.WebApplicationContext
+import org.springframework.web.multipart.MaxUploadSizeExceededException
+
+// GlobalExceptionHandler(#53)는 실제로 MaxUploadSizeExceededException을 잡아 error/413을
+// 렌더링하는지 검증해야 하는데, MockMvc의 MockMultipartHttpServletRequest는 실제 서블릿 컨테이너의
+// MultipartConfigElement 크기 제한을 강제하지 않아(getParts()가 등록된 Part를 그대로 반환) 진짜
+// 큰 파일을 업로드해도 예외가 발생하지 않는다(직접 확인함 — 컨트롤러까지 정상 도달해 anonymous
+// 403으로 응답했다). 그래서 이 예외가 실제로 던져지는 상황을 테스트 전용 컨트롤러로 재현해
+// DispatcherServlet -> 같은 프로덕션 GlobalExceptionHandler -> 실제 ThymeleafViewResolver까지
+// 그대로 태운다. 컨트롤러/뷰 리졸버/템플릿은 전부 진짜이고, 예외 발생 지점만 대체한 것이다.
+@RestController
+private class MaxUploadSizeExceededTestController {
+    @GetMapping("/__test/trigger-max-upload-size-exceeded")
+    fun trigger(): String {
+        throw MaxUploadSizeExceededException(10L)
+    }
+}
+
+@TestConfiguration
+private class MaxUploadSizeExceededTestConfig {
+    @Bean
+    fun maxUploadSizeExceededTestController() = MaxUploadSizeExceededTestController()
+}
+
+// P-템플릿 그룹3 #45/#47/#49/#50/#53 대응 — mockk 단위 테스트는 뷰 이름만 확인하고 실제 Thymeleaf
+// 렌더링을 거치지 않으므로, 이 스펙은 실제 ViewResolver(webAppContextSetup)로 요청을 태워 새로 만든
+// 컨텍스트 인지형 에러 화면들(error/notfound, error/forbidden, error/forbidden_organization,
+// error/badrequest, error/413)이 문법 오류 없이 렌더링되고 기대한 문구/링크가 실제 HTML에 나타나는지
+// 확인한다. 이 세션에서 mockk 테스트만 통과하고 실제 렌더링은 한 번도 검증 안 된 파샬에서
+// SpelEvaluationException이 실제로 발견된 전례가 있어(원인: 프래그먼트 인자 안의 T(...)/gathering
+// 제약) 반드시 이 방식으로 검증한다.
+@Transactional
+@Import(MaxUploadSizeExceededTestConfig::class)
+class ErrorPageTemplateRenderingSpec @Autowired constructor(
+    private val webApplicationContext: WebApplicationContext,
+    private val projectRepository: ProjectRepository,
+    private val userRepository: UserRepository,
+    private val organizationRepository: OrganizationRepository,
+    private val organizationUserRepository: OrganizationUserRepository,
+    private val roleRepository: RoleRepository
+) : AbstractIntegrationTest() {
+
+    private val mockMvc: MockMvc by lazy { MockMvcBuilders.webAppContextSetup(webApplicationContext).build() }
+
+    init {
+        describe("에러 페이지 컨텍스트 인지형 렌더링 (P-템플릿 그룹3 #45/#47/#49/#50/#53)") {
+            // 이름이 고유한(errpage- 접두) 픽스처만 만들고 클래스에 붙은 @Transactional이 각
+            // 테스트 종료 시 롤백하므로, 다른 스펙의 데이터를 건드리는 전역 deleteAll()은 쓰지 않는다.
+
+            it("이슈를 찾지 못하면 error/notfound가 프로젝트 헤더/메뉴와 함께 실제로 렌더링돼야 한다 (#45)") {
+                // BootstrapSetupInterceptor는 DB에 유저가 0명이면 무조건 /bootstrap-setup으로
+                // 리다이렉트하므로, 인증 없이 GET하는 이 화면도 유저를 최소 1명 만들어둬야 한다.
+                userRepository.save(User(loginId = "errpage-bootstrap1", name = "부트스트랩", email = "errpage-bootstrap1@yona.io"))
+                val project = projectRepository.save(
+                    Project(name = "errpage-proj1", owner = "errpage-owner1", projectScope = ProjectScope.PUBLIC)
+                )
+
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/issue/999"))
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                // targetType="issue_post" -> error.notfound.issue_post 메시지 + 이슈 목록으로 가는
+                // 링크(TemplateHelper.notFoundReturnUrl) + 프로젝트 헤더(owner/name breadcrumb)가
+                // 모두 실제 HTML에 나타나야 한다.
+                body shouldContain "존재하지 않는 이슈"
+                body shouldContain "/${project.owner}/${project.name}/issues?state=all"
+                body shouldContain project.name!!
+            }
+
+            it("비공개 프로젝트에 비회원이 접근하면 error/forbidden이 프로젝트 헤더와 함께 실제로 렌더링돼야 한다 (#47)") {
+                val project = projectRepository.save(
+                    Project(name = "errpage-proj2", owner = "errpage-owner2", projectScope = ProjectScope.PRIVATE)
+                )
+                val outsider = userRepository.save(
+                    User(loginId = "errpage-outsider", name = "외부인", email = "errpage-outsider@yona.io")
+                )
+                val auth = UsernamePasswordAuthenticationToken(outsider.loginId, "pw")
+
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/issues").principal(auth))
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                body shouldContain "권한이 없거나 존재하지 않는 프로젝트"
+                body shouldContain project.name!!
+            }
+
+            it("조직 멤버 목록에 비Admin 멤버가 접근하면 error/forbidden_organization이 조직 헤더와 함께 실제로 렌더링돼야 한다 (#49)") {
+                val org = organizationRepository.save(Organization(name = "errpage-org1"))
+                val member = userRepository.save(
+                    User(loginId = "errpage-orgmember", name = "조직멤버", email = "errpage-orgmember@yona.io")
+                )
+                val memberRole = roleRepository.findById(RoleType.ORG_MEMBER.roleType).orElseGet {
+                    roleRepository.save(Role(id = RoleType.ORG_MEMBER.roleType, name = "ORG_MEMBER"))
+                }
+                organizationUserRepository.save(OrganizationUser(user = member, organization = org, role = memberRole))
+                val auth = UsernamePasswordAuthenticationToken(member.loginId, "pw")
+
+                val body = mockMvc.perform(get("/org/${org.name}/members").principal(auth))
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                body shouldContain "권한이 없습니다"
+                body shouldContain org.name!!
+            }
+
+            it("SVN 프로젝트에 브랜치 기본값 지정을 요청하면 error/badrequest가 프로젝트 헤더와 함께 실제로 렌더링돼야 한다 (#50)") {
+                val project = projectRepository.save(
+                    Project(name = "errpage-proj3", owner = "errpage-owner3", vcs = "SVN", projectScope = ProjectScope.PUBLIC)
+                )
+                val user = userRepository.save(
+                    User(loginId = "errpage-svnuser", name = "SVN유저", email = "errpage-svnuser@yona.io")
+                )
+                val auth = UsernamePasswordAuthenticationToken(user.loginId, "pw")
+
+                val body = mockMvc.perform(
+                    post("/${project.owner}/${project.name}/code/master/setAsDefault").principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                body shouldContain "잘못된 요청"
+                body shouldContain project.name!!
+            }
+
+            it("MaxUploadSizeExceededException이 발생하면 GlobalExceptionHandler가 error/413을 실제로 렌더링해야 한다 (#53)") {
+                userRepository.save(User(loginId = "errpage-bootstrap2", name = "부트스트랩2", email = "errpage-bootstrap2@yona.io"))
+
+                val body = mockMvc.perform(get("/__test/trigger-max-upload-size-exceeded"))
+                    .andExpect(status().isPayloadTooLarge)
+                    .andReturn().response.contentAsString
+
+                body shouldContain "너무 큰 텍스트 데이터를 보냈습니다"
+                // MaxUploadSizeExceededException.maxUploadSize(10바이트)가 그대로 메시지 인자로
+                // 전달되는지도 함께 확인한다.
+                body shouldContain "10"
+            }
+        }
+    }
+}

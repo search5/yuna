@@ -183,12 +183,15 @@ class IssueViewControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("project", "issuePage", "state"))
             }
 
-            it("프로젝트 멤버가 아닐 경우 403 Forbidden 뷰 혹은 status를 반환해야 한다") {
+            it("프로젝트 멤버가 아닐 경우 컨텍스트 인지형 403(error/forbidden) 뷰를 반환해야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(nonMemberUser)
 
+                // yona error/forbidden.scala.html 대응 (P-템플릿 #47) — 프로젝트는 이미 찾았으므로
+                // 프로젝트 헤더/메뉴가 붙는 컨텍스트 인지형 403(제네릭 error/403이 아니다).
                 mockMvc.perform(get("/owner/TestProj/issues").principal(userAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
+                    .andExpect(model().attributeExists("project"))
             }
 
             // yona IssueApp.java:46,166-177 getItemsPerPage() 대응 (P1-105).
@@ -362,7 +365,8 @@ class IssueViewControllerSpec : DescribeSpec({
                     labelIds = null,
                     isDraft = false,
                     temporaryUploadFiles = "900,901",
-                    authentication = auth
+                    authentication = auth,
+                    model = ExtendedModelMap()
                 )
 
                 result shouldBe "redirect:/owner/TestProj/issue/5"
@@ -401,7 +405,8 @@ class IssueViewControllerSpec : DescribeSpec({
                     labelIds = null,
                     isDraft = false,
                     temporaryUploadFiles = null,
-                    authentication = auth
+                    authentication = auth,
+                    model = ExtendedModelMap()
                 )
 
                 result shouldBe "redirect:/owner/TestProj/issue/5"
@@ -437,7 +442,8 @@ class IssueViewControllerSpec : DescribeSpec({
                     projectName = "GroupProj",
                     number = 3L,
                     request = IssueForm(title = "새 제목", body = "새 본문"),
-                    authentication = auth
+                    authentication = auth,
+                    model = ExtendedModelMap()
                 )
 
                 result shouldBe "redirect:/owner/GroupProj/issue/3"
