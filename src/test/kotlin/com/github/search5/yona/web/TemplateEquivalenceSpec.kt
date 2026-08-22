@@ -33,6 +33,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.test.context.TestPropertySource
 import org.springframework.web.context.WebApplicationContext
 import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
@@ -54,6 +55,7 @@ import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.user.FavoriteProject
 import com.github.search5.yona.domain.user.FavoriteProjectRepository
 
+@TestPropertySource(properties = ["github.allow.migration=true"])
 class TemplateEquivalenceSpec @Autowired constructor(
     private val wac: WebApplicationContext,
     private val userRepository: UserRepository,
@@ -1346,6 +1348,47 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     )
                     doc.select(".user-project-list i.star.starred").size shouldBe 0
                     doc.select(".user-project-list i.star").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-33] 마이그레이션 화면(migration/home.scala.html, migrationPageLayout.scala.html) 동치성 검증") {
+                it("migrationPageLayout이 감싸던 전체 GNB/footer, migration 전용 자산이 포함되어야 한다") {
+                    val result = mockMvc.perform(
+                        get("/migration").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    ).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+
+                    // migrationPageLayout = partial_update_notification() + common.navbar(...) + @content + common.scripts()
+                    doc.select("form[name='gnb-search-form']").size shouldBe 1
+                    doc.select("footer.page-footer-outer").size shouldBe 1
+
+                    // migrationPageLayout 전용 헤드/스크립트 자산(공용 site/layout::head/scripts에는 없음)
+                    doc.select("script[src*='lib/jquery/jquery-1.9.0.js']").size shouldBe 1
+                    doc.select("script[src*='lib/jquery/jquery.browser.js']").size shouldBe 1
+                    doc.select("script[src*='lib/jquery/jquery.pjax.js']").size shouldBe 1
+                    doc.select("script[src*='common/yobi.Common.js']").size shouldBe 1
+                    doc.select("script[src*='lib/vendor.js']").size shouldBe 1
+                    doc.select("script[src*='service/yona.Migration.js']").size shouldBe 1
+                    doc.select("link[href*='fonts.googleapis.com/css?family=Montserrat']").size shouldBe 1
+
+                    // AngularJS 앱 컨테이너는 토큰 유무와 무관하게 항상 렌더링된다
+                    doc.select("div.yobi-migration[ng-app=yona.migration]").size shouldBe 1
+                }
+
+                it("code 파라미터(및 그에 따른 token)가 없으면 header-pannel 전체가 렌더링되지 않아야 한다(legacy ng-if=\"'@token'\")") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/migration").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    doc.select(".yobi-migration > .header-pannel").size shouldBe 0
+                }
+
+                it("로그인하지 않은 사용자는 로그인 폼으로 리다이렉트되어야 한다") {
+                    mockMvc.perform(get("/migration"))
+                        .andExpect(status().is3xxRedirection)
                 }
             }
         }
