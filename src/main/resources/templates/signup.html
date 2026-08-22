@@ -26,6 +26,8 @@
           </ul>
         </div>
 
+        <div class="btns-row nm" th:if="${useSocialLoginOnly}" th:text="#{app.warn.support.social.login.only}">소셜 로그인을 통한 로그인만 가능합니다.</div>
+        <th:block th:unless="${useSocialLoginOnly}">
         <dl>
           <dt>
             <label for="loginId" th:text="#{user.signupId}">아이디</label>
@@ -66,6 +68,7 @@
         <div class="btns-row">
           <button type="submit" class="ybtn ybtn-primary ybtn-large ybtn-fullsize" th:text="#{user.signupBtn}">가입하기</button>
         </div>
+        </th:block>
 
         <div class="act-row">
           <span th:text="#{user.isAlreadySignupUser}">이미 가입하셨나요?</span> <a th:href="@{/login}" class="go-login" th:text="#{title.login}">로그인</a>

@@ -24,6 +24,8 @@
         <form th:action="@{/users/login}" method="POST">
           <input type="hidden" name="redirectUrl" th:value="${param.redirectUrl}">
           
+          <div class="btns-row nm" th:if="${useSocialLoginOnly}" th:text="#{app.warn.support.social.login.only}">소셜 로그인을 통한 로그인만 가능합니다.</div>
+          <th:block th:unless="${useSocialLoginOnly}">
           <dl>
             <dd>
               <input id="loginIdOrEmailD" name="loginIdOrEmail" type="text" class="text email" autocomplete="off" th:placeholder="#{user.login.key}" required autofocus>
@@ -36,9 +38,10 @@
           <div class="btns-row">
             <button type="submit" class="ybtn ybtn-primary ybtn-large ybtn-fullsize" th:text="#{button.login}">로그인</button>
           </div>
-          
+          </th:block>
+
           <div class="btns-row nm">
-            <div class="social-login-title-line" th:text="#{title.or}"> or </div>
+            <div class="social-login-title-line" th:unless="${useSocialLoginOnly}" th:text="#{title.or}"> or </div>
             <a th:href="@{/oauth2/authorization/github}" class="ybtn oauth-login-btn">
               <span class="auth-provider-logo">
                 <span class="github">
@@ -56,7 +59,7 @@
             </a>
           </div>
 
-          <div class="act-row mt5">
+          <div class="act-row mt5" th:unless="${useSocialLoginOnly}">
             <div class="remember-me-wrap pull-left">
               <input id="remember-me" type="checkbox" name="rememberMe" class="checkbox" checked>
               <label for="remember-me" class="bg-checkbox" th:text="#{title.rememberMe}">로그인 상태 유지</label>
