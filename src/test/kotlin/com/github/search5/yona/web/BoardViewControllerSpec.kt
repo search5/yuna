@@ -143,8 +143,11 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
+                // yona BoardApp.posts() @IsAllowed(READ, PROJECT) -> IsAllowedAction forbidden 분기
+                // ErrorViews.Forbidden.render("error.forbidden", project) 대응 (P-템플릿 #47).
                 mockMvc.perform(get("/owner/TestProj/posts").principal(userAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
+                    .andExpect(model().attributeExists("project"))
             }
 
             // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE 대응 (P1-105) — 게시글 목록은 항상 고정 15.
@@ -306,7 +309,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "제목", body = "본문", temporaryUploadFiles = "900")
 
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj/post/5"
                 verify(exactly = 1) {
@@ -337,7 +340,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "새 README", body = "새 본문", readme = true)
 
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
@@ -357,7 +360,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "첫 README", body = "본문", readme = true)
 
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj"
                 verify(exactly = 1) { postingService.createPosting(1L, any(), 10L) }
@@ -375,7 +378,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "이슈 템플릿", body = "템플릿 내용", issueTemplate = "true")
 
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth)
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
@@ -407,7 +410,7 @@ class BoardViewControllerSpec : DescribeSpec({
                     branch = "develop"
                 )
 
-                val result = boardViewController.createPost("owner", "CodeEditProj", request, userAuth)
+                val result = boardViewController.createPost("owner", "CodeEditProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/CodeEditProj/code/develop/src/main/Foo.kt"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
@@ -447,7 +450,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "제목", body = "본문")
 
-                val result = boardViewController.createPost("owner", "PublicProj", request, nonMemberAuth)
+                val result = boardViewController.createPost("owner", "PublicProj", request, nonMemberAuth, org.springframework.ui.ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/PublicProj/post/1"
             }

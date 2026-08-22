@@ -71,7 +71,10 @@ class BoardViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // yona BoardApp.posts() @IsAllowed(READ, PROJECT) -> IsAllowedAction의 forbidden 분기
+            // ErrorViews.Forbidden.render("error.forbidden", project) 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val actualPage = if (pageNum != null) {
@@ -125,10 +128,19 @@ class BoardViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // yona BoardApp.post() @IsAllowed(READ, BOARD_POST) -> IsAllowedAction의 forbidden 분기
+            // ErrorViews.Forbidden.render("error.forbidden", project) 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
-        val posting = postingService.getPosting(project.id!!, number) ?: return "error/404"
+        val posting = postingService.getPosting(project.id!!, number) ?: run {
+            // yona BoardApp.post() @IsAllowed(READ, BOARD_POST) -> IsAllowedAction의 resourceObject==null
+            // 분기 ErrorViews.NotFound.render("error.notfound", project, "board_post") 대응 (P-템플릿 #45).
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "board_post")
+            return "error/notfound"
+        }
         val comments = postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(posting.id!!)
 
         if (loginUser != null) {
@@ -203,7 +215,10 @@ class BoardViewController(
         // 프로젝트 멤버/그룹멤버로만 좁게 검사해 yona보다 과도하게 제한하고 있었다 — yuna
         // IssueViewController.createIssueForm이 이미 쓰고 있는 정답 패턴을 그대로 재사용.
         if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.BOARD_POST)) {
-            return "error/403"
+            // yona BoardApp.newPostForm() @IsCreatable(BOARD_POST) -> IsCreatableAction
+            // ErrorViews.Forbidden.render("error.forbidden", project) 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val isAllowedToNotice = loginUser != null && (projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || accessControl.isAllowedIfGroupMember(project, loginUser))
@@ -249,10 +264,20 @@ class BoardViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-            return "error/403"
+            // yona BoardApp.editPostForm()의 "if (!AccessControl.isAllowed(..., posting.asResource(),
+            // Operation.READ)) { return forbidden(ErrorViews.Forbidden.render("error.forbidden",
+            // project)); }" 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
-        val posting = postingService.getPosting(project.id!!, number) ?: return "error/404"
+        val posting = postingService.getPosting(project.id!!, number) ?: run {
+            // yona board_post 서브 리소스 조회 실패 -> error/notfound targetType=board_post 대응
+            // (P-템플릿 #45), BoardViewController.viewPost()와 동일한 정답 패턴.
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "board_post")
+            return "error/notfound"
+        }
 
         val isAllowedToNotice = loginUser != null && (projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || accessControl.isAllowedIfGroupMember(project, loginUser))
 
@@ -283,21 +308,35 @@ class BoardViewController(
         @PathVariable projectName: String,
         @PathVariable number: Long,
         @ModelAttribute request: PostingForm,
-        authentication: Authentication?
+        authentication: Authentication?,
+        model: Model
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-            ?: return "error/403"
+            ?: run {
+                // yona AbstractPostingApp.editPosting()이 요구하는 로그인 전제 대응 —
+                // 미로그인 상태 대응은 error/forbidden으로 통일 (P-템플릿 #47).
+                model.addAttribute("project", project)
+                return "error/forbidden"
+            }
 
-        val posting = postingService.getPosting(project.id!!, number) ?: return "error/404"
+        val posting = postingService.getPosting(project.id!!, number) ?: run {
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "board_post")
+            return "error/notfound"
+        }
 
         if (posting.authorLoginId != loginUser.loginId &&
             !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) &&
             !accessControl.isAllowedIfGroupMember(project, loginUser)
         ) {
-            return "error/403"
+            // yona AbstractPostingApp.editPosting()의 "if (!AccessControl.isAllowed(..., original.
+            // asResource(), Operation.UPDATE)) { return forbidden(ErrorViews.Forbidden.render(
+            // "error.forbidden", original.project)); }" 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val isReadme = posting.readme ?: false
@@ -341,19 +380,26 @@ class BoardViewController(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @ModelAttribute request: PostingForm,
-        authentication: Authentication?
+        authentication: Authentication?,
+        model: Model
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-            ?: return "error/403"
+            ?: run {
+                model.addAttribute("project", project)
+                return "error/forbidden"
+            }
 
         // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113). 공개 프로젝트의
         // 비멤버 로그인 사용자도 게시글을 쓸 수 있는데, 여기서는 프로젝트 멤버/그룹멤버로만 좁게
         // 검사해 yona보다 과도하게 제한하고 있었다 — createPostForm과 동일한 정답 패턴으로 교체.
         if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.BOARD_POST)) {
-            return "error/403"
+            // yona BoardApp.newPost() @IsCreatable(BOARD_POST) -> IsCreatableAction
+            // ErrorViews.Forbidden.render("error.forbidden", project) 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         // yona BoardApp.newPost()의 "if (post.readme) { Posting readmePosting = ...; if (readmePosting
@@ -364,7 +410,7 @@ class BoardViewController(
         if (request.readme == true) {
             val existingReadme = postingRepository.findByProjectAndReadme(project, true).firstOrNull()
             if (existingReadme != null) {
-                return editPost(owner, projectName, existingReadme.number!!, request, authentication)
+                return editPost(owner, projectName, existingReadme.number!!, request, authentication, model)
             }
         }
 
