@@ -223,24 +223,24 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 116 | [i] | `issue/partial_searchform.scala.html` | `issue/list.html`에 인라인 | 완료(TASK-0238). 대체로 일치하나 **마일스톤 select가 열림 optgroup만 있고 닫힌 마일스톤 optgroup이 통째로 빠져** 있었음(legacy는 열림/닫힘 2개 optgroup) — `IssueViewController.list()`에 `closedMilestones` 모델 속성 신규 추가 후 복구. **라벨 관리 링크도 legacy `isManagerOf(project)` 권한 체크 없이 항상 노출**되고 있었음(실제 라벨 설정 화면은 매니저/사이트관리자만 접근 가능해 일반 멤버에게 403 유발) — `templateHelper.isManager` 게이트 추가 |
 | 117 | [i] | `issue/partial_list.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). 이슈 행 마크업(제목/작성자/날짜/서브태스크 진행률/마일스톤/댓글·공감·공유 카운트) legacy와 일치 |
 | 118 | [i] | `issue/partial_list_wrap.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). 좌측 필터+우측 목록 2단 레이아웃, 정렬 필터 링크(마감일/최근업데이트/등록일/댓글순) 구조 일치 |
-| 119 | [~] | `issue/partial_list_draft.scala.html` | (미이식) | **미이식 확인(TASK-0238)**: legacy는 초안(isDraft=true) 이슈를 작성자 본인에게만 목록 최상단에 노출하는 별도 파샬을 갖고 있으나, yuna는 이슈 목록 쿼리가 `State.OPEN`/`State.CLOSED`만 조회해 `State.DRAFT` 이슈는 목록에서 완전히 안 보임(직접 URL 접근 시에만 열람 가능, `IssueController`에 작성자 본인 검증 로직은 있음). 백엔드에 작성자별 초안 조회 쿼리 신규 추가 + 목록 템플릿에 초안 섹션 추가가 필요해 순수 템플릿 포팅 범위를 넘어 보류 — 후속 배치에서 별도 작업으로 처리 필요 |
+| 119 | [x] | `issue/partial_list_draft.scala.html` | `issue/list.html`(`issue/partial_list :: list` 프래그먼트 재사용) | **완료(TASK-0260)**. `IssueRepository.findByProjectAndAuthorLoginIdAndIsDraftTrueOrderByNumberDesc` 신규 추가 + `IssueViewController.listIssues()`에 legacy `partial_list_wrap.scala.html:84` 대응 게이트(`currentPage.getPageIndex==0 && !hasCondition && state != CLOSED`) 구현, `draftIssues` 모델 속성으로 전달. `list.html`이 `partial_list :: list` 프래그먼트를 재사용해 렌더링(번호 대신 `#초안` draft-number 표시는 partial_list.html에 이미 구현돼 있어 재사용만으로 충분). **검증 중 발견한 실질 버그**: legacy `SearchCondition.hasCondition()`은 `assigneeId/authorId/mentionId/commenterId/sharerId/favoriteId`만 검사하는데(텍스트검색/마일스톤/라벨/마감일 필터는 미포함) 이전 세션 구현은 `filter`/`milestoneId`/`labelIds`/`dueDate`까지 조건에 넣어 마일스톤·라벨로만 필터링해도 초안 섹션이 사라지는 legacy와 다른 동작이었음 — `authorId/assigneeId/commenterId`만 검사하도록 수정(레거시가 지원하는 mentionId/sharerId/favoriteId는 yuna 목록 API에 파라미터 자체가 없어 항상 false로 취급). `IssueDraftListTemplateRenderingSpec` 그린 |
 | 120 | [i] | `issue/partial_list_subtask.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). 서브태스크 진행률 바(`done-outline`/`red-outline`)와 부모 이슈 링크 구조 일치 |
 | 121 | [i] | `issue/partial_list_quicksearch.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). 좌측 퀵링크(전체/할당된/작성한/댓글단 이슈) 구조·카운트 배지 일치 |
 | 122 | [x] | `issue/partial_massupdate.scala.html` | `issue/list.html`에 인라인 | 완료(TASK-0238). 일괄 수정 폼(상태/담당자/마일스톤/라벨 추가·제거) 구조는 대체로 일치하나, **마일스톤 드롭다운이 `project.menuSetting.milestone`(마일스톤 메뉴 활성화 여부) 게이트 없이 마일스톤 데이터만 있으면 노출**되고 있었음 — `project.isMilestoneEnabled` 조건 추가로 복구 |
 | 123 | [i] | `issue/partial_select_label.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). select2 기반 카테고리별 라벨 다중선택 구조는 일치하나, legacy는 라벨 dt 안에 `isManagerOf(project)`일 때만 보이는 `[편집]` 인라인 링크를 두는 반면 yuna는 별도 `.labels-wrap` 아이콘 버튼(#116에서 권한 게이트 복구함)으로 분리 배치 — 기능은 동등, DOM 구조만 소폭 차이(수용 가능한 수준으로 판단) |
 | 124 | [i] | `issue/partial_show_selected_label.scala.html` | `issue/partial_show_selected_label.html`(프래그먼트) | 확인 완료(TASK-0238). `dl`/`dt`/라벨 앵커 구조 일치, 수정 불필요 |
-| 125 | [~] | `issue/partial_select_subtask.scala.html` | (미이식) | **미이식 확인(TASK-0238)**: 이슈 생성/수정 폼에서 부모 이슈를 select2로 검색해 지정하는 위젯. yuna의 create.html/edit.html에 부모이슈 지정 UI가 없음(현재는 URL 쿼리파라미터 `parentIssueId`로만 하위이슈 생성 가능, 기존 이슈의 부모를 나중에 바꾸는 기능 없음) — REST 검색 엔드포인트 신규 필요, 순수 템플릿 포팅 범위를 넘어 보류 |
+| 125 | [x] | `issue/partial_select_subtask.scala.html` | `issue/edit.html`에 인라인(`subtask-wrap`) | **완료(TASK-0260)**. legacy를 다시 확인한 결과 select2 후보 목록은 AJAX 검색이 아니라 서버가 최대 300건(`Issue.findParentIssueByProject(project, "", 300)`)을 `<option>`으로 렌더링해두고 클라이언트 select2가 그 위에서 필터링하는 방식이라 별도 REST 검색 엔드포인트는 애초에 불필요했음(이전 조사 메모의 "REST 검색 엔드포인트 신규 필요"는 부정확한 추정이었음, 실제 구현 완료 후 정정). `IssueViewController.editIssueForm()`에 `IssueRepository.findByProjectAndParentIsNullOrderByCreatedDateDesc(project, PageRequest.of(0, 300))`로 후보군을 조회해 자기자신 제외(`it.id != issue.id`, legacy의 `.filter(issue.id != currentIssueId)` 대응) 후 `parentCandidates` 모델로 전달, `hasChildIssue`(`countByParentId > 0`, 이미 부모 이슈면 후보 자체를 비움) 게이트까지 legacy와 동일하게 구현. `targetProjectId`(이동 가능 프로젝트 select2)도 `movableProjects`로 함께 구현. `IssueEditSubtaskTemplateRenderingSpec` 그린 |
 | 126 | [x] | `issue/view.scala.html` | `issue/view.html` | 대체로 정밀 이식돼 있음을 확인(TASK-0238). 아래 #127,134~136에서 발견된 2건의 실질적 기능 누락은 백엔드 작업이 필요해 별도 보류 항목으로 기록 |
-| 127 | [~] | `issue/partial_assignee.scala.html` | (view.html에 정적 텍스트로만 존재, 인터랙티브 위젯 없음) | **중대 발견(TASK-0238), 미이식**: view.html 우측 패널의 담당자/마일스톤이 항상 읽기전용 `<span>` 텍스트뿐이며, legacy처럼 `isAllowedUpdate`(매니저 등)일 때 select2 기반 인라인 수정 위젯으로 바뀌는 기능이 없음. 정적 자산 `yobi.issue.View.js`에는 이미 `[data-toggle=select2]` change 이벤트로 `massUpdate` 엔드포인트에 AJAX 저장하는 로직이 구현돼 있으나(`_onChangeIssueInfo`/`_requestUpdateIssue`), (a) view.html에 해당 select 마크업 자체가 없고, (b) 템플릿의 `$yobi.loadModule("issue.View", {...})` 호출에도 `urls.massUpdate`가 전달되지 않아 이중으로 죽어있는 상태. 참고로 legacy 자체도 `_onSelectingAssignee`가 리스닝하는 `[name="assignee.user.id"]` 셀렉터가 실제 렌더링되는 `partial_assignee`의 `name="assigneeLoginId"`와 불일치해 legacy에서도 일부 핸들러는 이미 죽어있었음(주 동작 경로는 `data-toggle=select2`의 범용 change 핸들러). 라벨은 이미 동일 패턴(#123)으로 정상 작동 중이라 참고 구현으로 재사용 가능. REST 계약 검증이 필요해 순수 템플릿 포팅 범위를 넘어 보류 — 후속 배치에서 (1) view.html에 assignee/milestone/dueDate select2 마크업 추가, (2) `massUpdate` URL을 JS 초기화 옵션에 전달, (3) 실제 massUpdate 컨트롤러가 단건 필드 갱신 요청을 올바르게 처리하는지 검증까지 함께 처리 필요 |
+| 127 | [x] | `issue/partial_assignee.scala.html` | `issue/view.html`에 인라인(우측 패널) | **완료(TASK-0260)**. view.html 우측 패널에 `issueUpdateForm`(legacy `<form id="issueUpdateForm" action="massUpdate">` 대응, `issues[0].id` hidden input 포함) + `isAllowedUpdate`일 때 담당자(`id="assignee"` hidden input, legacy `partial_assignee.scala.html`과 동일한 `name="assigneeLoginId"`)/마일스톤(select2, `project.isMilestoneEnabled` 게이트)/마감일(`data-toggle="calendar"`) 인라인 위젯을 추가하고, `$yobi.loadModule("issue.View", {...})` 호출에 `urls.massUpdate`를 전달해 배선을 완성. 담당자는 legacy와 동일하게 massUpdate가 아니라 전용 REST(`yonaAssgineeModule` + `IssueShareController`의 `assignableUsers`/`assignees` 엔드포인트, 이미 구현돼 있었음)로 즉시 저장됨. **massUpdate 403 근본 원인을 실측으로 확인**: (1) 이전 세션이 `loginUser.isMemberOf(project)`로 선제 차단했는데, `User.isMemberOf()`가 참조하는 `projectUsers`는 `mappedBy="user"` 지연 컬렉션이라 같은 트랜잭션 안에서 User가 먼저 로드된 뒤 ProjectUser가 별도로 저장되면 스냅샷이 갱신되지 않아 실제 멤버인데도 false가 되는 문제가 있었음. (2) 더 근본적으로 legacy `IssueApp.massUpdate()`는 애초에 프로젝트 멤버십을 통째로 게이트하지 않고 **이슈 1건씩** `AccessControl.isAllowed(user, issue, Operation.UPDATE)`로 권한을 확인해 `updatedItems`/`rejectedByPermission`을 집계한 뒤 "아무것도 갱신 못 하고 권한거부만 있었을 때"만 403을 반환하는 구조였음 — `IssueViewController.massUpdate()`를 이 legacy 구조 그대로 재작성(이슈별 `accessControl.isAllowedToUpdateIssue` 체크 + draft 스킵 + updatedItems==0 && rejectedByPermission>0일 때만 403). `IssueInlineUpdateWidgetTemplateRenderingSpec`의 massUpdate 테스트를 `status().isOk` + `dueDate` 갱신 확인 실제 검증으로 강화해 그린 확인 |
 | 128 | [i] | `issue/partial_comment.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238). 댓글 아바타/작성자/날짜/공감 리스트·모달/공감토글 버튼/마크다운 본문 구조 legacy와 일치 |
 | 129 | [i] | `issue/partial_comments.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238, 이전 P1-106에서 이미 이식). 댓글+이벤트 통합 타임라인(`issue.getTimeline()`) 구조 일치 |
 | 130 | [i] | `issue/partial_event_timeline.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238, 이전 P1-106에서 이미 이식). 상태변경 이벤트 렌더링 구조 일치 |
 | 131 | [i] | `issue/partial_index_comment.scala.html` | (미이식, 기능적으로 불필요) | 조사 완료(TASK-0238): legacy에서 `issue.isDraft`일 때만 쓰이는 축약형 댓글 뷰(줄임말 텍스트 등)이며, yuna는 draft 여부와 무관하게 항상 풀 타임라인(#129와 동일)을 렌더링해 기능적으로 상위호환 — 별도 이식 불필요로 판단 |
 | 132 | [i] | `issue/partial_index_comments.scala.html` | (미이식, 기능적으로 불필요) | #131과 동일 사유로 별도 이식 불필요 |
 | 133 | [i] | `issue/partial_index_event_timeline.scala.html` | (미이식, 기능적으로 불필요) | #131과 동일 사유로 별도 이식 불필요 |
-| 134 | [~] | `issue/partial_view_child.scala.html` | (미이식) | **중대 발견(TASK-0238), 미이식**: 하위 이슈 1건 렌더링 파샬. #135와 함께 보류 |
-| 135 | [~] | `issue/partial_view_childIssueList.scala.html` | (미이식) | **중대 발견(TASK-0238), 미이식**: 이슈 상세 화면에 부모+하위이슈 목록(진행률 바 포함)을 보여주는 기능이 view.html에 전혀 없음(하위 이슈 "등록" 버튼만 있고 등록된 하위 이슈 목록을 볼 방법이 없음). `Issue.findByParentIssueIdAndState` 상당의 리포지토리 메서드 신규 필요 + `partial_view_child`(#134)/`partial_view_childIssueListOnly`(#136) 렌더링 로직까지 함께 필요해 순수 템플릿 포팅 범위를 넘어 보류 — 후속 배치에서 전용 작업으로 처리 필요 |
-| 136 | [~] | `issue/partial_view_childIssueListOnly.scala.html` | (미이식) | #135의 AJAX 갱신용 파샬, #135와 함께 보류 |
+| 134 | [x] | `issue/partial_view_child.scala.html` | `issue/partial_view_child.html`(프래그먼트, 신규) | **완료(TASK-0260)**. 하위이슈 1건 렌더링 프래그먼트(`child(state, childIssue, currentIssue, project, currentUser)`) 신규 작성 — draft 이슈는 작성자 본인에게만 노출(`isDraft` 가드), 상태라벨/twoColumeModeTarget 링크/`#초안` 또는 `#번호`/제목/담당자/댓글·공감 카운트/라벨/작성일이 legacy와 1:1 대응. `IssueChildIssueListTemplateRenderingSpec` 그린 |
+| 135 | [x] | `issue/partial_view_childIssueList.scala.html` | `issue/partial_view_childIssueList.html`(프래그먼트, 신규) | **완료(TASK-0260)**. 이슈 상세화면 우측 패널에 부모+하위이슈 목록(진행률 바 포함)을 렌더링하는 프래그먼트 신규 작성. `IssueRepository.findByParentIdAndState`/`TemplateHelper.findByParentIdAndState`(legacy `Issue.findByParentIssueIdAndState` 대응) 신규 추가, 진행률은 `TemplateHelper.getPercentFormatted`(legacy `getPercent(unit,total)=((unit/total)*100).toInt` 대응)로 계산. **검증 중 발견한 버그**: `getPercentFormatted`가 `String.format("%.0f", ...)`로 반올림하고 있었는데 legacy Scala의 `.toInt`는 반올림이 아니라 0쪽으로 절삭(truncate)이라 (예: 66.6% → legacy는 66, 이전 구현은 67) 진행률 표시가 legacy와 달라지는 경우가 있었음 — `pct.toInt().toString()`으로 절삭 방식으로 수정(같은 헬퍼를 쓰는 #120 `issue/partial_list.html`의 서브태스크 진행률 바도 함께 정정됨). Thymeleaf `th:each`+`th:replace` 조합 시 루프 변수가 null이 되는 문제를 피하기 위해 `<th:block th:each>` 안에 `th:replace`를 중첩하는 패턴 적용. `IssueChildIssueListTemplateRenderingSpec` 그린 |
+| 136 | [x] | `issue/partial_view_childIssueListOnly.scala.html` | `issue/partial_list.html`에 인라인 | **완료(TASK-0260)**. legacy에서 `partial_list.scala.html`이 2단보기(`child-issue-list hide`) 영역에 호출하던 AJAX 갱신용 파샬(부모헤더/진행률 바 없이 open/closed 하위이슈만 나열) — 별도 프래그먼트 파일 대신 `issue/partial_list.html`의 `child-issue-list` 섹션에 동일 로직을 직접 인라인(열림/닫힘 하위이슈만, draft 제외)으로 구현. `TemplateHelper.findByParentId` 사용 |
 | 137 | [i] | `issue/partial_voters.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238). 공감 버튼 토글/투표자 아바타 목록/더보기 툴팁 구조 legacy와 일치 |
 | 138 | [i] | `issue/partial_voter_list.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238). 투표자 목록 모달 구조 legacy와 일치 |
 | 139 | [x] | `issue/my_list.scala.html` | `issue/my_list.html` | 확인 완료(TASK-0238). site/layout 기반 GNB, mySeriesMenuTab/my_partial_search 조각 호출, 로그인기본페이지 설정 스크립트까지 legacy와 정확히 일치, 코드 변경 없음 |
@@ -956,8 +956,9 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-24]`(이슈 목록 화면 — 마일스톤 열림/닫힘 optgroup
   검증, 라벨 관리 링크 매니저/일반멤버 권한 노출 차이 검증).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN).
-  **그룹7(issue/*, #113~142) 30개 항목 전체 처리 완료(구현 26개 + 백엔드 필요로 명확히 보류 4개: #119,
-  #125, #127, #134~136).** 다음은 그룹8(board/*, #143~148).
+  **그룹7(issue/*, #113~142) 당시 30개 항목 중 26개 구현 + 백엔드 필요로 보류한 4개(#119, #125, #127,
+  #134~136, 총 6개 로우)는 이후 TASK-0260에서 백엔드까지 포함해 전부 완료 처리됨(하단 TASK-0260 섹션
+  참조).** 다음은 그룹8(board/*, #143~148).
 
 ### 방침 정정: "저가치 코너케이스" 판단으로 보류한 항목 재작업 착수 — #87~89 (TASK-0239)
 
@@ -1875,3 +1876,71 @@ TASK-0252로 그룹10~17 통합 회귀를 green으로 만든 뒤 백로그를 �
 - **검증**: 문서 편집만 진행, 코드 변경 없음(순수 문서 정확성 교정). 참고로 표 행 상태(`[x]`) 자체는
   전부 이미 정확했다 — 문제는 "완료"와 나란히 붙어있던 "범위조정, 아래참고" 라벨이 실제로는 해소된
   과거 결손을 마치 지금도 미해결인 것처럼 읽히게 하는 낡은 표현이었다는 것.
+
+### TASK-0260: 그룹7 issue/* 하위이슈+담당자+초안 위젯 완성 (이전 세션 이어받음)
+
+- **배경**: TASK-0238(그룹7)에서 "백엔드 필요로 순수 템플릿 포팅 범위를 넘는다"며 보류했던 6개 로우
+  (#119, #125, #127, #134, #135, #136)를 사용자가 "백엔드 다 수정해도 되니 legacy 그대로 완성하라"고
+  명시적으로 재지시. 직전 세션이 이미 대부분 구현해뒀으나 massUpdate가 403을 반환하는 원인을 조사하던
+  중 세션이 중단(agent kill)됐음 — 코디네이터가 보존해둔 `worktree-agent-a997d9f15d64bb5c8` 브랜치를
+  `--no-ff` 병합해 진행 상황을 흡수한 뒤 이어서 완료.
+- **병합 충돌 1건**: `issue/view.html`의 편집 버튼 `onclick` 관련 두 세션의 서로 다른 Thymeleaf
+  이벤트핸들러 우회 방식(HEAD: `data-*` 속성 + 정적 `onclick`, incoming: `th:href` 앵커로 감싸기)이
+  충돌 — 바로 아래 `!isAllowedUpdate` 분기와 동일한 앵커-래핑 패턴을 쓰는 incoming 쪽을 채택(스타일
+  일관성).
+- **massUpdate 403의 실제 원인 (실측 확인)**: 두 겹의 문제였음.
+  1. 직전 세션이 남겨둔 진단 코드(`println` 삽입)로 실제 요청을 추적한 결과, `loginUser.isMemberOf(project)`
+     상단 게이트가 `false`를 반환하고 있었음. `User.isMemberOf()`가 참조하는 `projectUsers`는
+     `mappedBy="user"` 지연 컬렉션인데, 테스트가 "매니저 User 저장 → 같은 트랜잭션에서 ProjectUser 별도
+     저장"하는 순서라 User 쪽 컬렉션 스냅샷이 최초 로드 시점(빈 컬렉션)에 머물러 실제로는 멤버인데도
+     `false`가 되는 문제였음.
+  2. 위 (1)을 `ProjectUserRepository.existsByProjectIdAndUserId()`로 DB 직접조회하도록 고치는 것만으로도
+     테스트는 통과하지만, legacy `IssueApp.massUpdate()` 원본을 다시 대조한 결과 애초에 legacy는 "프로젝트
+     멤버십"을 통째로 게이트하지 않는다는 걸 확인 — 이슈 1건씩 `AccessControl.isAllowed(user, issue,
+     Operation.UPDATE)`로 권한을 확인해 `updatedItems`/`rejectedByPermission`을 집계하고,
+     "아무것도 갱신하지 못했고 권한거부만 있었을 때"만(`updatedItems==0 && rejectedByPermission>0`)
+     403을 반환하는 구조. `IssueViewController.massUpdate()`를 이 legacy 구조 그대로 재작성(상단 멤버십
+     게이트 제거, `issue.isDraft` 스킵, delete/update 각각 `accessControl.isAllowedToUpdateIssue` 이슈별
+     체크, 집계 후 조건부 403). 진단용 `println`은 제거.
+- **#119(초안 목록)**: `IssueRepository.findByProjectAndAuthorLoginIdAndIsDraftTrueOrderByNumberDesc`
+  신규 + `listIssues()`에 legacy `partial_list_wrap.scala.html:84`의
+  `currentPage.getPageIndex==0 && !hasCondition && !state.equals(CLOSED)` 게이트 구현.
+  검증 중 `hasCondition` 계산이 legacy `SearchCondition.hasCondition()`(assigneeId/authorId/mentionId/
+  commenterId/sharerId/favoriteId만 검사)보다 넓게(filter/milestoneId/labelIds/dueDate까지 포함) 잡혀
+  있어 마일스톤·라벨 필터만 걸어도 초안 섹션이 사라지는 legacy와 다른 동작이던 걸 발견해 수정.
+- **#125(부모이슈 지정 위젯)**: `edit.html`에 `subtask-wrap`(targetProjectId+parentId select2) 인라인
+  구현, `IssueRepository.findByProjectAndParentIsNullOrderByCreatedDateDesc`(최대 300건, legacy
+  `Issue.findParentIssueByProject` 대응)로 후보군 조회 + 자기자신 제외 + `hasChildIssue` 게이트.
+  legacy 원본을 다시 읽어보니 후보 목록은 AJAX 검색이 아니라 서버가 최대 300개 `<option>`을 미리
+  렌더링해두는 방식이라 "REST 검색 엔드포인트 필요"라는 TASK-0238의 추정은 틀린 것으로 판명 —
+  별도 엔드포인트 없이 완료.
+- **#127(담당자/마일스톤 인라인 위젯)**: view.html 우측 패널에 `issueUpdateForm`(massUpdate 대상,
+  `issues[0].id` hidden input) + 담당자(hidden input select2, legacy `partial_assignee.scala.html`과
+  동일 마크업)/마일스톤(select2)/마감일(calendar) 위젯을 `isAllowedUpdate` 조건부로 추가,
+  `$yobi.loadModule("issue.View", {urls:{massUpdate:...}})` 배선 완성. 담당자는 legacy와 동일하게
+  massUpdate가 아니라 전용 REST(`yonaAssgineeModule`, 기존 `IssueShareController`)로 즉시 저장.
+- **#134/#135/#136(하위이슈 목록)**: `issue/partial_view_child.html`(하위이슈 1건, 신규 프래그먼트),
+  `issue/partial_view_childIssueList.html`(부모헤더+진행률바+draft/open/closed 하위이슈 목록, 신규
+  프래그먼트) 작성 + `IssueRepository.findByParentIdAndState`/`TemplateHelper.findByParentIdAndState`
+  신규(legacy `Issue.findByParentIssueIdAndState` 대응). #136(`partial_view_childIssueListOnly`,
+  2단보기 AJAX 갱신용)은 별도 파일 대신 `issue/partial_list.html`의 `child-issue-list` 섹션에 동일
+  로직(부모헤더 없이 open/closed만) 인라인으로 구현.
+  **진행률 계산 버그 발견 및 수정**: `TemplateHelper.getPercentFormatted`가 `String.format("%.0f", ...)`로
+  반올림하고 있었는데, legacy Scala `getPercent(unit,total) = ((unit/total)*100).toInt`는 반올림이 아니라
+  0쪽으로 절삭(truncate)한다(예: 66.6% → legacy는 "66", 반올림이면 "67") — `pct.toInt().toString()`으로
+  절삭 방식으로 정정. 같은 헬퍼를 공유하는 #120(`issue/partial_list.html`의 서브태스크 진행률 바)도 함께
+  정정됨.
+  Thymeleaf `th:each`+`th:replace`를 같은 요소에 쓰면 루프 변수가 null이 되는 기존에 알려진 함정을
+  피하기 위해 `<th:block th:each>` 안에 `th:replace`를 중첩하는 패턴, `T(...)` 정적 클래스 참조를
+  `th:with`로 미리 변수화하는 패턴을 그대로 적용.
+- **신규 real-rendering 테스트 4종 그린 확인**: `IssueChildIssueListTemplateRenderingSpec`(2),
+  `IssueDraftListTemplateRenderingSpec`(1), `IssueEditSubtaskTemplateRenderingSpec`(2),
+  `IssueInlineUpdateWidgetTemplateRenderingSpec`(2, massUpdate 테스트를 `status().isOk` +
+  `dueDate` 실제 갱신 확인으로 강화) — 총 7개 신규 테스트 + 기존 `IssueViewControllerSpec`(11) 전부 그린.
+- **검증**: `./gradlew compileKotlin compileTestKotlin -q`(그린) +
+  `./gradlew test --tests "com.github.search5.yona.web.IssueChildIssueListTemplateRenderingSpec"
+  --tests "com.github.search5.yona.web.IssueDraftListTemplateRenderingSpec"
+  --tests "com.github.search5.yona.web.IssueEditSubtaskTemplateRenderingSpec"
+  --tests "com.github.search5.yona.web.IssueInlineUpdateWidgetTemplateRenderingSpec"
+  --tests "com.github.search5.yona.web.IssueViewControllerSpec"`(18개 테스트 전부 GREEN, 0 failures).
+  전체 `./gradlew test`는 병렬 워크트리 OOM 방지 정책에 따라 실행하지 않음(대상 클래스만 실행).

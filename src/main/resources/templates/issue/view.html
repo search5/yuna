@@ -139,16 +139,14 @@
                         <div class="watcher-list" style="margin-top: 10px;"></div>
 
                         <span class="act-row">
-                            <!-- legacy 원본은 onclick="window.location='...'" 인라인 핸들러를 쓰지만,
-                                 Thymeleaf 3.1+는 th:onclick 같은 이벤트핸들러 속성 안에서 문자열을 반환하는
-                                 변수식(${...})을 신뢰하지 않는 컨텍스트로 취급해 차단한다(TemplateProcessingException:
-                                 "Only variable expressions returning numbers or booleans are allowed in this
-                                 context") — 실제로 isAllowedUpdate=true인 로그인 사용자(작성자/매니저)가
-                                 이슈를 볼 때마다 500 에러가 나는 상태였다(TASK-0257에서 실제 렌더링 테스트로
-                                 발견). Thymeleaf 공식 에러 메시지가 권장하는 대로 data-* 속성에 URL을 담고
-                                 정적(비-th:) onclick에서 읽어오는 방식으로 안전하게 우회한다 — 동작은 legacy와
-                                 동일(클릭 시 editform으로 이동). -->
-                            <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:data-edit-url="@{/{owner}/{projectName}/issue/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}" onclick="window.location=this.getAttribute('data-edit-url')"><i class="yobicon-edit-2"></i></button>
+                            <!-- th:onclick에 문자열 리터럴 조립식을 쓰면 Thymeleaf가 "Only variable expressions
+                                 returning numbers or booleans are allowed" 예외를 던진다(이벤트 핸들러 속성
+                                 제약) — 이번 세션에 매니저로 렌더링 검증하면서 실제로 재현된 버그. legacy는
+                                 onclick(순수 JS)였지만 yuna에서는 아래 !isAllowedUpdate 분기와 동일하게
+                                 th:href 앵커로 감싸 동일한 이동 동작을 안전하게 재현한다. -->
+                            <a th:if="${isAllowedUpdate}" th:href="@{/{owner}/{projectName}/issue/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}">
+                                <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}"><i class="yobicon-edit-2"></i></button>
+                            </a>
                             <a th:if="${!isAllowedUpdate}" th:href="@{/{owner}/{projectName}/issue/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}">
                                 <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.show.original}"><i class="yobicon-edit-2"></i></button>
                             </a>
@@ -165,9 +163,26 @@
                         </span>
                     </div>
 
+                    <!-- yona issue/view.scala.html:270-278 subtasks 영역 대응 (그룹7 #134/#135/#136).
+                         amIShared: 현재 사용자가 이 이슈의 공유자(sharer)인지. isThisParentIssue: 이
+                         이슈 자체가 최상위 부모인지(parent==null). 공유자로서 하위이슈를 보고 있을 때는
+                         (자신이 이미 하위이슈인 경우) 형제 하위이슈 목록을 노출하지 않는다. -->
+                    <div class="subtasks" th:with="amIShared=${currentUser != null && issue.sharers.![user.id].contains(currentUser.id)}, isThisParentIssue=${issue.parent == null}">
+                        <th:block th:if="${amIShared}">
+                            <div th:if="${isThisParentIssue}" th:replace="~{issue/partial_view_childIssueList :: childIssueList(${issue}, ${project}, ${currentUser})}"></div>
+                        </th:block>
+                        <div th:unless="${amIShared}" th:replace="~{issue/partial_view_childIssueList :: childIssueList(${issue}, ${project}, ${currentUser})}"></div>
+                    </div>
+
                     <div id="comments" class="board-comment-wrap">
                         <div id="timeline">
-                            <div class="timeline-list">
+                            <!-- yona IssueApp.timeline()/yobi.issue.View.js _updateTimeline() 대응 (그룹7 #127).
+                                 massUpdate로 담당자/마일스톤/마감일을 저장한 뒤 이 영역만 AJAX로 다시 불러온다
+                                 (GET .../issue/{number}/timeline, "issue/view :: timelineItems"). 이 fragment 밖의
+                                 로컬 변수(th:with)는 참조하지 않고 모델 속성(timeline, childCommentsByParentId,
+                                 isProjectManager, commentApiBase, currentUser, project, issue)만 사용한다 —
+                                 그래야 timeline() 엔드포인트가 같은 모델만 채워서 동일하게 렌더링할 수 있다. -->
+                            <div class="timeline-list" th:fragment="timelineItems">
                                 <!-- 타임라인 영역 (댓글 + 상태/담당자/라벨/마일스톤/이동 이벤트, Thymeleaf Loop) -->
                                 <th:block th:each="item : ${timeline}">
                                 <div th:if="${item.kind == 'COMMENT'}" th:with="comment=${item.comment}, children=${childCommentsByParentId != null ? childCommentsByParentId.get(comment.id) : null}, canEditThisComment=${currentUser != null and (item.comment.authorId == currentUser.id or isProjectManager)}, issueCommentResourceType=${T(com.github.search5.yona.domain.enumeration.ResourceType).ISSUE_COMMENT}"
@@ -321,27 +336,74 @@
                 <!-- Right Pane -->
                 <div class="span3 span-right-pane mb20">
                     <div class="issue-info">
-                        <form id="issueUpdateForm" th:action="@{/api/projects/{projectId}(projectId=${project.id})}" method="post">
+                        <form id="issueUpdateForm" th:action="@{/{owner}/{projectName}/issues/massupdate(owner=${project.owner}, projectName=${project.name})}" method="post">
                             <input type="hidden" name="issues[0].id" th:value="${issue.id}" />
 
+                            <!-- 담당자 — yona issue/partial_assignee.scala.html 대응 (그룹7 #127). isAllowedUpdate
+                                 일 때는 select2 인라인 위젯(yonaAssgineeModule, IssueApi.findAssignableUsers/
+                                 updateAssginees와 동일한 REST 대응 엔드포인트로 저장)으로 바뀐다 — massUpdate가
+                                 아니라 담당자 전용 REST 엔드포인트로 즉시 저장되는 legacy 동작을 그대로 재현한다. -->
                             <dl>
                                 <dt th:text="#{issue.assignee}">담당자</dt>
                                 <dd>
-                                    <span th:text="${issue.assignee != null ? issue.assignee.user.name : #messages.msg('issue.noAssignee')}">담당자 없음</span>
+                                    <th:block th:if="${isAllowedUpdate}">
+                                        <input type="hidden" class="bigdrop" id="assignee" name="assigneeLoginId" th:placeholder="#{issue.noAssignee}" th:value="${issue.assignee != null ? issue.assignee.user.loginId : ''}" style="width: 100%" title="">
+                                    </th:block>
+                                    <th:block th:unless="${isAllowedUpdate}">
+                                        <a th:if="${issue.assignee != null}" th:href="@{/{loginId}(loginId=${issue.assignee.user.loginId})}" class="usf-group">
+                                            <span class="avatar-wrap smaller"><img th:src="${issue.assignee.user.avatarUrl}" width="20" height="20"></span>
+                                            <strong class="name" th:text="${issue.assignee.user.name}">이름</strong>
+                                            <span class="loginid"> <strong>@</strong><span th:text="${issue.assignee.user.loginId}">loginId</span></span>
+                                        </a>
+                                        <div th:unless="${issue.assignee != null}" th:text="#{issue.noAssignee}">담당자 없음</div>
+                                    </th:block>
                                 </dd>
                             </dl>
 
-                            <dl>
+                            <!-- 마일스톤 — yona issue/view.scala.html:329-381 대응 (그룹7 #127). project.menuSetting.milestone
+                                 대응 gate + isAllowedUpdate일 때 select2, 아니면 링크/텍스트. -->
+                            <dl th:if="${project.isMilestoneEnabled}">
                                 <dt th:text="#{milestone}">마일스톤</dt>
                                 <dd>
-                                    <span th:text="${issue.milestone != null ? issue.milestone.title : #messages.msg('issue.noMilestone')}">마일스톤 없음</span>
+                                    <div th:if="${openMilestones.isEmpty() and closedMilestones.isEmpty()}">
+                                        <a th:href="@{/{owner}/{projectName}/newMilestoneForm(owner=${project.owner}, projectName=${project.name})}" class="ybtn ybtn-small ybtn-fullsize" target="_blank" th:text="#{milestone.menu.new}">새 마일스톤</a>
+                                    </div>
+                                    <th:block th:unless="${openMilestones.isEmpty() and closedMilestones.isEmpty()}">
+                                        <select th:if="${isAllowedUpdate}" id="milestone" name="milestone.id" data-toggle="select2" data-format="milestone" data-container-css-class="fullsize">
+                                            <option value="-1" th:selected="${issue.milestone == null}" th:text="#{issue.noMilestone}">마일스톤 없음</option>
+                                            <optgroup th:label="#{milestone.state.open}">
+                                                <option th:each="ms : ${openMilestones}" th:value="${ms.id}" th:selected="${issue.milestone != null and issue.milestone.id == ms.id}" th:text="${ms.title}"></option>
+                                            </optgroup>
+                                            <optgroup th:label="#{milestone.state.closed}">
+                                                <option th:each="ms : ${closedMilestones}" th:value="${ms.id}" th:selected="${issue.milestone != null and issue.milestone.id == ms.id}" th:text="${ms.title}"></option>
+                                            </optgroup>
+                                        </select>
+                                        <th:block th:unless="${isAllowedUpdate}">
+                                            <a th:if="${issue.milestone != null}" th:href="@{/{owner}/{projectName}/milestone/{id}(owner=${project.owner}, projectName=${project.name}, id=${issue.milestone.id})}" th:text="${issue.milestone.title}">마일스톤</a>
+                                            <span th:if="${issue.milestone == null}" th:text="#{issue.noMilestone}">마일스톤 없음</span>
+                                        </th:block>
+                                    </th:block>
                                 </dd>
                             </dl>
 
+                            <!-- 마감일 — yona issue/view.scala.html:384-411 대응 (그룹7 #127). isAllowedUpdate일 때
+                                 calendar 텍스트 입력(massUpdate로 저장), 아니면 기존과 동일한 텍스트 표시. -->
                             <dl>
-                                <dt th:text="#{issue.dueDate}">마감일</dt>
+                                <dt>
+                                    <span th:text="#{issue.dueDate}">마감일</span>
+                                    <span class="duedate-status" th:classappend="${templateHelper.isOverDueDate(issue)} ? 'overdue' : ''">
+                                        <th:block th:if="${issue.dueDate != null and issue.state == T(com.github.search5.yona.domain.enumeration.State).OPEN}">
+                                            <th:block th:if="${templateHelper.isOverDueDate(issue)}">(<span th:text="#{issue.dueDate.overdue}">기한초과</span>)</th:block>
+                                            <th:block th:unless="${templateHelper.isOverDueDate(issue)}">(<span th:text="${templateHelper.until(issue)}">D-3</span>)</th:block>
+                                        </th:block>
+                                    </span>
+                                </dt>
                                 <dd>
-                                    <span th:text="${issue.dueDate != null ? #dates.format(issue.dueDate, 'yyyy-MM-dd') : #messages.msg('issue.noDuedate')}">마감일 없음</span>
+                                    <div th:if="${isAllowedUpdate}" class="search search-bar">
+                                        <input type="text" name="dueDate" th:value="${issue.dueDate != null ? #dates.format(issue.dueDate, 'yyyy-MM-dd') : ''}" class="textbox full" autocomplete="off" data-toggle="calendar">
+                                        <button type="button" class="search-btn btn-calendar"><i class="yobicon-calendar2"></i></button>
+                                    </div>
+                                    <span th:unless="${isAllowedUpdate}" th:text="${issue.dueDate != null ? #dates.format(issue.dueDate, 'yyyy-MM-dd') : #messages.msg('issue.noDuedate')}">마감일 없음</span>
                                 </dd>
                             </dl>
 
@@ -431,9 +493,11 @@
 
 <th:block th:replace="~{site/layout :: scripts}"></th:block>
 <th:block th:replace="~{common/select2 :: select2}"></th:block>
+<th:block th:replace="~{common/calendar :: calendar}"></th:block>
 <script type="text/javascript" src="/javascripts/common/yona.Tasklist.js"></script>
 <script type="text/javascript" src="/javascripts/lib/atjs/jquery.caret.min.js"></script>
 <script type="text/javascript" src="/javascripts/lib/atjs/jquery.atwho.js"></script>
+<script type="text/javascript" src="/javascripts/service/yona.issue.Assginee.js"></script>
 <script type="text/javascript">
     $(function(){
         $yobi.loadModule("issue.View", {
@@ -441,9 +505,22 @@
             "nextState": "[[${issue.state}]]",
             "urls"     : {
                 "watch"     : "/watch",
-                "unwatch"   : "/unwatch"
+                "unwatch"   : "/unwatch",
+                "timeline"  : "[[@{/{owner}/{projectName}/issue/{number}/timeline(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}]]",
+                "massUpdate": "[[@{/{owner}/{projectName}/issues/massupdate(owner=${project.owner}, projectName=${project.name})}]]"
             }
         });
+
+        // yona issue/view.scala.html:539-544 yonaAssgineeModule(...) 대응 (그룹7 #127) — 담당자
+        // select2는 massUpdate가 아니라 이슈별 전용 REST 엔드포인트(findAssignableUsers/updateAssginees,
+        // 이미 IssueShareController에 구현돼 있음)로 즉시 저장된다.
+        <th:block th:if="${isAllowedUpdate}">
+        yonaAssgineeModule(
+            "[[@{/-_-api/v1/owners/{owner}/projects/{projectName}/issues/{number}/assignableUsers(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}]]",
+            "[[@{/-_-api/v1/owners/{owner}/projects/{projectName}/issues/{number}/assignees(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}]]",
+            "[[#{issue.assignee}]]"
+        );
+        </th:block>
 
         $('[data-request-method="delete"]').click(function(){
             var uri = $(this).data("requestUri");
