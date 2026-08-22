@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head(#{site.sidebar.data})}"></head>
+<head th:replace="~{site/layout :: head(#{${message}})}"></head>
 <body class="theme-default">
 <div id="main" class="main">
   <!-- GNB -->
@@ -49,7 +49,6 @@
       </div>
     </div>
   </div>
-</div>
 </div>
 
 <footer th:replace="~{site/layout :: footer}"></footer>

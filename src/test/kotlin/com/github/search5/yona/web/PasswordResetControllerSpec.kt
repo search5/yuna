@@ -24,7 +24,7 @@ class PasswordResetControllerSpec : DescribeSpec({
     val passwordResetService = mockk<PasswordResetService>()
     val userRepository = mockk<UserRepository>()
     val mailService = mockk<MailService>()
-    val passwordResetController = PasswordResetController(passwordResetService, userRepository, mailService)
+    val passwordResetController = PasswordResetController(passwordResetService, userRepository, mailService, "Yona")
     val mockMvc = MockMvcBuilders.standaloneSetup(passwordResetController).build()
 
     beforeTest {
@@ -50,7 +50,7 @@ class PasswordResetControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
                     .andExpect(view().name("user/lostPassword"))
-                    .andExpect(model().attributeExists("successMessage"))
+                    .andExpect(model().attributeExists("isSent"))
 
                 verify(exactly = 1) { mailService.sendHtmlMail("gildong@example.com", "홍길동", any(), any()) }
             }

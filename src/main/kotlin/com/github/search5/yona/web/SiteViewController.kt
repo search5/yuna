@@ -68,6 +68,7 @@ class SiteViewController(
         model.addAttribute("query", query)
         model.addAttribute("currentUser", currentUser)
         model.addAttribute("adminCount", adminCount)
+        model.addAttribute("message", "title.siteSetting")
 
         return "site/userList"
     }
@@ -87,6 +88,7 @@ class SiteViewController(
         model.addAttribute("projects", projects)
         model.addAttribute("projectName", projectName)
         model.addAttribute("currentUser", currentUser)
+        model.addAttribute("message", "title.projectList")
 
         return "site/projectList"
     }
@@ -114,6 +116,7 @@ class SiteViewController(
         model.addAttribute("state", stateStr)
         model.addAttribute("currentUser", currentUser)
         model.addAttribute("userRepository", userRepository)
+        model.addAttribute("message", "title.siteSetting")
 
         return "site/issueList"
     }
@@ -187,6 +190,7 @@ class SiteViewController(
     ): String {
         val currentUser = checkAdmin(authentication)
         model.addAttribute("currentUser", currentUser)
+        model.addAttribute("message", "title.siteSetting")
         return "site/data"
     }
 
@@ -201,6 +205,7 @@ class SiteViewController(
 
         model.addAttribute("errors", errors)
         model.addAttribute("currentUser", currentUser)
+        model.addAttribute("message", "title.siteSetting")
         return "site/diagnostic"
     }
 
