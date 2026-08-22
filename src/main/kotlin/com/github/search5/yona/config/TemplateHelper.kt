@@ -9,6 +9,7 @@ import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.pullrequest.CommentThread
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.project.Project
@@ -206,6 +207,56 @@ class TemplateHelper(
         val zone = ZoneId.systemDefault()
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(zone)
         return formatter.format(instant)
+    }
+
+    // yona models/User.java:247-250 getDateString() 대응(search/partial_users.scala.html의
+    // "userinfo.since" 가입일 표시에서 사용). "MMM dd, yyyy" 포맷을 Locale.US로 고정하는 legacy
+    // 원본을 그대로 재현 — TemplateHelper.getDateString(instant)(yyyy-MM-dd h:mm:ss a, 로컬 로케일)와는
+    // 포맷이 달라 별도 메서드로 분리했다.
+    fun getUserSinceDateString(instant: Instant?): String {
+        if (instant == null) return ""
+        val zone = ZoneId.systemDefault()
+        val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.US).withZone(zone)
+        return formatter.format(instant)
+    }
+
+    // yona models/Milestone.java:261 until() 대응 (search/partial_milestones.scala.html에서 사용).
+    // 오늘/기한초과/남은일수 3분기 — issue용 until(issue: Issue)와는 메시지 키가 다르다(legacy 원본이
+    // Issue.until()과 Milestone.until()에서 서로 다른 메시지 키 세트를 쓰기 때문에 그대로 분리 재현).
+    fun until(milestone: Milestone): String {
+        val due = milestone.dueDate ?: return ""
+        val zone = ZoneId.systemDefault()
+        val nowDate = Instant.now().atZone(zone).toLocalDate()
+        val dueDate = due.atZone(zone).toLocalDate()
+        val locale = LocaleContextHolder.getLocale()
+
+        if (nowDate.isEqual(dueDate)) {
+            return messageSource.getMessage("common.time.today", null, locale)
+        }
+
+        val days = ChronoUnit.DAYS.between(nowDate, dueDate)
+        return if (days < 0) {
+            messageSource.getMessage("common.time.overday", arrayOf((-days).toString()), locale)
+        } else {
+            messageSource.getMessage("common.time.leftday", arrayOf(days.toString()), locale)
+        }
+    }
+
+    // yona utils/TemplateHelper.scala:428-445 urlToCommentThread()/urlToContainer() 대응
+    // (search/partial_reviews.scala.html에서 사용). PR 리뷰 스레드면 PR 화면, 커밋 리뷰 스레드면
+    // 커밋 화면으로 링크한다 — outdated diff의 특정 커밋 앵커(specificChange) 세부 분기는
+    // NotificationUrlResolver.urlToContainer()에서 이미 동일하게 생략해둔 전례를 따라 여기서도
+    // 생략한다(기능 누락이 아니라 "어느 diff 특정 커밋을 보여줄지"의 UI 라우팅 미세조정).
+    fun urlToCommentThread(thread: CommentThread): String {
+        val pullRequest = thread.pullRequest
+        val container = if (pullRequest != null) {
+            val project = pullRequest.toProject
+            "/${project.owner}/${project.name}/pull/${pullRequest.number}"
+        } else {
+            val project = thread.project
+            if (project == null) "" else "/${project.owner}/${project.name}/commit/${thread.commitId}"
+        }
+        return "$container#thread-${thread.id}"
     }
 
     fun getIssueLabelsString(labels: Set<IssueLabel>?): String {
