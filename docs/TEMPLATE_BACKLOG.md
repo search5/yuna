@@ -63,7 +63,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 1 | [~] | `layout.scala.html` | `site/layout.html` | 메인 사이트 레이아웃(navbar/footer/scripts 포함) 대응 여부 확인. siteLayout과 혼동 주의 |
+| 1 | [x] | `layout.scala.html` | `site/layout.html` | 완료(TASK-0220, TDD). og/twitter 메타태그·업데이트알림배너·NProgress/ViewerJS 자산 이식. `\|:\|` 제목 분리 컨벤션은 미이식(비고 참고) |
 | 2 | [~] | `layout_framed.scala.html` | `site/layout_framed.html` | 상동, "framed"(iframe/팝업용 미니 레이아웃) 버전 |
 | 3 | [ ] | `siteLayout.scala.html` | (없음, 신규) | **사이트 관리자(admin)** 전용 레이아웃 — `site/*` 관리자 화면들이 extends. `layout.scala.html`과 다른 파일임에 주의 |
 | 4 | [ ] | `siteLayout_framed.scala.html` | (없음, 신규) | 상동 framed 버전 |
@@ -409,5 +409,41 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 
 작업을 진행하면서 이 섹션에 그룹/파일 단위로 완료 기록을 남긴다(형식은 `docs/PARITY_BACKLOG.md`의 완료 로그와 동일한
 톤 — 원인/구현 내용/legacy와 다르게 처리한 지점과 근거/검증 방법을 명시).
+
+### #1 `layout.scala.html` → `site/layout.html` (TASK-0220)
+
+- **원인**: yuna의 `site/layout.html`은 legacy `layout.scala.html`의 head/gnb/scripts 내용을 이미 fragment
+  형태로 상당 부분 인라인해두고 있었으나(선행 세션 작업), legacy 원본과 줄 단위 대조 결과 다음이 누락돼 있었다:
+  1. `og:*`/`twitter:*` OpenGraph·트위터카드 메타 태그 전체
+  2. 사이트 관리자 전용 **업데이트 알림 배너**(legacy `partial_update_notification.scala.html`) — 백엔드
+     (`YonaUpdateService`, `SiteApiController.unwatchUpdate`, `messages*.properties`의 `site.update.*` 키)는
+     이미 이식돼 있었으나 뷰 조각만 빠져 있었다.
+  3. `NProgress.configure(...)` 초기화 호출과 `nprogress.css`/`nprogress.js` 자산 — 기존 코드는 `NProgress.set/start`만
+     호출하고 라이브러리 자체를 로드/설정하지 않아 실제로는 매 페이지에서 JS 에러가 나는 상태였다.
+  4. ViewerJS(`viewer.css`/`viewer.js`/`jquery-viewer.js`)와 `.markdown-wrap` 이미지 갤러리 뷰어 초기화 스크립트 전체
+- **구현 내용**:
+  - `GlobalModelAttributeAdvice`에 `yonaUpdateService`(기존 `YonaUpdateService` 빈을 그대로 노출)와
+    `currentRequestPath`(`HttpServletRequest.requestURI`, legacy `Http.Context.current().request().path()` 대응)
+    `@ModelAttribute`를 추가 — 기존 `currentUser`/`templateHelper`/`markdownService`와 동일한 패턴(Play의 전역 정적
+    접근을 Spring `@ControllerAdvice` 전역 모델 속성으로 치환)이라 아키텍처적으로 허용되는 치환.
+  - `site/layout.html`의 `head` 조각에 og/twitter 메타 태그 8종과 `nprogress.css`/`viewer.css` 링크 추가.
+  - `gnb` 조각의 admin-affix 배너 바로 뒤에 legacy `partial_update_notification.scala.html`과 동일한 조건
+    (`currentUser.isSiteManager && yonaUpdateService.isWatched && yonaUpdateService.isUpdateRequired`)의
+    업데이트 알림 `<p class="center-txt">` 블록 추가. 메시지 키(`site.update.notification`,
+    `site.update.notification.hide`)는 기존 `messages*.properties`를 그대로 재사용.
+  - `scripts` 조각에 `nprogress.js`/`viewer.js`/`jquery-viewer.js` 스크립트 로드와, legacy와 동일한
+    `NProgress.configure({minimum:0.7})` 초기화 스크립트, `.markdown-wrap` 뷰어 초기화 스크립트(`Viewer.setDefaults`,
+    이미지 mouseover 커서 처리 포함) 추가.
+- **legacy와 다르게 처리한 지점**: legacy는 `title.split(" \\|:\\| ")`로 제목을 "실제 제목"과 "설명"으로 분리해
+  `og:title`/`og:description`을 따로 채우지만, yuna는 `title` 모델 속성이 이미 여러 컨트롤러에 걸쳐 단일 문자열
+  컨벤션으로 정착돼 있어(이 파일만으로는 바꿀 수 없는 범위) 이번 작업에서는 `og:title`/`og:description`에 동일한
+  `${title}` 값을 사용했다. `\|:\|` 분리 컨벤션을 온전히 이식하려면 모든 컨트롤러의 `title` 전달 방식을 바꿔야 하는
+  더 큰 범위의 작업이라 별도 항목으로 분리하지 않고 이번 비고에 한계로 기록한다(필요 시 추후 새 P-번호로 등록).
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-5] 레이아웃 공통 조각(site/layout.html) 동치성 검증`
+  (사이트 관리자+업데이트 필요 시 배너 노출/미노출 3종, og·twitter 메타 태그 존재, NProgress/ViewerJS 자산 로드).
+  `YonaUpdateService`는 실제 네트워크 호출(`checkForUpdate()`) 없이 리플렉션으로 `isUpdateRequired`/`latestVersion`
+  private 필드를 직접 세팅해 결정론적으로 검증했다.
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN),
+  `./gradlew compileKotlin compileTestKotlin`, 전체 회귀 `./gradlew test` 모두 통과.
 
 (아직 없음)

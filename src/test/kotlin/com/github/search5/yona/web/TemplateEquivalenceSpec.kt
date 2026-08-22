@@ -13,8 +13,10 @@ import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.support.YonaUpdateService
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.user.YonaUserDetails
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
@@ -44,7 +46,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val postingRepository: PostingRepository,
     private val issueRepository: IssueRepository,
     private val issueLabelRepository: IssueLabelRepository,
-    private val issueLabelCategoryRepository: IssueLabelCategoryRepository
+    private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
+    private val yonaUpdateService: YonaUpdateService
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -137,6 +140,35 @@ class TemplateEquivalenceSpec @Autowired constructor(
                 passwordSalt = "salt",
                 authoritiesVal = AuthorityUtils.createAuthorityList("ROLE_ACTIVE")
             )
+
+            val siteAdmin = userRepository.findByLoginId("siteadmin").orElseGet {
+                userRepository.save(User(loginId = "siteadmin", name = "관리자", email = "siteadmin@yona.io", state = UserState.SITE_ADMIN))
+            }.let {
+                if (it.state != UserState.SITE_ADMIN) {
+                    it.state = UserState.SITE_ADMIN
+                    userRepository.save(it)
+                } else it
+            }
+
+            val siteAdminDetails = YonaUserDetails(
+                id = siteAdmin.id!!,
+                loginId = siteAdmin.loginId,
+                passwordVal = "hashed",
+                passwordSalt = "salt",
+                authoritiesVal = AuthorityUtils.createAuthorityList("ROLE_ACTIVE", "ROLE_SITE_ADMIN")
+            )
+
+            fun setUpdateState(updateRequired: Boolean, latestVersion: String?, watched: Boolean = true) {
+                val requiredField = yonaUpdateService.javaClass.getDeclaredField("isUpdateRequired")
+                requiredField.isAccessible = true
+                requiredField.setBoolean(yonaUpdateService, updateRequired)
+
+                val versionField = yonaUpdateService.javaClass.getDeclaredField("latestVersion")
+                versionField.isAccessible = true
+                versionField.set(yonaUpdateService, latestVersion)
+
+                yonaUpdateService.isWatched = watched
+            }
 
             describe("[Test-19-1] GNB 프로젝트 메뉴(projectMenu) 탭 동치성 렌더링 검증") {
                 it("공개 프로젝트에 비로그인 접근 시, CODE/PULL_REQUEST/REVIEW 탭이 정상적으로 렌더링되어야 한다") {
@@ -313,6 +345,89 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     // 2. 단축키 도움말 조각 존재 여부 검증
                     doc.select("#helpKeys").size shouldNotBe 0
                     doc.select(".board-footer").size shouldNotBe 0
+                }
+            }
+
+            describe("[Test-19-5] 레이아웃 공통 조각(site/layout.html) 동치성 검증") {
+                it("사이트 관리자에게 업데이트가 존재하고 알림을 끄지 않았다면, 업데이트 알림 배너가 노출되어야 한다") {
+                    setUpdateState(updateRequired = true, latestVersion = "9.9.9", watched = true)
+
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj")
+                            .with(SecurityMockMvcRequestPostProcessors.user(siteAdminDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    val notice = doc.select("p.center-txt a[href*='github.com/yona-projects/yona/releases']")
+                    notice.size shouldBe 1
+                    notice.text() shouldNotBe ""
+
+                    val hideBtn = doc.select("p.center-txt button[data-request-method='post'][data-request-uri='/sites/unwatchUpdate']")
+                    hideBtn.size shouldBe 1
+                }
+
+                it("업데이트가 필요하지 않으면 사이트 관리자에게도 업데이트 알림 배너가 노출되지 않아야 한다") {
+                    setUpdateState(updateRequired = false, latestVersion = null, watched = true)
+
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj")
+                            .with(SecurityMockMvcRequestPostProcessors.user(siteAdminDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("button[data-request-uri='/sites/unwatchUpdate']").size shouldBe 0
+                }
+
+                it("업데이트가 존재해도 사이트 관리자가 아닌 사용자에게는 업데이트 알림 배너가 노출되지 않아야 한다") {
+                    setUpdateState(updateRequired = true, latestVersion = "9.9.9", watched = true)
+
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("button[data-request-uri='/sites/unwatchUpdate']").size shouldBe 0
+
+                    setUpdateState(updateRequired = false, latestVersion = null, watched = true)
+                }
+
+                it("head 조각에 og/twitter 메타 태그가 렌더링되어야 한다") {
+                    val result = mockMvc.perform(get("/owner/public-proj"))
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("meta[property='og:title']").size shouldBe 1
+                    doc.select("meta[property='og:url']").size shouldBe 1
+                    doc.select("meta[property='og:type']").attr("content") shouldBe "website"
+                    doc.select("meta[name='twitter:card']").attr("content") shouldBe "summary"
+                    doc.select("meta[name='twitter:title']").size shouldBe 1
+                    doc.select("meta[name='twitter:url']").size shouldBe 1
+                }
+
+                it("공통 스크립트 조각에 NProgress 라이브러리 로드/초기화 및 ViewerJS 자산이 포함되어야 한다") {
+                    val result = mockMvc.perform(get("/owner/public-proj"))
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val html = result.response.contentAsString
+                    val doc = Jsoup.parse(html)
+
+                    doc.select("link[href*='lib/nprogress/nprogress.css']").size shouldBe 1
+                    doc.select("script[src*='lib/nprogress/nprogress.js']").size shouldBe 1
+                    html.contains("NProgress.configure(") shouldBe true
+
+                    doc.select("link[href*='lib/viewerjs/viewer.css']").size shouldBe 1
+                    doc.select("script[src*='lib/viewerjs/viewer.js']").size shouldBe 1
+                    doc.select("script[src*='lib/viewerjs/jquery-viewer.js']").size shouldBe 1
+                    html.contains(".markdown-wrap").shouldBe(true)
                 }
             }
         }
