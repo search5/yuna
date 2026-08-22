@@ -36,7 +36,8 @@
                   <option data-type="user"
                           th:data-avatar-url="${currentUser.avatarUrl ?: '/images/default-avatar-128.png'}"
                           th:value="${currentUser.loginId}"
-                          th:text="${currentUser.loginId}">
+                          th:text="${currentUser.loginId}"
+                          th:selected="${form.owner == currentUser.loginId}">
                     admin
                   </option>
                   <!-- 만약 조직(Group)이 있다면 추가해 줍니다 -->
@@ -44,7 +45,8 @@
                           data-type="group"
                           th:data-avatar-url="@{/organizations/{orgId}/logo(orgId=${org.id})}"
                           th:value="${org.name}"
-                          th:text="${org.name}">
+                          th:text="${org.name}"
+                          th:selected="${form.owner == org.name}">
                     group
                   </option>
               </select>
@@ -60,7 +62,7 @@
             </dt>
             <dd>
               <input id="project-name" type="text" name="name" class="text" maxlength="250"
-                     th:placeholder="#{project.name.placeholder}" required>
+                     th:value="${form.name}" th:placeholder="#{project.name.placeholder}" required>
             </dd>
             <!-- // -->
 
@@ -69,7 +71,7 @@
               <label for="description" th:text="#{project.description}">설명</label>
             </dt>
             <dd>
-              <textarea id="description" name="overview" class="text textarea.span4"></textarea>
+              <textarea id="description" name="overview" class="text textarea.span4" th:text="${form.overview}"></textarea>
             </dd>
             <!-- // -->
           </dl>
@@ -83,7 +85,7 @@
               <div class="span10">
                 <ul class="unstyled project-scopes mt10">
                   <li>
-                    <input type="radio" id="public" name="projectScope" value="PUBLIC" class="radio-btn pull-left" checked="checked">
+                    <input type="radio" id="public" name="projectScope" value="PUBLIC" class="radio-btn pull-left" th:checked="${form.projectScope.name() == 'PUBLIC'}">
                     <label for="public">
                       <strong class="ml5" th:text="#{project.public}">PUBLIC (공개)</strong>
                       <p class="note" th:text="#{project.public.notice}">
@@ -92,8 +94,18 @@
                     </label>
                   </li>
 
+                  <li id="opt-protected" class="mt10" th:style="${isOwnerOrganization} ? 'display:block;' : 'display:none;'">
+                    <input type="radio" id="protected" name="projectScope" value="PROTECTED" class="radio-btn pull-left" th:checked="${form.projectScope.name() == 'PROTECTED'}">
+                    <label for="protected">
+                      <strong class="ml5" th:text="#{project.protected}">PROTECTED (그룹 공개)</strong>
+                      <p class="note" th:text="#{project.protected.notice}">
+                        같은 그룹(조직)에 속한 사용자에게만 공개됩니다.
+                      </p>
+                    </label>
+                  </li>
+
                   <li class="mt10">
-                    <input type="radio" id="private" name="projectScope" value="PRIVATE" class="radio-btn pull-left">
+                    <input type="radio" id="private" name="projectScope" value="PRIVATE" class="radio-btn pull-left" th:checked="${form.projectScope.name() == 'PRIVATE'}">
                     <label for="private">
                       <strong class="ml5" th:text="#{project.private}">PRIVATE (비공개)</strong>
                       <p class="note" th:text="#{project.private.notice}">
@@ -115,10 +127,10 @@
               </div>
               <div class="span10 cu-desc">
                 <select id="vcs" name="vcs" data-toggle="select2" data-dropdown-css-class="select2-without-searchbox" class="mb10 mt5" style="min-width: 220px;">
-                  <option value="GIT" selected th:text="#{project.new.vcsType.git}">Git</option>
-                  <option value="SUBVERSION" th:text="#{project.new.vcsType.subversion}">Subversion</option>
+                  <option value="GIT" th:selected="${form.vcs == 'GIT'}" th:text="#{project.new.vcsType.git}">Git</option>
+                  <option value="SUBVERSION" th:selected="${form.vcs == 'SUBVERSION'}" th:text="#{project.new.vcsType.subversion}">Subversion</option>
                 </select>
-                <span id="svn" class="ml10 notice" style="display: none;" th:text="#{project.svn.warning}">
+                <span id="svn" class="ml10 notice" th:style="${form.vcs == 'SUBVERSION'} ? 'display:inline;' : 'display:none;'" th:text="#{project.svn.warning}">
                   Subversion은 pull request 기능을 사용할 수 없습니다.
                 </span>
               </div>
@@ -131,27 +143,27 @@
               </div>
               <div class="span10">
                   <label for="menuSettingCode" class="bg-radiobtn label-public inline-list">
-                    <input type="checkbox" class="radio-btn" id="menuSettingCode" name="code" value="true" checked>
+                    <input type="checkbox" class="radio-btn" id="menuSettingCode" name="code" value="true" th:checked="${form.code}">
                     <span th:text="#{menu.code}">코드</span>
                   </label>
                   <label for="menuSettingIssue" class="bg-radiobtn label-public inline-list">
-                    <input type="checkbox" class="radio-btn" id="menuSettingIssue" name="issue" value="true" checked>
+                    <input type="checkbox" class="radio-btn" id="menuSettingIssue" name="issue" value="true" th:checked="${form.issue}">
                     <span th:text="#{menu.issue}">이슈</span>
                   </label>
                   <label for="menuSettingPullRequest" class="bg-radiobtn label-public inline-list">
-                    <input type="checkbox" class="radio-btn" id="menuSettingPullRequest" name="pullRequest" value="true" checked>
+                    <input type="checkbox" class="radio-btn" id="menuSettingPullRequest" name="pullRequest" value="true" th:checked="${form.pullRequest}">
                     <span th:text="#{menu.pullRequest}">코드 주고받기</span>
                   </label>
                   <label for="menuSettingReview" class="bg-radiobtn label-public inline-list">
-                    <input type="checkbox" class="radio-btn" id="menuSettingReview" name="review" value="true" checked>
+                    <input type="checkbox" class="radio-btn" id="menuSettingReview" name="review" value="true" th:checked="${form.review}">
                     <span th:text="#{menu.review}">리뷰</span>
                   </label>
                   <label for="menuSettingMilestone" class="bg-radiobtn label-public inline-list">
-                    <input type="checkbox" class="radio-btn" id="menuSettingMilestone" name="milestone" value="true" checked>
+                    <input type="checkbox" class="radio-btn" id="menuSettingMilestone" name="milestone" value="true" th:checked="${form.milestone}">
                     <span th:text="#{milestone}">마일스톤</span>
                   </label>
                   <label for="menuSettingBoard" class="bg-radiobtn label-public inline-list">
-                    <input type="checkbox" class="radio-btn" id="menuSettingBoard" name="board" value="true" checked>
+                    <input type="checkbox" class="radio-btn" id="menuSettingBoard" name="board" value="true" th:checked="${form.board}">
                     <span th:text="#{menu.board}">게시판</span>
                   </label>
               </div>
