@@ -114,8 +114,11 @@ class IssueViewController(
         // 권한 체크
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowedToReadProject(loginUser, project)) {
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47) — 프로젝트는 이미 찾았으므로
+            // 프로젝트 헤더/메뉴가 붙는 컨텍스트 인지형 403으로 교체.
+            model.addAttribute("project", project)
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
-            return "error/403"
+            return "error/forbidden"
         }
 
         val actualPage = if (pageNum != null) {
@@ -276,11 +279,19 @@ class IssueViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowedToReadProject(loginUser, project)) {
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
-            return "error/403"
+            return "error/forbidden"
         }
 
-        val issue = issueRepository.findByProjectAndNumber(project, number) ?: return "error/404"
+        val issue = issueRepository.findByProjectAndNumber(project, number) ?: run {
+            // yona error/notfound.scala.html 대응 (P-템플릿 #45) — 프로젝트는 찾았지만 그 안의
+            // 이슈를 찾지 못한 경우이므로 컨텍스트 인지형 404(targetType="issue_post")로 교체.
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "issue_post")
+            return "error/notfound"
+        }
         val comments = issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(issue.id!!)
 
         if (loginUser != null) {
@@ -419,8 +430,10 @@ class IssueViewController(
         val currentAuth = authentication ?: SecurityContextHolder.getContext().authentication
         val loginUser = currentAuth?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.ISSUE_POST)) {
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
-            return "error/403"
+            return "error/forbidden"
         }
 
         // 마일스톤 목록 가져오기
@@ -480,10 +493,15 @@ class IssueViewController(
             }
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        val issue = issueRepository.findByProjectAndNumber(project, number) ?: return "error/404"
+        val issue = issueRepository.findByProjectAndNumber(project, number) ?: run {
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "issue_post")
+            return "error/notfound"
+        }
         if (!accessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)) {
+            model.addAttribute("project", project)
             model.addAttribute("messageKey", "error.forbidden.or.notfound")
-            return "error/403"
+            return "error/forbidden"
         }
 
         // 마일스톤 목록 가져오기
@@ -550,7 +568,8 @@ class IssueViewController(
         @RequestParam(required = false) labelIds: List<Long>?,
         @RequestParam(required = false, defaultValue = "false") isDraft: Boolean,
         @RequestParam(required = false) temporaryUploadFiles: String?,
-        authentication: Authentication?
+        authentication: Authentication?,
+        model: Model
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
@@ -559,7 +578,9 @@ class IssueViewController(
             ?: return "redirect:/users/loginform"
 
         if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.ISSUE_POST)) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val issue = Issue(
@@ -716,11 +737,19 @@ class IssueViewController(
     ): Any {
         val wantsJson = accept?.contains("application/json") == true
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
-            ?: return if (wantsJson) ResponseEntity.notFound().build<Any>() else "redirect:/error/404"
+            // "redirect:/error/404"·"redirect:/error/403"는 실제로 매핑된 라우트가 없어 Spring의
+            // 기본 404/403으로 빠지던 버그였다 — 다른 메서드들과 동일하게 뷰 이름을 직접 리턴(비JSON
+            // 경로)하도록 정정. JSON을 원하는 요청(wantsJson)은 계속 상태코드만 반환한다(#127).
+            ?: return if (wantsJson) ResponseEntity.notFound().build<Any>() else "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null) {
-            return if (wantsJson) ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build<Any>() else "redirect:/error/403"
+            if (wantsJson) return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build<Any>()
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47) — 프로젝트는 이미 찾았으므로
+            // 컨텍스트 인지형 403. 멤버십 게이트(isMemberOf)는 TASK-0260에서 legacy massUpdate()와
+            // 동일하게 이슈 단위 권한 체크로 대체돼 여기서는 로그인 여부만 확인한다(주석 아래 참고).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         // yona IssueApp.massUpdate() 대응 — legacy는 프로젝트 멤버십을 통째로 게이트하지 않고
@@ -867,22 +896,32 @@ class IssueViewController(
         @PathVariable projectName: String,
         @PathVariable number: Long,
         @ModelAttribute request: IssueForm,
-        authentication: Authentication?
+        authentication: Authentication?,
+        model: Model
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-            ?: return "error/403"
+            ?: run {
+                // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+                model.addAttribute("project", project)
+                return "error/forbidden"
+            }
 
         val issue = issueRepository.findByProjectAndNumber(project, number)
-            ?: return "error/404"
+            ?: run {
+                model.addAttribute("project", project)
+                model.addAttribute("targetType", "issue_post")
+                return "error/notfound"
+            }
 
         if (issue.authorLoginId != loginUser.loginId &&
             !projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) &&
             !accessControl.isAllowedIfGroupMember(project, loginUser)
         ) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         val assigneeUser = request.assigneeLoginId?.let { 

@@ -110,7 +110,10 @@ class OrganizationViewController(
         }
 
         if (!isOrgAdmin && loginUser?.isSiteManager != true) {
-            return "error/403"
+            // yona error/forbidden_organization.scala.html 대응 (P-템플릿 #49) — 조직은 이미
+            // 찾았으므로 조직 헤더/메뉴가 붙는 컨텍스트 인지형 403.
+            model.addAttribute("org", org)
+            return "error/forbidden_organization"
         }
 
         model.addAttribute("org", org)
@@ -404,7 +407,9 @@ class OrganizationViewController(
         }
 
         if (!isOrgAdmin && !loginUser.isSiteManager) {
-            return "error/403"
+            // yona error/forbidden_organization.scala.html 대응 (P-템플릿 #49) — 조직은 이미 찾았음.
+            model.addAttribute("org", org)
+            return "error/forbidden_organization"
         }
 
         model.addAttribute("org", org)
@@ -435,7 +440,9 @@ class OrganizationViewController(
         }
 
         if (!isOrgAdmin && !loginUser.isSiteManager) {
-            return "error/403"
+            // yona error/forbidden_organization.scala.html 대응 (P-템플릿 #49).
+            model.addAttribute("org", org)
+            return "error/forbidden_organization"
         }
 
         // yona OrganizationApp.java:409-420 validateForUpdate()의 LogoUtil.isImageFile()/
@@ -511,7 +518,9 @@ class OrganizationViewController(
         }
 
         if (!isOrgAdmin && !loginUser.isSiteManager) {
-            return "error/403"
+            // yona error/forbidden_organization.scala.html 대응 (P-템플릿 #49).
+            model.addAttribute("org", org)
+            return "error/forbidden_organization"
         }
 
         model.addAttribute("org", org)

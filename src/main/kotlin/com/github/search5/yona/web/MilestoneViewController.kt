@@ -105,7 +105,9 @@ class MilestoneViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         // 파라미터 값에 따라 이넘 조회
@@ -151,12 +153,21 @@ class MilestoneViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
-        val milestone = milestoneService.getMilestone(id) ?: return "error/404"
+        val milestone = milestoneService.getMilestone(id) ?: run {
+            // yona error/notfound.scala.html 대응 (P-템플릿 #45).
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
+        }
         if (milestone.project.id != project.id) {
-            return "error/404"
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
         }
 
         val dto = toViewDto(milestone)
@@ -194,7 +205,9 @@ class MilestoneViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         model.addAttribute("project", project)
@@ -216,12 +229,21 @@ class MilestoneViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-            return "error/403"
+            // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
-        val milestone = milestoneService.getMilestone(id) ?: return "error/404"
+        val milestone = milestoneService.getMilestone(id) ?: run {
+            // yona error/notfound.scala.html 대응 (P-템플릿 #45).
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
+        }
         if (milestone.project.id != project.id) {
-            return "error/404"
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
         }
 
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.MILESTONE, id.toString())
@@ -259,10 +281,15 @@ class MilestoneViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-            ?: return "error/403"
+            ?: run {
+                // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+                model.addAttribute("project", project)
+                return "error/forbidden"
+            }
 
         if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser)) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         // 1. 중복 제목 검증
@@ -344,13 +371,23 @@ class MilestoneViewController(
             ?: return "error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-            ?: return "error/403"
+            ?: run {
+                // yona error/forbidden.scala.html 대응 (P-템플릿 #47).
+                model.addAttribute("project", project)
+                return "error/forbidden"
+            }
 
         if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser)) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
-        val original = milestoneService.getMilestone(id) ?: return "error/404"
+        val original = milestoneService.getMilestone(id) ?: run {
+            // yona error/notfound.scala.html 대응 (P-템플릿 #45).
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
+        }
 
         // 1. 중복 제목 검증
         val isDuplicateTitle = original.title != title && milestoneRepository.findByProjectAndTitle(project, title) != null
@@ -435,20 +472,31 @@ class MilestoneViewController(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @PathVariable id: Long,
-        authentication: Authentication?
+        authentication: Authentication?,
+        model: Model
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-            ?: return "error/403"
+            ?: run {
+                model.addAttribute("project", project)
+                return "error/forbidden"
+            }
         if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser)) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
-        val milestone = milestoneService.getMilestone(id) ?: return "error/404"
+        val milestone = milestoneService.getMilestone(id) ?: run {
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
+        }
         if (milestone.project.id != project.id) {
-            return "error/404"
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
         }
-        
+
         milestoneService.updateMilestone(
             milestoneId = id,
             title = milestone.title,
@@ -464,20 +512,31 @@ class MilestoneViewController(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @PathVariable id: Long,
-        authentication: Authentication?
+        authentication: Authentication?,
+        model: Model
     ): String {
         val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
             ?: return "error/404"
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-            ?: return "error/403"
+            ?: run {
+                model.addAttribute("project", project)
+                return "error/forbidden"
+            }
         if (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser)) {
-            return "error/403"
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
-        val milestone = milestoneService.getMilestone(id) ?: return "error/404"
+        val milestone = milestoneService.getMilestone(id) ?: run {
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
+        }
         if (milestone.project.id != project.id) {
-            return "error/404"
+            model.addAttribute("project", project)
+            model.addAttribute("targetType", "milestone")
+            return "error/notfound"
         }
-        
+
         milestoneService.updateMilestone(
             milestoneId = id,
             title = milestone.title,
