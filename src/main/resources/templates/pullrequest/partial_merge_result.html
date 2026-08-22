@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+</head>
+<body>
+<!--
+ legacy git/partial_merge_result.scala.html 대응 (그룹11 #178). PR 생성/수정 화면(create.html/
+ edit.html)의 "#__commits" 영역을 git.Write.js가 브랜치 선택 시마다 AJAX로 채우는 조각 —
+ from/to 브랜치 사이의 커밋 목록 + 충돌 여부를 보여준다.
+ NOTE(문서화된 보류): legacy는 이 조각을 PullRequestApp.mergeResult() 액션이 렌더링하며, 그
+ 액션은 (아직 DB에 저장되지 않은) 임의의 from/to 프로젝트·브랜치 조합에 대해 "커밋 프리뷰 +
+ 충돌 여부"를 계산한다. yuna의 RepositoryService/PlayRepository에는 이런 "두 임의 브랜치 사이
+ 커밋 프리뷰" 기능이 아직 없고(기존 PullRequestService.attemptMerge()는 이미 저장된 PullRequest
+ 엔티티 기준으로만 동작), 이 프리뷰 없이도 PR 생성/수정 자체는 기존 REST 엔드포인트로 정상
+ 동작한다 — 그래서 이번 배치에서는 마크업 조각만 legacy와 동일하게 완성해두고, 이 조각을
+ 실제로 채워줄 컨트롤러 엔드포인트(GET/POST .../pullrequests/mergeResult) 신설은 별도 백엔드
+ 작업으로 미룬다(마크업은 100% 완성, 실 연동만 보류).
+-->
+<th:block th:fragment="mergeResult(pullRequestTitle, pullRequestBody, commits, conflict)">
+    <div id="mergeResult" class="code-browser-wrap"
+         th:data-commits="${commits != null ? commits.size() : 0}"
+         th:data-pullrequest-title="${pullRequestTitle}"
+         th:data-pullrequest-body="${pullRequestBody}"
+         th:data-conflict="${commits != null and !commits.isEmpty() ? conflict : null}">
+        <div th:if="${commits == null or commits.isEmpty()}">
+            <h5 th:text="#{pullRequest.diff.noChanges}">변경 사항이 없습니다.</h5>
+        </div>
+        <div class="commit-wrap" th:if="${commits != null and !commits.isEmpty()}">
+            <table class="code-table commits">
+                <thead class="thead">
+                <tr>
+                    <td class="commit-id"><strong>@</strong></td>
+                    <td class="messages"><strong th:text="#{code.commitMsg}">커밋 메시지</strong></td>
+                    <td class="date"><strong th:text="#{code.commitDate}">커밋 일시</strong></td>
+                    <td class="author"><strong th:text="#{code.author}">작성자</strong></td>
+                </tr>
+                </thead>
+                <tbody class="tbody">
+                <tr th:each="commit : ${commits}">
+                    <td class="commit-id">
+                        <a th:href="@{/{owner}/{projectName}/commit/{commitId}(owner=${commit.owner}, projectName=${commit.projectName}, commitId=${commit.id})}" th:text="${commit.shortId}">abc1234</a>
+                    </td>
+                    <td class="messages" th:text="${commit.shortMessage}">커밋 메시지</td>
+                    <td class="date" th:title="${@templateHelper.getDateString(commit.authorDate)}" th:text="${@templateHelper.agoOrDateString(commit.authorDate)}">방금 전</td>
+                    <td class="author" th:text="${commit.authorEmail}">
+                        <img th:if="${commit.authorAvatarUrl != null}" th:src="${commit.authorAvatarUrl}" width="32" height="32"/>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</th:block>
+</body>
+</html>

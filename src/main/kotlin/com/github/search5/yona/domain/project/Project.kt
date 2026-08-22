@@ -87,4 +87,12 @@ class Project(
 
     val isProtected: Boolean
         get() = projectScope == ProjectScope.PROTECTED
+
+    // legacy Project.java:589 isForkedFromOrigin()/593 hasForks() 대응 (그룹11 #167 pullrequest/list
+    // 포팅 과정에서 추가) — 단순 null/size 체크라 별도 서비스 없이 엔티티 계산 프로퍼티로 이식한다.
+    val isForkedFromOrigin: Boolean
+        get() = originalProject != null
+
+    val hasForks: Boolean
+        get() = forkingProjects.isNotEmpty()
 }

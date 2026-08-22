@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head(${project.name} + ' - Fork')}">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko"
+      th:with="forkLabel=#{fork}, pageTitle=${project.owner + ' / ' + project.name + ' ' + forkLabel}">
+<head th:replace="~{site/layout :: head(title=${pageTitle})}">
 </head>
 <body class="prj" id="html-body">
 <div id="main" class="main">
@@ -9,87 +10,115 @@
     <div th:replace="~{project/header :: header(${project})}"></div>
     <div th:replace="~{project/menu :: menu(${project}, 'pullRequest')}"></div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <!-- TODO(그룹11 PR 작업 시): legacy 실제 대응 파일은 project/fork.scala.html이 아니라
-       git/fork.scala.html이다 — 폼 구조/도움말 메시지/이미 포크된 프로젝트 목록 표시를
-       legacy와 줄 단위로 대조해 재작성 필요. 지금은 독자 GNB만 site/layout 기반으로 교체. -->
-  <div class="container">
-    <div class="fork-container">
-      <form th:action="@{/{owner}/{name}/fork(owner=${project.owner}, name=${project.name})}" method="post" class="form-horizontal">
-        <fieldset>
-          <legend>
-            <h3 style="margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #eee;">
-              <span th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</span> 프로젝트 Fork
-            </h3>
-          </legend>
+    <!-- legacy git/fork.scala.html 1:1 이식 (P2-46 계열 그룹11 작업) — yuna 배치는 project/fork.html이지만
+         내용은 legacy git/fork.scala.html과 동일해야 한다. -->
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <div class="content-wrap frm-wrap">
+                <!-- 기존 yuna 컨트롤러(ProjectViewController.fork)가 실패 시 넘겨주는 에러 메시지 표시.
+                     legacy Play Form 검증 에러 표시 방식과 완전히 동일하진 않지만, 컨트롤러 계약을 깨지
+                     않기 위해 유지한다. -->
+                <div th:if="${error}" class="alert alert-danger" th:text="${error}">에러 메시지</div>
 
-          <!-- 에러 메시지 -->
-          <div th:if="${error}" class="alert alert-danger" th:text="${error}">
-            에러 메시지 내용
-          </div>
-
-          <div class="help-well">
-            <h4 style="margin-top:0;">프로젝트 포크(Fork)란?</h4>
-            <p>원본 프로젝트의 독립적인 복사본을 생성합니다.</p>
-            <p>복사본 프로젝트에서 자유롭게 커밋하고 코드를 수정한 뒤, 언제든 원본 프로젝트에 코드 보내기(Pull Request)를 요청할 수 있습니다.</p>
-          </div>
-
-          <!-- 소유자 선택 -->
-          <div class="form-group">
-            <label class="col-sm-3 control-label" for="ownerSelect">프로젝트 소유자</label>
-            <div class="col-sm-9">
-              <select id="ownerSelect" name="owner" class="form-control" required style="max-width: 300px;">
-                <!-- 로그인 유저 본인 -->
-                <option th:value="${currentUser.loginId}" th:text="${currentUser.loginId} + ' (개인 계정)'"></option>
-                <!-- 내가 관리하는 조직들 -->
-                <option th:each="org : ${organizations}" th:value="${org.name}" th:text="${org.name} + ' (그룹)'"></option>
-              </select>
+                <form th:action="@{/{owner}/{name}/fork(owner=${project.owner}, name=${project.name})}" method="post" class="form-horizontal nm">
+                    <!-- legacy 원문 그대로: hidden owner 필드와 아래 select#project-owner가 동일하게
+                         name="owner"를 공유한다(legacy의 알려진 중복 name 특성을 그대로 이식). -->
+                    <input type="hidden" name="owner" th:value="${currentUser.loginId}" />
+                    <fieldset>
+                        <legend>
+                            <h4 style="padding-top:10px;">
+                                <span th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</span> <span th:text="#{fork}">코드 저장소 복사</span>
+                            </h4>
+                        </legend>
+                        <div id="helpMessage" class="well">
+                            <div class="row-fluid">
+                                <!-- forkedProjects: yuna ProjectViewController.newFork()가 아직 이 모델
+                                     속성을 넘겨주지 않아(TODO: Project.findByOwnerAndOriginalProject(destination, project)
+                                     대응 조회를 컨트롤러에 추가) 항상 비어 있는 것으로 취급된다.
+                                     구조는 legacy와 동일하게 두 분기를 모두 유지한다. -->
+                                <div th:if="${forkedProjects == null or forkedProjects.isEmpty()}">
+                                    <div class="pull-left"><img class="img-polaroid" th:src="@{/images/fork-pull/fork.jpg}"><br></div>
+                                    <div class="pull-left help-messages">
+                                        <p class="lead" th:text="#{fork.help.title}">프로젝트의 코드 저장소를 복사합니다.</p>
+                                        <p th:text="#{fork.help.message.1}">원본 프로젝트의 코드 저장소를 복사하여 본인만의 프로젝트를 생성할 수 있습니다.</p>
+                                        <p th:text="#{fork.help.message.2}">코드 보내기 기능을 사용하여 복사한 프로젝트에서 원본 프로젝트로 코드를 보낼 수 있습니다.</p>
+                                    </div>
+                                </div>
+                                <div th:unless="${forkedProjects == null or forkedProjects.isEmpty()}" class="help-messages center-txt">
+                                    <i class="ico ico-err2"></i>
+                                    <p th:text="#{fork.already.exist}">동일한 원본 프로젝트를 복사한 프로젝트가 있습니다.</p>
+                                    <p th:each="forkedProject : ${forkedProjects}">
+                                        <strong class="vmiddle" th:text="${project.owner} + ' / ' + ${project.name}">owner / name</strong>
+                                        <i class="yobicon-right vmiddle"></i>
+                                        <a th:href="@{/{owner}/{name}(owner=${forkedProject.owner}, name=${forkedProject.name})}" class="vmiddle primary-txt" th:text="${forkedProject.owner} + ' / ' + ${forkedProject.name}">forkOwner / forkName</a>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label" for="project-owner" th:text="#{project.owner}">프로젝트 소유자</label>
+                            <div class="controls">
+                                <!-- data-url: legacy는 newFork(owner, name, forkOwner) 3-arg 라우트로 목적지
+                                     조직별 재조회 URL을 만들지만, yuna newFork GET은 목적지 소유자를 경로
+                                     변수로 받지 않는다(컨트롤러 시그니처 확인 완료). 따라서 옵션이 바뀌어도
+                                     동일한 newFork URL을 가리키는 것으로 단순화했다 — 실제 목적지 전환은
+                                     컨트롤러에 forkOwner 경로변수가 추가돼야 동작한다(후속 작업 필요, out of
+                                     scope). project.Fork JS 모듈(yobi.project.Fork.js)은 정적 자산으로 이미
+                                     존재하여 그대로 로드한다. -->
+                                <select id="project-owner" name="owner">
+                                    <option th:value="${currentUser.loginId}"
+                                            th:attr="data-url=@{/{owner}/{name}/newFork(owner=${project.owner}, name=${project.name})}"
+                                            th:text="${currentUser.loginId}"
+                                            selected="selected">admin</option>
+                                    <option th:each="org : ${organizations}"
+                                            th:value="${org.name}"
+                                            th:attr="data-url=@{/{owner}/{name}/newFork(owner=${project.owner}, name=${project.name})}"
+                                            th:text="${org.name}">org</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label" for="inputName" th:text="#{project.name}">프로젝트 이름</label>
+                            <div class="controls">
+                                <input type="text" id="inputName" name="name" th:value="${project.name}" />
+                                <span class="help-inline" th:text="#{project.name.alert}">이름 안내</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label" th:text="#{project.shareOption}">공개 설정</label>
+                            <div class="controls">
+                                <input name="projectScope" type="radio" id="public" value="PUBLIC" class="radio-btn" checked="checked">
+                                <label for="public" class="bg-radiobtn label-public" th:text="#{project.public}">공개</label>
+                                <!-- legacy는 Organization.findByName(forkProject.owner) != null 일 때만 PROTECTED를
+                                     노출한다. yuna 템플릿 범위에서는 forkProject.owner(선택된 목적지 소유자)를
+                                     알 수 없으므로, "사용자가 관리하는 조직이 하나라도 있으면" 노출하는 것으로
+                                     단순화했다(템플릿 전용 결정, 문서화). -->
+                                <th:block th:if="${organizations != null and !organizations.isEmpty()}">
+                                    <input name="projectScope" type="radio" id="protected" value="PROTECTED" class="radio-btn">
+                                    <label for="protected" class="bg-radiobtn label-protected" th:text="#{project.protected}">그룹 공개</label>
+                                </th:block>
+                                <input name="projectScope" type="radio" id="private" value="PRIVATE" class="radio-btn">
+                                <label for="private" class="bg-radiobtn label-private" th:text="#{project.private}">비공개</label>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <div class="controls">
+                                <button type="submit" class="ybtn ybtn-info" th:text="#{fork}">코드 저장소 복사</button>
+                                <a th:href="@{/{owner}/{name}/pulls(owner=${project.owner}, name=${project.name})}" class="ybtn" th:text="#{button.cancel}">취소</a>
+                            </div>
+                        </div>
+                    </fieldset>
+                </form>
             </div>
-          </div>
-
-          <!-- 프로젝트 이름 입력 -->
-          <div class="form-group">
-            <label class="col-sm-3 control-label" for="projectNameInput">프로젝트 이름</label>
-            <div class="col-sm-9">
-              <input type="text" id="projectNameInput" name="name" th:value="${project.name}" class="form-control" required style="max-width: 300px;" />
-              <span class="help-block" style="font-size: 12px; color: #777;">알파벳, 숫자, 대시(-)와 언더스코어(_)만 사용할 수 있습니다.</span>
-            </div>
-          </div>
-
-          <!-- 공개 여부 설정 -->
-          <div class="form-group">
-            <label class="col-sm-3 control-label">공개 범위 설정</label>
-            <div class="col-sm-9">
-              <div class="radio">
-                <label>
-                  <input type="radio" name="projectScope" id="scopePublic" value="PUBLIC" checked>
-                  <strong>공개 (Public)</strong> - 누구나 프로젝트를 조회하고 코드를 볼 수 있습니다.
-                </label>
-              </div>
-              <div class="radio" style="margin-top: 10px;">
-                <label>
-                  <input type="radio" name="projectScope" id="scopePrivate" value="PRIVATE">
-                  <strong>비공개 (Private)</strong> - 지정한 멤버들만 접근할 수 있습니다.
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-group" style="margin-top: 30px;">
-            <div class="col-sm-offset-3 col-sm-9">
-              <button type="submit" class="btn btn-info" style="min-width: 100px;">Fork 생성</button>
-              <a th:href="@{/{owner}/{name}(owner=${project.owner}, name=${project.name})}" class="btn btn-default" style="margin-left: 10px;">취소</a>
-            </div>
-          </div>
-
-        </fieldset>
-      </form>
+        </div>
     </div>
-  </div>
 
     <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
 <th:block th:replace="~{site/layout :: scripts}"></th:block>
+<script type="text/javascript">
+$(document).ready(function() { $yobi.loadModule("project.Fork"); });
+</script>
 </body>
 </html>

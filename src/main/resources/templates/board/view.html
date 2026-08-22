@@ -85,13 +85,30 @@
                     <div id="comments" class="board-comment-wrap">
                         <div id="timeline">
                             <div class="timeline-list">
-                                <div th:each="comment : ${comments}" class="comment" th:id="'comment-' + ${comment.id}">
+                                <div th:each="comment : ${comments}"
+                                     th:with="children=${childCommentsByParentId != null ? childCommentsByParentId.get(comment.id) : null}"
+                                     class="comment" th:classappend="${currentUser != null and comment.authorLoginId == currentUser.loginId} ? ' author'" th:id="'comment-' + ${comment.id}">
+                                    <div th:replace="~{common/childCommentsAnchorDiv :: anchorDiv(${children})}"></div>
+                                    <div class="comment-avatar">
+                                        <span class="avatar-wrap"><img src="/images/default-avatar-128.png" width="32" height="32"></span>
+                                    </div>
+                                    <div class="media-body">
                                     <div class="comment-body">
-                                        <div class="author-info">
+                                        <div class="author-info meta-info">
                                             <strong class="name" th:text="${comment.authorName != null ? comment.authorName : comment.authorLoginId}">댓글작성자</strong>
                                             <span class="date" th:text="${templateHelper.agoOrDateString(comment.createdDate)}">작성일</span>
+                                            <span class="act-row pull-right">
+                                                <!-- 그룹11 #25 재작업: 댓글 인라인 수정/삭제 버튼 -->
+                                                <button th:if="${currentUser != null}" type="button" class="btn-transparent-with-fontsize-lineheight ml10" data-toggle="comment-edit" th:data-comment-id="${comment.id}" th:title="#{common.comment.edit}"><i class="yobicon-edit-2"></i></button>
+                                                <button th:if="${currentUser != null and (comment.authorId == currentUser.id or isProjectManager)}" type="button" class="btn-transparent-with-fontsize-lineheight ml6" data-toggle="comment-delete" th:data-request-uri="${commentApiBase} + '/' + ${comment.id}" th:title="#{common.comment.delete}"><i class="yobicon-trash"></i></button>
+                                            </span>
                                         </div>
-                                        <div class="content markdown-wrap" th:utext="${markdownService.render(comment.contents, true, project)}">댓글내용</div>
+                                        <div th:replace="~{common/commentUpdateForm :: updateForm(${comment}, ${commentApiBase}, ${currentUser != null and (comment.authorId == currentUser.id or isProjectManager)}, ${T(com.github.search5.yona.domain.enumeration.ResourceType).NONISSUE_COMMENT})}"></div>
+                                        <div th:id="'comment-body-' + ${comment.id}">
+                                            <div class="content markdown-wrap" th:utext="${markdownService.render(comment.contents, true, project)}">댓글내용</div>
+                                        </div>
+                                    </div>
+                                    <div th:replace="~{common/childComments :: childComments(${comment}, ${children}, ${project}, ${commentApiBase}, ${currentUser}, ${isProjectManager})}"></div>
                                     </div>
                                 </div>
                             </div>
@@ -175,6 +192,8 @@
         </div>
     </div>
 
+    <div th:replace="~{common/commentDeleteModal :: commentDeleteModal('#comments')}"></div>
+
     <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
@@ -198,6 +217,48 @@
                 success: function() {
                     window.location = "[[@{/{owner}/{projectName}/posts(owner=${project.owner}, projectName=${project.name})}]]";
                 }
+            });
+        });
+
+        // ===== 그룹11 #25/#26/#29/#30/#31 재작업: 댓글 인라인 수정/대댓글 AJAX 배선 =====
+        $(document).on('click', '[data-toggle="comment-edit"]', function(){
+            var id = $(this).data('commentId');
+            $('#comment-body-' + id).hide();
+            $('#comment-editform-' + id).show();
+        });
+        $(document).on('click', '.ybtn-cancel', function(){
+            var id = $(this).data('commentId');
+            $('#comment-editform-' + id).hide();
+            $('#comment-body-' + id).show();
+        });
+        $(document).on('submit', '.comment-update-form form', function(e){
+            e.preventDefault();
+            var $form = $(this);
+            var apiBase = $form.data('apiBase');
+            var commentId = $form.data('commentId');
+            var contents = $form.find('textarea[data-editor-mode="update-comment-body"]').val();
+            $.ajax({
+                url: apiBase + '/' + commentId,
+                type: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({ contents: contents }),
+                success: function(){ window.location.reload(); },
+                error: function(xhr){ alert('[[#{common.comment.edit}]] failed: ' + (xhr.responseJSON && xhr.responseJSON.message || xhr.responseText || '')); }
+            });
+        });
+        $(document).on('submit', '.child-comment-form', function(e){
+            e.preventDefault();
+            var $form = $(this);
+            var apiBase = $form.data('apiBase');
+            var parentCommentId = $form.data('parentCommentId');
+            var contents = $form.find('textarea[name="contents"]').val();
+            $.ajax({
+                url: apiBase,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ contents: contents, parentCommentId: parentCommentId }),
+                success: function(){ window.location.reload(); },
+                error: function(xhr){ alert('[[#{button.comment.new}]] failed: ' + (xhr.responseJSON && xhr.responseJSON.message || xhr.responseText || '')); }
             });
         });
     });
