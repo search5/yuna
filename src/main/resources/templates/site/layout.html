@@ -515,7 +515,7 @@
         <a href="/sites/massmail" th:text="#{site.sidebar.massMail}">대량 메일 발송</a>
       </li>
       <li th:class="${activeMenu == 'update' ? 'active' : ''}">
-        <a href="/sites/update" th:text="#{site.sidebar.update}">시스템 업데이트</a>
+        <a href="/sites/update"><span th:text="#{site.sidebar.update}">시스템 업데이트</span><span th:if="${yonaUpdateService.isUpdateRequired()}" class="notification-badge">1</span></a>
       </li>
       <li th:class="${activeMenu == 'diagnostic' ? 'active' : ''}">
         <a href="/sites/diagnostic" th:text="#{site.sidebar.diagnostics}">시스템 자가진단</a>

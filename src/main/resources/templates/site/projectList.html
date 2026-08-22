@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head('프로젝트 관리')}"></head>
+<head th:replace="~{site/layout :: head(#{${message}})}"></head>
 <body class="theme-default">
 <div id="main" class="main">
   <!-- GNB -->
@@ -64,20 +64,7 @@
             </li>
           </ul>
 
-          <!-- Pagination -->
-          <div style="text-align: center; margin-top: 30px;">
-            <ul class="pagination" th:if="${projects.totalPages > 1}">
-              <li th:class="${projects.first} ? 'disabled' : ''">
-                <a th:href="${projects.first} ? '#' : @{/sites/projectList(page=${projects.number}, projectName=${projectName})}">&laquo;</a>
-              </li>
-              <li th:each="pageIdx : ${#numbers.sequence(1, projects.totalPages)}" th:class="${projects.number + 1 == pageIdx} ? 'active' : ''">
-                <a th:href="@{/sites/projectList(page=${pageIdx}, projectName=${projectName})}" th:text="${pageIdx}">1</a>
-              </li>
-              <li th:class="${projects.last} ? 'disabled' : ''">
-                <a th:href="${projects.last} ? '#' : @{/sites/projectList(page=${projects.number + 2}, projectName=${projectName})}">&raquo;</a>
-              </li>
-            </ul>
-          </div>
+          <div id="pagination"></div>
         </div>
       </div>
     </div>
@@ -112,7 +99,11 @@ $(function(){
 
         $('#project-name').html($(this).data('projectName'));
         $('#alertDeletionWrap').modal('show');
+
+        console.log($(this).data('href'));
     });
+
+    yobi.Pagination.update($("#pagination"), /*[[${projects.totalPages}]]*/ 1, {"paramNameForPage": "page"});
 });
 </script>
 </body>

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head('사용자 관리')}"></head>
+<head th:replace="~{site/layout :: head(#{${message}})}"></head>
 <body class="theme-default">
 <div id="main" class="main">
   <!-- GNB -->
@@ -109,21 +109,8 @@
             </li>
           </ul>
           
-          <!-- Pagination -->
-          <div style="text-align: center; margin-top: 30px;">
-            <ul class="pagination" th:if="${users.totalPages > 1}">
-              <li th:class="${users.first} ? 'disabled' : ''">
-                <a th:href="${users.first} ? '#' : @{/sites/userList(page=${users.number}, state=${userState}, query=${query})}">&laquo;</a>
-              </li>
-              <li th:each="pageIdx : ${#numbers.sequence(1, users.totalPages)}" th:class="${users.number + 1 == pageIdx} ? 'active' : ''">
-                <a th:href="@{/sites/userList(page=${pageIdx}, state=${userState}, query=${query})}" th:text="${pageIdx}">1</a>
-              </li>
-              <li th:class="${users.last} ? 'disabled' : ''">
-                <a th:href="${users.last} ? '#' : @{/sites/userList(page=${users.number + 2}, state=${userState}, query=${query})}">&raquo;</a>
-              </li>
-            </ul>
-          </div>
-          
+          <div id="pagination"></div>
+
           <div id="alertDeletionWrap" class="modal fade">
             <div class="modal-header">
               <button type="button" class="close" data-dismiss="modal">×</button>
@@ -186,6 +173,8 @@ $(function(){
                 $yobi.alert("password change failed: " + JSON.parse(data.responseText).reason);
             });
     });
+
+    yobi.Pagination.update($("#pagination"), /*[[${users.totalPages}]]*/ 1, {"paramNameForPage": "page"});
 });
 </script>
 <script type="text/x-jquery-tmpl" id="dismissable-alerts">
