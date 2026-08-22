@@ -921,6 +921,19 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     val doc = Jsoup.parse(result.response.contentAsString)
                     doc.select(".email-verification-help").size shouldBe 1
                 }
+
+                // yona UserApp.useSocialLoginOnly(application.use.social.login.only) 대응 (P-템플릿 #15).
+                // 기본값(false)일 때는 legacy와 동일하게 아이디/비밀번호 폼과 로그인유지/비밀번호찾기가
+                // 그대로 노출돼야 한다(true일 때 숨김 처리는 별도 스프링 컨텍스트 프로퍼티 오버라이드가
+                // 필요해 이 통합 스펙에서는 검증하지 않음 — th:if/th:unless 자체는 다른 곳에서도 이미
+                // 검증된 안전한 패턴이라 낮은 리스크로 판단).
+                it("useSocialLoginOnly 기본값(false)일 때 아이디/비밀번호 로그인 폼과 로그인유지 체크박스가 노출돼야 한다") {
+                    val result = mockMvc.perform(get("/users/loginform")).andReturn()
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select(".login-form-wrap input#password").size shouldBe 1
+                    doc.select(".login-form-wrap #remember-me").size shouldBe 1
+                    doc.text().contains("소셜 로그인을 통한 로그인만 가능합니다") shouldBe false
+                }
             }
 
             describe("[Test-19-18] 회원가입 화면(user/signup.scala.html) 동치성 검증") {

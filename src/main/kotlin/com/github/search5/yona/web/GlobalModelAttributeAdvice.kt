@@ -28,7 +28,10 @@ class GlobalModelAttributeAdvice(
     @Value("\${yuna.application.hide-project-listing:false}") private val hideProjectListing: Boolean,
     // yona controllers/Application.java:42-43 NAVBAR_CUSTOM_LINK_NAME/URL 대응 — common/usermenu.scala.html:80-82.
     @Value("\${yuna.application.navbar.custom-link.name:}") private val navbarCustomLinkName: String,
-    @Value("\${yuna.application.navbar.custom-link.url:}") private val navbarCustomLinkUrl: String
+    @Value("\${yuna.application.navbar.custom-link.url:}") private val navbarCustomLinkUrl: String,
+    // yona controllers/UserApp.java:79-80 useSocialLoginOnly("application.use.social.login.only") 대응
+    // (P-템플릿 #15) — true면 로그인/회원가입/loginDialog에서 아이디·비밀번호 폼을 숨기고 소셜 로그인만 노출.
+    @Value("\${yuna.application.use-social-login-only:false}") private val useSocialLoginOnly: Boolean
 ) {
 
     @ModelAttribute("currentUser")
@@ -89,4 +92,7 @@ class GlobalModelAttributeAdvice(
 
     @ModelAttribute("navbarCustomLinkUrl")
     fun navbarCustomLinkUrl(): String = navbarCustomLinkUrl
+
+    @ModelAttribute("useSocialLoginOnly")
+    fun useSocialLoginOnly(): Boolean = useSocialLoginOnly
 }

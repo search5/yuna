@@ -382,7 +382,7 @@
             </div>
 
             <div th:id="'preview-' + ${wrapId}" class="tab-pane">
-                <div class="markdown-preview markdown-wrap content-body" data-via-email="false"></div>
+                <div class="markdown-preview markdown-wrap" th:classappend="${editorMode}" data-via-email="false"></div>
             </div>
             <div class="notification-receiver">
                 <span class="notification-receiver-title" th:text="#{notification.receiver.list.title}">Notification receivers</span>
@@ -574,6 +574,8 @@
           <button type="button" class="close mr10" data-dismiss="modal" aria-hidden="true">&times;</button>
         </div>
         <form action="/users/login" method="post" class="frm-wrap login-form-wrap">
+          <div class="btns-row nm" th:if="${useSocialLoginOnly}" th:text="#{app.warn.support.social.login.only}">소셜 로그인을 통한 로그인만 가능합니다.</div>
+          <th:block th:unless="${useSocialLoginOnly}">
           <dl>
             <dd>
               <input id="loginIdOrEmailD" name="loginIdOrEmail" type="text" class="text email" autocomplete="off" th:placeholder="#{user.login.key}">
@@ -589,8 +591,9 @@
           <div class="btns-row nm">
             <button type="submit" class="ybtn ybtn-primary fullsize" th:text="#{button.login}">로그인</button>
           </div>
+          </th:block>
           <div class="btns-row nm">
-            <div class="social-login-title-line"> or </div>
+            <div class="social-login-title-line" th:unless="${useSocialLoginOnly}"> or </div>
             <a href="/authenticate/github" class="ybtn oauth-login-btn">
               <span class="auth-provider-logo">
                 <span class="github">
@@ -607,7 +610,7 @@
               </span>
             </a>
           </div>
-          <div class="act-row right-txt mt20">
+          <div class="act-row right-txt mt20" th:unless="${useSocialLoginOnly}">
             <div class="pull-left">
               <input id="remember-meD" type="checkbox" name="rememberMe" class="checkbox" checked>
               <label for="remember-meD" class="bg-checkbox" th:text="#{title.rememberMe}">로그인 유지</label>
