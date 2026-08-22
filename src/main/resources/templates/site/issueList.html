@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head('이슈 관리')}"></head>
+<head th:replace="~{site/layout :: head(#{${message}})}"></head>
 <body class="theme-default">
 <div id="main" class="main">
   <!-- GNB -->
@@ -64,20 +64,7 @@
             </li>
           </ul>
           
-          <!-- Pagination -->
-          <div style="text-align: center; margin-top: 30px;">
-            <ul class="pagination" th:if="${issues.totalPages > 1}">
-              <li th:class="${issues.first} ? 'disabled' : ''">
-                <a th:href="${issues.first} ? '#' : @{/sites/issueList(page=${issues.number}, state=${state})}">&laquo;</a>
-              </li>
-              <li th:each="pageIdx : ${#numbers.sequence(1, issues.totalPages)}" th:class="${issues.number + 1 == pageIdx} ? 'active' : ''">
-                <a th:href="@{/sites/issueList(page=${pageIdx}, state=${state})}" th:text="${pageIdx}">1</a>
-              </li>
-              <li th:class="${issues.last} ? 'disabled' : ''">
-                <a th:href="${issues.last} ? '#' : @{/sites/issueList(page=${issues.number + 2}, state=${state})}">&raquo;</a>
-              </li>
-            </ul>
-          </div>
+          <div id="pagination"></div>
         </div>
       </div>
     </div>
@@ -87,5 +74,10 @@
 <footer th:replace="~{site/layout :: footer}"></footer>
 
 <th:block th:replace="~{site/layout :: scripts}"></th:block>
+<script type="text/javascript" th:inline="javascript">
+$(function(){
+    yobi.Pagination.update($("#pagination"), /*[[${issues.totalPages}]]*/ 1, {"paramNameForPage": "page"});
+});
+</script>
 </body>
 </html>
