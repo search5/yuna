@@ -3,6 +3,8 @@ package com.github.search5.yona.web
 import com.github.search5.yona.AbstractIntegrationTest
 import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingRepository
+import com.github.search5.yona.domain.issue.Assignee
+import com.github.search5.yona.domain.issue.AssigneeRepository
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.project.Project
@@ -45,6 +47,7 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val roleRepository: RoleRepository,
     private val postingRepository: PostingRepository,
     private val issueRepository: IssueRepository,
+    private val assigneeRepository: AssigneeRepository,
     private val issueLabelRepository: IssueLabelRepository,
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
     private val yonaUpdateService: YonaUpdateService
@@ -507,6 +510,111 @@ class TemplateEquivalenceSpec @Autowired constructor(
 
                     val doc = Jsoup.parse(result.response.contentAsString)
                     doc.select("footer.page-footer-outer").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-8] GNB navbar/usermenu(common/navbar.scala.html, common/usermenu.scala.html) 동치성 검증") {
+                val guest = userRepository.findByLoginId("guestuser").orElseGet {
+                    userRepository.save(User(loginId = "guestuser", name = "게스트", email = "guestuser@yona.io", isGuest = true))
+                }
+                val guestDetails = YonaUserDetails(
+                    id = guest.id!!,
+                    loginId = guest.loginId,
+                    passwordVal = "hashed",
+                    passwordSalt = "salt",
+                    authoritiesVal = AuthorityUtils.createAuthorityList("ROLE_ACTIVE")
+                )
+
+                it("게스트 사용자에게는 전체 목록 링크와 새 그룹 만들기 링크가 숨겨져야 한다") {
+                    val result = mockMvc.perform(
+                        get("/notifications")
+                            .with(SecurityMockMvcRequestPostProcessors.user(guestDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select(".gnb-nav a[href='/projects']").size shouldBe 0
+                    doc.select(".gnb-usermenu a[href='/organizations/new']").size shouldBe 0
+                }
+
+                it("일반 회원에게는 전체 목록 링크와 새 그룹 만들기 링크가 노출되어야 한다") {
+                    val result = mockMvc.perform(
+                        get("/notifications")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select(".gnb-nav a[href='/projects']").size shouldBe 1
+                    doc.select(".gnb-usermenu a[href='/organizations/new']").size shouldBe 1
+                }
+
+                it("배정된 미해결 이슈가 있으면 내 이슈 링크 옆에 카운터 배지가 노출되어야 한다") {
+                    val myIssue = issueRepository.findAll().find { it.title == "내배지테스트이슈" } ?: issueRepository.save(
+                        Issue(
+                            title = "내배지테스트이슈",
+                            body = "내용",
+                            project = publicProj,
+                            authorId = owner.id!!,
+                            authorLoginId = owner.loginId,
+                            authorName = owner.name,
+                            number = 900L
+                        )
+                    )
+                    if (myIssue.assignee == null) {
+                        val assignee = assigneeRepository.save(Assignee(user = member, project = publicProj))
+                        myIssue.assignee = assignee
+                        issueRepository.save(myIssue)
+                    }
+
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    val myIssueLink = doc.select(".gnb-usermenu a[href='/user/issues']")
+                    myIssueLink.size shouldBe 1
+                    myIssueLink.select(".counter-badge").size shouldNotBe 0
+                }
+            }
+
+            describe("[Test-19-9] 공용 스크립트 조각(common/scripts.scala.html) 동치성 검증") {
+                it("토스트 알림 템플릿, U 단축키, pageshow NProgress 해제, iframe 히스토리 동기화 스크립트가 포함되어야 한다") {
+                    val result = mockMvc.perform(
+                        get("/owner/public-proj")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val html = result.response.contentAsString
+                    val doc = Jsoup.parse(html)
+
+                    doc.select("script#tplYobiToast").size shouldBe 1
+
+                    html.contains("\"U\":") shouldBe true
+                    html.contains("user\\/${member.loginId}") shouldBe true
+
+                    html.contains("pageshow") shouldBe true
+                    html.contains("NProgress.done()") shouldBe true
+
+                    html.contains(".head-anchor") shouldBe true
+                    html.contains(".share-link") shouldBe true
+                    html.contains("window.parent.history.pushState") shouldBe true
+                }
+
+                it("비로그인 사용자에게 렌더링되는 로그인 모달이 jquery-ui 스크립트를 로드해야 한다") {
+                    val result = mockMvc.perform(get("/owner/public-proj"))
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("script[src*='lib/jquery/jquery-ui-1.10.4.custom.min.js']").size shouldBe 1
                 }
             }
         }
