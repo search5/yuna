@@ -95,7 +95,10 @@ class ReviewThreadController(
 
         model.addAttribute("project", project)
         model.addAttribute("commentThreads", commentThreads)
-        model.addAttribute("param", condition)
+        // yona reviewthread/list.scala.html의 "param"(ReviewSearchCondition) 대응. Thymeleaf 3에서
+        // "param"은 HTTP 요청 파라미터를 가리키는 예약된 암묵 객체라 동일 이름의 모델 속성과 충돌해
+        // "${param}" 단독 참조 시 SpEL 평가 예외가 나므로 searchCondition으로 개명한다.
+        model.addAttribute("searchCondition", condition)
         model.addAttribute("currentUser", currentUser)
         model.addAttribute("countEveryone", countEveryone)
         model.addAttribute("countParticipant", countParticipant)

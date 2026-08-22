@@ -945,13 +945,19 @@ class ProjectViewController(
         return "project/fork"
     }
 
-    // 12. 프로젝트 포크 실행 (POST /{ownerName}/{projectName}/fork)
+    // 12. 프로젝트 포크 실행 (POST /{ownerName}/{projectName}/fork) — legacy PullRequestApp.fork() 대응
+    // (그룹11 #172). legacy는 이 액션에서 실제 git clone을 바로 하지 않고, 이름 중복만 검사한 뒤
+    // "복제 중입니다" 인터스티셜 화면(git/clone.scala.html)을 먼저 보여주고, 그 화면의 JS가
+    // 잠시(3초) 후 doClone()을 호출해 실제 git clone + 프로젝트 생성을 수행한다 — 이번 재작업에서
+    // 그 2단계 구조를 그대로 복원했다(기존에는 이 메서드가 fork를 동기로 즉시 실행하고 바로
+    // redirect했었음).
     @PostMapping("/{ownerName}/{projectName}/fork")
     fun fork(
         @PathVariable ownerName: String,
         @PathVariable projectName: String,
         @RequestParam("owner") owner: String,
         @RequestParam("name") name: String,
+        @RequestParam(value = "projectScope", required = false, defaultValue = "PUBLIC") projectScope: String,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -968,13 +974,44 @@ class ProjectViewController(
         if (projectRepository.existsByOwnerAndName(destination, forkedProjectName)) {
             val orgUserList = organizationUserRepository.findByUserIdAndRoleId(loginUser.id!!, RoleType.ORG_ADMIN.roleType)
             val organizations = orgUserList.map { it.organization }
+            val forkedProjects = projectRepository.findByOwnerAndOriginalProject(destination, originalProject)
 
             model.addAttribute("project", originalProject)
             model.addAttribute("organizations", organizations)
+            model.addAttribute("forkedProjects", forkedProjects)
             model.addAttribute("currentUser", loginUser)
             model.addAttribute("error", "이미 동일한 소유자 밑에 같은 이름의 프로젝트가 존재합니다.")
             return "project/fork"
         }
+
+        model.addAttribute("project", originalProject)
+        model.addAttribute("forkOwner", destination)
+        model.addAttribute("forkName", forkedProjectName)
+        model.addAttribute("forkProjectScope", projectScope)
+        model.addAttribute("currentUser", loginUser)
+        return "pullrequest/clone"
+    }
+
+    // legacy PullRequestApp.doClone() 대응(그룹11 #172) — pullrequest/clone.html이 로드 3초 후
+    // AJAX로 호출하는 실제 git clone + 프로젝트 생성 엔드포인트. legacy와 동일한 응답 형태
+    // ({"status":"success"|"failed","url":"..."})를 돌려준다.
+    @PostMapping("/api/{ownerName}/{projectName}/doClone")
+    @ResponseBody
+    fun doClone(
+        @PathVariable ownerName: String,
+        @PathVariable projectName: String,
+        @RequestParam("owner") owner: String,
+        @RequestParam("name") name: String,
+        authentication: Authentication?
+    ): ResponseEntity<Map<String, String>> {
+        val originalProject = projectRepository.findByOwnerAndNameOrPreviousPlace(ownerName, projectName).orElse(null)
+            ?: return ResponseEntity.ok(mapOf("status" to "failed", "url" to "/"))
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return ResponseEntity.ok(mapOf("status" to "failed", "url" to "/users/loginform"))
+
+        val destination = owner.trim()
+        val forkedProjectName = name.trim()
 
         return try {
             projectService.forkProject(
@@ -983,16 +1020,9 @@ class ProjectViewController(
                 destinationOwner = destination,
                 destinationName = forkedProjectName
             )
-            "redirect:/$destination/$forkedProjectName"
+            ResponseEntity.ok(mapOf("status" to "success", "url" to "/$destination/$forkedProjectName"))
         } catch (e: Exception) {
-            val orgUserList = organizationUserRepository.findByUserIdAndRoleId(loginUser.id!!, RoleType.ORG_ADMIN.roleType)
-            val organizations = orgUserList.map { it.organization }
-
-            model.addAttribute("project", originalProject)
-            model.addAttribute("organizations", organizations)
-            model.addAttribute("currentUser", loginUser)
-            model.addAttribute("error", e.message ?: "프로젝트 포크 실패")
-            return "project/fork"
+            ResponseEntity.ok(mapOf("status" to "failed", "url" to "/$ownerName/$projectName/pulls"))
         }
     }
 

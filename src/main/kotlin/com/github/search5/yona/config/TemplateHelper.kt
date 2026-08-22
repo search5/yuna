@@ -482,5 +482,22 @@ class TemplateHelper(
         if (project == null || user == null || project.id == null) return false
         return watchRepository.findByUserAndResourceTypeAndResourceId(user, ResourceType.PROJECT, project.id.toString()) != null
     }
+
+    // yona git/partial_state.scala.html의 getCodeURL(project) 대응 (그룹11 #183). 프로젝트 멤버면
+    // "scheme://loginId@host[:port]/owner/name.git" 형태로 사용자 계정을 끼워넣은 clone URL을
+    // 돌려주고(로그인 인증 git push용), 아니면 계정 없이 그대로 돌려준다. legacy는
+    // CodeApp.getURL()이 별도로 존재했지만 yuna에는 clone URL 헬퍼가 아직 없어 여기에 신설한다.
+    fun getCloneUrl(project: Project, user: User?): String {
+        val request = (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)?.request
+        val scheme = request?.scheme ?: "http"
+        val host = request?.serverName ?: "localhost"
+        val port = request?.serverPort ?: 80
+        val isDefaultPort = (scheme == "http" && port == 80) || (scheme == "https" && port == 443)
+        val hostPart = if (isDefaultPort) host else "$host:$port"
+        val isMember = user != null && project.id != null && user.id != null &&
+            projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
+        val authority = if (isMember && user != null) "${user.loginId}@$hostPart" else hostPart
+        return "$scheme://$authority/${project.owner}/${project.name}.git"
+    }
 }
 
