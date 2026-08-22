@@ -98,14 +98,14 @@ class ReviewThreadControllerSpec : DescribeSpec({
                 .andExpect(header().exists("Content-Disposition"))
         }
 
-        it("[Test-16-3-1] isCodeAccessibleMemberOnly가 true이고 비회원(비인증)인 경우 403 에러 뷰를 반환해야 한다") {
+        it("[Test-16-3-1] isCodeAccessibleMemberOnly가 true이고 비회원(비인증)인 경우 error/forbidden 뷰를 반환해야 한다") {
             every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MemberOnlyProject") } returns Optional.of(memberOnlyProject)
 
             mockMvc.perform(
                 get("/owner/MemberOnlyProject/reviews")
             )
                 .andExpect(status().isOk)
-                .andExpect(view().name("error/403"))
+                .andExpect(view().name("error/forbidden"))
         }
 
         it("[Test-16-3-2] isCodeAccessibleMemberOnly가 true이고 가입된 멤버인 경우 정상적으로 200 OK를 반환해야 한다") {

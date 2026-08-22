@@ -129,7 +129,7 @@ class ReviewApiControllerSpec : DescribeSpec({
                 post("/api/owner/public-project/pullRequest/100/review")
                     .principal(strangerAuth)
             )
-                .andExpect(view().name("error/403"))
+                .andExpect(view().name("error/forbidden"))
 
             verify(exactly = 0) { codeReviewService.addReviewer(any(), any()) }
         }
@@ -147,7 +147,7 @@ class ReviewApiControllerSpec : DescribeSpec({
                 post("/api/owner/public-project/pullRequest/100/unreview")
                     .principal(strangerAuth)
             )
-                .andExpect(view().name("error/403"))
+                .andExpect(view().name("error/forbidden"))
 
             verify(exactly = 0) { codeReviewService.removeReviewer(any(), any()) }
         }
