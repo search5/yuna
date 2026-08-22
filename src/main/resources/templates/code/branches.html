@@ -5,7 +5,7 @@
 <body class="theme-default">
 <div id="main" class="main">
     <div th:replace="~{site/layout :: gnb}"></div>
-    
+
     <!-- Yona 원본 프로젝트 헤더 및 프로젝트 메뉴 탑재 -->
     <div th:replace="~{project/header :: header(${project})}"></div>
     <div th:replace="~{project/menu :: menu(${project}, 'code')}"></div>
@@ -38,66 +38,77 @@
                                 <th th:text="#{title.branches}">브랜치</th>
                                 <th th:text="#{code.branches.commit}">최신 커밋</th>
                                 <th th:text="#{code.branches.pullRequest}">보낸 코드</th>
-                                <th></th>
+                                <th th:if="${showActionsColumn}"></th>
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- 기본(Head) 브랜치 렌더링 -->
+                            <!-- 기본(Head) 브랜치 렌더링 (yona code/partial_branchrow.scala.html isHead=true 대응) -->
                             <tr th:if="${headBranch != null}" class="head">
                                 <td class="branchName">
-                                    <a th:href="@{/{owner}/{name}/code/{branch}(owner=${project.owner}, name=${project.name}, branch=${headBranch.shortName})}" 
+                                    <a th:href="@{/{owner}/{name}/code/{branch}(owner=${project.owner}, name=${project.name}, branch=${headBranch.shortName})}"
                                        th:text="${headBranch.shortName}">default</a>
                                     <span class="headBranch ml10" th:text="#{code.branches.defaultBranch}">기본 브랜치</span>
                                 </td>
                                 <td class="commit">
                                     <a th:href="@{/{owner}/{name}/commit/{commitId}(owner=${project.owner}, name=${project.name}, commitId=${headBranch.headCommit.id})}"
                                        class="commitId" th:title="${headBranch.headCommit.id}" th:text="${headBranch.headCommit.shortId}">shortId</a>
-                                    <span class="date" 
-                                          th:data-toggle="tooltip" 
-                                          th:data-placement="top" 
-                                          th:title="${@templateHelper.getDateString(headBranch.headCommit.committerDate)}"
-                                          th:text="${@templateHelper.agoOrDateString(headBranch.headCommit.committerDate)}">date</span>
+                                    <span class="date"
+                                          th:data-toggle="tooltip"
+                                          th:data-placement="top"
+                                          th:title="${templateHelper.getDateString(headBranch.headCommit.committerDate.toInstant())}"
+                                          th:text="${templateHelper.agoOrDateString(headBranch.headCommit.committerDate.toInstant())}">date</span>
                                 </td>
                                 <td class="pullRequest">
-                                    <span class="disabled" th:text="#{code.branches.noPullRequest}">보낸 코드 없음</span>
+                                    <th:block th:with="pr=${pullRequestsByBranch.get(headBranch.shortName)}">
+                                        <a th:if="${pr != null}" th:href="@{/{owner}/{name}/pull/{number}(owner=${pr.toProject.owner}, name=${pr.toProject.name}, number=${pr.number})}"
+                                           th:class="'blue-txt pullrequest-state ' + ${#strings.toLowerCase(pr.state.name())}"
+                                           data-toggle="tooltip" data-placement="top" th:title="#{'pullRequest.state.' + ${#strings.toLowerCase(pr.state.name())}}"
+                                           th:text="'pullRequest-' + ${pr.number}">pullRequest-1</a>
+                                        <span th:if="${pr == null}" class="disabled" th:text="#{code.branches.noPullRequest}">보낸 코드 없음</span>
+                                    </th:block>
                                 </td>
-                                <td class="actions">
-                                </td>
+                                <td class="actions" th:if="${showActionsColumn}"></td>
                             </tr>
 
                             <!-- 나머지 브랜치 리스트 렌더링 -->
                             <tr th:each="branch : ${allBranches}">
                                 <td class="branchName">
-                                    <a th:href="@{/{owner}/{name}/code/{branch}(owner=${project.owner}, name=${project.name}, branch=${branch.shortName})}" 
+                                    <a th:href="@{/{owner}/{name}/code/{branch}(owner=${project.owner}, name=${project.name}, branch=${branch.shortName})}"
                                        th:text="${branch.shortName}">branchName</a>
                                 </td>
                                 <td class="commit">
                                     <a th:href="@{/{owner}/{name}/commit/{commitId}(owner=${project.owner}, name=${project.name}, commitId=${branch.headCommit.id})}"
                                        class="commitId" th:title="${branch.headCommit.id}" th:text="${branch.headCommit.shortId}">shortId</a>
-                                    <span class="date" 
-                                          th:data-toggle="tooltip" 
-                                          th:data-placement="top" 
-                                          th:title="${@templateHelper.getDateString(branch.headCommit.committerDate)}"
-                                          th:text="${@templateHelper.agoOrDateString(branch.headCommit.committerDate)}">date</span>
+                                    <span class="date"
+                                          th:data-toggle="tooltip"
+                                          th:data-placement="top"
+                                          th:title="${templateHelper.getDateString(branch.headCommit.committerDate.toInstant())}"
+                                          th:text="${templateHelper.agoOrDateString(branch.headCommit.committerDate.toInstant())}">date</span>
                                 </td>
                                 <td class="pullRequest">
-                                    <span class="disabled" th:text="#{code.branches.noPullRequest}">보낸 코드 없음</span>
+                                    <th:block th:with="pr=${pullRequestsByBranch.get(branch.shortName)}">
+                                        <a th:if="${pr != null}" th:href="@{/{owner}/{name}/pull/{number}(owner=${pr.toProject.owner}, name=${pr.toProject.name}, number=${pr.number})}"
+                                           th:class="'blue-txt pullrequest-state ' + ${#strings.toLowerCase(pr.state.name())}"
+                                           data-toggle="tooltip" data-placement="top" th:title="#{'pullRequest.state.' + ${#strings.toLowerCase(pr.state.name())}}"
+                                           th:text="'pullRequest-' + ${pr.number}">pullRequest-1</a>
+                                        <span th:if="${pr == null}" class="disabled" th:text="#{code.branches.noPullRequest}">보낸 코드 없음</span>
+                                    </th:block>
                                 </td>
-                                <td class="actions">
-                                    <button type="button"
+                                <td class="actions" th:if="${showActionsColumn}">
+                                    <!-- allBranches는 이미 headBranch(기본 브랜치)를 제외한 목록이라 legacy의
+                                         "branch.getName() != project.defaultBranch()" 조건은 여기서 항상 참이다 -->
+                                    <button th:if="${canUpdate}" type="button"
                                             class="ybtn ybtn-default ybtn-small"
                                             data-request-method="post"
                                             th:data-request-uri="@{/{owner}/{name}/code/{branch}/setAsDefault(owner=${project.owner}, name=${project.name}, branch=${branch.shortName})}"
                                             th:text="#{code.branches.setAsDefault}">
                                         기본 브랜치로 설정
                                     </button>
-                                    <button type="button"
-                                            class="ybtn ybtn-danger ybtn-small"
-                                            data-request-method="delete"
-                                            th:data-request-uri="@{/{owner}/{name}/code/{branch}(owner=${project.owner}, name=${project.name}, branch=${branch.shortName})}"
-                                            th:text="#{button.delete}">
+                                    <a th:if="${canDelete}" class="ybtn ybtn-danger ybtn-small" data-request-method="delete"
+                                       th:data-request-uri="@{/{owner}/{name}/code/{branch}(owner=${project.owner}, name=${project.name}, branch=${branch.shortName})}"
+                                       th:text="#{button.delete}">
                                         삭제
-                                    </button>
+                                    </a>
                                 </td>
                             </tr>
                         </tbody>
@@ -106,39 +117,10 @@
             </div>
         </div>
     </div>
-    
+
     <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
 <div th:replace="~{site/layout :: scripts}"></div>
-<script type="text/javascript">
-  $(document).ready(function(){
-      $(document).on('click', '[data-request-method]', function(e) {
-          e.preventDefault();
-          var $el = $(this);
-          var method = $el.data('request-method');
-          var uri = $el.data('request-uri');
-          if (!uri) return;
-          
-          var confirmMsg = method === 'delete' ? '정말로 이 브랜치를 삭제하시겠습니까?' : '기본 브랜치로 변경하시겠습니까?';
-          if (confirm(confirmMsg)) {
-              var form = $('<form></form>');
-              form.attr('method', 'post');
-              form.attr('action', uri);
-              
-              if (method === 'delete') {
-                  form.append('<input type="hidden" name="_method" value="DELETE" />');
-              }
-              
-              var csrfToken = $("meta[name='_csrf']").attr("content");
-              if (csrfToken) {
-                  form.append('<input type="hidden" name="_csrf" value="' + csrfToken + '" />');
-              }
-              $(document.body).append(form);
-              form.submit();
-          }
-      });
-  });
-</script>
 </body>
 </html>

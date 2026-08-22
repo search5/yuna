@@ -2,13 +2,16 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.support.MarkdownService
+import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
 import org.eclipse.jgit.api.errors.NoHeadException
+import java.io.ByteArrayOutputStream
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.file.Files
@@ -35,8 +39,20 @@ class CodeViewController(
     private val commentThreadRepository: CommentThreadRepository,
     private val commitCommentRepository: CommitCommentRepository,
     private val accessControl: AccessControl,
-    private val markdownService: MarkdownService
+    private val markdownService: MarkdownService,
+    // yona utils.Config.getSiteName() 대응 — code/nohead(_svn).html의 안내 문구 {0} 자리에 채워 넣는다.
+    @Value("\${yuna.site-name:Yona}")
+    private val siteName: String
 ) {
+
+    // yona code/{nohead,nohead_svn}.scala.html:46/33 "if(isAllowed(currentUser, project.asResource, UPDATE))"
+    // 대응 — clone/init 안내 가이드는 UPDATE 권한 있는 사용자에게만 보여준다.
+    private fun addNoHeadAttributes(model: Model, project: Project, loginUser: User?) {
+        model.addAttribute("project", project)
+        model.addAttribute("currentUser", loginUser)
+        model.addAttribute("siteName", siteName)
+        model.addAttribute("canManage", accessControl.isAllowed(loginUser, project, Operation.UPDATE))
+    }
 
     @GetMapping("/{owner}/{projectName}/code")
     fun codeBrowser(
@@ -59,7 +75,7 @@ class CodeViewController(
 
         val repository = repositoryService.getRepository(project)
         if (repository.isEmpty()) {
-            model.addAttribute("project", project)
+            addNoHeadAttributes(model, project, loginUser)
             return if (project.vcs == "SUBVERSION") "code/nohead_svn" else "code/nohead"
         }
 
@@ -117,13 +133,62 @@ class CodeViewController(
         model.addAttribute("path", normalizedPath)
         model.addAttribute("currentUser", loginUser)
 
+        // yona code/view.scala.html:26-39 makeBreadCrumbs() 대응 — 경로의 각 세그먼트와 그 세그먼트까지의
+        // 누적 경로 쌍의 목록. (동일 이름 세그먼트가 반복될 때 문자열 indexOf로 서브패스를 재구성하면
+        // 깨지는 문제를 피하기 위해 컨트롤러에서 직접 누적한다.)
+        val breadcrumbs = if (normalizedPath.isNotEmpty()) {
+            var cumulative = ""
+            normalizedPath.split("/").map { segment ->
+                cumulative = if (cumulative.isEmpty()) segment else "$cumulative/$segment"
+                segment to cumulative
+            }
+        } else {
+            emptyList()
+        }
+        model.addAttribute("breadcrumbs", breadcrumbs)
+
+        // yona code/view.scala.html:41-47 @dir 대응 — "새 파일" 링크가 새 파일을 놓을 디렉터리.
+        // 현재 보고 있는 대상이 폴더면 그 폴더 자신, 파일이면 그 파일을 담고 있는 부모 디렉터리.
+        val lastIsFolder = recursiveData.lastOrNull()?.get("type")?.asText() == "folder"
+        val currentDir = if (lastIsFolder && normalizedPath.isNotEmpty()) {
+            "$normalizedPath/"
+        } else {
+            normalizedPath.substringBeforeLast("/", "")
+        }
+        model.addAttribute("currentDir", currentDir)
+
+        // yona code/view.scala.html:49-55 pathWithoutFileName() 대응 — "파일" 탭이 가리키는 목적지
+        // (파일을 보고 있을 때는 그 파일의 부모 폴더 목록으로, 이미 폴더 목록을 보고 있을 때는 그 폴더의
+        // 부모로 한 단계 올라간다. legacy 그대로 이식).
+        val filesTabPath = if (normalizedPath.lastIndexOf("/") > 0) {
+            normalizedPath.substring(0, normalizedPath.lastIndexOf("/"))
+        } else {
+            ""
+        }
+        model.addAttribute("filesTabPath", filesTabPath)
+
         // yona views/code/partial_view_file.scala.html:109-114 "if(isMarkdownExtension(path))" 대응
         // (P1-139) — 코드브라우저에서 .md류 파일은 원문 대신 렌더링된 HTML로 보여준다.
         val lastEntry = recursiveData.lastOrNull()
-        if (lastEntry?.get("type")?.asText() == "file" && isMarkdownExtension(normalizedPath)) {
-            val data = lastEntry.get("data")?.asText()
-            if (data != null) {
-                model.addAttribute("markdownHtml", markdownService.renderFileInCodeBrowser(data, project))
+        if (lastEntry?.get("type")?.asText() == "file") {
+            if (isMarkdownExtension(normalizedPath)) {
+                val data = lastEntry.get("data")?.asText()
+                if (data != null) {
+                    model.addAttribute("markdownHtml", markdownService.renderFileInCodeBrowser(data, project))
+                }
+            }
+
+            // yona views/code/partial_view_file.scala.html:44-59 CommentThread.countOnCommit()/
+            // CommitComment.count() 대응 — 파일뷰의 리비전 링크 옆 댓글 수 배지 (그룹10 #154).
+            val revisionId = lastEntry.get("revisionNo")?.asText()
+            if (revisionId != null) {
+                val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"
+                val commentCount = if (isSvn) {
+                    commitCommentRepository.countByProjectAndCommitIdAndPath(project, revisionId, normalizedPath)
+                } else {
+                    commentThreadRepository.countByProjectAndCommitIdAndCodeRangePath(project, revisionId, normalizedPath)
+                }
+                model.addAttribute("fileCommentCount", commentCount)
             }
         }
 
@@ -179,6 +244,39 @@ class CodeViewController(
         headers.set(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"${normalizedPath.substringAfterLast('/')}\"")
 
         return ResponseEntity(rawData, headers, HttpStatus.OK)
+    }
+
+    // yona CodeApp.download() 대응 (그룹10 #154, code/view.html "ZIP 다운로드" 버튼) — GitRepository.getArchive()는
+    // 이미 구현돼 있었지만 이를 호출하는 컨트롤러 엔드포인트가 없어서 뷰의 다운로드 링크가 죽은 링크였다.
+    @GetMapping("/{owner}/{projectName}/code/download/{branch}")
+    fun download(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable branch: String,
+        authentication: Authentication?
+    ): ResponseEntity<ByteArray> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (project.isCodeAccessibleMemberOnly == true) {
+            if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+            }
+        } else if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val decodedBranch = URLDecoder.decode(branch, "UTF-8")
+        val repository = repositoryService.getRepository(project)
+        val out = ByteArrayOutputStream()
+        repository.getArchive(out, decodedBranch)
+
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.parseMediaType("application/zip")
+        headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=$projectName-$decodedBranch.zip")
+
+        return ResponseEntity(out.toByteArray(), headers, HttpStatus.OK)
     }
 
     @GetMapping("/{owner}/{projectName}/image/{rev}/{*path}")
@@ -249,7 +347,7 @@ class CodeViewController(
         val commits = try {
             repository.getHistory(page, 25, decodedBranch, decodedPath)
         } catch (e: NoHeadException) {
-            model.addAttribute("project", project)
+            addNoHeadAttributes(model, project, loginUser)
             return if (project.vcs == "SUBVERSION") "code/nohead_svn" else "code/nohead"
         }
 
@@ -260,6 +358,32 @@ class CodeViewController(
         model.addAttribute("commits", commits)
         model.addAttribute("page", page)
         model.addAttribute("currentUser", loginUser)
+
+        // yona code/history.scala.html:56-69 makeBreadCrumbs() 대응 (view.scala.html과 동일한 이유로
+        // 문자열 indexOf 재구성 대신 컨트롤러에서 누적 경로를 직접 계산한다).
+        if (!decodedPath.isNullOrEmpty()) {
+            var cumulative = ""
+            val breadcrumbs = decodedPath.split("/").map { segment ->
+                cumulative = if (cumulative.isEmpty()) segment else "$cumulative/$segment"
+                segment to cumulative
+            }
+            model.addAttribute("breadcrumbs", breadcrumbs)
+        }
+
+        // yona code/history.scala.html:144-154 CommentThread.count()/CommitComment.count() 대응 —
+        // 커밋별 댓글 수 배지. 커밋마다 반복 쿼리라 비효율적이지만 legacy도 동일하게 N+1이었다(그대로 이식).
+        val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"
+        val commentCounts = commits.associate { commit ->
+            val count = if (isSvn) {
+                commitCommentRepository.findByProjectAndCommitIdOrderByCreatedDateAsc(project, commit.getId()).size.toLong()
+            } else if (decodedPath.isNullOrEmpty()) {
+                commentThreadRepository.findByCommitIdOrderByCreatedDateDesc(commit.getId()).size.toLong()
+            } else {
+                commentThreadRepository.countByProjectAndCommitIdAndCodeRangePath(project, commit.getId(), decodedPath)
+            }
+            commit.getId() to count
+        }
+        model.addAttribute("commentCounts", commentCounts)
 
         return "code/history"
     }
@@ -305,6 +429,8 @@ class CodeViewController(
         model.addAttribute("selectedBranch", branch)
         model.addAttribute("path", path)
         model.addAttribute("currentUser", loginUser)
+        // yona code/svnDiff.scala.html:37-50 브랜치 드롭다운(common/branchItem 대응, 그룹2 #39) 대응.
+        model.addAttribute("branches", repository.getRefNames())
 
         val isSvn = project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN"
         val commentThreads = if (isSvn) {

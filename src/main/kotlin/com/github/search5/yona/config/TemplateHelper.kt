@@ -313,5 +313,36 @@ class TemplateHelper(
         val userAgent = request?.getHeader("User-Agent") ?: return false
         return userAgent.contains("Macintosh", ignoreCase = true)
     }
+
+    // yona utils/TemplateHelper.scala:227-234 Branches.itemName() 대응 — RepositoryService.getRefNames()가
+    // 돌려주는 "refs/heads/master" 같은 전체 ref 이름에서 표시/URL용 브랜치 이름("master")만 뽑아낸다.
+    fun branchItemName(branch: String): String {
+        val parts = branch.split("/", limit = 3)
+        return if (parts.size == 3 && parts[0] == "refs") parts[2] else branch
+    }
+
+    // yona utils/TemplateHelper.scala:216-225 Branches.itemType() 대응.
+    fun branchItemType(branch: String): String {
+        val parts = branch.split("/")
+        return when {
+            parts.size >= 2 && parts[0] == "refs" && parts[1] == "heads" -> "branch"
+            parts.size >= 2 && parts[0] == "refs" && parts[1] == "tags" -> "tag"
+            parts.size >= 2 && parts[0] == "refs" -> parts[1]
+            else -> branch
+        }
+    }
+
+    // yona utils/TemplateHelper.scala:236-246 Branches.branchInHTML() 대응 — "refs/heads/..." 같은
+    // 전체 ref 이름이면 타입 라벨(<span class="label branch">branch</span>)을 붙이고, 그렇지 않으면(이미
+    // 짧은 이름이면) 그대로 반환한다.
+    fun branchInHtml(branch: String): String {
+        val parts = branch.split("/")
+        return if (parts.isNotEmpty() && parts[0] == "refs" && parts.size >= 3) {
+            val branchType = branchItemType(branch)
+            "<span class=\"label $branchType\">$branchType</span>" + branchItemName(branch)
+        } else {
+            branch
+        }
+    }
 }
 
