@@ -164,20 +164,20 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 70 | [x] | `user/login.scala.html` | `login.html` | 완료(TASK-0233, TDD). 이메일 인증 안내 문구(`email-verification-help`) 누락 발견해 추가. 소셜로그인 프로바이더 동적목록/useSocialLoginOnly 토글은 #15와 동일 사유로 미이식(이미 github/google 고정 버튼으로 아키텍처 치환됨). `title.loginFor` 메시지키 파라미터화 대신 하드코딩된 것은 렌더링 결과가 동일해 저가치로 판단해 미수정 |
 | 71 | [x] | `user/signup.scala.html` | `signup.html` | 완료(TASK-0234, TDD). **독자 페이지였음** — 자체 `<head>`만 있고 site GNB/footer가 전무했음. site/layout 조각으로 교체 + 관리자승인 안내(`isUsingSignUpConfirm`)/실시간 아이디·이메일 중복확인(validate.js+yobi.user.SignUp.js, 백엔드 엔드포인트 신규) 복구. `UserController.confirmEmail()`도 #72와 동일한 RestController-raw-HTML 안티패턴이라 함께 발견해 `UserViewController`로 이전 |
 | 72 | [x] | `user/verified.scala.html` | `user/verified.html`(신규 생성) | 완료(TASK-0233, TDD). **중대 발견**: `UserController.verifyUser()`가 `@RestController`에서 Thymeleaf 템플릿 대신 하드코딩된 raw HTML 문자열(`ResponseEntity<String>`)을 직접 반환하고 있었음 — GNB/footer/i18n 전무. `UserViewController`(`@Controller`)로 이전하고 legacy 구조(siteLayout→전체 GNB+footer, `user.verified`/`user.verified.detail` 메시지키) 그대로 이식. 실패 시 404 상태코드도 legacy의 `notFound(...)`에 맞춰 추가 |
-| 73 | [~] | `user/resetPassword.scala.html` | `user/resetPassword.html` | |
-| 74 | [~] | `user/edit.scala.html` | `user/edit.html` | |
-| 75 | [~] | `user/edit_password.scala.html` | `user/edit_password.html` | |
-| 76 | [~] | `user/edit_emails.scala.html` | `user/edit_emails.html` | |
-| 77 | [~] | `user/edit_token.scala.html` | `user/edit_token.html` | |
-| 78 | [~] | `user/edit_notifications.scala.html` | `user/edit_notifications.html` | |
-| 79 | [~] | `user/partial_edit_tabmenu.scala.html` | `user/partial_edit_tabmenu.html` | |
-| 80 | [~] | `user/view.scala.html` | `user/view.html` | 프로필 화면 본체 — 아래 5개 partial이 실제로 인라인되어 있는지 확인 |
-| 81 | [i] | `user/partial_issues.scala.html` | (view.html에 인라인 추정) | 프로필 "이슈" 탭 |
-| 82 | [i] | `user/partial_milestones.scala.html` | (view.html에 인라인 추정) | 프로필 "마일스톤" 탭 |
-| 83 | [i] | `user/partial_postings.scala.html` | (view.html에 인라인 추정) | 프로필 "게시글" 탭 |
-| 84 | [i] | `user/partial_pullRequests.scala.html` | (view.html에 인라인 추정) | 프로필 "PR" 탭 |
-| 85 | [i] | `user/partial_projectlist.scala.html` | (view.html에 인라인 추정) | 프로필 "소속 프로젝트" 탭 |
-| 86 | [~] | `user/userFiles.scala.html` | `user/userFiles.html` | 내가 올린 첨부파일 목록 |
+| 73 | [x] | `user/resetPassword.scala.html` | `user/resetPassword.html` | 완료(TASK-0235, TDD). #71/#72와 동일 패턴 — 독자 페이지(site GNB/footer 없음, i18n 메시지키 미사용, resetPassword 모듈 스크립트 미로드)였음을 발견해 site/layout 조각 기반으로 재작성 |
+| 74 | [x] | `user/edit.scala.html` | `user/edit.html` | 확인 — gnb/footer 조각 존재 확인(코드 변경 없음) |
+| 75 | [x] | `user/edit_password.scala.html` | `user/edit_password.html` | 확인 — gnb/footer 조각 존재 확인(코드 변경 없음) |
+| 76 | [x] | `user/edit_emails.scala.html` | `user/edit_emails.html` | 확인 — gnb/footer 조각 존재 확인(코드 변경 없음) |
+| 77 | [x] | `user/edit_token.scala.html` | `user/edit_token.html` | 확인 — gnb/footer 조각 존재 확인(코드 변경 없음) |
+| 78 | [x] | `user/edit_notifications.scala.html` | `user/edit_notifications.html` | 확인 — gnb/footer 조각 존재 확인(코드 변경 없음) |
+| 79 | [x] | `user/partial_edit_tabmenu.scala.html` | `user/partial_edit_tabmenu.html` | 확인 — 프래그먼트 파일이라 gnb/footer 불필요, 정상(코드 변경 없음) |
+| 80 | [x] | `user/view.scala.html` | `user/view.html` | 완료(TASK-0235). 탭 구성(issues/pullRequests/projects 3개) legacy와 정확히 일치 확인 — #82/#83이 프로필 탭이 아님을 재확인(비고 참고) |
+| 81 | [i] | `user/partial_issues.scala.html` | `user/view.html`(인라인) | 확인 완료 — 프로필 "이슈" 탭에 인라인, 구조 일치(코드 변경 없음) |
+| 82 | [~] | `user/partial_milestones.scala.html` | (재배치 필요 — 그룹14 `search/*`) | **매핑 오류 발견**: 이 파일은 프로필 탭이 아니라 `search/partial_search.scala.html`(검색 결과 렌더링)에서만 호출됨. 그룹5가 아니라 그룹14(search/*, #224~233) 작업 시 처리해야 함 — 지금은 손대지 않음 |
+| 83 | [~] | `user/partial_postings.scala.html` | (재배치 필요 — 그룹14 `search/*`) | #82와 동일 — `search/partial_search.scala.html` 전용, 그룹14에서 처리 |
+| 84 | [i] | `user/partial_pullRequests.scala.html` | `user/view.html`(인라인) | 확인 완료 — 프로필 "PR" 탭에 인라인, 구조 일치(코드 변경 없음) |
+| 85 | [i] | `user/partial_projectlist.scala.html` | `user/view.html`(인라인) | 확인 완료 — 프로필 "소속 프로젝트" 탭에 인라인, 구조 일치(코드 변경 없음) |
+| 86 | [x] | `user/userFiles.scala.html` | `user/userFiles.html` | 확인 완료 — 첨부파일 목록 테이블 구조, hover, fileType 아이콘, pagination까지 legacy와 정확히 일치(코드 변경 없음) |
 
 > `site/lostPassword.scala.html`은 legacy상 `site/` 밑에 있지만 인증 플로우라 이 그룹에서 함께 처리(#153 참고, yuna는 이미
 > `user/lostPassword.html`로 위치 이동해 둠 — 그대로 유지).
@@ -824,3 +824,23 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec" --tests
   "com.github.search5.yona.web.UserControllerSpec" --tests "com.github.search5.yona.web.UserViewControllerSpec"`
   (RED 확인 후 GREEN). 전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.
+
+### 그룹5 `user/*` 마무리: #73~86 (TASK-0235)
+
+- **#73(resetPassword)**: #71/#72와 동일한 "독자 페이지" 패턴(site GNB/footer 없음, i18n 메시지키 미사용,
+  `resetPassword` 모듈 스크립트 미로드 — 정적 자산 `yobi.resetPassword.js`는 존재했으나 죽어있었음) 발견,
+  site/layout 조각 기반으로 재작성.
+- **#74~79(edit·edit_password·edit_emails·edit_token·edit_notifications·partial_edit_tabmenu)**: 전부
+  gnb/footer 조각을 이미 정상적으로 사용 중임을 확인, 코드 변경 없음.
+- **#80(view)/#81/#84/#85(issues·pullRequests·projectlist 파샬)**: `user/view.html`의 탭 구성(이슈/PR/
+  소속 프로젝트 3개)이 legacy `view.scala.html`과 정확히 일치함을 확인 — legacy 자체도 3탭만 가지고 있었다.
+- **#82/#83(milestones·postings 파샬) 매핑 오류 발견**: 원래 백로그에 "프로필 마일스톤/게시글 탭"으로
+  잘못 기록돼 있었으나, 실제로는 `search/partial_search.scala.html`(검색 결과 렌더링)에서만 호출되는
+  검색 도메인 전용 파샬임을 확인했다. 그룹5가 아니라 그룹14(`search/*`, #224~233) 작업 시 처리하도록
+  비고에 재배치 기록만 남기고 이번엔 손대지 않음.
+- **#86(userFiles)**: 첨부파일 목록 테이블 구조, hover 효과, fileType 아이콘 자동 분류, pagination까지
+  legacy와 정확히 일치함을 확인, 코드 변경 없음.
+- **legacy와 다르게 처리한 지점(#73)**: 없음(누락 복원).
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-19]`(비밀번호 재설정 화면 GNB+footer+모듈스크립트).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
+  **그룹5(user/*, #70~86) 17개 항목 전체 처리 완료.** 다음은 그룹6(project/*, #87~112).
