@@ -5,6 +5,14 @@
   <title th:text="${title} + ' - Yona'">어드민 관리 - Yona</title>
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta property="og:title" th:content="${title}">
+  <meta property="og:url" th:content="${currentRequestPath}">
+  <meta property="og:type" content="website">
+  <meta property="og:description" th:content="${title}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" th:content="${title}">
+  <meta name="twitter:url" th:content="${currentRequestPath}">
+  <meta name="twitter:description" th:content="${title}">
   <link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
   <link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
   <link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
@@ -12,6 +20,8 @@
   <link rel="stylesheet" type="text/css" media="all" href="/javascripts/lib/pikaday/pikaday.css">
   <link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
   <link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css?v=20260614-2">
+  <link rel="stylesheet" type="text/css" media="all" href="/javascripts/lib/nprogress/nprogress.css">
+  <link rel="stylesheet" href="/javascripts/lib/viewerjs/viewer.css">
   <script type="text/javascript" src="/javascripts/yona-layout.js"></script>
   <script type="text/javascript" src="/messages.js"></script>
   <script type="text/javascript" sec:authorize="isAuthenticated()">
@@ -32,10 +42,15 @@
   <!-- GNB (공통 네비게이션 바) -->
   <th:block th:fragment="gnb">
     <div sec:authorize="hasAuthority('ROLE_SITE_ADMIN')" class="admin-logged-in-affix" data-spy="affix" data-offset-top="30">
-      <span th:text="#{user.siteAdminLoggedInAffix}">관리자로 로그인 하였습니다!</span> 
+      <span th:text="#{user.siteAdminLoggedInAffix}">관리자로 로그인 하였습니다!</span>
       <span class="small-font" th:text="#{user.siteAdminLoggedInAffix.maxim}">- 큰 힘에는 큰 책임이 따릅니다</span>
     </div>
-    
+
+    <p class="center-txt" th:if="${currentUser != null and currentUser.isSiteManager and yonaUpdateService.isWatched() and yonaUpdateService.isUpdateRequired()}">
+      <a th:href="${yonaUpdateService.releaseUrl}" th:text="#{site.update.notification(${yonaUpdateService.latestVersion})}">Software update: Yona 1.16.0 is available</a>
+      <button type="button" data-request-method="post" data-request-uri="/sites/unwatchUpdate" class="ybtn ybtn-small" th:text="#{site.update.notification.hide}">Hide</button>
+    </p>
+
     <div class="unsupported hidden">
       <div class="unsupported-inner">
         <p id="unsupported-content">
@@ -44,7 +59,7 @@
         </p>
       </div>
     </div>
-    
+
     <header class="gnb-outer" th:classappend="${project != null or org != null} ? 'project-header' : ''">
       <div class="gnb-inner">
         <div class="pin" data-toggle="tooltip" data-placement="bottom" title="Sidebar"><i class="yobicon-arrow-left"></i><i class="yobicon-arrow-right" style="display: block;"></i></div>
@@ -595,6 +610,29 @@
     <script type="text/javascript" src="/javascripts/lib/tippy/tippy-bundle.umd.min.js"></script>
     <script type="text/javascript" src="/javascripts/common/yona.Usermenu.js"></script>
     <script type="text/javascript" src="/javascripts/common/yobi.LoginDialog.js"></script>
+    <script type="text/javascript" src="/javascripts/lib/nprogress/nprogress.js"></script>
+    <script type="text/javascript" src="/javascripts/lib/viewerjs/viewer.js"></script>
+    <script type="text/javascript" src="/javascripts/lib/viewerjs/jquery-viewer.js"></script>
+
+    <script type="text/javascript">
+        $(function() {
+            NProgress.configure({minimum: 0.7});
+        });
+    </script>
+    <script type="text/javascript">
+        $(function () {
+            Viewer.setDefaults({
+                transition: false
+            })
+            $(".markdown-wrap").each(function () {
+                var $that = $(this);
+                $that.find("img").on("mouseover", function () {
+                    $(this).css("cursor", "pointer");
+                })
+                $that.viewer();
+            });
+        });
+    </script>
 
     <script type="text/javascript" th:inline="javascript">
         // yobi.Usermenu.js를 위한 API URL 매핑

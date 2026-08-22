@@ -3,7 +3,9 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.support.MarkdownService
+import com.github.search5.yona.domain.support.YonaUpdateService
 import com.github.search5.yona.config.TemplateHelper
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.ControllerAdvice
 import org.springframework.web.bind.annotation.ModelAttribute
@@ -12,7 +14,8 @@ import org.springframework.web.bind.annotation.ModelAttribute
 class GlobalModelAttributeAdvice(
     private val userRepository: UserRepository,
     private val markdownService: MarkdownService,
-    private val templateHelper: TemplateHelper
+    private val templateHelper: TemplateHelper,
+    private val yonaUpdateService: YonaUpdateService
 ) {
 
     @ModelAttribute("currentUser")
@@ -32,5 +35,15 @@ class GlobalModelAttributeAdvice(
     @ModelAttribute("templateHelper")
     fun templateHelper(): TemplateHelper {
         return templateHelper
+    }
+
+    @ModelAttribute("yonaUpdateService")
+    fun yonaUpdateService(): YonaUpdateService {
+        return yonaUpdateService
+    }
+
+    @ModelAttribute("currentRequestPath")
+    fun currentRequestPath(request: HttpServletRequest): String {
+        return request.requestURI
     }
 }
