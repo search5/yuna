@@ -238,7 +238,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
                 mockMvc.perform(get("/owner/TestProj").principal(userAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
             }
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
@@ -325,7 +325,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(memberProjectUser)
 
                 mockMvc.perform(get("/owner/TestProj/setting").principal(userAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
             }
         }
 

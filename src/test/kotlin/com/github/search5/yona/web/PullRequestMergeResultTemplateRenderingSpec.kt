@@ -190,7 +190,7 @@ class PullRequestMergeResultTemplateRenderingSpec @Autowired constructor(
                         .param("fromBranch", "refs/heads/master")
                         .param("toBranch", "refs/heads/master")
                         .with(authOf(outsider))
-                ).andExpect(view().name("error/403"))
+                ).andExpect(view().name("error/forbidden"))
             }
         }
     }
