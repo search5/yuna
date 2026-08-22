@@ -44,7 +44,12 @@ class Issue(
     @JoinColumn(name = "assignee_id")
     var assignee: Assignee? = null,
 
-    @OneToOne(fetch = FetchType.LAZY)
+    // yona Issue.java:138 "public Issue parent" 대응. 한 부모 이슈가 여러 하위이슈(subtask)를 가질 수
+    // 있어야 하는데(findByParentIssueId()가 List<Issue>를 반환) @OneToOne으로 매핑돼 있으면 Hibernate가
+    // parent_id 컬럼에 DB 레벨 UNIQUE 제약을 걸어 같은 부모를 가리키는 두 번째 하위이슈 INSERT부터
+    // DataIntegrityViolationException이 난다 — 그룹7 #134/#135/#136 렌더링 테스트(하위이슈 2건 이상)로
+    // 실제로 재현된 버그. @ManyToOne으로 수정한다(그룹7 TASK-0256).
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
     var parent: Issue? = null,
 
