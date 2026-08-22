@@ -13,7 +13,10 @@
             <div th:for="'issue-' + ${issue.id}" class="issue-item-row">
                 <div class="title-wrap">
                     <a th:href="@{/{owner}/{projectName}/issue/{number}(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}" class="title">
-                        <span class="post-id">#<span th:text="${issue.number}">1</span></span>
+                        <!-- yona partial_list.scala.html:33 대응 (그룹7 #119) — 초안 이슈는 실제 번호
+                             대신 "#초안"으로 표시한다. -->
+                        <span class="post-id" th:if="${issue.isDraft}"><span class="draft-number" th:text="'#' + #{issue.state.draft}">#초안</span></span>
+                        <span class="post-id" th:unless="${issue.isDraft}">#<span th:text="${issue.number}">1</span></span>
                     </a>
                     <th:block th:if="${issue.weight > 0}">
                         <span class="weight-up-arrow" data-toggle="tooltip" data-placement="right" th:title="|#{issue.weight} ${issue.weight}|"><i class="yobicon-angle-circled-up"></i></span>

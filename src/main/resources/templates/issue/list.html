@@ -350,6 +350,11 @@
                             </div>
                         </div>
 
+                        <!-- yona partial_list_wrap.scala.html:84-86/partial_list_draft.scala.html 대응
+                             (그룹7 #119) — 검색조건 없는 첫 페이지(닫힌 이슈 탭 제외)에서 로그인한 본인의
+                             초안 이슈를 목록 최상단에 노출한다. -->
+                        <div th:if="${draftIssues != null && !draftIssues.isEmpty()}" th:replace="~{issue/partial_list :: list(${project}, ${draftIssues}, ${currentUser})}"></div>
+
                         <div th:replace="~{issue/partial_list :: list(${project}, ${issuePage.content}, ${currentUser})}"></div>
 
                         <!-- 엑셀 다운로드 버튼 -->
