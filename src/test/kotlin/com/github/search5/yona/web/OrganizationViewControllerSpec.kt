@@ -236,16 +236,19 @@ class OrganizationViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("error/404"))
             }
 
-            it("일반 유저(조직 Admin 아님)가 접근하면 403 Forbidden 뷰를 반환해야 한다") {
+            it("일반 유저(조직 Admin 아님)가 접근하면 컨텍스트 인지형 403(error/forbidden_organization) 뷰를 반환해야 한다") {
                 val orgUser = OrganizationUser(id = 1L, user = user, organization = org, role = roleMember)
                 org.organizationUsers = mutableListOf(orgUser)
 
                 every { organizationRepository.findByName("testorg") } returns Optional.of(org)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
 
+                // yona error/forbidden_organization.scala.html 대응 (P-템플릿 #49) — 조직은 이미
+                // 찾았으므로 조직 헤더/메뉴가 붙는 컨텍스트 인지형 403(제네릭 error/403이 아니다).
                 mockMvc.perform(get("/org/testorg/members").principal(userAuth))
                     .andExpect(status().isOk)
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden_organization"))
+                    .andExpect(model().attributeExists("org"))
             }
 
             it("조직 Admin인 유저가 접근하면 200 OK와 organization/members 뷰를 반환해야 한다") {
