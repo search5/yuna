@@ -23,6 +23,7 @@ import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import io.mockk.clearMocks
@@ -55,13 +56,18 @@ class BranchViewControllerSpec : DescribeSpec({
         reviewCommentRepositoryForAccessControl, commitCommentRepositoryForAccessControl,
         milestoneRepositoryForAccessControl
     )
+    val pullRequestRepository = mockk<PullRequestRepository>()
+    every {
+        pullRequestRepository.findFirstByFromProjectAndFromBranchAndToProjectOrderByNumberDesc(any(), any(), any())
+    } returns null
 
     val branchViewController = BranchViewController(
         projectRepository,
         projectUserRepository,
         userRepository,
         repositoryService,
-        accessControl
+        accessControl,
+        pullRequestRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(branchViewController).build()
 

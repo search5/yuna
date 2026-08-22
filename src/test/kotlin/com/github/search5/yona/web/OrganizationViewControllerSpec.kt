@@ -24,6 +24,8 @@ import com.github.search5.yona.domain.organization.OrganizationService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.mention.MentionService
+import com.github.search5.yona.domain.role.RoleRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -67,6 +69,9 @@ class OrganizationViewControllerSpec : DescribeSpec({
         mockk<MilestoneRepository>()
     )
 
+    val mentionService = mockk<MentionService>()
+    val roleRepository = mockk<RoleRepository>()
+
     val organizationViewController = OrganizationViewController(
         organizationRepository,
         organizationUserRepository,
@@ -77,7 +82,9 @@ class OrganizationViewControllerSpec : DescribeSpec({
         organizationService,
         attachmentRepository,
         attachmentService,
-        accessControl
+        accessControl,
+        mentionService,
+        roleRepository
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(organizationViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -101,6 +108,9 @@ class OrganizationViewControllerSpec : DescribeSpec({
         val org = Organization(id = 1L, name = "testorg")
         val roleMember = Role(id = RoleType.ORG_MEMBER.roleType, name = "ORG_MEMBER")
         val roleAdmin = Role(id = RoleType.ORG_ADMIN.roleType, name = "ORG_ADMIN")
+        every {
+            roleRepository.findAllById(listOf(RoleType.ORG_ADMIN.roleType, RoleType.ORG_MEMBER.roleType))
+        } returns listOf(roleAdmin, roleMember)
 
         // yona OrganizationApp.java:90-91 @GuestProhibit 대응 (P1-121). orgList와 동일하게
         // isGuest 계정만 차단하고 비로그인 사용자는 (별도 @AnonymousCheck가 담당하는) error/403으로
@@ -278,8 +288,11 @@ class OrganizationViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 val projectsSlot = slot<List<Project>>()
                 every {
-                    postingRepository.findByProjectIn(capture(projectsSlot), any())
+                    postingRepository.findByProjectInAndKeyword(capture(projectsSlot), any(), any())
                 } returns PageImpl(emptyList<Posting>())
+                every {
+                    postingRepository.findByProjectInAndNotice(any(), any())
+                } returns emptyList()
 
                 mockMvc.perform(get("/org/testorg/boards").principal(userAuth))
                     .andExpect(status().isOk)
@@ -296,8 +309,11 @@ class OrganizationViewControllerSpec : DescribeSpec({
                     Optional.of(OrganizationUser(id = 3L, user = user, organization = org, role = roleAdmin))
                 val projectsSlot = slot<List<Project>>()
                 every {
-                    postingRepository.findByProjectIn(capture(projectsSlot), any())
+                    postingRepository.findByProjectInAndKeyword(capture(projectsSlot), any(), any())
                 } returns PageImpl(emptyList<Posting>())
+                every {
+                    postingRepository.findByProjectInAndNotice(any(), any())
+                } returns emptyList()
 
                 mockMvc.perform(get("/org/testorg/boards").principal(userAuth))
                     .andExpect(status().isOk)
@@ -312,7 +328,7 @@ class OrganizationViewControllerSpec : DescribeSpec({
             val hiddenController = OrganizationViewController(
                 organizationRepository, organizationUserRepository, userRepository, issueRepository,
                 postingRepository, pullRequestRepository, organizationService, attachmentRepository,
-                attachmentService, accessControl, hideProjectListing = true
+                attachmentService, accessControl, mentionService, roleRepository, hideProjectListing = true
             )
 
             it("error/403 뷰를 반환해야 한다") {

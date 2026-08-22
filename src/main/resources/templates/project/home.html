@@ -264,7 +264,11 @@
                                 <a th:href="@{/{owner}/{name}/newFork(owner=${project.owner}, name=${project.name})}" class="ybtn ybtn-inverse" th:text="#{fork}">Fork</a>
                             </span>
                         </div>
-                        
+
+                        <th:block th:if="${project.isMilestoneEnabled and sidebarMilestone != null}">
+                            <div th:replace="~{milestone/partial_status :: status(${sidebarMilestone}, ${project})}"></div>
+                        </th:block>
+
                         <div class="inner member-info">
                             <header>
                                 <h3 th:text="#{project.members}">Project members</h3>

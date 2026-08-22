@@ -28,7 +28,8 @@
                         </div>
                     </div>
                     <ul class="all-projects">
-                        <li class="project" th:each="project : ${projects}" data-item="project-item" th:data-value="${project.name} + ' ' + ${project.overview}">
+                        <li class="project" th:each="project : ${projects}" data-item="project-item" th:data-value="${project.name} + ' ' + ${project.overview}"
+                            th:with="assignableUsers=${@templateHelper.getAssignableUsers(project)}, watchingCount=${@templateHelper.getWatchingCount(project.id)}, isWatchingThisProject=${@templateHelper.isWatchingProject(project, currentUser)}">
                             <div class="info-wrap">
                                 <div class="owner-avatar-wrap hide-in-mobile">
                                     <a th:href="@{/{owner}/{name}(owner=${project.owner}, name=${project.name})}">
@@ -62,18 +63,18 @@
                             <div class="stats-wrap pull-right">
                                 <div class="members">
                                     <ul class="unstyled">
-                                        <li th:each="member : ${@templateHelper.getAssignableUsers(project)}" th:if="${member.loginId != project.owner}">
+                                        <li th:each="member : ${assignableUsers}" th:if="${member.loginId != project.owner}">
                                             <a th:href="@{/user/{loginId}(loginId=${member.loginId})}" class="avatar-wrap">
                                                 <img th:src="${member.avatarUrl}" th:alt="${member.name}">
                                             </a>
                                         </li>
                                     </ul>
                                     <p>
-                                        <span th:utext="${#messages.msg('project.onmember', #lists.size(@templateHelper.getAssignableUsers(project)))}">members</span>
+                                        <span th:utext="${#messages.msg('project.onmember', #lists.size(assignableUsers))}">members</span>
                                         <i class="yobicon-eye"></i>
-                                        <span th:utext="${#messages.msg('project.onwatching', @templateHelper.getWatchingCount(project.id))}">watching</span>
-                                        <i th:if="${@templateHelper.isWatchingProject(project, currentUser)}" class="yobicon-lightbulb ramp-on" data-toggle="tooltip" th:title="#{project.default.group.watching}"></i>
-                                        <i th:unless="${@templateHelper.isWatchingProject(project, currentUser)}" class="yobicon-lightbulb ramp-off" data-toggle="tooltip" th:title="${#messages.msg('project.you.are.not.watching', '')}"></i>
+                                        <span th:utext="${#messages.msg('project.onwatching', watchingCount)}">watching</span>
+                                        <i th:if="${isWatchingThisProject}" class="yobicon-lightbulb ramp-on" data-toggle="tooltip" th:title="#{project.default.group.watching}"></i>
+                                        <i th:unless="${isWatchingThisProject}" class="yobicon-lightbulb ramp-off" data-toggle="tooltip" th:title="${#messages.msg('project.you.are.not.watching', '')}"></i>
                                     </p>
                                 </div>
                             </div>

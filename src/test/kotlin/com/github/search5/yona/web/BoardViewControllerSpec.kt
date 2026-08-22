@@ -107,6 +107,8 @@ class BoardViewControllerSpec : DescribeSpec({
     beforeTest {
         clearMocks(projectRepository, postingService, postingRepository, projectUserRepository, userRepository,
             postingCommentRepository, watchService, attachmentRepository)
+        every { projectUserRepository.findByProjectIdAndUserId(any(), any()) } returns Optional.empty()
+        every { postingRepository.findByProjectAndNotice(any(), any(), any<Pageable>()) } returns PageImpl(emptyList())
     }
 
     describe("BoardViewController 템플릿 연동 테스트") {
@@ -153,7 +155,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 val pageableSlot = slot<Pageable>()
-                every { postingRepository.findByProject(project, capture(pageableSlot)) } returns PageImpl(listOf(posting), pageRequest, 1)
+                every { postingRepository.findByProjectAndNotice(project, false, capture(pageableSlot)) } returns PageImpl(listOf(posting), pageRequest, 1)
                 every { postingService.getNotices(1L) } returns emptyList()
 
                 mockMvc.perform(get("/owner/TestProj/posts").principal(userAuth))

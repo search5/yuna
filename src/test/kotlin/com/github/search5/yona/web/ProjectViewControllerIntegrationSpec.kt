@@ -1,6 +1,9 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.AbstractIntegrationTest
+import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
@@ -14,6 +17,8 @@ import com.github.search5.yona.domain.user.YonaUserDetails
 import io.kotest.extensions.spring.SpringExtension
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.security.core.authority.AuthorityUtils
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
@@ -33,7 +38,8 @@ class ProjectViewControllerIntegrationSpec @Autowired constructor(
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
     private val projectUserRepository: ProjectUserRepository,
-    private val projectUserService: ProjectUserService
+    private val projectUserService: ProjectUserService,
+    private val milestoneRepository: MilestoneRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -52,9 +58,18 @@ class ProjectViewControllerIntegrationSpec @Autowired constructor(
             val projName = "member-only-code"
 
             beforeTest {
-                projectUserRepository.deleteAll()
-                projectRepository.deleteAll()
-                userRepository.deleteAll()
+                // 다른 스펙과 같은 테스트 컨테이너 DB를 공유하므로 전역 deleteAll()을 쓰면 안 된다 —
+                // 그룹11 PullRequestListTemplateEquivalenceSpec 등 타 스펙이 만든 project/pull_request를
+                // 건드려 FK 위반이 발생한다(전체 회귀에서 실제로 재현됨). 이 스펙 소유 데이터(고정
+                // 이름의 owner/project/user들)만 매회 정리한다.
+                projectRepository.findByOwnerAndName(ownerName, projName).ifPresent { existing ->
+                    projectUserRepository.findByProjectId(existing.id!!).forEach { projectUserRepository.delete(it) }
+                    milestoneRepository.findByProject(existing).forEach { milestoneRepository.delete(it) }
+                    projectRepository.delete(existing)
+                }
+                listOf(ownerName, "member1", "nonmember", "enrollee1").forEach { loginId ->
+                    userRepository.findByLoginId(loginId).ifPresent { userRepository.delete(it) }
+                }
 
                 // 테스트용 유저 및 프로젝트 매회 신규 생성 후 영속 객체 반환값을 변수에 할당
                 val projectOwner = userRepository.save(User(loginId = ownerName, name = "소유자", email = "owner@yona.io"))
@@ -147,6 +162,41 @@ class ProjectViewControllerIntegrationSpec @Autowired constructor(
                 )
                     .andExpect(status().isOk)
                     .andExpect(content().string(not(containsString("/$ownerName/$projName/setting"))))
+            }
+
+            // yona project/home.scala.html:112-118 대응 (milestone/partial_status, #153) — 사이드바에
+            // 가장 기한이 임박한 열린 마일스톤의 진행 상황 카드가 렌더링돼야 한다.
+            it("열린 마일스톤이 있을 때, 프로젝트 홈 사이드바에 가장 기한이 임박한 마일스톤의 진행 상황 카드가 렌더링되어야 한다") {
+                val projObj = projectRepository.findByOwnerAndName(ownerName, projName).get()
+                milestoneRepository.save(
+                    Milestone(
+                        title = "먼 마일스톤", project = projObj, state = State.OPEN,
+                        dueDate = Instant.now().plus(30, ChronoUnit.DAYS)
+                    )
+                )
+                val nearMilestone = milestoneRepository.save(
+                    Milestone(
+                        title = "임박한 마일스톤", project = projObj, state = State.OPEN,
+                        dueDate = Instant.now().plus(3, ChronoUnit.DAYS)
+                    )
+                )
+
+                val ownerUserObj = userRepository.findByLoginId(ownerName).get()
+                val ownerDetails = YonaUserDetails(
+                    id = ownerUserObj.id ?: 77L,
+                    loginId = ownerUserObj.loginId,
+                    passwordVal = "hashed",
+                    passwordSalt = "salt",
+                    authoritiesVal = AuthorityUtils.createAuthorityList("ROLE_ACTIVE")
+                )
+
+                mockMvc.perform(
+                    get("/$ownerName/$projName").with(user(ownerDetails))
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(content().string(containsString("milestone-info")))
+                    .andExpect(content().string(containsString(nearMilestone.title)))
+                    .andExpect(content().string(not(containsString("먼 마일스톤"))))
             }
 
             describe("GET /$ownerName/$projName/members") {

@@ -183,7 +183,7 @@ class OrganizationTemplateEquivalenceSpec @Autowired constructor(
                     )
                     doc.select(".project-header-outer").size shouldBe 1
                     doc.select(".project-menu-outer").size shouldBe 1
-                    doc.select("ul.nav.nav-tabs li a").size shouldBe 3
+                    doc.select("ul.nav.nav-tabs li a[href*=settingform], ul.nav.nav-tabs li a[href*='/members'], ul.nav.nav-tabs li a[href*=deleteForm]").size shouldBe 3
                     doc.select("input#project-name").attr("value") shouldBe org.name
                     doc.select(".gnb-wrap").isEmpty() shouldBe true
                 }
@@ -372,8 +372,16 @@ class OrganizationTemplateEquivalenceSpec @Autowired constructor(
 
             describe("[Org-6] 조직 탈퇴(leave) 백엔드 검증 (yona OrganizationApp.leave() 대응)") {
                 it("일반 멤버는 조직 관리자가 1명 이상 남아있으면 정상적으로 탈퇴할 수 있어야 한다") {
+                    // acme-org(공용 픽스처 org)는 관리자가 orgAdminUser 1명뿐이라 이 시나리오(관리자
+                    // 1명 이상 남아있는 상태에서 탈퇴)를 검증할 수 없다 — 관리자 2명짜리 전용 org 사용.
+                    val twoAdminOrg = organizationRepository.save(Organization(name = "two-admin-org-${System.nanoTime()}", created = Instant.now()))
+                    val firstAdmin = userRepository.save(User(loginId = "first-admin-${System.nanoTime()}", name = "관리자1", email = "first-admin-${System.nanoTime()}@yona.io"))
+                    organizationUserRepository.save(OrganizationUser(user = firstAdmin, organization = twoAdminOrg, role = orgAdminRole))
+                    val secondAdmin = userRepository.save(User(loginId = "second-admin-${System.nanoTime()}", name = "관리자2", email = "second-admin-${System.nanoTime()}@yona.io"))
+                    organizationUserRepository.save(OrganizationUser(user = secondAdmin, organization = twoAdminOrg, role = orgAdminRole))
+
                     val leaver = userRepository.save(User(loginId = "leave-member-${System.nanoTime()}", name = "탈퇴할멤버", email = "leave-member-${System.nanoTime()}@yona.io"))
-                    organizationUserRepository.save(OrganizationUser(user = leaver, organization = org, role = orgMemberRole))
+                    organizationUserRepository.save(OrganizationUser(user = leaver, organization = twoAdminOrg, role = orgMemberRole))
                     val leaverDetails = YonaUserDetails(
                         id = leaver.id!!,
                         loginId = leaver.loginId,
@@ -383,13 +391,13 @@ class OrganizationTemplateEquivalenceSpec @Autowired constructor(
                     )
 
                     val result = mockMvc.perform(
-                        delete("/organizations/${org.name}/leave")
+                        delete("/organizations/${twoAdminOrg.name}/leave")
                             .with(SecurityMockMvcRequestPostProcessors.user(leaverDetails))
                             .with(SecurityMockMvcRequestPostProcessors.csrf())
                     ).andReturn()
 
                     result.response.status shouldBe 200
-                    organizationUserRepository.findByOrganizationIdAndUserId(org.id!!, leaver.id!!).isPresent shouldBe false
+                    organizationUserRepository.findByOrganizationIdAndUserId(twoAdminOrg.id!!, leaver.id!!).isPresent shouldBe false
                 }
 
                 it("조직 관리자가 단 1명일 때 일반 멤버는 탈퇴가 거부되어야 한다(legacy validateForLeave 버그 재현)") {

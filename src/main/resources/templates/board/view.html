@@ -86,7 +86,7 @@
                         <div id="timeline">
                             <div class="timeline-list">
                                 <div th:each="comment : ${comments}"
-                                     th:with="children=${childCommentsByParentId != null ? childCommentsByParentId.get(comment.id) : null}"
+                                     th:with="children=${childCommentsByParentId != null ? childCommentsByParentId.get(comment.id) : null}, canEditThisComment=${currentUser != null and (comment.authorId == currentUser.id or isProjectManager)}, postingCommentResourceType=${T(com.github.search5.yona.domain.enumeration.ResourceType).NONISSUE_COMMENT}"
                                      class="comment" th:classappend="${currentUser != null and comment.authorLoginId == currentUser.loginId} ? ' author'" th:id="'comment-' + ${comment.id}">
                                     <div th:replace="~{common/childCommentsAnchorDiv :: anchorDiv(${children})}"></div>
                                     <div class="comment-avatar">
@@ -103,7 +103,7 @@
                                                 <button th:if="${currentUser != null and (comment.authorId == currentUser.id or isProjectManager)}" type="button" class="btn-transparent-with-fontsize-lineheight ml6" data-toggle="comment-delete" th:data-request-uri="${commentApiBase} + '/' + ${comment.id}" th:title="#{common.comment.delete}"><i class="yobicon-trash"></i></button>
                                             </span>
                                         </div>
-                                        <div th:replace="~{common/commentUpdateForm :: updateForm(${comment}, ${commentApiBase}, ${currentUser != null and (comment.authorId == currentUser.id or isProjectManager)}, ${T(com.github.search5.yona.domain.enumeration.ResourceType).NONISSUE_COMMENT})}"></div>
+                                        <div th:replace="~{common/commentUpdateForm :: updateForm(${comment}, ${commentApiBase}, ${canEditThisComment}, ${postingCommentResourceType})}"></div>
                                         <div th:id="'comment-body-' + ${comment.id}">
                                             <div class="content markdown-wrap" th:utext="${markdownService.render(comment.contents, true, project)}">댓글내용</div>
                                         </div>

@@ -7,7 +7,7 @@
            data-assignee-id=""
            data-author-id=""
            data-mention-id=""
-           th:data-project-names="${#strings.listJoin(selectedProjectNames, ",")}">
+           th:data-project-names="${#strings.listJoin(selectedProjectNames, ',')}">
             <span th:text="#{issue.list.all}">All</span>
         </a>
     </li>
@@ -16,7 +16,7 @@
             <a pjax-filter href="#"
                data-author-id=""
                th:data-assignee-id="${currentUser.id}"
-               th:data-project-names="${#strings.listJoin(selectedProjectNames, ",")}"
+               th:data-project-names="${#strings.listJoin(selectedProjectNames, ',')}"
                data-mention-id="">
                 <span th:text="#{issue.list.assignedToMe}">Assigned to me</span>
             </a>
@@ -25,7 +25,7 @@
             <a pjax-filter href="#"
                th:data-author-id="${currentUser.id}"
                data-assignee-id=""
-               th:data-project-names="${#strings.listJoin(selectedProjectNames, ",")}"
+               th:data-project-names="${#strings.listJoin(selectedProjectNames, ',')}"
                data-mention-id="">
                 <span th:text="#{issue.list.authoredByMe}">Authored by me</span>
             </a>
@@ -34,7 +34,7 @@
             <a pjax-filter href="#"
                data-author-id=""
                data-assignee-id=""
-               th:data-project-names="${#strings.listJoin(selectedProjectNames, ",")}"
+               th:data-project-names="${#strings.listJoin(selectedProjectNames, ',')}"
                th:data-mention-id="${currentUser.id}">
                 <span th:text="#{issue.list.mentionedOfMe}">Mentioned of me</span>
             </a>

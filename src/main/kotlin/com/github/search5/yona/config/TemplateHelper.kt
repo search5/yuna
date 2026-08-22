@@ -178,6 +178,11 @@ class TemplateHelper(
         return issueRepository.countByParentIdAndState(parentId, state)
     }
 
+    // issue/partial_list.html의 2단 보기 자식 이슈 목록(child-issue-list)에서 사용.
+    fun findByParentId(parentId: Long): List<Issue> {
+        return issueRepository.findByParentId(parentId)
+    }
+
     fun getPercent(numerator: Double, denominator: Double): Double {
         if (denominator == 0.0) return 0.0
         return (numerator / denominator) * 100.0
@@ -385,6 +390,25 @@ class TemplateHelper(
     fun getOpenMilestones(project: Project?): List<Milestone> {
         if (project == null) return emptyList()
         return milestoneRepository.findByProjectAndState(project, State.OPEN)
+    }
+
+    data class MilestoneProgress(
+        val openCount: Int,
+        val closedCount: Int,
+        val completionRate: Int,
+        val isOverdue: Boolean
+    )
+
+    // yona models/Milestone.java:92-98,135-137,277-279 getNumOpenIssues()/getNumClosedIssues()/
+    // getCompletionRate()/isOverDueDate() 대응 (milestone/partial_status.html에서 사용).
+    fun getMilestoneProgress(milestone: Milestone): MilestoneProgress {
+        val allIssues = issueRepository.findByMilestone(milestone)
+        val openCount = allIssues.count { it.state == State.OPEN }
+        val closedCount = allIssues.count { it.state == State.CLOSED }
+        val total = openCount + closedCount
+        val completionRate = if (total > 0) (closedCount * 100) / total else 0
+        val isOverdue = milestone.dueDate?.isBefore(Instant.now()) ?: false
+        return MilestoneProgress(openCount, closedCount, completionRate, isOverdue)
     }
 
     fun isMac(): Boolean {
