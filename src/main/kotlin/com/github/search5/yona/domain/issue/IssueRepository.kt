@@ -24,6 +24,10 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
     fun countByProjectAndState(project: Project, state: State): Long
     fun findByProjectIn(projects: List<Project>, pageable: Pageable): Page<Issue>
     fun findByProjectInAndState(projects: List<Project>, state: State, pageable: Pageable): Page<Issue>
+
+    // yona organization/group_issue_search_partial.scala.html:72 Issue.countIssuesBy(organization, ...)
+    // 대응 (조직 그룹, TASK-0244) — 열림/닫힘 상태 탭 배지 카운트.
+    fun countByProjectInAndState(projects: List<Project>, state: State): Long
     fun findByProjectAndNumber(project: Project, number: Long): Issue?
     fun findByMilestone(milestone: Milestone): List<Issue>
     fun findByMilestoneAndState(milestone: Milestone, state: State): List<Issue>

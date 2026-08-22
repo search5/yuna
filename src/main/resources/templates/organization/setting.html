@@ -1,143 +1,74 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${org.name} + ' - 조직 설정 - Yona'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .org-header {
-      background-color: #f8f9fa;
-      padding: 30px 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 30px;
-  }
-  .setting-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-  }
-</style>
+<head th:replace="~{site/layout :: head(${org.name})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
 
-  <!-- 조직 헤더 -->
-  <div class="org-header">
-    <div class="container">
-      <h2 th:text="${org.name}">조직 이름</h2>
-    </div>
-  </div>
+    <div th:replace="~{organization/header :: header(${org})}"></div>
+    <div th:replace="~{organization/menu :: menu(${org}, 'setting')}"></div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <div class="col-md-9">
-        <!-- 설정 서브 탭 메뉴 삽입 -->
-        <div th:replace="~{organization/partial_settingmenu :: menu(${org}, 'setting')}"></div>
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <div th:replace="~{organization/partial_settingmenu :: menu(${org}, 'setting')}"></div>
 
-        <div class="setting-container">
-          <h3 style="margin-top: 0; margin-bottom: 20px;" th:text="#{organization.settingFrom}">조직 설정</h3>
-          
-          <div class="alert alert-danger" th:if="${error}" th:text="${error}">에러 메시지</div>
+            <div class="alert alert-danger" th:if="${error}" th:text="${error}">error</div>
 
-          <form id="saveSetting" method="post" th:action="@{/organizations/{orgName}/setting(orgName=${org.name})}" enctype="multipart/form-data" class="nm" name="update-org">
-            <input type="hidden" name="id" th:value="${org.id}">
-            
-            <div class="bubble-wrap gray" style="background: #fafbfc; border: 1px solid #d8dee2; border-radius: 3px; padding: 20px; margin-bottom: 20px;">
-              <div class="box-wrap top clearfix frm-wrap" style="display: flex; gap: 20px;">
-                
-                <!-- 로고 이미지 업로드 박스 -->
-                <div class="setting-box left" style="flex: 1; text-align: center; border-right: 1px solid #eee; padding-right: 20px;">
-                  <div class="logo-wrap" th:style="'background-image:url(\'/organizations/' + ${org.id} + '/logo\'); background-size: cover; background-position: center; width: 120px; height: 120px; margin: 0 auto 15px; border: 1px solid #ddd; border-radius: 4px;'"></div>
-                  <div class="logo-desc">
-                    <ul class="unstyled descs" style="list-style: none; padding: 0; margin: 0;">
-                      <li><strong th:text="#{organization.logo}">조직 로고</strong></li>
-                      <li style="font-size: 12px; color: #666; margin-top: 5px;">
-                        <span th:text="#{organization.logo.type}">허용 형식: </span> <span class="point" style="color: #f36c22;">bmp, jpg, gif, png</span>
-                      </li>
-                      <li style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                        <span th:text="#{organization.logo.maxFileSize}">최대 크기: </span> <span class="point" style="color: #f36c22;">5MB</span>
-                      </li>
-                      <li>
-                        <div class="btn-wrap">
-                          <input id="logoPath" type="file" class="file" name="logoPath" accept="image/*" style="width: 100%;">
+            <form id="saveSetting" method="post" th:action="@{/organizations/{orgName}/setting(orgName=${org.name})}" enctype="multipart/form-data" class="nm" name="update-org">
+                <input type="hidden" name="id" th:value="${org.id}">
+                <div class="bubble-wrap gray">
+                    <div class="box-wrap top clearfix frm-wrap" style="padding-top:20px;">
+                        <div class="setting-box left">
+                            <div class="logo-wrap" th:style="'background-image:url(' + @{/organizations/{orgId}/logo(orgId=${org.id})} + ')'"></div>
+                            <div class="logo-desc">
+                                <ul class="unstyled descs">
+                                    <li><strong th:text="#{organization.logo}">Logo</strong></li>
+                                    <li><span th:text="#{organization.logo.type}">Type</span> <span class="point">bmp, jpg, gif, png</span></li>
+                                    <li><span th:text="#{organization.logo.maxFileSize}">Max size</span> <span class="point">5MB</span></li>
+                                    <li>
+                                        <div class="btn-wrap">
+                                            <div class="nbtn medium white fake-file-wrap">
+                                                <i class="yobicon-upload"></i> <span th:text="#{button.upload}">Upload</span><input id="logoPath" type="file" class="file" name="logoPath" accept="image/*">
+                                            </div>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
-                      </li>
-                    </ul>
-                  </div>
+                        <dl class="setting-box right">
+                            <dt>
+                                <label for="project-name" th:text="#{organization.name.placeholder}">Name</label>
+                            </dt>
+                            <dd>
+                                <input id="project-name" type="text" name="name" maxlength="250" th:value="${org.name}">
+                                <div class="orange-txt">
+                                    <span class="msg wrongName" style="display: none;"></span>
+                                </div>
+                            </dd>
+                            <dt>
+                                <label for="project-desc" th:text="#{organization.description.placeholder}">Description</label>
+                            </dt>
+                            <dd>
+                                <textarea id="project-desc" name="descr" maxlength="250" class="textarea" th:text="${org.descr}"></textarea>
+                            </dd>
+                        </dl>
+                    </div>
                 </div>
-
-                <!-- 설정 입력 필드 -->
-                <dl class="setting-box right" style="flex: 2; margin: 0;">
-                  <dt style="margin-bottom: 5px;">
-                    <label for="org-name" th:text="#{organization.name.placeholder}">조직 이름</label>
-                  </dt>
-                  <dd style="margin-bottom: 15px;">
-                    <input id="org-name" type="text" name="name" class="form-control" maxlength="250" th:value="${org.name}" style="width: 100%;" required>
-                  </dd>
-                  <dt style="margin-bottom: 5px;">
-                    <label for="org-desc" th:text="#{organization.description.placeholder}">조직 설명</label>
-                  </dt>
-                  <dd>
-                    <textarea id="org-desc" name="descr" maxlength="250" class="form-control" style="width: 100%; height: 100px; resize: vertical;" th:text="${org.descr}"></textarea>
-                  </dd>
-                </dl>
-                
-              </div>
-            </div>
-            
-            <div class="box-wrap bottom" style="text-align: right;">
-              <button id="save" class="ybtn ybtn-success" type="submit" th:text="#{button.save}">저장</button>
-            </div>
-          </form>
+                <div class="box-wrap bottom">
+                    <button id="save" class="ybtn ybtn-success" th:text="#{button.save}">Save</button>
+                </div>
+            </form>
         </div>
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
+    <div th:replace="~{site/layout :: scripts}"></div>
 </div>
+<script language="javascript" th:inline="javascript">
+    $(function() {
+        $yobi.loadModule("organization.Setting")
+    })
+</script>
 </body>
 </html>
