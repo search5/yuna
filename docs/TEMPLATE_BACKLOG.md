@@ -325,23 +325,23 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 193 | [~] | `organization/list.scala.html` | `organization/list.html` | |
-| 194 | [~] | `organization/create.scala.html` | `organization/create.html` | |
-| 195 | [~] | `organization/view.scala.html` | `organization/view.html` | |
-| 196 | [ ] | `organization/header.scala.html` | `organization/header.html` | (view.html 인라인 여부 확인) |
-| 197 | [ ] | `organization/menu.scala.html` | `organization/menu.html` | 조직 상단 탭 메뉴 |
-| 198 | [~] | `organization/members.scala.html` | `organization/members.html` | |
-| 199 | [~] | `organization/setting.scala.html` | `organization/setting.html` | |
-| 200 | [~] | `organization/partial_settingmenu.scala.html` | `organization/partial_settingmenu.html` | |
-| 201 | [~] | `organization/deleteForm.scala.html` | `organization/delete.html` | 파일명 다름 |
-| 202 | [~] | `organization/group_board_list.scala.html` | `organization/boardList.html` | 파일명 다름 |
-| 203 | [ ] | `organization/group_board_list_partial.scala.html` | `organization/boardList_partial.html` | |
-| 204 | [~] | `organization/group_issue_list.scala.html` | `organization/issueList.html` | |
-| 205 | [ ] | `organization/group_issue_list_partial.scala.html` | `organization/issueList_partial.html` | |
-| 206 | [ ] | `organization/group_issue_list_quicksearch.scala.html` | `organization/issueList_quicksearch.html` | |
-| 207 | [ ] | `organization/group_issue_search_partial.scala.html` | `organization/issueSearch_partial.html` | |
-| 208 | [~] | `organization/group_pullrequest_list.scala.html` | `organization/pullRequestList.html` | |
-| 209 | [ ] | `organization/group_pullrequest_list_partial.scala.html` | `organization/pullRequestList_partial.html` | |
+| 193 | [x] | `organization/list.scala.html` | `organization/list.html` | 완료(TASK-0250) — gnb는 있었으나 footer/scripts 조각 누락 발견해 복구 |
+| 194 | [x] | `organization/create.scala.html` | `organization/create.html` | 완료(TASK-0250) — n-alert/wrongName 검증 마크업, `name="new-org"`, `organization.New` 모듈 로드, footer/scripts 전부 누락 발견해 복구, 검증 실패 시 입력값 보존 추가 |
+| 195 | [x] | `organization/view.scala.html` | `organization/view.html` | 완료(TASK-0250) — 완전 재작성(기존은 가짜 GNB+독자 마크업으로 legacy와 무관한 구조였음). header/menu 프래그먼트 신설 연결, 관리자/멤버 목록 분리, 탈퇴 버튼, 프로젝트 목록 카드(라벨/포크출처/워칭카운트) 전부 복구 |
+| 196 | [x] | `organization/header.scala.html` | `organization/header.html` | 완료(TASK-0250) — 신규 작성(project/header.html과 동일 패턴). 로고/브레드크럼/게스트 가입요청 드롭다운 |
+| 197 | [x] | `organization/menu.scala.html` | `organization/menu.html` | 완료(TASK-0250) — 신규 작성(project/menu.html과 동일 패턴). 홈/이슈/게시판/PR 탭 + 관리자 설정 톱니 |
+| 198 | [x] | `organization/members.scala.html` | `organization/members.html` | 완료(TASK-0250) — 완전 재작성(가짜 GNB 제거). 멤버추가/역할변경/삭제/가입승인을 기존 REST API(`/api/organizations/**`)에 연결(project/members.html과 동일 관례) |
+| 199 | [x] | `organization/setting.scala.html` | `organization/setting.html` | 완료(TASK-0250) — 완전 재작성(가짜 GNB 제거), header/menu/partial_settingmenu 프래그먼트 연결 |
+| 200 | [x] | `organization/partial_settingmenu.scala.html` | `organization/partial_settingmenu.html` | 기존 구현이 이미 legacy와 동치(설정/멤버/삭제 3탭) — 변경 없음, 상태만 [x]로 정정 |
+| 201 | [x] | `organization/deleteForm.scala.html` | `organization/delete.html` | 완료(TASK-0250) — 완전 재작성(가짜 GNB 제거), 삭제 확인 모달/AJAX 그대로 이식 |
+| 202 | [x] | `organization/group_board_list.scala.html` | `organization/boardList.html` | 완료(TASK-0250) — 완전 재작성. 공지/일반글 분리, 프로젝트 다중선택, orderBy 정렬 링크, notice 1페이지 한정 노출 백엔드 포함 신규 구현 |
+| 203 | [x] | `organization/group_board_list_partial.scala.html` | `organization/boardList_partial.html` | 완료(TASK-0250) — 신규 작성 |
+| 204 | [x] | `organization/group_issue_list.scala.html` | `organization/issueList.html` | 완료(TASK-0250) — 완전 재작성(issueSearch_partial 위임 구조로) |
+| 205 | [x] | `organization/group_issue_list_partial.scala.html` | `organization/issueList_partial.html` | 완료(TASK-0250) — 신규 작성 |
+| 206 | [x] | `organization/group_issue_list_quicksearch.scala.html` | `organization/issueList_quicksearch.html` | 완료(TASK-0250) — 신규 작성(전체/할당된/작성한/멘션된 4종 퀵필터) |
+| 207 | [x] | `organization/group_issue_search_partial.scala.html` | `organization/issueSearch_partial.html` | 완료(TASK-0250) — 신규 작성. authorId/assigneeId/mentionId 필터·상태탭 카운트·정렬 백엔드(`IssueSpecification.filterOrganizationIssues`) 신규 구현 |
+| 208 | [x] | `organization/group_pullrequest_list.scala.html` | `organization/pullRequestList.html` | 완료(TASK-0250) — 완전 재작성. 열림/닫힘 탭 배지 카운트 백엔드 포함 |
+| 209 | [x] | `organization/group_pullrequest_list_partial.scala.html` | `organization/pullRequestList_partial.html` | 완료(TASK-0250) — 신규 작성. 리뷰스레드 진행률 바(CommentThreadRepository 연동) 포함 |
 
 ## 그룹 13 — `site/*` 사이트 관리자 (14개, #210~223)
 
@@ -1046,3 +1046,70 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   분리 검증, `\|:\|` 없는 화면의 하위호환 검증).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 60 tests).
   다음은 나머지 보류 항목(#8,10,12,13,20,23,38~41,45,47,49,50,53,57,70,82,83,90,108)을 번호 순으로 재작업.
+
+### 그룹12 `organization/*` 완료 (#193~209, TASK-0250)
+
+- **착수 전 상태 확인**: `organization/*.html` 10개 파일 전부 legacy `site/layout::gnb`/`footer`/`scripts`
+  조각이 하나도 포함돼 있지 않았고(그룹1 TASK-0223 조사에서 이미 기록해둔 것과 동일), `view.html`/
+  `members.html`/`setting.html`/`delete.html`/`boardList.html`/`issueList.html`/`pullRequestList.html`
+  7개는 project 그룹에서 발견된 것과 동일한 "가짜 GNB(`.gnb-wrap`/`.gnb-brand` 하드코딩)+jQuery CDN
+  직접 로드+legacy와 무관한 독자 마크업" 버그를 그대로 갖고 있었음(작업 원칙 4-e 예고대로). `list.html`/
+  `create.html`은 `site/layout::gnb`는 있었으나 `footer`/`scripts` 조각이 누락돼 있었음. `header.html`/
+  `menu.html`(#196/#197)은 파일 자체가 아예 없었고, `boardList_partial`/`issueList_partial`/
+  `issueList_quicksearch`/`issueSearch_partial`/`pullRequestList_partial`(#203/#205/#206/#207/#209)도
+  전무했음 — legacy의 `group_issue_search_partial.scala.html`이 담당하던 이슈 검색(퀵서치+authorId/
+  assigneeId/mentionId 필터+정렬+상태탭 카운트) 기능 자체가 백엔드에도 전혀 배선돼 있지 않았음.
+- **17개 전부 legacy 1:1 재작업**: `project/header.html`+`project/menu.html`을 확립된 패턴으로 삼아
+  `organization/header.html`(로고/브레드크럼/게스트 가입요청 드롭다운)과 `organization/menu.html`
+  (홈/이슈/게시판/PR 탭+관리자 설정 톱니)을 신규 작성, `view/members/setting/delete/boardList/issueList/
+  pullRequestList` 7개를 `site/layout::gnb/footer/scripts` + 새 header/menu 프래그먼트 기반으로 완전
+  재작성, `list.html`/`create.html`은 누락된 footer/scripts와 legacy 대비 누락 마크업(create.html의
+  n-alert 검증 영역, `organization.New` 모듈 로드, 폼 `name="new-org"`)만 보강. 새 partial 5개
+  (`boardList_partial`/`issueList_partial`/`issueList_quicksearch`/`issueSearch_partial`/
+  `pullRequestList_partial`)를 legacy 원본 그대로 신규 작성.
+- **백엔드도 함께 이식(뷰만으로 끝나지 않는 항목들, 작업 원칙 준수)**:
+  1. **조직 탈퇴(leave) 기능 자체가 전무**했음(`view.html`의 관리자/멤버 탈퇴 버튼이 가리킬 엔드포인트가
+     없었음) — `OrganizationService.leaveOrganization()`/`OrganizationServiceImpl` 신규 추가,
+     `OrganizationViewController.leave()`(`DELETE /organizations/{orgName}/leave`) 신규 추가. legacy
+     `OrganizationApp.java:287-311 validateForLeave()`를 그대로 재현 — `AccessControl.isAllowed(user, org,
+     LEAVE)`가 조직 ORG_ADMIN 여부와 동일하다는 것을 legacy `AccessControl.java:198-199`에서 확인하고,
+     "관리자는 이 가드를 완전히 우회(마지막 관리자라도 자유롭게 탈퇴 가능 — legacy의 실제 버그)" /
+     "관리자가 아니면 조직 전체 관리자 수가 정확히 1명일 때 탈퇴자와 무관하게 거부(역시 legacy 원문의
+     버그성 동작)"를 있는 그대로 재현했다(TemplateEquivalenceSpec으로 검증).
+  2. **조직 이슈 검색 자체가 백엔드에 없었음** — `IssueSpecification.filterOrganizationIssues()`(다중
+     프로젝트+상태+authorId/assigneeId/mentionId+검색어) 신규 추가, `IssueRepository.
+     countByProjectInAndState()` 신규 추가, `MentionService.getMentioningIssueIds()`(기존 "나를 언급한
+     이슈" 기능)를 재사용해 mentionId 퀵필터 배선. `OrganizationViewController.organizationIssues()`를
+     이 전부를 조합하도록 재작성.
+  3. **조직 게시판 목록의 프로젝트 다중선택/정렬/공지분리**도 배선이 없었음 — `PostingRepository.
+     findByProjectInAndKeyword()`/`findByProjectInAndNotice()` 신규 추가.
+  4. **조직 PR 목록의 검색어 필터·상태별 카운트 배지**도 없었음 — `PullRequestRepository.
+     searchByToProjectInAndState()`/`countByToProjectInAndState()` 신규 추가.
+  5. **PR 리뷰 진행률 바**(`group_pullrequest_list_partial.scala.html`의 코멘트 스레드 열림/닫힘 비율)도
+     연결이 안 돼 있었음 — `TemplateHelper.getCommentThreads()`/`countCommentThreadsByState()`/
+     `getReviewProgressPercent()` 신규 추가(기존 `CommentThreadRepository.findByPullRequest()` 재사용).
+  6. `TemplateHelper`에 `isOrganizationAdmin`/`isOrganizationMember`/`isOrganizationGuest`/
+     `isEnrolledOrganization`/`isWatchingProject` 신규 추가 — 뷰 곳곳(header/menu/view.html)에서
+     반복 호출되므로 project 쪽 `isMember`/`isManager`와 같은 자리에 뒀다(legacy `OrganizationUser.
+     isAdmin/isMember/isGuest`, `User.enrolled(Organization)`, `User.isWatching(Project)` 대응).
+- **legacy와 다르게 처리한 지점**: (a) `group_issue_list_quicksearch.scala.html`이 공용 `SearchCondition`
+  클래스를 재사용하며 갖고 다니는 `milestoneId` data 속성은, org 이슈 검색 화면 자체에 마일스톤 필터
+  UI가 legacy에도 없어(죽은 파라미터) yuna 쪽 퀵서치에서는 아예 배선하지 않았다(순수 아키텍처 단순화,
+  기능 손실 없음). (b) `organization/list.scala.html`의 `Config.displayPrivateRepositories() ||
+  AccessControl.isAllowed(..., READ)` 조직별 비공개 블러 처리는, yuna의 `Organization` 엔티티에 legacy
+  Project처럼 별도 공개범위(privacy scope) 필드가 없어(조직 자체는 비공개 개념이 없음) 이식 대상이
+  실질적으로 존재하지 않는다고 판단해 보류(제네릭 목록 그대로 노출) — 필요 시 별도 PARITY_BACKLOG 항목화
+  검토.
+- **테스트**: 새 `OrganizationTemplateEquivalenceSpec.kt`(그룹 규모가 커서 기존 `TemplateEquivalenceSpec.kt`와
+  분리) — `[Org-1]`~`[Org-6]` 6개 describe 블록, 17개 화면 전체를 GNB/footer/header/menu 조각 노출,
+  게스트/관리자/멤버별 header 가입버튼·탈퇴버튼 노출 분기, 설정서브메뉴 3탭, 게시판 공지/일반글 분리,
+  이슈 상태탭+퀵서치+authorId 필터, PR 상태탭+열림/닫힘 분리, 조직 탈퇴(정상탈퇴/마지막관리자 1명 거부)
+  총 17개 `it` 블록으로 검증.
+- **검증 관련 특이사항**: 이 세션 종료 시점에 8개 병렬 워크트리가 동시에 Gradle 데몬을 띄우며 호스트
+  메모리 경합(OOM)이 발생해 코디네이터 지시로 `./gradlew` 실행을 중단했다. 메인 소스셋
+  (`compileKotlin`)은 이 그룹의 백엔드 변경 전부를 반영한 상태로 정상 컴파일 완료를 확인했으나
+  (`compileTestKotlin` 포함 `./gradlew test` 전체 실행은 수행하지 못함), 이후 `TemplateHelper.
+  getReviewProgressPercent()` 리팩터링과 신규 테스트 스펙 파일은 컴파일러로 재확인하지 못했다 — 코드
+  리뷰로 기존 확립된 문법 패턴(`project/*.html`, `board/list.html`, `issue/list.html`, `site/layout.html`,
+  `milestone/*.html`)과 1:1 대조해 안전을 확인했지만, 최종 `./gradlew test` 실행 검증은 코디네이터가
+  병합 후 중앙에서 순차 실행하기로 함. **그룹12(organization/*, #193~209) 17개 항목 전체 처리 완료.**

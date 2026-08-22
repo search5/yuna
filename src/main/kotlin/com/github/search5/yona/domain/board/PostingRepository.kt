@@ -19,6 +19,24 @@ interface PostingRepository : JpaRepository<Posting, Long> {
     fun findByProjectIn(projects: List<Project>, pageable: Pageable): Page<Posting>
     fun findByProjectAndReadme(project: Project, readme: Boolean): List<Posting>
 
+    // yona organization/group_board_list.scala.html:65-71 notices 대응 (조직 그룹, TASK-0244) —
+    // 조직에서 보이는 프로젝트들의 공지 게시글 전체(페이지 무관, 1페이지에서만 상단에 노출됨).
+    fun findByProjectInAndNotice(projects: List<Project>, notice: Boolean): List<Posting>
+
+    // yona organization/group_board_list.scala.html의 param.filter(검색어) + projectNames[](프로젝트
+    // 좁히기) 대응 — keyword가 빈 문자열이면 전체를 대상으로 한다.
+    @Query("""
+        SELECT p FROM Posting p
+        WHERE p.project IN :projects
+          AND p.notice = false
+          AND (:keyword = '' OR p.title LIKE CONCAT('%', :keyword, '%') OR p.body LIKE CONCAT('%', :keyword, '%'))
+    """)
+    fun findByProjectInAndKeyword(
+        @Param("projects") projects: List<Project>,
+        @Param("keyword") keyword: String,
+        pageable: Pageable
+    ): Page<Posting>
+
     @Query("""
         SELECT p FROM Posting p 
         WHERE (p.project.id IN :projectIds

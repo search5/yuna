@@ -21,6 +21,22 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long> {
     fun findByToProject(toProject: Project, pageable: Pageable): Page<PullRequest>
     fun findByToProjectAndNumber(toProject: Project, number: Long): PullRequest?
     fun findByToProjectInAndState(toProjects: List<Project>, state: State, pageable: Pageable): Page<PullRequest>
+    // yona organization/group_pullrequest_list.scala.html:49,55 PullRequest.count(condition) 대응
+    // (조직 그룹, TASK-0244) — 열림/닫힘 상태 탭 배지 카운트.
+    fun countByToProjectInAndState(toProjects: List<Project>, state: State): Long
+
+    // yona organization/group_pullrequest_list.scala.html의 condition.filter(제목 검색) 대응.
+    @Query("""
+        SELECT pr FROM PullRequest pr
+        WHERE pr.toProject IN :projects AND pr.state = :state
+          AND (:keyword = '' OR pr.title LIKE CONCAT('%', :keyword, '%'))
+    """)
+    fun searchByToProjectInAndState(
+        @Param("projects") projects: List<Project>,
+        @Param("state") state: State,
+        @Param("keyword") keyword: String,
+        pageable: Pageable
+    ): Page<PullRequest>
 
     fun findFirstByToProjectOrderByNumberDesc(toProject: Project): PullRequest?
     fun findByContributor(contributor: User): List<PullRequest>
