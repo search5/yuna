@@ -39,6 +39,8 @@ import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder
 import com.github.search5.yona.domain.issue.IssueLabelCategory
 import com.github.search5.yona.domain.issue.IssueLabel
 import com.github.search5.yona.domain.issue.RecentIssueService
+import com.github.search5.yona.domain.user.UserSetting
+import com.github.search5.yona.domain.user.UserSettingRepository
 
 class TemplateEquivalenceSpec @Autowired constructor(
     private val wac: WebApplicationContext,
@@ -52,7 +54,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val issueLabelRepository: IssueLabelRepository,
     private val issueLabelCategoryRepository: IssueLabelCategoryRepository,
     private val yonaUpdateService: YonaUpdateService,
-    private val recentIssueService: RecentIssueService
+    private val recentIssueService: RecentIssueService,
+    private val userSettingRepository: UserSettingRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -659,6 +662,58 @@ class TemplateEquivalenceSpec @Autowired constructor(
 
                     val doc = Jsoup.parse(result.response.contentAsString)
                     doc.select("#mySidenav a[href='#myRecentIssueList']").size shouldNotBe 0
+                }
+            }
+
+            describe("[Test-19-11] 개인 3탭 메뉴(common/mySeriesMenuTab.scala.html) 동치성 검증") {
+                it("현재 페이지가 로그인 기본 페이지로 이미 지정돼 있으면 '기본 페이지로 설정' 버튼이 숨겨져야 한다") {
+                    userSettingRepository.findByUserId(member.id!!).ifPresentOrElse(
+                        { it.loginDefaultPage = "notifications"; userSettingRepository.save(it) },
+                        { userSettingRepository.save(UserSetting(user = member, loginDefaultPage = "notifications")) }
+                    )
+
+                    val result = mockMvc.perform(
+                        get("/notifications")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("#setDefaultLoginPage").size shouldBe 0
+                }
+
+                it("현재 페이지가 로그인 기본 페이지가 아니면 '기본 페이지로 설정' 버튼이 노출되어야 한다") {
+                    userSettingRepository.findByUserId(member.id!!).ifPresentOrElse(
+                        { it.loginDefaultPage = "/somewhere-else"; userSettingRepository.save(it) },
+                        { userSettingRepository.save(UserSetting(user = member, loginDefaultPage = "/somewhere-else")) }
+                    )
+
+                    val result = mockMvc.perform(
+                        get("/notifications")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("#setDefaultLoginPage").size shouldBe 1
+                }
+
+                it("내 파일 목록 페이지도 공용 3탭 메뉴(알림/내 이슈/내 파일)를 공유해야 한다") {
+                    val result = mockMvc.perform(
+                        get("/user/files")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                    )
+                        .andExpect(status().isOk)
+                        .andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    val tabs = doc.select("ul.nav-tabs")
+                    tabs.select("a[href='/notifications']").size shouldBe 1
+                    tabs.select("a[href='/user/issues']").size shouldBe 1
+                    tabs.select("a[href='/user/files']").size shouldBe 1
+                    tabs.select("li.active a[href='/user/files']").size shouldBe 1
                 }
             }
         }
