@@ -3,6 +3,7 @@ package com.github.search5.yona.web
 import com.github.search5.yona.config.YonaAuthenticationProvider
 import com.github.search5.yona.domain.issue.RecentIssue
 import com.github.search5.yona.domain.issue.RecentIssueService
+import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.user.Email
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -33,15 +34,16 @@ class UserControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val recentIssueService = mockk<RecentIssueService>()
     val userSettingRepository = mockk<UserSettingRepository>()
+    val organizationRepository = mockk<OrganizationRepository>()
     val yonaAuthenticationProvider = mockk<YonaAuthenticationProvider>()
     val userController = UserController(
         userService, userRepository, recentIssueService, userSettingRepository,
-        yonaAuthenticationProvider, allowedEmailDomains = "", requireAdminConfirm = false
+        organizationRepository, yonaAuthenticationProvider, allowedEmailDomains = "", requireAdminConfirm = false
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(userController).build()
 
     beforeTest {
-        clearMocks(userService, userRepository, recentIssueService, userSettingRepository, yonaAuthenticationProvider)
+        clearMocks(userService, userRepository, recentIssueService, userSettingRepository, organizationRepository, yonaAuthenticationProvider)
     }
 
     describe("UserController 웹 API 테스트") {
@@ -100,18 +102,35 @@ class UserControllerSpec : DescribeSpec({
             }
         }
 
-        describe("GET /user/emails/{emailId}/confirm") {
-            it("토큰이 일치하면 보조 이메일 인증 완료 메시지를 표시해야 한다") {
-                // Given
-                every { userService.confirmEmail(10L, "test-token-50") } returns true
+        describe("GET /user/isUsed") {
+            it("이미 존재하는 아이디면 isExist=true를 반환해야 한다") {
+                every { userService.isLoginIdExist("gildong") } returns true
+                every { organizationRepository.findByName("gildong") } returns Optional.empty()
 
-                // When & Then
-                mockMvc.perform(
-                    get("/user/emails/10/confirm")
-                        .param("token", "test-token-50")
-                )
+                mockMvc.perform(get("/user/isUsed").param("name", "gildong"))
                     .andExpect(status().isOk)
-                    .andExpect(content().string(Matchers.containsString("이메일 인증이 완료되었습니다.")))
+                    .andExpect(jsonPath("$.isExist").value(true))
+                    .andExpect(jsonPath("$.isReserved").exists())
+            }
+
+            it("존재하지 않고 예약어도 아니면 isExist=false, isReserved=false를 반환해야 한다") {
+                every { userService.isLoginIdExist("brandnewuser") } returns false
+                every { organizationRepository.findByName("brandnewuser") } returns Optional.empty()
+
+                mockMvc.perform(get("/user/isUsed").param("name", "brandnewuser"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.isExist").value(false))
+                    .andExpect(jsonPath("$.isReserved").value(false))
+            }
+        }
+
+        describe("GET /user/isEmailExist") {
+            it("이미 존재하는 이메일이면 isExist=true를 반환해야 한다") {
+                every { userService.isEmailExist("gildong@example.com") } returns true
+
+                mockMvc.perform(get("/user/isEmailExist").param("email", "gildong@example.com"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.isExist").value(true))
             }
         }
 

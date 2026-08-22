@@ -162,7 +162,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
 | 70 | [x] | `user/login.scala.html` | `login.html` | 완료(TASK-0233, TDD). 이메일 인증 안내 문구(`email-verification-help`) 누락 발견해 추가. 소셜로그인 프로바이더 동적목록/useSocialLoginOnly 토글은 #15와 동일 사유로 미이식(이미 github/google 고정 버튼으로 아키텍처 치환됨). `title.loginFor` 메시지키 파라미터화 대신 하드코딩된 것은 렌더링 결과가 동일해 저가치로 판단해 미수정 |
-| 71 | [~] | `user/signup.scala.html` | `signup.html` | 핵심 필드(loginId/name/email/password/retypedPassword) 확인 완료. 상세 줄단위 대조는 다음 배치에서 처리 |
+| 71 | [x] | `user/signup.scala.html` | `signup.html` | 완료(TASK-0234, TDD). **독자 페이지였음** — 자체 `<head>`만 있고 site GNB/footer가 전무했음. site/layout 조각으로 교체 + 관리자승인 안내(`isUsingSignUpConfirm`)/실시간 아이디·이메일 중복확인(validate.js+yobi.user.SignUp.js, 백엔드 엔드포인트 신규) 복구. `UserController.confirmEmail()`도 #72와 동일한 RestController-raw-HTML 안티패턴이라 함께 발견해 `UserViewController`로 이전 |
 | 72 | [x] | `user/verified.scala.html` | `user/verified.html`(신규 생성) | 완료(TASK-0233, TDD). **중대 발견**: `UserController.verifyUser()`가 `@RestController`에서 Thymeleaf 템플릿 대신 하드코딩된 raw HTML 문자열(`ResponseEntity<String>`)을 직접 반환하고 있었음 — GNB/footer/i18n 전무. `UserViewController`(`@Controller`)로 이전하고 legacy 구조(siteLayout→전체 GNB+footer, `user.verified`/`user.verified.detail` 메시지키) 그대로 이식. 실패 시 404 상태코드도 legacy의 `notFound(...)`에 맞춰 추가 |
 | 73 | [~] | `user/resetPassword.scala.html` | `user/resetPassword.html` | |
 | 74 | [~] | `user/edit.scala.html` | `user/edit.html` | |
@@ -785,6 +785,42 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-16]`(인증 완료 화면 GNB+footer+loginId 노출),
   `[Test-19-17]`(로그인 화면 이메일 인증 안내 문구) 추가. `UserControllerSpec.kt`의 이제-깨진 구식 테스트
   제거, `UserViewControllerSpec.kt`에 성공/실패 2종 유닛 테스트 추가(생성자 이전에 맞춰 회귀 수정).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec" --tests
+  "com.github.search5.yona.web.UserControllerSpec" --tests "com.github.search5.yona.web.UserViewControllerSpec"`
+  (RED 확인 후 GREEN). 전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.
+
+### #71 `user/signup.scala.html` (TASK-0234)
+
+- **원인**: `signup.html`이 자체 `<head>`만 갖고 `site/layout`의 GNB/footer 조각을 전혀 쓰지 않는 완전한 독자
+  페이지였음(login.html은 #70에서 이미 site/layout 기반으로 고쳐졌던 것과 대조적). 관리자 승인이 필요한 경우
+  보여주는 안내 문구(`isUsingSignUpConfirm`)가 없었고, 아이디/이메일 실시간 중복확인(validate.js +
+  yobi.user.SignUp.js) 정적 자산은 존재했지만 로드도 안 되고 백엔드 체크 엔드포인트(`/user/isUsed`,
+  `/user/isEmailExist`)조차 없었다.
+  같은 조사 중 `UserController.confirmEmail()`/`confirmEmailLegacy()`(보조 이메일 인증)도 #72(verified)와
+  **완전히 동일한 안티패턴**임을 발견 — `@RestController`가 Thymeleaf를 우회해 하드코딩된 raw HTML을 직접
+  반환하고 있었다. legacy는 성공 시 `editUserInfoForm()`으로 리다이렉트, 실패 시 `ErrorViews.NotFound`(404)를
+  반환하는데, yuna는 항상 200 OK로 고정 HTML 문자열만 반환했다.
+- **구현 내용**:
+  - `signup.html`을 `site/layout :: head/gnb/footer/scripts` 조각 기반으로 재작성. `requireAdminConfirm`
+    모델 속성(`AuthController.signupForm()`/`signup()`에 추가)으로 게이팅되는 관리자 승인 안내 블록 복구.
+  - `UserController`에 신규 `GET /user/isUsed`(`{isExist, isReserved}`)/`GET /user/isEmailExist`
+    (`{isExist}`) 엔드포인트 추가 — legacy `UserApp.isUsed()`/`isEmailExist()`와 동일한 JSON 응답 형식.
+    `isUsed`는 `userService.isLoginIdExist(...)`와 `organizationRepository.findByName(...)`(조직명과 아이디
+    네임스페이스 공유) 둘 다 확인하고, 기존에 이미 존재하던 `ReservedWordsValidator`를 재사용.
+  - `signup.html`에 `validate.js`+`yobi.user.SignUp.js` 로드와 체크 URL 설정 스크립트 추가.
+  - `confirmEmail()`/`confirmEmailLegacy()`를 `UserController`(RestController)에서 `UserViewController`
+    (Controller)로 이전, 성공 시 `redirect:/user/editform`, 실패 시 404+`error/404` 뷰로 수정.
+- **legacy와 다르게 처리한 지점**:
+  - `title.signupConfirmDesc2`(관리자 문의 이메일을 역순 난독화해서 보여주는 스팸봇 방지 트릭)는 "기본
+    사이트 관리자"라는 고정 개념이 yuna에 없어(사이트 관리자는 동적으로 지정/해제 가능한 상태 플래그일 뿐)
+    이식하지 않음 — 관리자 승인 필요 안내 문구 자체는 살렸지만 문의 이메일 표시 줄은 생략.
+  - legacy의 `addUserInfoToSession(email.user)`(이메일 인증 링크 클릭만으로 세션을 자동 갱신하는 동작)는
+    Spring Security 인증 모델과 근본적으로 다른 메커니즘이고 보안에 민감한 결정이라 이식 범위에서 제외 —
+    응답/뷰 처리 방식(리다이렉트+404)만 legacy와 동치화했다.
+  - `title.signupFor` 메시지 키 파라미터화 대신 하드코딩 문자열은 #70과 동일 사유로 미수정.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-18]`(GNB+footer+검증스크립트, isUsed/isEmailExist JSON
+  응답 형식 2종). `UserControllerSpec.kt`에 `isUsed`/`isEmailExist` 4종 유닛 테스트 추가, 이제 깨진 구식
+  `confirmEmail` 테스트 제거. `UserViewControllerSpec.kt`에 `confirmEmail` 리다이렉트/404 2종 유닛 테스트 추가.
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec" --tests
   "com.github.search5.yona.web.UserControllerSpec" --tests "com.github.search5.yona.web.UserViewControllerSpec"`
   (RED 확인 후 GREEN). 전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.

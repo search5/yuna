@@ -188,6 +188,24 @@ class UserViewControllerSpec : DescribeSpec({
             }
         }
 
+        describe("GET /user/emails/{emailId}/confirm") {
+            it("토큰이 유효하면 /user/editform으로 리다이렉트해야 한다") {
+                every { userService.confirmEmail(10L, "test-token-50") } returns true
+
+                mockMvc.perform(get("/user/emails/10/confirm").param("token", "test-token-50"))
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/user/editform"))
+            }
+
+            it("토큰이 유효하지 않으면 404와 error/404 뷰를 반환해야 한다") {
+                every { userService.confirmEmail(10L, "bad-token") } returns false
+
+                mockMvc.perform(get("/user/emails/10/confirm").param("token", "bad-token"))
+                    .andExpect(status().isNotFound)
+                    .andExpect(view().name("error/404"))
+            }
+        }
+
         describe("GET /user/editform") {
             it("로그인된 사용자라면 200 OK와 user/edit 뷰를 반환해야 한다") {
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)

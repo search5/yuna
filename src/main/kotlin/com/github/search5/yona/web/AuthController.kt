@@ -67,6 +67,7 @@ class AuthController(
     @GetMapping(value = ["/signup", "/users/signupform"])
     fun signupForm(model: Model): String {
         model.addAttribute("user", User())
+        model.addAttribute("requireAdminConfirm", requireAdminConfirm)
         return "signup"
     }
 
@@ -77,6 +78,7 @@ class AuthController(
         bindingResult: BindingResult,
         model: Model
     ): String {
+        model.addAttribute("requireAdminConfirm", requireAdminConfirm)
         // yona models/User.java:65-66,80 LOGIN_ID_PATTERN(@Pattern) 대응 (P1-104).
         if (!LoginIdFormatValidator.isValid(user.loginId)) {
             bindingResult.rejectValue("loginId", "pattern", "아이디 형식이 올바르지 않습니다.")
