@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="ko">
 <head>
 <meta charset="utf-8">
-<title>환영합니다!</title>
+<title th:text="#{app.restart.welcome}">환영합니다!</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
@@ -21,22 +21,21 @@
         display: block; text-align: center; overflow: hidden;
         width: 123px; height: 55px; line-height: 55px; font-size: 2em;
         color: #fff; background-color: #f36c22; margin:50px auto;
-        text-decoration: none;
     }
-    .logo:hover { color:#fff; text-decoration: none; }
+    .logo:hover { color:#fff; }
 </style>
 </head>
 
-<body style="zoom: 1;">
+<body>
 <div class="page-wrap-outer">
     <div class="container page-wrap">
         <div class="page">
             <div class="secret-wrap">
-                <a href="/" class="logo"><span>Yona</span></a>
+                <a href="/" class="logo"><span th:text="${siteName}">Yona</span></a>
 
-                <h3>환영합니다!</h3>
+                <h3 th:text="#{app.restart.welcome}">환영합니다!</h3>
                 <p class="secret-box txt-center">
-                    서버를 재시작해야합니다.
+                    <span th:text="#{app.restart.notice}">서버를 재시작해야합니다.</span>
                 </p>
             </div>
         </div>
@@ -44,7 +43,7 @@
 </div>
 <footer class="page-footer-outer">
     <div class="page-footer">
-        <span class="provider">Powered by <strong>Yona</strong></span>
+        <span class="provider">Powered by <strong th:text="${siteName}">Yona</strong></span>
     </div>
 </footer>
 </body>

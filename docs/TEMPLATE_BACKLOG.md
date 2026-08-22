@@ -400,8 +400,8 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 241 | [~] | `welcome/secret.scala.html` | `bootstrap-setup.html` | 최초 관리자 계정 설정 화면으로 추정 — 정확한 대응 여부 확인 |
-| 242 | [~] | `welcome/restart.scala.html` | `bootstrap-restart.html` | |
+| 241 | [x] | `welcome/secret.scala.html` | `bootstrap-setup.html` | 완료(TASK-0246, TDD). 매핑 확인 완료(`BootstrapSetupController`가 반환). 필드별 검증 에러 뱃지(`label-important`) 구조가 통째로 빠져 있던 것을 복구, 메시지 키(`#{...}`) 컨벤션 적용, CSS/구조 잉여물 제거. 상세는 진행 로그 참고 |
+| 242 | [x] | `welcome/restart.scala.html` | `bootstrap-restart.html` | 완료(TASK-0246, TDD). 텍스트는 이미 일치, 메시지 키 컨벤션 적용 + CSS/구조 잉여물 제거. `hasFailedToUpdateSecret` 분기는 legacy의 application.secret 파일 재기록 인프라 자체가 yuna에 없어 이번 배치에서는 미이식(사유는 진행 로그 참고) |
 
 ---
 
@@ -1160,3 +1160,56 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN).
   **그룹16(migration/*, #239~240) 2개 항목 전체 처리 완료.** (병렬 워크트리 에이전트가 작업, 메인
   세션이 TASK 번호/테스트 번호 재부여 후 병합)
+
+### 그룹17 `welcome/*` (#241~242) (TASK-0246, 병렬 워크트리 에이전트 작업 병합) — 전체 242개 배치 마감
+
+- **매핑 확인**: `BootstrapSetupController`(`/bootstrap-setup` GET/POST)가 `bootstrap-setup`/`bootstrap-restart`
+  뷰를 반환하는 것을 확인, 백로그의 추정 매핑이 정확함을 검증.
+- **legacy 트리거 조건과의 구조적 차이(조사 결과)**: legacy는 `Global.java`의 `onRequest` 인터셉트가
+  `application.secret`이 기본값(`DEFAULT_SECRET`)일 때 전역적으로 `welcome/secret`(또는 재시작 필요 시
+  `welcome/restart`)을 강제 표시하고, 폼 제출 시 기존 `admin`(initial-data.yml로 미리 생성된 계정)의
+  비밀번호/이메일을 갱신하면서 `application.secret` 파일 자체를 무작위 값으로 재작성한다(`updateSiteSecretKey`).
+  yuna는 이 Play 전용 "설정파일 시크릿 재작성" 인프라가 전혀 없어(다른 어떤 화면에도 대응 코드 없음),
+  기존에 이미 구현돼 있던 "가입자 0명이면 `/bootstrap-setup`으로 강제 이동"(`BootstrapSetupInterceptor`) +
+  "가입자 0명일 때 신규 SITE_ADMIN 계정 생성"(`BootstrapSetupController`) 대체 진입 조건은 그대로 유지.
+  이 부분은 순수 뷰 이식 범위를 넘는 백엔드 보안 인프라 항목이라 **이번 배치에서는 의도적으로 미이식**
+  (합리적 범위를 넘는 신규 서브시스템 — 별도 파리티 항목으로 취급해야 함, 이번 그룹 범위 아님).
+- **#241(bootstrap-setup.html) 발견 및 수정**:
+  1. **필드별 검증 에러 표시가 통째로 빠져 있었음** — legacy는 `newUserForm.errors().get(필드명)`으로
+     `아이디/이메일/비밀번호/비밀번호 재입력` 4개 필드 각각의 `<dt>` 라벨 옆에 `<span class="label
+     label-important">` 뱃지를 개별 노출하는데, yuna는 폼 상단에 범용 `alert-danger` 배너 하나만 있었고
+     그마저도 로그인ID 불일치·비밀번호 불일치 2가지 케이스만 하드코딩 문자열로 처리, `비밀번호 공백`/
+     `이메일 공백`/`이메일 중복` 검증 자체가 없었음. `BootstrapSetupController.setupAdmin()`을 legacy
+     `Global.java`의 `hasError()`와 동일한 필드별 검증(로그인ID 공백+불일치 이중 체크, 비밀번호 공백,
+     비밀번호 재입력 불일치, 이메일 공백, 이메일 중복(`userRepository.findByEmail`))으로 재작성하고,
+     결과를 `loginIdErrors`/`emailErrors`/`passwordErrors`/`retypedPasswordErrors` 리스트로 모델에 담아
+     템플릿에서 `th:each` + `#{__${err}__}`(메시지 키 동적 해석)로 legacy와 동일한 위치에 뱃지를 렌더링.
+  2. 하드코딩 한글 텍스트를 전부 `#{...}` 메시지 키(`app.welcome`/`app.welcome.warning.title/desc`/
+     `user.signupId`/`user.name`/`user.email`/`user.password`/`validation.retypePassword`/
+     `app.welcome.submit`)로 치환(기존 `messages_ko_KR.properties`에 legacy와 동일한 문구가 이미 존재함을
+     확인, 재사용). 사이트명(`<title>`/로고/footer)도 하드코딩 "Yona" 대신 `yuna.site-name` 설정값을
+     `siteName` 모델 속성으로 주입해 `#{app.welcome(${siteName})}`로 렌더링(legacy `utils.Config.
+     getSiteName()`에 대응).
+  3. **CSS/구조 잉여물 제거**: `<body style="zoom: 1;">`, `.logo`/`.logo:hover`의 `text-decoration: none`
+     추가 규칙은 legacy 원본에 없는 값이라 제거(순수 legacy 재현).
+  4. 관리자 생성 중 예외를 삼켜 폼에 범용 에러 문자열을 보여주던 try/catch도 legacy(예외 시 그냥 500
+     에러 페이지로 전파)에 맞춰 제거.
+- **#242(bootstrap-restart.html) 발견 및 수정**: 텍스트(`환영합니다!`/`서버를 재시작해야합니다.`)는 이미
+  legacy와 일치했으나 하드코딩이었던 것을 `#{app.restart.welcome}`/`#{app.restart.notice}` 메시지 키로
+  치환, `siteName` 모델 속성 주입, 동일한 CSS/구조 잉여물(`body style="zoom:1"`, 로고 `text-decoration`)
+  제거. `app.restart.updateSecretYourself`(시크릿 파일 재작성 실패 시 안내) 조건부 블록은 위에서 설명한
+  대로 시크릿 재작성 인프라 자체가 없어 트리거될 수 없는 죽은 분기가 되므로("known bug pattern: JS/컨트롤러
+  없는 죽은 마크업" 재발 방지 원칙에 따라) 의도적으로 미포함.
+- **legacy와 다르게 처리한 지점**: 진입 조건("가입자 0명" vs legacy의 "application.secret 기본값")만
+  기존 아키텍처를 유지(사유는 위 참고), 그 외 화면 내부(필드/문구/에러 표시 구조)는 전부 legacy와 일치시킴.
+- **테스트**: 이 화면은 가입자 0명(최초 부팅) 상태에서만 도달 가능해 기존 `TemplateEquivalenceSpec`의
+  공유 픽스처(다른 유저 다수 생성)와 충돌하므로, 신규 `BootstrapSetupTemplateEquivalenceSpec.kt` 별도
+  스펙 파일로 분리(매 테스트마다 `userRepository.deleteAll()`로 격리). GET 최초 진입/이미 가입자 존재 시
+  리다이렉트/로그인ID·비밀번호재입력·이메일 필드별 에러 뱃지 노출/성공 시 SITE_ADMIN 생성+재시작 화면
+  렌더링까지 6개 케이스 검증.
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.BootstrapSetupTemplateEquivalenceSpec"`
+  (GREEN, 6 tests. 병렬 워크트리 에이전트가 수정 전 코드로 되돌려 RED 3건 확인 후 재적용해 GREEN 전환
+  확인 완료). 메인 세션 병합 후 재검증 예정.
+- **전체 242개 배치 완료**: 그룹1~17 전 항목 처리 완료(병렬 워크트리 에이전트 병합 진행 중). 남은
+  미완료(`[ ]`/`[~]`/`[i]`) 마커는 각 진행 로그에 사유가 문서화된 상태 — 상세는 이 문서를 전체 검색해
+  확인.
