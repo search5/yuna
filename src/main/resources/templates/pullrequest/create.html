@@ -1,169 +1,167 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${project.name} + ' - 새 풀 리퀘스트 생성'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .form-container {
-      background: #fff;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 20px;
-      margin-bottom: 20px;
-  }
-</style>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko"
+      th:with="pullRequestNewLabel=#{pullRequest.new}, pageTitle=${project.name + ' - ' + pullRequestNewLabel}">
+<!--
+  legacy git/create.scala.html 대응 (그룹11 #168). 기존 yuna pullrequest/create.html은 가짜
+  .gnb-wrap GNB, 인라인 <style>, code.jquery.com 중복 jQuery 로드, legacy와 무관한 부트스트랩 폼을
+  하드코딩하고 있어(버그 패턴 a/b) 전면 재작성한다.
+
+  legacy는 fromProjectId/toProjectId를 project.getAssociationProjects()(같은 원본을 공유하는 fork들)
+  기준의 실렉트로 제공해 서로 다른 fork 간에도 PR을 보낼 수 있지만, yuna Project 엔티티에는 아직
+  이 기능(연관 프로젝트 조회)이 없다 — PullRequestController.CreatePullRequestRequest도
+  fromProjectId 하나만 받고 fromBranch/toBranch는 같은 저장소의 브랜치 이름으로 취급한다. 이
+  포팅에서는 이 백엔드 공백을 "이번 범위에서 새 서브시스템(연관 프로젝트 조회)까지 만들기엔 과도함"
+  으로 판단해 명시적으로 남겨두고(final report 참고), from/to 프로젝트는 항상 이 프로젝트 자신으로
+  고정한 채 브랜치→브랜치 PR만 지원한다 — 단, DOM 구조/id(pull-request-wrap/pull-left/pull-right/
+  arrow/#pullRequestState/#status/#title/#__commits)는 legacy와 동일하게 유지해 향후 연관 프로젝트
+  지원이 추가될 때 이 마크업을 그대로 재사용할 수 있게 했다.
+
+  legacy는 $yobi.loadModule("git.Write", {...})로 커밋 탭(#__commits)을 비동기로 채우는데, 이 모듈은
+  legacy 전용 JSON 엔드포인트(예: pullRequestMessages)에 의존해 yuna에는 대응 REST 엔드포인트가
+  없다 — #__commits 탭 셸(빈 nav-tabs 구조)만 이식하고 모듈 로드는 생략한다(문서화된 결손, 최종
+  보고 참고). 실제 폼 제출은 기존 REST 엔드포인트(POST /api/projects/{projectId}/pullrequests)로
+  AJAX 전송한다(허용된 Play→Thymeleaf 변환 범위).
+-->
+<head th:replace="~{site/layout :: head(title=${pageTitle})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'pullRequest')}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+    <div class="page-wrap-outer">
+        <div class="project-page-wrap">
+            <div class="content-wrap frm-wrap">
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <div class="col-md-9">
-        <div class="form-container">
-          <h3 style="margin-top: 0; margin-bottom: 20px;">새 풀 리퀘스트 요청</h3>
-          
-          <div th:if="${branches.isEmpty()}" class="alert alert-danger">
-            프로젝트 저장소에 브랜치가 존재하지 않아 풀 리퀘스트를 생성할 수 없습니다.
-          </div>
+                <div th:if="${branches.isEmpty()}" class="alert alert-danger">
+                    <span th:text="#{pullRequest.select.branch}">브랜치를 선택하세요.</span>
+                </div>
 
-          <form id="pr-form" th:if="${!branches.isEmpty()}">
-            <!-- 브랜치 매핑 선택 -->
-            <div class="row" style="margin-bottom: 20px;">
-              <div class="col-md-5">
-                <label for="fromBranch">보낼 브랜치 (Source)</label>
-                <select id="fromBranch" name="fromBranch" class="form-control" required>
-                  <option th:each="br : ${branches}" th:value="${br}" th:text="${br}"></option>
-                </select>
-              </div>
-              <div class="col-md-2 text-center" style="padding-top: 30px;">
-                <i class="yobicon-arrow-right" style="font-size: 20px; color: #999;"></i>
-              </div>
-              <div class="col-md-5">
-                <label for="toBranch">받을 브랜치 (Target)</label>
-                <select id="toBranch" name="toBranch" class="form-control" required>
-                  <option th:each="br : ${branches}" th:value="${br}" th:text="${br}" th:selected="${br == defaultBranch}"></option>
-                </select>
-              </div>
+                <form id="pull-request-form" th:if="${!branches.isEmpty()}" enctype="multipart/form-data">
+                    <div id="pull-request-wrap" class="row-fluid cb">
+                        <div class="pull-left span5">
+                            <dl class="pull-request-project">
+                                <dt th:text="#{pullRequest.from}">코드 보내는 곳</dt>
+                                <dd>
+                                    <select id="fromProjectId" name="fromProjectId" data-toggle="select2" disabled="disabled">
+                                        <option th:value="${project.id}" th:text="${project.owner} + '/' + ${project.name}">owner/project</option>
+                                    </select>
+                                    <input type="hidden" name="fromProjectId" th:value="${project.id}">
+                                    <select id="fromBranch" name="fromBranch" data-toggle="select2">
+                                        <option th:each="br : ${branches}" th:value="${br}" th:text="${br}" th:selected="${br == prefillFromBranch}"></option>
+                                    </select>
+                                </dd>
+                            </dl>
+                        </div>
+                        <div class="arrow span2 text-center">
+                            <i class="yobicon-arrow-right"></i>
+                        </div>
+                        <div class="pull-right span5">
+                            <dl class="pull-request-project">
+                                <dt th:text="#{pullRequest.to}">코드 받을 곳</dt>
+                                <dd>
+                                    <select id="toProjectId" name="toProjectId" data-toggle="select2" disabled="disabled">
+                                        <option th:value="${project.id}" th:text="${project.owner} + '/' + ${project.name}">owner/project</option>
+                                    </select>
+                                    <select id="toBranch" name="toBranch" data-toggle="select2">
+                                        <option th:each="br : ${branches}" th:value="${br}" th:text="${br}" th:selected="${br == prefillToBranch}"></option>
+                                    </select>
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <span id="pullRequestState" style="display:none;"></span>
+                    <div id="status" class="alert alert-info" style="display:none;"></div>
+
+                    <dl>
+                        <dd>
+                            <input type="text" id="title" name="title" class="text title" maxlength="250" tabindex="1" th:placeholder="#{title}" autocomplete="off">
+                        </dd>
+                    </dl>
+
+                    <div style="position: relative;">
+                        <div th:replace="~{site/layout :: markdownEditor('body', '', 'content-body')}"></div>
+                    </div>
+
+                    <!-- 파일 업로더 영역: issue/create.html과 동일한 마크업 패턴(legacy common.fileUploader 대응) -->
+                    <div class="upload-wrap content-footer" data-resource-type="PULL_REQUEST" id="upload">
+                        <input type="hidden" name="temporaryUploadFiles">
+                        <div class="attach-wrap">
+                            <span class="help help-droppable" th:text="#{common.attach.drophere}">Drag &amp; Drop files to attach here or</span>
+                            <div class="btn-wrap">
+                                <div class="nbtn medium white fake-file-wrap">
+                                    <i class="yobicon-upload"></i> <span th:text="#{button.upload}" th:remove="tag">File upload</span>
+                                    <input type="file" class="file" name="filePath" multiple="multiple">
+                                </div>
+                            </div>
+                            <span class="plain" th:text="#{common.attach.clickbutton}">Click upload button</span>
+                            <span class="help help-pastable" style="display: block;" th:text="#{common.attach.pastehere}">Paste the clipboard image</span>
+                        </div>
+                        <ul class="attached-files unstyled"></ul>
+                    </div>
+
+                    <div class="actrow right-txt">
+                        <button type="submit" id="button-save" class="ybtn ybtn-success" th:text="#{pullRequest.send}">코드 보내기</button><!--
+                     --><a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name})}" class="ybtn" th:text="#{pullRequest.cancel}">취소</a>
+                    </div>
+                </form>
+
+                <!-- legacy 커밋 탭(#__commits)은 git.Write.js가 비동기로 채우는 빈 셸이다(위 주석 참고) -->
+                <ul class="nav nav-tabs" id="pull-request-tabs">
+                    <li class="active"><a href="#overview" data-toggle="tab" th:text="#{pullRequest.menu.overview}">개요</a></li>
+                    <li><a href="#__commits" data-toggle="tab" th:text="#{pullRequest.menu.commit}">커밋</a></li>
+                </ul>
+                <div class="tab-content">
+                    <div id="__commits" class="tab-pane"></div>
+                </div>
             </div>
-
-            <div class="form-group">
-              <label for="title">풀 리퀘스트 제목</label>
-              <input type="text" id="title" name="title" class="form-control" placeholder="제목을 입력하세요" required maxlength="250">
-            </div>
-
-            <div class="form-group">
-              <label for="body">상세 설명</label>
-              <textarea id="body" name="body" class="form-control" rows="8" placeholder="상세 변경 사항 및 코드 설명 등을 작성하세요" style="resize: vertical;"></textarea>
-            </div>
-
-            <div style="margin-top: 25px;">
-              <button type="submit" class="btn btn-success">생성</button>
-              <a th:href="@{/{owner}/{projectName}/pulls(owner=${project.owner}, projectName=${project.name})}" class="btn btn-default">취소</a>
-            </div>
-          </form>
         </div>
-      </div>
     </div>
-  </div>
+
+    <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script th:inline="javascript">
-  $(document).ready(function() {
-      $("#pr-form").submit(function(e) {
-          e.preventDefault();
-          
-          var projectId = [[${project.id}]];
-          var owner = [[${project.owner}]];
-          var projectName = [[${project.name}]];
-          
-          var title = $("#title").val();
-          var body = $("#body").val();
-          var fromBranch = $("#fromBranch").val();
-          var toBranch = $("#toBranch").val();
-          
-          var requestData = {
-              title: title,
-              body: body,
-              fromProjectId: projectId, // 일단 본인 프로젝트 내 병합으로 설정
-              fromBranch: fromBranch,
-              toBranch: toBranch
-          };
-          
-          $.ajax({
-              url: '/api/projects/' + projectId + '/pullrequests',
-              type: 'POST',
-              contentType: 'application/json',
-              data: JSON.stringify(requestData),
-              success: function(result) {
-                  alert("풀 리퀘스트가 생성되었습니다.");
-                  window.location.href = '/' + owner + '/' + projectName + '/pulls';
-              },
-              error: function(xhr, status, error) {
-                  alert("생성 실패: " + xhr.responseText);
-              }
-          });
-      });
-  });
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
+<th:block th:replace="~{common/select2 :: select2}"></th:block>
+<th:block th:replace="~{site/layout :: markdown(${project})}"></th:block>
+<script type="text/javascript" th:inline="javascript">
+    $(document).ready(function() {
+        yobi.Mention({
+            "target": 'textarea[id^=editor-]',
+            "url"   : /*[[@{/{owner}/{projectName}/mentionList(owner=${project.owner}, projectName=${project.name})}]]*/ ""
+        });
+
+        $("#pull-request-form").submit(function(e) {
+            e.preventDefault();
+
+            var projectId = [[${project.id}]];
+            var owner = [[${project.owner}]];
+            var projectName = [[${project.name}]];
+
+            var requestData = {
+                title: $("#title").val(),
+                body: $('textarea[data-editor-mode="content-body"]').val(),
+                fromProjectId: projectId,
+                fromBranch: $("#fromBranch").val(),
+                toBranch: $("#toBranch").val()
+            };
+
+            $.ajax({
+                url: '/api/projects/' + projectId + '/pullrequests',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function(result) {
+                    window.location.href = '/' + owner + '/' + projectName + '/pulls';
+                },
+                error: function(xhr, status, error) {
+                    $("#status").text("생성 실패: " + xhr.responseText).show();
+                }
+            });
+        });
+    });
 </script>
 </body>
 </html>

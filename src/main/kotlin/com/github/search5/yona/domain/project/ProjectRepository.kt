@@ -13,6 +13,11 @@ interface ProjectRepository : JpaRepository<Project, Long> {
     fun findByOwner(owner: String): List<Project>
     fun countByLabelsId(labelId: Long): Long
 
+    // legacy Project.findByOwnerAndOriginalProject(destination, project) 대응 (그룹11 #173) —
+    // 특정 소유자(destination) 밑에 이미 이 프로젝트를 원본으로 포크한 프로젝트가 있는지 조회.
+    // git/fork.scala.html의 "이미 포크한 프로젝트가 있습니다" 안내 목록에 쓰인다.
+    fun findByOwnerAndOriginalProject(owner: String, originalProject: Project): List<Project>
+
     // yona Project.projectNameChangeable(id, userName, projectName) 대응 (P1-144) — 대소문자 무시
     // 비교(`.ieq(...)`) + 본인(id) 제외(`.ne("id", id)`)로 같은 소유자 내 이름 중복 여부를 검사한다.
     fun existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot(owner: String, name: String, id: Long): Boolean

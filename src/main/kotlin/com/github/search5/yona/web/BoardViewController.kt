@@ -157,9 +157,24 @@ class BoardViewController(
         }
         val attachmentsJson = objectMapper.writeValueAsString(mapOf("attachments" to attachmentsList))
 
+        // legacy board/partial_comments.scala.html의 childComments 대응(그룹11 #25/#29/#30/#31
+        // 재작업) — 대댓글은 최상위 댓글 목록에서 제외하고 부모별로 묶어 common/childComments에
+        // 넘긴다(issue/view.html과 동일한 패턴).
+        val topLevelComments = comments.filter { it.parentComment == null }
+        val childCommentsByParentId: Map<Long, List<com.github.search5.yona.domain.board.PostingComment>> =
+            comments.filter { it.parentComment != null }
+                .groupBy { it.parentComment!!.id!! }
+
+        val isProjectManager = loginUser != null && projectUserRepository.findByProjectIdAndUserId(project.id!!, loginUser.id!!)
+            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .orElse(false)
+
         model.addAttribute("project", project)
         model.addAttribute("post", posting)
-        model.addAttribute("comments", comments)
+        model.addAttribute("comments", topLevelComments)
+        model.addAttribute("childCommentsByParentId", childCommentsByParentId)
+        model.addAttribute("isProjectManager", isProjectManager)
+        model.addAttribute("commentApiBase", "/api/projects/${project.id}/posts/${posting.number}/comments")
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("isWatching", isWatching)
         model.addAttribute("isAllowedUpdate", isAllowedUpdate)

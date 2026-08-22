@@ -92,15 +92,15 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 20 | [i] | `common/editor.scala.html` | `site/layout.html :: markdownEditor(name,value,editorMode)` (인라인) | 확인: 현재 호출부(`issue/create,edit`, `board/create,edit,view`, `milestone/create,edit`)는 전부 대시(`-`) 없는 `name`만 넘겨서 legacy의 `wrapIdGen`/`textareaName` 분리 로직·`viaEmail` 파라미터화가 실질적으로 관측되지 않음 — 백엔드에 "via email" 기능 자체가 없어 저가치로 판단해 지금은 미이식(문서에 기록, 필요 시 재검토) |
 | 21 | [x] | `common/fileUploader.scala.html` | `site/layout.html :: scripts`(tplAttachedFile/tplDropFilesHere) + `common/uploadForm.html`(신규) | 완료(TASK-0227, TDD). tplAttachedFile/tplDropFilesHere는 이미 정확히 이식돼 있었음(확인). `common.uploadForm(...)` 호출 부분은 #22에서 처리 |
 | 22 | [x] | `common/uploadForm.scala.html` | `common/uploadForm.html`(신규 생성) | 완료(TASK-0227, TDD). **중대 발견**: `issue/view.html`/`board/view.html`의 기존 `#upload-drop-zone`/`input[name=file]` 마크업이 legacy 구조(`upload-wrap`/`data-resource-type`/`input[name=filePath]`)와 전혀 다른 독자 구현이었고, 어떤 정적 JS 파일도 `upload-drop-zone`/`upload-file-input` 셀렉터를 참조하지 않아(grep 확인) 사실상 동작하지 않는 죽은 마크업이었음. legacy 구조로 교체 |
-| 23 | [~] | `common/attachmentFile.scala.html` | (없음, 신규 필요) | 서버사이드 렌더링되는 "이미 첨부된 파일 1건" 표시 조각(수정 화면 등에서 기존 첨부파일 목록에 사용) — 아직 미착수. #21/22와 달리 클라이언트 JS 템플릿(tplAttachedFile)이 아닌 서버 렌더 조각이라 별도 확인 필요 |
+| 23 | [x] | `common/attachmentFile.scala.html` | `common/attachmentFile.html`(신규) | 완료(TASK-0243). legacy 전체에서 이 파샬의 호출부가 `common/commentUpdateForm.scala.html`(#25) 단 한 곳뿐임을 확인 — #25 재작업과 함께 처리(파일명+삭제버튼 서버렌더 행) |
 | 24 | [i] | `common/commentForm.scala.html` | `issue/view.html`, `board/view.html` (각 페이지에 인라인) | 확인: `<form id="comment-form" ... enctype="multipart/form-data">` + 에디터 + fileUploader 슬롯 + 제출 버튼 구조는 이미 정확히 대응됨(#22에서 enctype 누락도 함께 수정). `common.editor(...)`/`common.fileUploader(...)` 자리에 해당하는 하위 조각들의 이식 상태는 #20/#21/#22 참고 |
-| 25 | [ ] | `common/commentUpdateForm.scala.html` | (없음, 신규 필요 — 규모 큼) | **조사 완료, 미착수**. 댓글 인라인 수정 UI(파일 업로드+알림메일 체크박스+저장/취소 포함) 자체가 yuna에 전혀 없음(`comment-editform`/`comment-update-form` 마크업 grep 0건). 백엔드는 `CommentController`의 `PUT /api/projects/{projectId}/issues|posts/{number}/comments/{commentId}` REST API로 이미 존재하지만, legacy는 `<form action=".../{id}" enctype=multipart/form-data>` 폼 전체제출 방식이라 REST API 기준으로 AJAX 재설계가 필요 — 순수 마크업 포팅을 넘어서는 프론트엔드 설계 작업. 그룹2 완주 후 별도 세션에서 집중 처리 권장 |
-| 26 | [ ] | `common/commentDeleteModal.scala.html` | (없음, 신규 필요) | **조사 완료, 미착수**. 삭제 확인 모달(`#comment-delete-modal`)과 `yobi.Comment.js` 초기화 스크립트가 yuna에 전혀 없음. 삭제 백엔드(`DELETE /api/projects/{projectId}/issues|posts/{number}/comments/{commentId}`)는 존재. #25와 함께 처리하는 게 효율적(같은 JS 초기화 흐름) |
+| 25 | [x] | `common/commentUpdateForm.scala.html` | `common/commentUpdateForm.html`(신규) | 완료(TASK-0243). 댓글 인라인 수정 폼 — legacy는 풀페이지 POST(`action=".../id"`)지만 yuna 백엔드가 REST(`PUT .../comments/{id}`)뿐이라 fetch PUT로 AJAX 전환(필요한 아키텍처 차이, 문서화). 알림메일 체크박스는 마크업만 유지하고 실제 발송억제 로직은 `CommentRequest`/`CommentService`에 파라미터가 없어 연결 보류(별도 백엔드 확장 필요, 문서화된 보류) |
+| 26 | [x] | `common/commentDeleteModal.scala.html` | `common/commentDeleteModal.html`(신규) | 완료(TASK-0243). `yobi.Comment.js` 정적 자산이 없어 동등한 삭제확인+DELETE+DOM제거 로직을 인라인 스크립트로 직접 구현(필요한 아키텍처 차이) |
 | 27 | [i] | `common/commentCount.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.comments-count.comments-count-color` 구조 완전 일치(TASK-0227 후속 조사, 코드 변경 없음) |
 | 28 | [i] | `common/commentAndVoterPairDisplay.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.item-count-groups` 조합 표시 구조 완전 일치(코드 변경 없음) |
-| 29 | [ ] | `common/child_commentForm.scala.html` | (없음, #25/#26과 함께 처리) | **조사 완료, 미착수**. 대댓글(child comment) 작성 원라인 폼. 백엔드는 `CommentController`가 `parentCommentId`를 이미 받아 처리(`IssueComment.parentComment` 필드 존재) — REST API는 준비됐으나 프론트 UI가 전혀 없음. #25/#26과 같은 "댓글 UI 전체 AJAX 재설계" 묶음으로 처리 권장 |
-| 30 | [ ] | `common/childComments.scala.html` | (없음, #25/#26과 함께 처리) | **조사 완료, 미착수**. 대댓글 목록+인라인 답글폼 조합. 마크업(`subcomment-media-body`/`one-line-comment`/`child-comment-input-form`) 자체가 yuna에 없음. #25/#26/#29와 같은 묶음 |
-| 31 | [ ] | `common/childCommentsAnchorDiv.scala.html` | (없음, #25/#26과 함께 처리) | **조사 완료, 미착수**. 대댓글 앵커(`#comment-N`) div — #29/#30 없이는 의미 없어 함께 처리 |
+| 29 | [x] | `common/child_commentForm.scala.html` | `common/child_commentForm.html`(신규) | 완료(TASK-0243). `CommentController`가 이미 `parentCommentId`를 받으므로 POST AJAX로 그대로 연결 |
+| 30 | [x] | `common/childComments.scala.html` | `common/childComments.html`(신규) | 완료(TASK-0243). 대댓글 목록+인라인 답글폼. `IssueViewController`/`BoardViewController`가 부모별 children 맵을 새로 계산해 넘겨준다(대댓글은 최상위 타임라인에서 제외 — 이전에는 필터가 없어 대댓글이 최상위 댓글과 중복 노출되는 버그였음, 이번에 함께 수정) |
+| 31 | [x] | `common/childCommentsAnchorDiv.scala.html` | `common/childCommentsAnchorDiv.html`(신규) | 완료(TASK-0243). yuna는 대댓글 작성 후 페이지 새로고침 방식(REST 전환에 따른 필요한 단순화)이라 실질적 삽입 로직은 없지만 DOM 앵커(`#comment-N`)는 legacy와 동일하게 유지 |
 | 32 | [i] | `common/voteCount.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.vote-count.vote-color` 구조 완전 일치(코드 변경 없음) |
 | 33 | [i] | `common/sharerCount.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `.sharer-color` 구조 완전 일치(코드 변경 없음) |
 | 34 | [i] | `common/showSubtasksCheckbox.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `#two-column-mode-checkbox`/`#toggle-show-subtasks` 구조 완전 일치(코드 변경 없음) |
@@ -109,7 +109,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 37 | [x] | `common/issueLabelColor.scala.html` | `web/LabelStyleController.kt`(`GET /{owner}/{project}/issue/labels.css`) | 완료(TASK-0229, TDD). **발견**: 이 legacy 파일은 뷰가 아니라 `IssueLabelApp.labelStyles()` 컨트롤러가 `text/css`로 직접 렌더링하는 동적 스타일시트였고, yuna의 `LabelStyleController`가 이미 완전히 동일한 로직(RGB/hex 파싱+휘도 계산 포함)으로 이식돼 있었음(선행 세션) — 단 legacy가 이 스타일시트를 링크하는 10개 화면 중 `issue/view`/`issue/create`/`issue/edit`/`board/view`/`board/list` 5곳에 `<link>` 태그 자체가 빠져 있어 추가. `project/partial_dashboard_issuesbylabel`/`project/partial_issuelabels_list`(프로젝트 대시보드·라벨 설정 화면)는 대응 파일 존재 여부 확인 필요 — 미착수로 남김 |
 | 38 | [~] | `common/commitMsg.scala.html` | `code/{view,diff,svnDiff}.html`(부분 인라인) | 조사: `.commitMsg` 클래스는 이미 3개 code/* 파일에 존재하나 legacy의 short/desc/moreBtn 펼침 구조까지 일치하는지 미확인 — `code/*` 그룹(그룹10, #154~166) 착수 시 함께 정밀 대조 예정 |
 | 39 | [ ] | `common/branchItem.scala.html` | (미확인) | `code/*` 그룹(그룹10, #154~166) 착수 시 함께 처리 예정 — 브랜치 선택 드롭다운 관련이라 코드 브라우징 화면과 강하게 결합 |
-| 40 | [ ] | `common/reviewForm.scala.html` | (미확인) | 코드리뷰 댓글 폼 — PR/리뷰 도메인(그룹11, #167~192) 착수 시 함께 처리 예정. `common.editor`+`common.uploadForm` 재사용 구조라 #20/#22 완료로 재료는 준비됨 |
+| 40 | [x] | `common/reviewForm.scala.html` | `common/reviewForm.html`(신규) | 완료(TASK-0243). `site/layout::markdownEditor` + `common/uploadForm`으로 정확히 이식 |
 | 41 | [ ] | `common/partial_history.scala.html` | (없음, 백엔드 기능 자체 부재) | **조사 완료, 미착수**. "변경 이력"(edit history) 기능 자체가 yuna `Issue`/`Posting` 엔티티에 없음(`history` 필드 자체가 없음) — 순수 템플릿 이식이 아니라 `docs/PARITY_BACKLOG.md`에 백엔드 항목으로 먼저 등록해야 하는 규모. 이번 배치에서는 조사 결과만 기록 |
 | 42 | [i] | `common/notificationMail.scala.html` | `domain/notification/NotificationMailRenderer.kt`(인라인) | 확인 완료 — Thymeleaf 템플릿이 아니라 Kotlin 코드로 HTML 문자열을 직접 생성하는 방식으로 이미 완전히 동일하게 이식돼 있음(폰트 스택, `hr` 구분선, unwatch/설정변경 푸터 링크, 메시지 키까지 일치). 코드 변경 없음 |
 | 43 | [x] | `common/uservoice.scala.html` | (포팅 제외) | **제외 결정(사유 기록)** — legacy 자체에서도 이 파일을 호출하는 곳이 0건(grep 확인, 죽은 코드). 설령 사용하더라도 원본 Yona 프로젝트 전용 UserVoice 계정(`forum_id`, 위젯 스크립트 URL이 원본 프로젝트에 하드코딩)이라 포크인 yuna에 그대로 심는 것은 부적절 |
@@ -294,32 +294,32 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 167 | [~] | `git/list.scala.html` | `pullrequest/list.html` | |
-| 168 | [~] | `git/create.scala.html` | `pullrequest/create.html` | |
-| 169 | [~] | `git/edit.scala.html` | `pullrequest/edit.html` | |
-| 170 | [~] | `git/view.scala.html` | `pullrequest/view.html` | P2-39에서 conversation 탭 로직은 되돌렸음 — 마크업 자체는 legacy와 줄 단위 대조 필요 |
-| 171 | [i] | `git/viewChanges.scala.html` | (view.html에 "changes" 탭으로 인라인 추정) | |
-| 172 | [ ] | `git/clone.scala.html` | `pullrequest/clone.html` | 클론 방법 안내(HTTP/SSH URL) |
-| 173 | [~] | `git/fork.scala.html` | `project/fork.html` | 경로 다름(project 밑) — 내용 대조 |
-| 174 | [ ] | `git/partial_branch.scala.html` | `pullrequest/partial_branch.html` | |
-| 175 | [ ] | `git/partial_forklist.scala.html` | `pullrequest/partial_forklist.html` | |
-| 176 | [ ] | `git/partial_info.scala.html` | `pullrequest/partial_info.html` | |
-| 177 | [ ] | `git/partial_list.scala.html` | `pullrequest/partial_list.html` | AJAX 목록 갱신용 |
-| 178 | [ ] | `git/partial_merge_result.scala.html` | `pullrequest/partial_merge_result.html` | |
-| 179 | [i] | `git/partial_pull_request_event.scala.html` | (view.html에 인라인, P2-39/P1-106 관련) | conversation 탭 되돌림과 함께 재검증 |
-| 180 | [ ] | `git/partial_recently_pushed_branches.scala.html` | `pullrequest/partial_recently_pushed_branches.html` | |
-| 181 | [ ] | `git/partial_reviewlist.scala.html` | `pullrequest/partial_reviewlist.html` | |
-| 182 | [ ] | `git/partial_search.scala.html` | `pullrequest/partial_search.html` | |
-| 183 | [ ] | `git/partial_state.scala.html` | `pullrequest/partial_state.html` | PR 상태 뱃지 |
-| 184 | [~] | `reviewthread/list.scala.html` | `reviewthread/list.html` | |
-| 185 | [ ] | `reviewthread/partial_list.scala.html` | `reviewthread/partial_list.html` | |
-| 186 | [ ] | `partial_comment_thread.scala.html`(최상위) | `pullrequest/partial_comment_thread.html` | 코드리뷰 스레드 렌더러(diff 인라인) |
-| 187 | [ ] | `partial_comment_form_on_thread.scala.html`(최상위) | `pullrequest/partial_comment_form_on_thread.html` | |
-| 188 | [ ] | `partial_diff.scala.html`(최상위) | `pullrequest/partial_diff.html` | |
-| 189 | [ ] | `partial_diff_line.scala.html`(최상위) | `pullrequest/partial_diff_line.html` | |
-| 190 | [ ] | `partial_diff_comment_on_line.scala.html`(최상위) | `pullrequest/partial_diff_comment_on_line.html` | |
-| 191 | [ ] | `partial_filediff.scala.html`(최상위) | `pullrequest/partial_filediff.html` | |
-| 192 | [ ] | `partial_update_notification.scala.html`(최상위) | `pullrequest/partial_update_notification.html` | 실시간(폴링) 갱신 알림 배너 |
+| 167 | [x] | `git/list.scala.html` | `pullrequest/list.html` | 완료(TASK-0243). 얇은 래퍼로 재작성 + partial_search 위임 |
+| 168 | [x] | `git/create.scala.html` | `pullrequest/create.html` | 완료(TASK-0243). legacy DOM(`pull-request-wrap`) 구조로 전면 재작성. cross-fork PR(다른 프로젝트 간)은 yuna에 `getAssociationProjects()` 상당 기능이 없어 동일 프로젝트 내 브랜치→브랜치로 범위 축소(문서화된 보류) |
+| 169 | [x] | `git/edit.scala.html` | `pullrequest/edit.html` | 완료(TASK-0243). create.html과 동일한 DOM 정합 |
+| 170 | [x] | `git/view.scala.html` | `pullrequest/view.html` | 완료(TASK-0243, 전면 재작성). "commits" 탭은 legacy에 없는 yuna 자체 확장이었음을 확인해 제거, tab 쿼리파라미터도 제거하고 legacy와 동일하게 단일 overview 페이지로 되돌림 |
+| 171 | [x] | `git/viewChanges.scala.html` | `pullrequest/view.html`(tab=changes) | 완료(TASK-0243). 별도 URL(`/pull/{number}/changes`)은 유지(허용된 아키텍처 차이), 콘텐츠는 legacy viewChanges와 대조해 review-wrap/reviewlist/non-ranged 댓글까지 재현 |
+| 172 | [x] | `git/clone.scala.html` | `pullrequest/clone.html` | 완료(TASK-0243). **비고 정정**: 이 파일은 "클론 방법 안내"가 아니라 fork 진행 중 보여주는 인터스티셜 화면이었음(재조사로 확인) — `ProjectViewController.fork()`가 이름검증만 하고 이 화면을 렌더, 화면의 JS가 3초 후 신설 `doClone()` 엔드포인트를 호출해 실제 fork 수행 |
+| 173 | [x] | `git/fork.scala.html` | `project/fork.html` | 완료(TASK-0243). 콘텐츠 전면 재작성(owner-select/scope radio/이미 포크된 프로젝트 안내). `ProjectRepository.findByOwnerAndOriginalProject` 신설해 forkedProjects 연결. owner-select의 조직별 목적지 전환(newFork 3-arg 라우트)은 yuna 라우트가 목적지 owner 파라미터를 안 받아 단순화(문서화된 보류) |
+| 174 | [x] | `git/partial_branch.scala.html` | `pullrequest/partial_branch.html` | 완료(TASK-0243) |
+| 175 | [x] | `git/partial_forklist.scala.html` | `pullrequest/partial_forklist.html` | 완료(TASK-0243) |
+| 176 | [x] | `git/partial_info.scala.html` | `pullrequest/partial_info.html` | 완료(TASK-0243). 리뷰 참여/뱃지/overview·changes 탭 바 |
+| 177 | [x] | `git/partial_list.scala.html` | `pullrequest/partial_list.html` | 완료(TASK-0243). 기존 yuna 독자 `<table>` 대신 legacy `post-list-wrap`/`post-item` 구조로 교체 |
+| 178 | [~] | `git/partial_merge_result.scala.html` | `pullrequest/partial_merge_result.html` | 마크업은 완료(TASK-0243)했으나, 이 조각을 실제로 채워주는 legacy `PullRequestApp.mergeResult()`(임의 from/to 브랜치 조합의 커밋 프리뷰+충돌 계산) 상당 컨트롤러 엔드포인트는 아직 없음 — RepositoryService에 그런 "두 브랜치 사이 프리뷰" 기능 자체가 없어 이번 배치 범위를 넘는 별도 백엔드 작업으로 보류(PR 생성/수정 자체는 이 프리뷰 없이도 기존 REST로 정상 동작) |
+| 179 | [x] | `git/partial_pull_request_event.scala.html` | `pullrequest/partial_pull_request_event.html` | 완료(TASK-0243). **버그 발견/수정**: 기존 P2-39 코멘트가 "legacy도 PULL_REQUEST_COMMIT_CHANGED를 안 보여준다"고 잘못 기록했었음 — legacy 파샬 재대조 결과 전용 case가 있어 실제로 렌더링함, 컨트롤러 필터에 포함시켜 바로잡음(단, 이벤트별 커밋 목록은 yuna PullRequestEvent 스키마에 없어 메시지+링크만 표시, 문서화된 단순화) |
+| 180 | [x] | `git/partial_recently_pushed_branches.scala.html` | `pullrequest/partial_recently_pushed_branches.html` | 완료(TASK-0243) |
+| 181 | [x] | `git/partial_reviewlist.scala.html` | `pullrequest/partial_reviewlist.html` | 완료(TASK-0243) |
+| 182 | [x] | `git/partial_search.scala.html` | `pullrequest/partial_search.html` | 완료(TASK-0243). filter/contributorId 검색 백엔드까지 신설(JPA Specification) |
+| 183 | [x] | `git/partial_state.scala.html` | `pullrequest/partial_state.html` | 완료(TASK-0243). PR 상태 뱃지 + 충돌 해결 안내 + 브랜치 삭제/복구. `TemplateHelper.getCloneUrl()` 신설(legacy `CodeApp.getURL()` 상당) |
+| 184 | [x] | `reviewthread/list.scala.html` | `reviewthread/list.html` | 완료(TASK-0243). 가짜 GNB 제거, 실제 site/layout 재사용으로 전면 재작성 |
+| 185 | [x] | `reviewthread/partial_list.scala.html` | `reviewthread/partial_list.html` | 완료(TASK-0243) |
+| 186 | [x] | `partial_comment_thread.scala.html`(최상위) | `pullrequest/partial_comment_thread.html` | 완료(TASK-0243). 코드리뷰 스레드 렌더러(comment-avatar/media-body/meta-info + data-range-* 속성) |
+| 187 | [x] | `partial_comment_form_on_thread.scala.html`(최상위) | `pullrequest/partial_comment_form_on_thread.html` | 완료(TASK-0243). 실제 폼 제출(`ReviewViewController.newPullRequestComment`)이 이미 legacy와 동일한 풀페이지 POST 방식이라 AJAX 전환 없이 그대로 재사용 가능했음 |
+| 188 | [x] | `partial_diff.scala.html`(최상위) | `pullrequest/partial_diff.html` | 완료(TASK-0243). 파일개수 제한 경고는 yuna에 대응 상수/절단 로직이 없어(경고만 붙이면 오해 유발) 생략(문서화된 보류) |
+| 189 | [x] | `partial_diff_line.scala.html`(최상위) | `pullrequest/partial_diff_line.html` | 완료(TASK-0243). EOF 개행누락 표시(`noNewlineAtEof`)는 극히 드문 엣지케이스라 생략(문서화된 단순화) |
+| 190 | [x] | `partial_diff_comment_on_line.scala.html`(최상위) | `pullrequest/partial_diff_comment_on_line.html` | 완료(TASK-0243). legacy는 미리 그룹핑된 Map을 받지만 yuna는 파샬 재사용 단순화를 위해 스레드 전체 목록을 받아 th:each+th:if로 매칭(O(n) 스캔, 결과 동일) |
+| 191 | [x] | `partial_filediff.scala.html`(최상위) | `pullrequest/partial_filediff.html` | 완료(TASK-0243). ADD/DELETE/MODIFY/RENAME/COPY + 바이너리 + 에러(크기초과) + 파일모드변경까지 legacy 분기 전부 재현. yuna `FileDiff` 도메인 모델이 이미 legacy와 동일한 Error enum/isFileModeChanged를 갖고 있어 가능했음 |
+| 192 | [x] | `partial_update_notification.scala.html`(최상위) | (미이식, 제외 결정) | **제외 결정(사유 기록)**: 사이트 매니저 전용 "새 버전 알림"(YobiUpdate, 외부 릴리스 URL 폴링) 기능 자체가 yuna에 없고, 이를 이식하려면 외부 버전 체크 서브시스템을 통째로 새로 설계해야 함 — 순수 템플릿 이식 범위를 크게 넘어서 이번 배치에서는 제외. 필요 시 `docs/PARITY_BACKLOG.md`에 백엔드 항목으로 등록 후 별도 진행 권장 |
 
 ## 그룹 12 — `organization/*` 조직 (17개, #193~209)
 
@@ -1046,3 +1046,111 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   분리 검증, `\|:\|` 없는 화면의 하위호환 검증).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 60 tests).
   다음은 나머지 보류 항목(#8,10,12,13,20,23,38~41,45,47,49,50,53,57,70,82,83,90,108)을 번호 순으로 재작업.
+
+### 그룹11 `pullrequest/*`(legacy `git/*`) + `reviewthread/*` + 코드리뷰 diff 파샬 26개 + #40/#23/#25/#26/#29/#30/#31 (TASK-0243)
+
+**범위**: #167~192(그룹11 전체 26개) + 그룹2에서 그룹11 착수 시 처리하기로 미뤄뒀던 #40(`common/
+reviewForm`), #23(`common/attachmentFile`), #25/#26/#29/#30/#31(댓글 인라인 수정/삭제/대댓글 UI
+AJAX 재설계). 병렬 세션 3개(오케스트레이터 본인 + 서브에이전트 2개, 같은 워크트리 공유)로 나눠
+처리 — 서브에이전트 A는 #167/168/169/175/177/180/182(PR 목록/생성/수정 화면군), 서브에이전트 B는
+#173/184/185(project/fork.html, reviewthread/*), 오케스트레이터 본인은 #170~172/174/176/178/179/
+181/183/186~192(PR 상세/변경사항/diff 렌더링 도메인) + #40/#23/#25/#26/#29/#30/#31(댓글 UI)을 맡음.
+
+**#167/168/169/175/177/180/182 (PR 목록/생성/수정)**: `pullrequest/list.html`을 legacy처럼 얇은
+wrapper로 재작성하고 실제 목록/탭/검색 콘텐츠를 `partial_search.html`(신규)로 위임, 그 안에서
+`partial_list.html`(기존 yuna 독자 `<table>`을 legacy `post-list-wrap`/`post-item` 구조로 교체)과
+`partial_recently_pushed_branches.html`(신규)을 재사용. filter/contributorId 검색은 JPA
+`Specification` 기반으로 백엔드까지 새로 구현(기존엔 없던 기능). `create.html`/`edit.html`은 가짜
+GNB+부트스트랩 폼을 legacy DOM(`pull-request-wrap`/`pull-left`/`pull-right`/`#pullRequestState`/
+`#status`/`#__commits`)으로 전면 재작성 — 단 cross-fork PR(다른 프로젝트 브랜치 간)은 yuna에
+`getAssociationProjects()` 상당 기능이 없어 동일 프로젝트 내 브랜치→브랜치로 범위를 축소(문서화된
+보류, DOM은 legacy와 동일하게 유지해 향후 확장 가능).
+
+**#170/171 (PR 상세 overview/changes)**: 기존 `pullrequest/view.html`은 legacy에 없는 "commits"
+탭까지 넣은 독자 3탭 구조(conversation/commits/changes)였음을 확인 — legacy는 애초에 tab 개념이
+없고 overview(`/pull/{number}`)와 changes(`/pull/{number}/changes`)가 완전히 별도 URL인 단일
+페이지 구조라, `PullRequestViewController.viewPullRequest()`에서 `tab` 쿼리파라미터 자체를 제거하고
+"commits" 탭을 없앤 뒤 legacy와 동일한 2-페이지(같은 템플릿, tab 모델값만 다름) 구조로 되돌렸다.
+overview 탭은 `partial_info`(#176)/`partial_branch`(#174)/`partial_state`(#183)/
+`partial_pull_request_event`(#179)를 조합해 legacy `git/view.scala.html`을, changes 탭은
+`partial_diff`(#188)/`partial_reviewlist`(#181)/`partial_comment_thread`(#186) 등을 조합해 legacy
+`git/viewChanges.scala.html`을 재현했다. watch 버튼(`WatchService`/`WatchController`의 기존
+PULL_REQUEST 지원을 그대로 재사용), 첨부파일(`attachmentsJson`), isAcceptable/disabledAcceptReason/
+canDeleteBranch/canRestoreBranch/openThreadCount는 이번에 신규로 컨트롤러에 계산 로직을 추가했다.
+
+**#172(`pullrequest/clone.html`)**: **비고 정정** — 백로그에는 "클론 방법 안내(HTTP/SSH URL)"라고
+적혀 있었으나 legacy `git/clone.scala.html` 원본을 다시 대조한 결과 이는 fork 진행 중 보여주는
+"복제 중입니다" 인터스티셜 화면이었다(`PullRequestApp.fork()`가 이름검증만 하고 이 화면을 렌더,
+화면 로드 3초 뒤 JS가 `doClone()`을 호출해 실제 git clone+프로젝트 생성을 수행). yuna
+`ProjectViewController.fork()`가 기존엔 이름검증 직후 동기로 fork를 즉시 실행하고 바로 redirect
+하던 것을, legacy와 동일한 2단계 흐름(POST /fork → clone.html 렌더 → JS가 신설
+`POST /api/{owner}/{projectName}/doClone` 호출 → 실제 fork 수행)으로 되돌렸다.
+
+**#173(`project/fork.html`)**: (서브에이전트 B) legacy `git/fork.scala.html`과 대조해 owner-select
+(조직별 목적지)/공개범위 radio/이미 포크된 프로젝트 안내를 전면 재작성. `forkedProjects` 모델
+속성이 컨트롤러에 없다는 격차를 서브에이전트가 발견해 보고 — 오케스트레이터가
+`ProjectRepository.findByOwnerAndOriginalProject()` 신규 추가 + `ProjectViewController.fork()`에서
+채워 넣어 해결. 조직별 목적지 전환(newFork 3-arg 라우트, 다른 조직으로 목적지를 바꿔가며
+다시 조회)은 yuna `newFork` 라우트가 목적지 owner 파라미터를 받지 않아 단순화(문서화된 보류).
+
+**#186~192 (코드리뷰 diff 파샬)**: yuna `FileDiff`/`DiffLine`/`Hunk` 도메인 모델이 이미 legacy와
+동일한 `Error` enum(A/B_SIZE_EXCEEDED, DIFF_SIZE_EXCEEDED, OTHERS_SIZE_EXCEEDED)과
+`isFileModeChanged()`를 갖추고 있어(선행 세션에서 이미 포팅됨), `partial_filediff.html`에서
+ADD/DELETE/MODIFY/RENAME/COPY × 바이너리 × 에러 × 파일모드변경 조합을 legacy와 동일하게 전부
+재현할 수 있었다. `partial_diff_comment_on_line.html`은 legacy가 미리 그룹핑한 Map을 받는 대신
+스레드 전체 목록을 받아 `th:each`+`th:if`로 매칭하도록 단순화(결과 동일, 파일당 diff 규모에서
+성능 차이 무시 가능). `partial_comment_form_on_thread.html`은 실제 폼 제출 대상
+(`ReviewViewController.newPullRequestComment`)이 legacy와 동일하게 이미 풀페이지 POST 방식으로
+살아있어 AJAX 전환 없이 그대로 재사용 가능했다. `partial_diff.html`의 파일개수 제한 경고는 yuna에
+대응 상수/절단 로직이 없어 생략(경고만 붙이면 오해 유발, 문서화된 보류).
+
+**#192(`partial_update_notification`) 제외 결정**: 사이트 매니저 전용 "새 버전 알림"(YobiUpdate,
+외부 릴리스 URL 폴링) 기능 자체가 yuna에 없고 이식하려면 외부 버전체크 서브시스템을 통째로 새로
+설계해야 해서 순수 템플릿 이식 범위를 넘어 제외(사유 기록, 저가치 판단 아님).
+
+**#40/#23/#25/#26/#29/#30/#31 (댓글 인라인 수정/삭제/대댓글 AJAX 재설계)**: 그룹2에서 "댓글 UI
+전체 AJAX 재설계가 필요해 보류"로 남겨뒀던 항목들을 실제로 구현했다. `common/commentUpdateForm.html`
+(#25, 인라인 수정 폼)/`common/commentDeleteModal.html`(#26, 삭제 확인 모달+DOM 제거 스크립트)/
+`common/child_commentForm.html`(#29, 대댓글 원라인 폼)/`common/childComments.html`(#30, 대댓글
+목록+답글폼)/`common/childCommentsAnchorDiv.html`(#31, 대댓글 앵커 div)/`common/attachmentFile.html`
+(#23, 수정폼 안의 기존 첨부파일 행 — legacy에서 이 파샬의 유일한 호출부가 commentUpdateForm이라
+확인 후 #25와 함께 처리)를 신규 작성하고, `issue/view.html`/`board/view.html`의 댓글 렌더링에
+편집/삭제 버튼 + 인라인 수정폼 + 대댓글 UI를 실제로 배선했다. `common/reviewForm.html`(#40)은
+PR changes 탭 하단 코드리뷰(블록 코멘트) 폼으로 완성.
+- **필요한 아키텍처 차이(정책상 허용, scope-cutting 아님)**: legacy는 댓글 수정/대댓글 작성 모두
+  풀페이지 `<form method=post>` 제출이지만, yuna `CommentController`는 REST(PUT/POST/DELETE
+  `/api/projects/{projectId}/issues|posts/{number}/comments[/{id}]`)만 제공한다 — `yobi.Comment.js`
+  같은 legacy 전용 정적 자산도 없다. 두 화면 모두 fetch 기반 AJAX(성공 시 `location.reload()`,
+  기존 PR 리뷰어 참여/해제 버튼과 동일한 패턴)로 대체했다. 알림메일 발송 억제 체크박스는 마크업만
+  유지하고(legacy와 동일 위치) 실제 억제 로직은 `CommentRequest`/`CommentService`에 대응 파라미터가
+  없어 연결하지 않음(별도 백엔드 확장 필요, 문서화된 보류).
+- **버그 수정**: `IssueViewController`/`BoardViewController`의 `comments` 목록이 대댓글
+  (`parentComment != null`)까지 최상위 타임라인에 그대로 노출하고 있었음(대댓글이 최상위 댓글과
+  중복 표시되는 버그) — 최상위만 타임라인에 남기고 대댓글은 `childCommentsByParentId` 맵으로 분리해
+  `common/childComments`에서만 렌더링하도록 수정.
+- **구현 중 발견해 되짚어 고친 Thymeleaf 문법 문제(#1 작업 로그의 기존 발견 사례가 광범위하게 재발함을
+  확인)**: (1) `~{template :: fragment(...)}` 프래그먼트 지정식의 파라미터 자리에 `T(...).CONST`나
+  `@{...}` 같은 복잡한 하위 표현식을 `${}`로 감싸지 않고 그대로 넣으면 파싱에 실패할 수 있어(#1 로그의
+  `@bean.method(...)` 사례와 동일 계열) 전부 `${...}`로 완전히 감싸거나(단순한 경우) 상위 요소의
+  `th:with`로 미리 변수화한 뒤 그 변수만 넘기도록(복잡한 경우, 특히 `head(title=...)`) 고쳤다.
+  (2) `head(title=${a} + ' - ' + #{key})`처럼 `${...}` 밖에서 `#{...}`와 이어붙이는 패턴을 이번
+  세션에서 만든 PR/reviewthread/fork 관련 신규·수정 화면 7곳(`pullrequest/list,create,edit,view,
+  clone.html`, `project/fork.html`, `reviewthread/list.html`)에서 광범위하게 반복하고 있었음을 뒤늦게
+  발견 — `<html th:with="xxxLabel=#{key}, pageTitle=${a + ' - ' + xxxLabel}">` 2단계 패턴으로 전부
+  교정(기존 `board/view.html`/`issue/view.html`가 이미 쓰던 검증된 패턴과 동일하게 맞춤).
+- **테스트/검증에 대한 중요한 제약**: 이번 세션은 8개 워크트리가 동시에 `./gradlew` 빌드를 돌리며
+  OOM/데몬 경합이 심해 오케스트레이터 지시로 **컴파일/테스트를 전혀 실행하지 않고** 코드 읽기/재검토만으로
+  마무리했다. 서브에이전트 A는 `compileKotlin`까지는 확인했다고 보고했으나 템플릿 렌더링 테스트
+  (`PullRequestListTemplateEquivalenceSpec`)는 미검증, 서브에이전트 B의 신규 스펙
+  (`ProjectForkAndReviewThreadTemplateEquivalenceSpec`)과 그룹11 나머지 전체(view.html/diff 파샬/댓글
+  UI)는 **한 번도 렌더링 검증을 받지 못했다.** 위 "Thymeleaf 문법 문제"에서 몇 건을 실제로 발견/수정했지만
+  같은 종류의 다른 문제가 남아있을 가능성을 배제할 수 없다 — 병합 후 반드시
+  `./gradlew test --tests "com.github.search5.yona.web.*"` 전체 재실행으로 검증 필요.
+- **legacy와 다르게 처리한 지점 요약**: (a) PR view URL 구조는 유지하되 "commits" 탭(legacy에 없음)
+  제거, (b) cross-fork PR 생성 미지원(연관 프로젝트 조회 기능 부재), (c) 댓글 수정/대댓글 AJAX 전환,
+  (d) 이벤트별 커밋 목록 생략(PULL_REQUEST_COMMIT_CHANGED), (e) diff 파일개수 제한 경고 생략,
+  (f) fork owner-select 조직 전환 미지원, (g) merge 프리뷰(#178) 컨트롤러 미연결(마크업만 완성).
+  전부 위에 사유와 함께 기록.
+- **다음 세션 우선순위**: (1) 병합 후 전체 테스트 실행해 이번 배치 전체(그룹11 26개 + #40/#23/#25/
+  #26/#29/#30/#31) 그린 확인, (2) #178 merge 프리뷰 컨트롤러 연결, (3) cross-fork PR 지원(연관
+  프로젝트 조회) 여부 검토, (4) fork owner-select 조직 전환 지원.
