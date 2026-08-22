@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.mention.MentionService
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Controller
@@ -265,6 +266,33 @@ class UserViewController(
         model.addAttribute("selected", selected)
 
         return "user/view"
+    }
+
+    // yona UserApp.verifyUser() 대응. legacy는 실패 시 notFound("Invalid verification")를 반환한다.
+    @GetMapping("/verify/{loginId}/{verificationCode}")
+    fun verifyUserLegacy(
+        @PathVariable loginId: String,
+        @PathVariable verificationCode: String,
+        response: HttpServletResponse,
+        model: Model
+    ): String {
+        return verifyUser(loginId, verificationCode, response, model)
+    }
+
+    @GetMapping("/user/verify")
+    fun verifyUser(
+        @RequestParam("loginId") loginId: String,
+        @RequestParam("code") code: String,
+        response: HttpServletResponse,
+        model: Model
+    ): String {
+        val success = userService.verifyUser(loginId, code)
+        if (!success) {
+            response.status = HttpServletResponse.SC_NOT_FOUND
+            return "error/404"
+        }
+        model.addAttribute("loginId", loginId)
+        return "user/verified"
     }
 
     @GetMapping("/user/editform")

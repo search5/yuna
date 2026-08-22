@@ -161,9 +161,9 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 70 | [~] | `user/login.scala.html` | `login.html` | 루트 배치는 기존 유지, 내용 대조 |
-| 71 | [~] | `user/signup.scala.html` | `signup.html` | |
-| 72 | [ ] | `user/verified.scala.html` | `user/verified.html` | 이메일 인증 완료 안내 |
+| 70 | [x] | `user/login.scala.html` | `login.html` | 완료(TASK-0233, TDD). 이메일 인증 안내 문구(`email-verification-help`) 누락 발견해 추가. 소셜로그인 프로바이더 동적목록/useSocialLoginOnly 토글은 #15와 동일 사유로 미이식(이미 github/google 고정 버튼으로 아키텍처 치환됨). `title.loginFor` 메시지키 파라미터화 대신 하드코딩된 것은 렌더링 결과가 동일해 저가치로 판단해 미수정 |
+| 71 | [~] | `user/signup.scala.html` | `signup.html` | 핵심 필드(loginId/name/email/password/retypedPassword) 확인 완료. 상세 줄단위 대조는 다음 배치에서 처리 |
+| 72 | [x] | `user/verified.scala.html` | `user/verified.html`(신규 생성) | 완료(TASK-0233, TDD). **중대 발견**: `UserController.verifyUser()`가 `@RestController`에서 Thymeleaf 템플릿 대신 하드코딩된 raw HTML 문자열(`ResponseEntity<String>`)을 직접 반환하고 있었음 — GNB/footer/i18n 전무. `UserViewController`(`@Controller`)로 이전하고 legacy 구조(siteLayout→전체 GNB+footer, `user.verified`/`user.verified.detail` 메시지키) 그대로 이식. 실패 시 404 상태코드도 legacy의 `notFound(...)`에 맞춰 추가 |
 | 73 | [~] | `user/resetPassword.scala.html` | `user/resetPassword.html` | |
 | 74 | [~] | `user/edit.scala.html` | `user/edit.html` | |
 | 75 | [~] | `user/edit_password.scala.html` | `user/edit_password.html` | |
@@ -765,3 +765,26 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   때문에 테스트에서 `loginDefaultPage`를 명시적으로 null로 초기화해야 했다(발견 및 대응).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN).
   전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.
+
+### 그룹5 착수분: #70~72 (TASK-0233)
+
+- **#72(verified) 중대 발견**: `UserController.verifyUser()`/`verifyUserLegacy()`가 `@RestController`
+  클래스에 있어 `ResponseEntity<String>`으로 하드코딩된 raw HTML(`"<h3>회원가입 계정 인증이 완료되었습니다.</h3>..."`)
+  을 직접 반환하고 있었다 — Thymeleaf 템플릿, GNB, footer, i18n 메시지 키 전부 우회하는 완전한 독자 구현이었다.
+  `UserService.verifyUser()`/`UserVerification` 백엔드 자체는 이미 정확히 이식돼 있었다.
+- **구현 내용**: 신규 `user/verified.html`(legacy `siteLayout`→전체 GNB+footer, `#{user.verified}`/
+  `#{user.verified.detail}` 메시지 키) 작성. 두 엔드포인트를 `UserController`(RestController)에서
+  `UserViewController`(Controller)로 이전 — 이 프로젝트의 기존 API/View 컨트롤러 분리 컨벤션과 일치시킴.
+  실패 시 legacy의 `notFound("Invalid verification")`에 맞춰 404 상태코드 추가.
+  `#70(login)`: 이메일 인증 안내 문구(`.email-verification-help`, `notification.confirm.mail.will.be.sent`
+  메시지 키는 이미 존재)가 누락돼 있어 추가.
+- **legacy와 다르게 처리한 지점**: login의 소셜로그인 동적 프로바이더 목록/`useSocialLoginOnly` 토글은 #15와
+  동일 사유(Spring Security OAuth2 정적 클라이언트 등록)로 미이식. `title.loginFor` 메시지 키를 파라미터화된
+  호출 대신 하드코딩 문자열로 쓴 것은 현재 사이트명이 항상 "Yona"라 렌더링 결과가 완전히 동일해 저가치로 판단,
+  손대지 않음.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-16]`(인증 완료 화면 GNB+footer+loginId 노출),
+  `[Test-19-17]`(로그인 화면 이메일 인증 안내 문구) 추가. `UserControllerSpec.kt`의 이제-깨진 구식 테스트
+  제거, `UserViewControllerSpec.kt`에 성공/실패 2종 유닛 테스트 추가(생성자 이전에 맞춰 회귀 수정).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec" --tests
+  "com.github.search5.yona.web.UserControllerSpec" --tests "com.github.search5.yona.web.UserViewControllerSpec"`
+  (RED 확인 후 GREEN). 전체 회귀는 10개 항목 배치 규칙에 따라 다음 체크포인트에서 실행.
