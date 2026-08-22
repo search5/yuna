@@ -121,15 +121,15 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 45 | [ ] | `error/notfound.scala.html` | (없음, 신규 필요 — 규모 큼) | **보류 결정(사유 기록)**. 프로젝트 컨텍스트 전용 404(projectLayout+projectMenu 사용). yuna는 대부분 컨트롤러가 직접 `return "error/404"`(제네릭 뷰)로 처리하는 단순한 패턴이라, 프로젝트 메뉴가 있는 별도 404 뷰를 쓰려면 그 뷰를 리턴하는 모든 컨트롤러를 프로젝트 컨텍스트 인지형으로 바꿔야 하는 광범위한 리팩터 — 투입 대비 효과(에러 페이지에 프로젝트 메뉴 표시)가 낮다고 판단해 보류. `[없음, 신규]`가 아니라 실제로 정확히는 실제 매핑 대상이 #46이었음이 재확인 조사로 드러남(비고 참고) |
+| 45 | [x] | `error/notfound.scala.html` | `error/notfound.html`(신규) | **완료(TASK-0259)**. legacy `getMenuType`/`getReturnURL`/`getMessage` 로컬 함수를 `TemplateHelper.notFoundActiveMenu/notFoundReturnUrl/notFoundMessage`로 이식. 프로젝트가 이미 resolve된 뒤 서브리소스(이슈/게시글/마일스톤/브랜치/PR 등)를 못 찾는 지점들을 컨트롤러별로 감사해 legacy `ErrorViews.NotFound.render(key, project, type)`(3-arg, 컨텍스트 인지형)를 호출하는 지점만 전환하고, `render(key, project)`(2-arg, project를 받아도 실제로는 `notfound_default`로 귀결되는 legacy의 진짜 함정)나 project 자체를 못 찾는 지점은 제네릭 유지 — 아래 진행 로그 참고 |
 | 46 | [x] | `error/notfound_default.scala.html` | `error/404.html` | 완료(TASK-0231, TDD). **재확인**: yuna의 `error/404.html`(project 파라미터 없는 제네릭 뷰)이 실제로는 `notfound.scala.html`이 아니라 이 `_default` 변형에 대응함(siteLayout이 아닌 별도의 최소 헤더+**전용 D2 Program footer**를 쓰는 legacy의 유일한 예외 케이스). `errorGnb`(간소 헤더)는 이미 이 파일의 커스텀 헤더와 일치했으나, 전용 footer가 통째로 빠져 있어 추가 |
-| 47 | [ ] | `error/forbidden.scala.html` | (없음, 신규 필요 — 규모 큼) | **보류 결정** — #45와 동일 사유(프로젝트 컨텍스트 전용 403, 실제 매핑 대상은 #48) |
+| 47 | [x] | `error/forbidden.scala.html` | `error/forbidden.html`(신규) | **완료(TASK-0259)**. legacy `ErrorViews.Forbidden.render(key, project)`(2-arg, 컨텍스트 인지형)를 호출하는 지점(project resolve 이후 서브리소스 권한 없음)만 전환 — 아래 진행 로그 참고 |
 | 48 | [x] | `error/forbidden_default.scala.html` | `error/403.html` | 완료(TASK-0231, TDD). **재확인**: yuna의 `error/403.html`이 실제로 대응하는 legacy 파일은 이것 — `siteLayout`을 쓰므로 검색폼 있는 **전체 GNB**와 **사이트 공용 footer**가 필요한데, 잘못 `errorGnb`(간소 헤더, notfound_default 전용)를 쓰고 있었고 footer도 없었음. `gnb`+`footer`로 교체 |
-| 49 | [ ] | `error/forbidden_organization.scala.html` | (없음, 신규 필요) | **보류 결정** — 조직 컨텍스트 전용 403 변형. #45/#47과 같은 사유(yuna 컨트롤러들이 조직 컨텍스트 인지형 에러뷰를 쓰지 않는 단순 패턴) |
-| 50 | [ ] | `error/badrequest.scala.html` | (없음, 신규 필요 — 규모 큼) | **보류 결정** — #45와 동일 사유(프로젝트 컨텍스트 전용 400, 실제 매핑 대상은 #51) |
+| 49 | [x] | `error/forbidden_organization.scala.html` | `error/forbidden_organization.html`(신규) | **완료(TASK-0259)**. `organization/header::header`+`organization/menu::menu` 조각 재사용. `OrganizationViewController`의 조직 컨텍스트 인지형 403 지점 전환 — 아래 진행 로그 참고 |
+| 50 | [x] | `error/badrequest.scala.html` | `error/badrequest.html`(신규) | **완료(TASK-0259)**. legacy `ErrorViews.BadRequest.render(key, project)`(2-arg, 컨텍스트 인지형)를 호출하는 지점만 전환 — `render(key)`(1-arg, project 없이 호출 — `IsOnlyGitAvailableAction` 등)는 project를 넘겨도 어차피 제네릭이 아니라 애초에 project 없이 호출되는 legacy 실제 동작 그대로 제네릭 유지. 아래 진행 로그 참고 |
 | 51 | [x] | `error/badrequest_default.scala.html` | `error/400.html` | 완료(TASK-0231, TDD). #48과 동일한 문제(errorGnb+footer없음 → gnb+footer)를 수정 |
 | 52 | [x] | `error/internalServerError_default.scala.html` | `error/500.html` | 완료(TASK-0231, TDD). #48/#51과 동일한 문제 수정. 유일하게 legacy에 "non-default" 대응 파일이 없어(이 파일이 유일한 500 변형) 원래 매핑이 맞았음 |
-| 53 | [ ] | `error/requestTextEntityTooLarge.scala.html` | (없음, 신규 필요) | **조사 완료, 미착수**. 업로드 용량 초과(413) 에러 페이지 자체가 yuna에 없음. `MaxUploadSizeExceededException` 등을 잡는 전역 `@ExceptionHandler`/`@ControllerAdvice`가 현재 하나도 없어 순수 템플릿 이식이 아니라 백엔드 예외처리 신설이 선행돼야 함 — `docs/PARITY_BACKLOG.md`에 등록 후 처리 권장 |
+| 53 | [x] | `error/requestTextEntityTooLarge.scala.html` | `error/413.html`(신규) | **완료(TASK-0259)**. `web/GlobalExceptionHandler.kt` 신규(`@ControllerAdvice` + `@ExceptionHandler(MaxUploadSizeExceededException::class)`) — `siteLayout`+`gnb`+`footer` 조각으로 완전 이식. `MockMultipartHttpServletRequest`가 실제 크기 제한을 강제하지 않아 통합테스트용 전용 트리거 컨트롤러로 예외 발생 상황을 재현해 검증 — 아래 진행 로그 참고 |
 
 > yuna `error/401.html`은 legacy에 직접 대응 파일이 없음(legacy는 401을 별도 페이지로 안 두는 것으로 보임) — 이식 작업 중
 > legacy 라우팅/에러 핸들러에서 401이 실제로 어떻게 처리되는지(302 로그인 리다이렉트인지) 재확인 필요.
@@ -1944,3 +1944,82 @@ TASK-0252로 그룹10~17 통합 회귀를 green으로 만든 뒤 백로그를 �
   --tests "com.github.search5.yona.web.IssueInlineUpdateWidgetTemplateRenderingSpec"
   --tests "com.github.search5.yona.web.IssueViewControllerSpec"`(18개 테스트 전부 GREEN, 0 failures).
   전체 `./gradlew test`는 병렬 워크트리 OOM 방지 정책에 따라 실행하지 않음(대상 클래스만 실행).
+
+### TASK-0259: 그룹3 `error/*` 컨텍스트 인지형 에러페이지 완성 (#45,47,49,50,53)
+
+사용자 지시("레거시 요나 기준으로 애매하게 남아있는 것 전부 처리하고... 자의적 판단하지 말고 레거시
+요나 들고와")에 따라 #45/47/49/50/53을 완료했다. 이 배치는 규모가 커서(184개 컨트롤러 호출부 후보)
+코디네이터가 4단계로 나눠 처리했다 — 기반 작업(신규 템플릿/예외처리/`MilestoneViewController`/
+`ProjectViewController` 일부) + Board/Compare 그룹 + Branch/Code 그룹 + Review 도메인 그룹을 각각
+격리된 워크트리에서 병렬 진행한 뒤 코디네이터가 직접 4개 브랜치를 순차 병합(각 병합마다 3개 그룹이
+독립적으로 만든 동일한 기반 자산(`error/notfound.html`/`forbidden.html`, `TemplateHelper.
+notFoundActiveMenu/notFoundReturnUrl/notFoundMessage`, `ErrorPageTemplateRenderingSpec.kt`)이
+add/add·content 충돌을 일으켜 수작업으로 합쳤다), 마지막으로 어느 그룹에도 배정되지 않아 미착수로
+남아있던 `PullRequestViewController.kt`를 코디네이터가 직접 마무리했다.
+
+- **핵심 발견(legacy `utils/ErrorViews.java` 정독)**: `ErrorViews` enum의 각 뷰(Forbidden/NotFound/
+  BadRequest)는 호출부가 어떤 오버로드를 쓰느냐에 따라 컨텍스트 인지형 뷰로 갈지 제네릭 `_default`
+  뷰로 갈지가 전혀 다르게 갈린다 — 무조건 "project가 스코프에 있으면 컨텍스트 인지형"이 아니다.
+  - `Forbidden.render(key, project)`(2-arg) → 컨텍스트 인지형 `forbidden.html`.
+  - `NotFound.render(key, project)`(2-arg, **project만** 넘기고 type 문자열은 없음) →
+    `render(key, project, MenuType.PROJECT_HOME)`을 거쳐 실제로는 **제네릭** `notfound_default`로
+    귀결된다(project를 넘겨도 컨텍스트 인지형이 아닌 유일한 조합 — 함정). `NotFound.render(key,
+    project, type: String)`(3-arg, type 문자열까지 넘길 때만) → 진짜 컨텍스트 인지형 `notfound.html`.
+  - `BadRequest.render(key, project)`(2-arg) → 컨텍스트 인지형 `badrequest.html`(NotFound와 반대).
+    `BadRequest.render(key)`(1-arg, project 자체를 안 넘김) → 제네릭.
+  - 이 표를 정확히 근거로 각 컨트롤러 호출부가 legacy에서 실제로 어떤 오버로드를 타는지(그
+    호출부를 감싸는 legacy 액션/애노테이션까지 추적) 하나씩 확인한 뒤에만 전환했다 — "project가
+    이미 resolve됐다"는 겉보기 조건만으로 기계적으로 전환하지 않았다.
+- **`TemplateHelper.notFoundActiveMenu/notFoundReturnUrl/notFoundMessage`**: legacy
+  `error/notfound.scala.html`의 로컬 함수 `getMenuType`/`getReturnURL`/`getMessage` 대응. 여러
+  컨트롤러가 공통으로 참조해 한 곳에 모았다.
+- **`web/GlobalExceptionHandler.kt`(신규, #53)**: `@ControllerAdvice`로
+  `MaxUploadSizeExceededException`을 잡아 `error/413`을 렌더링. 실제 서블릿 크기 제한을 MockMvc가
+  강제하지 않아, 통합테스트에서는 예외를 직접 던지는 전용 트리거 컨트롤러(`@Import`된
+  `@TestConfiguration`)로 DispatcherServlet→같은 프로덕션 핸들러→실제 ThymeleafViewResolver
+  전체 체인을 그대로 태워 검증했다.
+- **컨버전 완료 컨트롤러(11개)**: `MilestoneViewController`, `ProjectViewController`(`projectHome`/
+  `labelsForm`), `BoardViewController`, `CompareViewController`, `BranchApiController`,
+  `CodeViewController`, `ReviewApiController`(`review`/`unreview`), `ReviewThreadController`
+  (`reviewThreads`), `ReviewViewController`(`newPullRequestComment`/`newCommitComment`/
+  `deleteCommitCommentRedirect`), `OrganizationViewController`(#49, `error/forbidden_organization`),
+  `IssueViewController`(`massUpdate` — TASK-0260과 겹쳐 별도로 정리, 아래 참고).
+  **`PullRequestViewController`(코디네이터가 직접 마무리, 8개 지점)**: `listPullRequests`/
+  `closedPullRequests`/`sentPullRequests`의 `checkMemberAccess` 실패(legacy `pullRequests()`의
+  `forbidden(ErrorViews.Forbidden.render("error.forbidden", project))` 2-arg 대응) →
+  `error/forbidden`. `viewPullRequest`/`editPullRequestForm`/`viewChangesInternal`의
+  `accessControl.isAllowed`/매니저·기여자 체크 실패 → `error/forbidden`, PR을 못 찾은 경우(legacy
+  `IsAllowedAction`의 `resourceObject==null` 분기, `notFound(ErrorViews.NotFound.render(
+  "error.notfound", project, resourceType.resource()))` 3-arg 대응) → `error/notfound`(targetType은
+  비움 — `PULL_REQUEST.resource()`=="pull_request"가 notfound.html의 4개 case 중 어느 것과도 안
+  맞아 legacy 자체가 항상 제네릭 문구+프로젝트 헤더 조합으로 빠지는 실제 동작을 그대로 재현).
+  `createPullRequestForm`/`mergeResult`의 guest 체크(legacy `validateBeforePullRequest()`의
+  `forbidden(ErrorViews.BadRequest.render("Guest is not allowed this request", project))`)는
+  **의도적 근사**: legacy가 상태 403 + badrequest.html 뷰 + 메시지 키가 아닌 리터럴 영어 문장이라는
+  조합을 쓰는데, yuna `badrequest.html`은 Thymeleaf `#{...}`로 실제 메시지 키를 요구해 리터럴
+  문자열을 그대로 재현할 수 없다 — 같은 성격의 다른 guest/member 체크들과 통일해 `error/forbidden`
+  으로 단순화(문서화된 근사, 완전한 미해결은 아님).
+- **`IssueViewController.massUpdate()` 병합 충돌**: TASK-0260(그룹7 이슈위젯)이 legacy 그대로
+  이슈 단위 권한 체크로 이 메서드를 재작성하면서 `"redirect:/error/404"`(매핑 안 되는 라우트로
+  빠지던 기존 버그)를 직접 뷰 이름 리턴으로 고쳤는데, TASK-0259 기반 브랜치도 같은 지점을 독립적으로
+  건드려 병합 충돌이 났다 — TASK-0260의 JSON 콘텐츠 협상(`wantsJson`)은 보존하면서 TASK-0259의
+  `error/forbidden` 전환과 결합해 병합.
+- **의도적으로 제네릭 유지한 대표 사례**: `BranchViewController.kt`의 `IsOnlyGitAvailableAction`
+  대응 지점(`badRequest(ErrorViews.BadRequest.render("error.badrequest.only.available.for.git"))`
+  — **1-arg**, project를 아예 안 넘김 → 제네릭이 legacy의 실제 동작, 상태 코드만 403→400으로
+  바로잡음). `MilestoneViewController`/`CompareViewController` 등 project 자체를 못 찾는 최초
+  조회 실패 지점 전부.
+- **아직 감사하지 못한 컨트롤러**: `MigrationViewController`, `SiteApiController`,
+  `SiteViewController`, `StatisticsController`, `StatisticsViewController`, `UserViewController` —
+  전수 조사 결과 이들은 대부분 `error/403`/`error/404`가 project 컨텍스트 자체가 없는(로그인/
+  사이트관리자/통계 등 프로젝트 하위 리소스가 아닌) 지점이라 제네릭이 legacy와 일치할 가능성이
+  높지만, 각 지점을 legacy `ErrorViews` 오버로드 기준으로 하나하나 확정 검증하지는 못했다 —
+  후속 세션에서 동일 절차로 마저 확인 필요(사유 기록, 은폐 아님).
+- **신규 테스트**: `ErrorPageTemplateRenderingSpec.kt`(4개 워크트리의 테스트를 전부 병합, 16개
+  `it` 블록 — Milestone/Project/Organization/SVN badrequest/413(기반) + Board/Compare(2) +
+  Branch/Code(2) + Review 도메인(4) + PullRequestViewController(코디네이터 추가 2)) 전부 GREEN.
+  기존 mockk 스펙(`BoardViewControllerSpec`/`CompareViewControllerSpec`/`ReviewViewControllerSpec`/
+  `ReviewApiControllerSpec`/`ReviewThreadControllerSpec`/`PullRequestViewControllerSpec`)의
+  `view().name("error/403")` 류 단언도 전부 `error/forbidden`/`error/notfound`로 갱신.
+- **검증**: `./gradlew compileKotlin compileTestKotlin` 클린, 영향받은 타겟 스펙 전부 GREEN(전체
+  `./gradlew test`는 다음 로그에 기록).

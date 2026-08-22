@@ -151,7 +151,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
                 mockMvc.perform(get("/owner/TestProj/milestones").principal(userAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
             }
 
             // yona MilestoneApp.java:50-73 MilestoneCondition(orderBy/orderDir 파라미터) 대응 (P1-128).
