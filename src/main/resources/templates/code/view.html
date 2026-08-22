@@ -26,6 +26,7 @@
   .list-wrap {
       border: 1px solid #eaecef;
       border-radius: 3px;
+      margin-bottom: 15px;
   }
   .listhead {
       background-color: #f6f8fa;
@@ -89,10 +90,6 @@
   .markdown-wrap {
       padding: 30px;
   }
-  .avatar-img {
-      border-radius: 50%;
-      margin-right: 5px;
-  }
 </style>
 </head>
 <body class="prj" id="html-body">
@@ -105,122 +102,156 @@
   <div class="page-wrap-outer">
     <div class="project-page-wrap">
       <div class="code-browse-wrap">
-      <!-- 상단 탭 메뉴 -->
-      <ul class="nav nav-tabs" style="margin-bottom:20px;">
+      <!-- 상단 탭 메뉴 (yona code/view.scala.html:62-76 대응 — recursiveData의 루트(경로 "")가 폴더일 때만 노출) -->
+      <ul class="nav nav-tabs" th:if="${recursiveData[0].get('type').asText() == 'folder'}" style="margin-bottom:20px;">
         <li class="active">
-          <a th:href="@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}">파일</a>
+          <a th:href="@{/{owner}/{name}/code/{branch}/{subPath}(owner=${project.owner}, name=${project.name}, branch=${branch}, subPath=${filesTabPath})}" th:text="#{code.files}">파일</a>
         </li>
-        <li>
-          <a th:href="@{/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}">커밋</a>
+        <li th:if="${branch == 'HEAD'}">
+          <a th:href="@{/{owner}/{name}/commits(owner=${project.owner}, name=${project.name})}" th:text="#{code.commits}">커밋</a>
+        </li>
+        <li th:unless="${branch == 'HEAD'}">
+          <a th:href="@{/{owner}/{name}/commits/{branch}(owner=${project.owner}, name=${project.name}, branch=${branch})}" th:text="#{code.commits}">커밋</a>
         </li>
         <li th:if="${project.vcs == 'GIT'}">
-          <a th:href="@{/{owner}/{name}/branches(owner=${project.owner}, name=${project.name})}">브랜치</a>
+          <a th:href="@{/{owner}/{name}/branches(owner=${project.owner}, name=${project.name})}" th:text="#{title.branches}">브랜치</a>
         </li>
       </ul>
 
       <!-- 브라우저 헤더 (브랜치 선택 및 브레드크럼) -->
       <div class="code-browse-header">
         <div style="display: flex; align-items: center; gap: 15px;">
-          <!-- 브랜치 선택 셀렉트 박스 -->
-          <select id="branches" class="form-control" style="width: 150px;">
-            <option th:each="branchName : ${branches}" 
-                    th:value="${branchName}" 
-                    th:text="${branchName}"
-                    th:selected="${branchName == branch}"></option>
+          <!-- 브랜치 선택 셀렉트 박스 (yona code/view.scala.html:78-87) -->
+          <select id="branches" class="form-control pull-left"
+                  th:classappend="${recursiveData[recursiveData.size() - 1].get('type').asText() == 'file'} ? 'mb10' : ''">
+            <option th:each="branchName : ${branches}"
+                    th:value="@{/{owner}/{name}/code/{branch}/{path}(owner=${project.owner}, name=${project.name}, branch=${templateHelper.branchItemName(branchName)}, path=${path})}"
+                    th:selected="${templateHelper.branchItemName(branchName) == templateHelper.branchItemName(branch)}"
+                    th:text="${branchName}"></option>
           </select>
-          
-          <!-- 브레드크럼 -->
+
+          <!-- 브레드크럼 (yona code/view.scala.html:26-39 makeBreadCrumbs() 대응, 세그먼트 사이에 구분자 없음) -->
           <div class="code-breadcrumb-wrap" id="breadcrumbs">
-            <a th:href="@{/{owner}/{projectName}/code/{branch}(owner=${project.owner}, projectName=${project.name}, branch=${branch})}" th:text="${project.name}">project</a>
-            <th:block th:if="${path != null && !path.isEmpty()}">
-               <span th:each="segment, iterStat : ${#strings.arraySplit(path, '/')}">
-                 / <a th:href="@{/{owner}/{projectName}/code/{branch}/{subPath}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, subPath=${#strings.substring(path, 0, #strings.indexOf(path, segment) + segment.length())})}" th:text="${segment}">segment</a>
-               </span>
-            </th:block>
+            <a th:href="@{/{owner}/{name}/code/{branch}(owner=${project.owner}, name=${project.name}, branch=${branch})}" th:text="${project.name}">project</a><th:block
+               th:each="crumb : ${breadcrumbs}"><a th:href="@{/{owner}/{name}/code/{branch}/{subPath}(owner=${project.owner}, name=${project.name}, branch=${branch}, subPath=${crumb.second})}" th:text="${crumb.first}">segment</a></th:block>
           </div>
         </div>
 
-        <div class="pull-right" th:if="${project.vcs == 'GIT'}">
-          <a th:href="@{/{owner}/{projectName}/code/download/{branch}(owner=${project.owner}, projectName=${project.name}, branch=${branch})}" class="btn btn-default btn-sm">
-             ZIP 다운로드
-          </a>
-        </div>
+        <th:block th:if="${project.vcs == 'GIT'}">
+          <div class="pull-right">
+            <a th:href="@{/{owner}/{name}/code/download/{branch}(owner=${project.owner}, name=${project.name}, branch=${branch})}" class="ybtn" th:text="#{code.download}">ZIP 다운로드</a>
+          </div>
+          <div class="pull-right" th:if="${currentUser != null}">
+            <a id="new-file-link" th:href="@{/{owner}/{name}/post/new(owner=${project.owner}, name=${project.name}, path=${currentDir}, branch=${templateHelper.branchItemName(branch)})}" class="ybtn" th:text="#{code.new.file}">새 파일</a>
+          </div>
+        </th:block>
       </div>
 
       <!-- 리포지토리 파일/폴더/파일내용 뷰어 영역 -->
       <div class="code-viewer-wrap">
+        <div id="spin" style="position:fixed; top:50%; left:50%"></div>
         <th:block th:each="fileInfo : ${recursiveData}">
-          
-          <!-- Case 1: Folder View -->
+
+          <!-- Case 1: Folder View (yona code/partial_view_folder.scala.html 대응) -->
           <div th:if="${fileInfo.get('type').asText() == 'folder'}" class="list-wrap" data-type="folder">
             <div class="listhead">
-              <div class="filename">파일명</div>
-              <div class="commitMsg">최신 커밋 메시지</div>
-              <div class="commitDate">작성일</div>
+              <div class="filename" th:text="#{code.filename}">파일명</div>
+              <div class="commitMsg" th:text="#{code.commitMsg}">최신 커밋 메시지</div>
+              <div class="commitDate" th:text="#{code.commitDate}">작성일</div>
             </div>
-            
-            <div class="alert alert-warning" th:if="${!fileInfo.get('data').fieldNames().hasNext()}">
+
+            <div class="alert alert-warning nm" th:if="${fileInfo.get('data').propertyNames().isEmpty()}" th:text="#{code.nofiles}">
                폴더 내 파일이 존재하지 않습니다.
             </div>
 
-            <!-- 하위 파일 목록 렌더링 -->
-            <div class="listitem" th:each="fileName : ${#lists.sort(fileInfo.get('data').fieldNames())}" th:with="file=${fileInfo.get('data').get(fileName)}">
+            <!-- 폴더 먼저, 그 다음 파일 순서로 렌더링 (legacy가 fieldNames()를 두 번 순회하는 것과 동일) -->
+            <div class="listitem" th:each="fileName : ${#lists.sort(#lists.toList(fileInfo.get('data').propertyNames()))}"
+                 th:if="${fileInfo.get('data').get(fileName).get('type').asText() == 'folder'}" th:with="file=${fileInfo.get('data').get(fileName)}">
               <div class="filename">
-                <i th:class="${file.get('type').asText() == 'folder' ? 'icon-folder-open' : 'icon-file'}" style="margin-right: 8px;"></i>
-                <a th:href="@{/{owner}/{projectName}/code/{branch}/{subPath}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, subPath=${path == null || path.isEmpty() ? fileName : path + '/' + fileName})}"
+                <span class="dynatree-icon vmiddle"></span>
+                <a th:href="@{/{owner}/{name}/code/{branch}/{subPath}(owner=${project.owner}, name=${project.name}, branch=${branch}, subPath=${path == null or path.isEmpty() ? fileName : path + '/' + fileName})}"
                    th:text="${fileName}">fileName</a>
               </div>
               <div class="commitMsg">
-                <span class="ml5" th:text="${file.get('msg')?.asText()}">Commit message</span>
+                <a th:href="@{/user/{loginId}(loginId=${file.get('userLoginId').asText()})}" class="avatar-wrap smaller"><img th:src="${file.get('avatar').asText()}"></a>
+                <span class="ml5"><a th:href="${file.get('commitUrl').asText()}" th:text="${file.get('msg').asText()}">Commit message</a></span>
               </div>
-              <div class="commitDate" th:text="${file.get('createdDate')?.asText()}">Date</div>
+              <div class="commitDate" th:text="${templateHelper.agoOrDateString(T(java.time.Instant).ofEpochMilli(file.get('createdDate').asLong()))}">Date</div>
+            </div>
+            <div class="listitem" th:each="fileName : ${#lists.sort(#lists.toList(fileInfo.get('data').propertyNames()))}"
+                 th:if="${fileInfo.get('data').get(fileName).get('type').asText() != 'folder'}" th:with="file=${fileInfo.get('data').get(fileName)}">
+              <div class="filename">
+                <span class="dynatree-icon vmiddle"></span>
+                <a th:href="@{/{owner}/{name}/code/{branch}/{subPath}(owner=${project.owner}, name=${project.name}, branch=${branch}, subPath=${path == null or path.isEmpty() ? fileName : path + '/' + fileName})}"
+                   th:text="${fileName}">fileName</a>
+              </div>
+              <div class="commitMsg">
+                <a th:href="@{/user/{loginId}(loginId=${file.get('userLoginId').asText()})}" class="avatar-wrap smaller"><img th:src="${file.get('avatar').asText()}"></a>
+                <span class="ml5"><a th:href="${file.get('commitUrl').asText()}" th:text="${file.get('msg').asText()}">Commit message</a></span>
+              </div>
+              <div class="commitDate" th:text="${templateHelper.agoOrDateString(T(java.time.Instant).ofEpochMilli(file.get('createdDate').asLong()))}">Date</div>
             </div>
           </div>
 
-          <!-- Case 2: File View -->
+          <!-- Case 2: File View (yona code/partial_view_file.scala.html 대응) -->
           <div th:if="${fileInfo.get('type').asText() == 'file'}" class="file-wrap" data-type="file">
-            <div class="file-header">
-              <div class="file-info">
-                <span class="commiter">
-                  <strong>작성자: </strong>
-                  <span th:text="${fileInfo.get('author')?.asText()}">Author</span>
+            <div class="file-header nm">
+              <div id="fileInfo" class="file-info">
+                <span id="commiter" class="commiter">
+                  <a th:href="@{/user/{loginId}(loginId=${fileInfo.get('userLoginId').asText()})}" class="avatar-wrap smaller"><img th:src="${fileInfo.get('avatar').asText()}"></a>
+                  <a th:href="@{/user/{loginId}(loginId=${fileInfo.get('userLoginId').asText()})}" class="ml5" th:text="${fileInfo.get('author').asText()}">Author</a>
                 </span>
-                <span class="commitDate" th:text="${fileInfo.get('createdDate')?.asText()}">Date</span>
-                <span class="revision">
-                  <strong>커밋 ID: </strong>
-                  <span style="font-family: monospace;" th:text="${#strings.substring(fileInfo.get('commitId').asText(), 0, 7)}">commitId</span>
+                <span id="commitDate" class="commitDate" th:text="${templateHelper.agoOrDateString(T(java.time.Instant).ofEpochMilli(fileInfo.get('createdDate').asLong()))}">Date</span>
+                <span id="revisionNo" class="revision">
+                  <a th:href="@{/{owner}/{name}/commit/{commitId}(owner=${project.owner}, name=${project.name}, commitId=${fileInfo.get('revisionNo').asText()}, branch=${branch}, path=${path})} + '#' + ${path}"
+                     th:text="${#strings.substring(fileInfo.get('revisionNo').asText(), 0, 7)}">commitId</a>
+                  <span class="number-of-comments ml5" th:if="${fileCommentCount != null and fileCommentCount > 0}"><i class="yobicon-comments"></i> <span th:text="${fileCommentCount}">0</span></span>
                 </span>
-                <span class="commitMsg" th:text="${fileInfo.get('commitMessage')?.asText()}">Commit message</span>
+                <span id="commitMessage" class="commitMsg" th:text="${fileInfo.get('commitMessage').asText()}">Commit message</span>
               </div>
               <div class="pull-right">
-                <a th:href="@{/{owner}/{projectName}/rawcode/{branch}/{path}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, path=${path})}" class="btn btn-default btn-sm" target="_blank">
-                  Raw 보기
+                <a th:unless="${fileInfo.get('isBinary').asBoolean()}" th:href="@{/{owner}/{name}/rawcode/{branch}/{path}(owner=${project.owner}, name=${project.name}, branch=${branch}, path=${path})}" class="ybtn" target="_blank">
+                  <i class="yobicon-download-alt yobicon-white vmiddle"></i> Raw
                 </a>
+                <a th:unless="${fileInfo.get('isBinary').asBoolean()}" th:if="${currentUser != null}"
+                   th:href="@{/{owner}/{name}/post/new(owner=${project.owner}, name=${project.name}, path=${path}, branch=${templateHelper.branchItemName(branch)}, edit=true)}" class="ybtn">
+                  Edit
+                </a>
+                <a id="open-in-browser" th:href="@{/{owner}/{name}/files/{branch}/{path}(owner=${project.owner}, name=${project.name}, branch=${branch}, path=${path})}" class="ybtn" target="_blank" th:data-content="#{code.open.desc}">
+                  <i class="yobicon-download-alt yobicon-white vmiddle"></i> <span th:text="#{code.open}">브라우저로 열기</span>
+                </a>
+                <a th:href="@{/{owner}/{name}/commits/{branch}/{path}(owner=${project.owner}, name=${project.name}, branch=${branch}, path=${path})}" class="ybtn" th:text="#{code.history}">변경이력</a>
               </div>
             </div>
 
-            <!-- 파일 내용 본문 -->
-            <div>
-              <!-- 이미지 파일인 경우 -->
-              <div th:if="${fileInfo.get('mimeType')?.asText()?.startsWith('image/')}" style="text-align: center; padding: 20px;">
-                <img th:src="@{/{owner}/{projectName}/rawcode/{branch}/{path}(owner=${project.owner}, projectName=${project.name}, branch=${branch}, path=${path})}" style="max-width: 100%; border: 1px solid #ddd;"/>
+            <!-- Binary File -->
+            <th:block th:if="${fileInfo.get('isBinary').asBoolean()}">
+              <div th:if="${fileInfo.get('mimeType') != null and fileInfo.get('mimeType').asText().indexOf('image/') == 0}" id="showImage" class="image-wrap">
+                <img th:src="@{/{owner}/{name}/rawcode/{branch}/{path}(owner=${project.owner}, name=${project.name}, branch=${branch}, path=${path})}">
               </div>
+              <div th:unless="${fileInfo.get('mimeType') != null and fileInfo.get('mimeType').asText().indexOf('image/') == 0}" id="showFile" class="file-wrap">
+                <p>
+                  <strong class="filename" th:text="${#strings.substring(path, path.lastIndexOf('/') + 1)}">fileName</strong><br>
+                  <span class="filesize" th:text="${fileInfo.get('size').asText()}">size</span><br>
+                  <a th:href="@{/{owner}/{name}/rawcode/{branch}/{path}(owner=${project.owner}, name=${project.name}, branch=${branch}, path=${path})}" class="filehref ybtn"><i class="yobicon-download-alt yobicon-white vmiddle"></i> <span th:text="#{button.download}">다운로드</span></a>
+                </p>
+              </div>
+            </th:block>
 
-              <!-- 마크다운 파일인 경우 (yona partial_view_file.scala.html:109-114 isMarkdownExtension() 대응, P1-139) -->
-              <div th:if="${markdownHtml != null and !fileInfo.get('mimeType')?.asText()?.startsWith('image/')}" id="codeVal" class="markdown-wrap codebrowser-markdown">
+            <!-- Text(Code) -->
+            <th:block th:unless="${fileInfo.get('isBinary').asBoolean()}">
+              <div th:if="${markdownHtml != null}" id="codeVal" class="markdown-wrap codebrowser-markdown">
                 <div th:utext="${markdownHtml}">Rendered markdown</div>
               </div>
-
-              <!-- 일반 소스 코드 텍스트인 경우 -->
-              <div th:if="${markdownHtml == null and !fileInfo.get('mimeType')?.asText()?.startsWith('image/')}" style="position: relative;">
-                <pre class="code-wrap"><code id="code-content" th:text="${fileInfo.get('data')?.asText()}">Code content</code></pre>
-              </div>
-            </div>
+              <th:block th:if="${markdownHtml == null}">
+                <div id="codeVal" class="hidden" th:text="${fileInfo.get('data').asText()}">code</div>
+                <pre id="showCode" class="code-wrap" th:data-mimetype="${fileInfo.get('mimeType').asText()}"></pre>
+              </th:block>
+            </th:block>
           </div>
 
         </th:block>
       </div>
-
     </div>
     </div>
   </div>
@@ -229,20 +260,15 @@
 </div>
 
 <div th:replace="~{site/layout :: scripts}"></div>
-<script th:inline="javascript">
+<th:block th:replace="~{common/select2 :: select2}"></th:block>
+<script type="text/javascript">
   $(document).ready(function(){
-      var owner = /*[[${project.owner}]]*/ '';
-      var projectName = /*[[${project.name}]]*/ '';
-      var path = /*[[${path}]]*/ '';
-      
       $("#branches").on("change", function(){
-          var selectedBranch = encodeURIComponent($(this).val());
-          var targetUrl = "/" + owner + "/" + projectName + "/code/" + selectedBranch;
-          if (path) {
-              targetUrl += "/" + path;
-          }
-          location.href = targetUrl;
+          location.href = $(this).val();
       });
+
+      // help popover at open with browser button
+      $("#open-in-browser").popover({trigger: "hover", placement: "top"});
   });
 </script>
 </body>

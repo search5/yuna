@@ -1,44 +1,7 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="'코드 비교(SVN) - ' + ${project.owner} + '/' + ${project.name} + ' - Yona'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
+<head th:replace="~{site/layout :: head(${commitA.id} + '..' + ${commitB.id})}">
 <style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
   .code-browse-wrap {
       background: #fff;
       border: 1px solid #d8dee2;
@@ -63,48 +26,33 @@
 </head>
 <body class="theme-default">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+  <div th:replace="~{site/layout :: gnb}"></div>
+  <div th:replace="~{project/header :: header(${project})}"></div>
+  <div th:replace="~{project/menu :: menu(${project}, 'code')}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
-
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
+  <!-- 메인 컨텐츠 영역 (yona code/compare_svn.scala.html — page-wrap-outer 없이 project-page-wrap 바로 시작) -->
+  <div class="project-page-wrap">
     <div class="code-browse-wrap">
       <p class="commitInfo">
-        비교 범위: <strong class="commitId" th:text="${commitA.getId()} + ' ... ' + ${commitB.getId()}">commitA ... commitB</strong>
+        <strong class="commitId" th:text="'@' + ${commitA.id} + '..' + ${commitB.id}">commitA..commitB</strong>
       </p>
 
       <!-- 변경 사항이 없는 경우 -->
-      <div class="alert alert-info" th:if="${#strings.isEmpty(patch)}">
-        변경된 내역이 없습니다. (No changes)
+      <div class="alert" th:if="${#strings.isEmpty(patch)}" th:text="#{code.noChanges}">
+        변경된 내역이 없습니다.
       </div>
 
       <!-- 변경 사항이 있는 경우 raw patch 데이터 출력 -->
       <div class="diff-wrap" th:if="${not #strings.isEmpty(patch)}">
-        <pre id="commit" class="diff-body" style="background-color: #f6f8fa; border: 1px solid #e1e4e8; padding: 15px; font-family: monospace; font-size: 12px; white-space: pre-wrap;" th:text="${patch}"></pre>
+        <div id="commit" data-commit-origin="true" class="diff-body hide" th:text="${patch}"></div>
       </div>
     </div>
   </div>
+
+  <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
+
+<div th:replace="~{site/layout :: scripts}"></div>
+<script type="text/javascript" src="/javascripts/lib/diff.js"></script>
 </body>
 </html>
