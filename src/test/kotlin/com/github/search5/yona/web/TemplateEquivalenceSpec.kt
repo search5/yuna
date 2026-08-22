@@ -51,6 +51,8 @@ import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
+import com.github.search5.yona.domain.user.FavoriteProject
+import com.github.search5.yona.domain.user.FavoriteProjectRepository
 
 class TemplateEquivalenceSpec @Autowired constructor(
     private val wac: WebApplicationContext,
@@ -69,7 +71,8 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val userVerificationRepository: UserVerificationRepository,
     private val milestoneRepository: MilestoneRepository,
     private val organizationRepository: OrganizationRepository,
-    private val organizationUserRepository: OrganizationUserRepository
+    private val organizationUserRepository: OrganizationUserRepository,
+    private val favoriteProjectRepository: FavoriteProjectRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -1323,6 +1326,26 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     )
                     // myIssue 항목 하나만 남아야 한다 — 커스텀 링크 <li>는 th:if로 렌더링에서 제외됨
                     doc.select("a.user-item-btn.loggged-in").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-32] 프로젝트 헤더 즐겨찾기 별표(project/header.scala.html) 동치성 검증") {
+                it("즐겨찾기 등록한 프로젝트는 서버사이드 초기 상태부터 별표에 starred 클래스가 붙어야 한다") {
+                    if (favoriteProjectRepository.findByUserIdAndProjectId(member.id!!, publicProj.id!!).isEmpty) {
+                        favoriteProjectRepository.save(FavoriteProject(user = member, project = publicProj))
+                    }
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/owner/public-proj").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))).andReturn().response.contentAsString
+                    )
+                    doc.select(".user-project-list i.star.starred").size shouldBe 1
+                }
+
+                it("즐겨찾기 등록하지 않은 프로젝트는 별표에 starred 클래스가 없어야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/owner/memberonly-proj").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))).andReturn().response.contentAsString
+                    )
+                    doc.select(".user-project-list i.star.starred").size shouldBe 0
+                    doc.select(".user-project-list i.star").size shouldBe 1
                 }
             }
         }
