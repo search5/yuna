@@ -173,8 +173,8 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 79 | [x] | `user/partial_edit_tabmenu.scala.html` | `user/partial_edit_tabmenu.html` | 확인 — 프래그먼트 파일이라 gnb/footer 불필요, 정상(코드 변경 없음) |
 | 80 | [x] | `user/view.scala.html` | `user/view.html` | 완료(TASK-0235). 탭 구성(issues/pullRequests/projects 3개) legacy와 정확히 일치 확인 — #82/#83이 프로필 탭이 아님을 재확인(비고 참고) |
 | 81 | [i] | `user/partial_issues.scala.html` | `user/view.html`(인라인) | 확인 완료 — 프로필 "이슈" 탭에 인라인, 구조 일치(코드 변경 없음) |
-| 82 | [~] | `user/partial_milestones.scala.html` | (재배치 필요 — 그룹14 `search/*`) | **매핑 오류 발견**: 이 파일은 프로필 탭이 아니라 `search/partial_search.scala.html`(검색 결과 렌더링)에서만 호출됨. 그룹5가 아니라 그룹14(search/*, #224~233) 작업 시 처리해야 함 — 지금은 손대지 않음 |
-| 83 | [~] | `user/partial_postings.scala.html` | (재배치 필요 — 그룹14 `search/*`) | #82와 동일 — `search/partial_search.scala.html` 전용, 그룹14에서 처리 |
+| 82 | [x] | `user/partial_milestones.scala.html` | (없음 — legacy 자체가 dead code) | TASK-0250에서 재조사 완료: legacy 전체(`grep -rn "partial_milestones" app/`, git log 포함)에서 이 파일을 실제로 호출하는 곳이 **단 한 군데도 없음**을 확인했다. `search/partial_search.scala.html`이 호출하는 `@partial_milestones(group, project, searchResult)`는 시그니처(`group, project, searchResult`)가 이 파일의 시그니처(`milestone, project`)와 다른 **동명이인** — 실제로는 같은 디렉터리의 `search/partial_milestones.scala.html`(그룹14 #231)을 가리킨다. 이전 세션의 "search/partial_search.scala.html 전용" 메모 자체가 오판이었음. legacy에서 도달 불가능한 죽은 코드이므로 이식할 대상 화면이 없다 — genuinely impossible(포팅할 legacy 호출 지점이 존재하지 않음)으로 판단, 미이식 |
+| 83 | [x] | `user/partial_postings.scala.html` | (없음 — legacy 자체가 dead code) | #82와 동일 사유로 재조사 완료: legacy 전체에서 호출 지점 없음(`user/view.scala.html`도 issues/pullRequests/projectlist 3탭만 사용, milestones/postings 탭 없음 — #80에서 이미 확인된 사실과 일치). 미이식 |
 | 84 | [i] | `user/partial_pullRequests.scala.html` | `user/view.html`(인라인) | 확인 완료 — 프로필 "PR" 탭에 인라인, 구조 일치(코드 변경 없음) |
 | 85 | [i] | `user/partial_projectlist.scala.html` | `user/view.html`(인라인) | 확인 완료 — 프로필 "소속 프로젝트" 탭에 인라인, 구조 일치(코드 변경 없음) |
 | 86 | [x] | `user/userFiles.scala.html` | `user/userFiles.html` | 확인 완료 — 첨부파일 목록 테이블 구조, hover, fileType 아이콘, pagination까지 legacy와 정확히 일치(코드 변경 없음) |
@@ -366,16 +366,16 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 224 | [~] | `search/result.scala.html` | `search/list.html` | 파일명 다름 — legacy는 탭별 partial을 아래서 include, yuna 412줄 단일 파일이 다 흡수했는지 대조 |
-| 225 | [ ] | `search/partial_search.scala.html` | `search/partial_search.html` | 검색창/탭 헤더 |
-| 226 | [i] | `search/partial_projects.scala.html` | (list.html에 인라인 추정) | |
-| 227 | [i] | `search/partial_issues.scala.html` | (list.html에 인라인 추정) | |
-| 228 | [i] | `search/partial_issue_comments.scala.html` | (list.html에 인라인 추정) | |
-| 229 | [i] | `search/partial_posts.scala.html` | (list.html에 인라인 추정) | |
-| 230 | [i] | `search/partial_post_comments.scala.html` | (list.html에 인라인 추정) | |
-| 231 | [i] | `search/partial_milestones.scala.html` | (list.html에 인라인 추정) | |
-| 232 | [i] | `search/partial_reviews.scala.html` | (list.html에 인라인 추정) | |
-| 233 | [i] | `search/partial_users.scala.html` | (list.html에 인라인 추정) | |
+| 224 | [x] | `search/result.scala.html` | `search/list.html` | TASK-0250에서 legacy 8개 파샬 전부와 줄 단위 대조 완료 — 아래 #225~233 비고 참고 |
+| 225 | [x] | `search/partial_search.scala.html` | `search/list.html`(인라인) | 별도 파일 대신 `list.html`에 검색창/카테고리탭/결과 dispatch 전체가 인라인됨(아키텍처 선택, 허용범위). 페이지네이션을 legacy의 `yobi.Pagination.update()`/`#pagination` 컨벤션 대신 자체 부트스트랩식 링크로 재발명한 버그 발견 후 legacy 그대로 복구 |
+| 226 | [x] | `search/partial_projects.scala.html` | `search/list.html`(인라인) | **버그 다수 발견·수정**: (1) 프로젝트 로고/아바타 이미지 전체 누락 → 추가, (2) 포크 배지(`fork.original`+원본 프로젝트 링크) 전체 누락 → 추가, (3) `project.overview`를 legacy처럼 **스니펫 없이 전체** 출력해야 하는데 다른 탭과 동일하게 40자 스니펫 로직을 잘못 적용해뒀음 → 스니펫 로직 제거, (4) 생성일 문구가 하드코딩 "생성일:"이었고 `project.create` 메시지키/ago 포맷 미사용 → 수정, (5) `project.codeUpdate`(마지막 코드 업데이트) 라인 전체 누락 → 추가, (6) legacy는 이 파샬에만 **페이지네이션이 없음**(1페이지 제한, legacy 자체 제약) — yuna는 있었음 → 제거, (7) `<li>` class에 legacy의 `project` 보조클래스 누락 → 추가, (8) owner/name 표기에 불필요한 공백(" / ") 삽입 → "owner/name"으로 수정 |
+| 227 | [x] | `search/partial_issues.scala.html` | `search/list.html`(인라인) | **버그 발견·수정**: 스니펫이 본문보다 짧을 때 legacy가 붙이는 "....." 말줄임표 누락, 작성자가 항상 텍스트로만 표시되고(링크 없음) `issue.noAuthor` 폴백도 없었음(하드코딩 "작성자 없음") → 실제 사용자 프로필 링크+`#{issue.noAuthor}` 폴백으로 복구, 날짜가 `agoOrDateString`이 아닌 `yyyy-MM-dd HH:mm` 고정 포맷이었음 → `@templateHelper.agoOrDateString`/`getDateString`으로 교체, 페이지네이션을 legacy 컨벤션(`yobi.Pagination.update`)으로 교체 |
+| 228 | [x] | `search/partial_issue_comments.scala.html` | `search/list.html`(인라인) | **버그 발견·수정**: 제목이 legacy의 "Re) "+이슈제목이 아니라 "...에 달린 댓글"이라는 임의 문구로 바뀌어 있었음(문구 재창작 금지 원칙 위반) → 원문 그대로 복구, `#comment-{id}` 앵커 누락 → 추가, 작성자 링크/`issue.noAuthor` 폴백·ago 날짜·페이지네이션은 #227과 동일 사유로 수정 |
+| 229 | [x] | `search/partial_posts.scala.html` | `search/list.html`(인라인) | #227과 동일한 버그들(말줄임표/작성자링크/ago날짜/페이지네이션) 발견·수정. legacy가 게시글인데도 `issue.noAuthor` 키를 재사용하는 것도 legacy 원문 그대로 유지(다른 화면과 다르게 `post.noAuthor`를 쓰지 않는 legacy 자체의 특이점) |
+| 230 | [x] | `search/partial_post_comments.scala.html` | `search/list.html`(인라인) | #228과 동일 버그(제목 문구 재창작, `#comment-{id}` 누락, 작성자링크/ago날짜/페이지네이션) 발견·수정. `posting.noAuthor` 메시지키는 legacy 5개 로케일 파일 전체에 **정의 자체가 없던 잠재 버그**를 발견 — Spring MessageSource는 Play와 달리 키 누락 시 예외를 던지므로, `issue.noAuthor`와 동일 값으로 6개 로케일 파일 모두에 새로 추가(파일: `messages*.properties`) |
+| 231 | [x] | `search/partial_milestones.scala.html` | `search/list.html`(인라인) | **버그 발견·수정**: 기한(dueDate)이 없을 때 legacy는 기한 영역 자체를 렌더링하지 않는데, yuna는 항상 "기한 없음" 텍스트를 렌더링하고 있었음(legacy에 없는 문구 재창작) → `th:if`로 복구. 기한이 있을 때도 `label.dueDate` 메시지키 미사용, `milestone.until()`(오늘/기한초과/남은일수) 표시 전체 누락 → `TemplateHelper.until(Milestone)` 신규 추가 후 복구 |
+| 232 | [x] | `search/partial_reviews.scala.html` | `search/list.html`(인라인) | **버그 다수 발견·수정**: (1) PR 링크 라우트가 실존하지 않는 `/pullRequest/{number}`였음(실제 컨트롤러 매핑은 `/pull/{number}`) → 404 버그 수정, (2) legacy는 PR 기반 리뷰만 제목(`Re) `+PR제목)을 보여주고 커밋 기반(비-PR) 리뷰는 제목 없이 스니펫 전체를 링크로 감싸는데, yuna는 항상 PR 리뷰로 가정해 `thread.pullRequest`가 null이면 NPE가 나는 구조였음 → `thread.isOnPullRequest()` 분기로 legacy 그대로 복구, (3) `TemplateHelper.urlToCommentThread(CommentThread)` 신규 추가(PR/커밋 라우팅, `NotificationUrlResolver.urlToContainer()`와 동일한 전례로 outdated-diff 특정 커밋 세부분기는 생략), (4) 작성자 표시가 `rc.author.name`을 조건 없이 그대로 쓰고 있어 이름이 없으면 빈 텍스트만 나왔음 → `issue.noAuthor` 폴백 복구, (5) 날짜가 `#dates.format`(java.util.Date 전용, `ReviewComment.createdDate`는 `Instant`라 런타임 오류 위험)이었음 → `agoOrDateString`으로 교체 |
+| 233 | [x] | `search/partial_users.scala.html` | `search/list.html`(인라인) | **버그 발견·수정**: 아바타 이미지 전체 누락 → `User.avatarUrl(32)` 사용해 복구(legacy `urlToPicture`/`DEFAULT_AVATAR_URL` 분기와 동등), `userinfo.since` 메시지키 미사용(하드코딩 "가입일:") → 복구. 가입일 포맷이 legacy `User.getDateString()`("MMM dd, yyyy", `Locale.US` 고정)과 다른 별개 포맷(`yyyy-MM-dd`)이었음 → `TemplateHelper.getUserSinceDateString()` 신규 추가로 legacy 포맷 그대로 복구. `<li>` class에 legacy의 `project` 보조클래스 누락 → 추가 |
 
 ## 그룹 15 — `help/*` 도움말 (5개, #234~238)
 
@@ -1376,3 +1376,32 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   리뷰로 기존 확립된 문법 패턴(`project/*.html`, `board/list.html`, `issue/list.html`, `site/layout.html`,
   `milestone/*.html`)과 1:1 대조해 안전을 확인했지만, 최종 `./gradlew test` 실행 검증은 코디네이터가
   병합 후 중앙에서 순차 실행하기로 함. **그룹12(organization/*, #193~209) 17개 항목 전체 처리 완료.**
+
+### 그룹14 `search/*` (#224~233) + #82/#83 (TASK-0248, 병렬 워크트리 에이전트 작업 병합)
+
+- **범위**: legacy `search/result.scala.html` + 하위 8개 파샬(#225~233) 전부가 yuna `search/list.html`
+  단일 파일(약 412줄)에 인라인 조합돼 있는 구조를 그대로 유지(아키텍처적으로 허용되는 선택)하되,
+  줄 단위 대조로 실제 내용 격차를 전수 조사 — 8개 탭 전부에서 실기능 버그 발견/수정(상세는 위 표의
+  #224~233 각 행 비고 참고): 프로젝트 로고/포크배지/overview 스니펫 오적용, 이슈/게시글/댓글 탭의
+  "....." 말줄임표 누락+작성자 링크 없음+`noAuthor` 폴백 없음+고정 날짜 포맷, 댓글 탭 제목이 legacy의
+  "Re) " 접두어 대신 임의 문구로 재창작돼 있던 것(문구 재창작 금지 원칙 위반), 마일스톤 탭의 기한
+  없음 처리 오류 및 `milestone.until()` 전체 누락, 리뷰 탭의 존재하지 않는 라우트(`/pullRequest/`→
+  실제는 `/pull/`)로 인한 404 및 커밋 기반 리뷰의 NPE 위험, 유저 탭 아바타 누락, 그리고 전 탭에 걸쳐
+  legacy의 `yobi.Pagination.update()` 컨벤션 대신 독자 부트스트랩 페이저를 재발명한 문제.
+- **#82/#83 재조사**: 이전 세션이 "search/partial_search.scala.html 전용"이라 기록해뒀던 것이 실제로는
+  **동명이인 파샬**(시그니처가 다른 같은 디렉터리의 `search/partial_milestones.scala.html`, 그룹14
+  #231)과의 혼동이었음을 확인 — `user/partial_milestones.scala.html`/`user/partial_postings.scala.html`
+  본체는 legacy 전체(코드+git 로그)에서 호출부가 단 한 곳도 없는 완전한 죽은 코드로 재확인, 이식할
+  legacy 호출 지점 자체가 없어 미이식(진짜 불가능 사례로 재분류, `[x]`).
+- **백엔드 추가**: `TemplateHelper.until(Milestone)`(오늘/기한초과/남은일수), `urlToCommentThread
+  (CommentThread)`(PR/커밋 라우팅), `getUserSinceDateString(Instant)`(legacy `User.getDateString()`
+  포맷 재현). `posting.noAuthor` 메시지키가 legacy 5개 로케일 파일 전체에 정의 자체가 없던 잠재 버그를
+  발견(Play는 키 누락을 조용히 넘기지만 Spring MessageSource는 예외 발생) — 6개 로케일 파일 모두에
+  `issue.noAuthor`와 동일 값으로 신규 추가.
+- **legacy와 다르게 처리한 지점**: 없음(발견된 격차 전부 순수 버그 수정 + 문구/키/라우트 원복).
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-34]`(통합 검색 8개 결과 탭 + 카테고리 탭
+  active/empty 클래스 검증) — 병렬 워크트리 병합 시 이미 존재하던 `[Test-19-31]`(GNB 검색범위,
+  메인 세션 작업)과 번호가 겹쳐 `[Test-19-34]`로 재번호 부여.
+- **검증**: 병렬 워크트리 에이전트는 Gradle 데몬 OOM 경합으로 `./gradlew` 실행 없이 수작업 검토만
+  수행(코디네이터 지시에 따름) — 메인 세션 병합 후 중앙에서 재검증 예정.
+  **그룹14(search/*, #224~233) 10개 항목 + #82/#83 전체 처리 완료.**
