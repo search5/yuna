@@ -155,7 +155,7 @@
             </div>
 
             <div class="board-footer" style="margin-top: 15px; margin-bottom: 15px;">
-                <div th:replace="~{help/keymap}" th:with="section='boardDetail'"></div>
+                <div th:replace="~{help/keymap :: keymap('boardDetail', ${project})}"></div>
             </div>
         </div>
     </div>
