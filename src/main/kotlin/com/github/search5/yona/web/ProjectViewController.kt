@@ -448,8 +448,11 @@ class ProjectViewController(
         val orgUserList = organizationUserRepository.findByUserIdAndRoleId(loginUser.id!!, RoleType.ORG_ADMIN.roleType)
         val organizations = orgUserList.map { it.organization }
 
+        val form = NewProjectForm().apply { this.owner = loginUser.loginId }
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("organizations", organizations)
+        model.addAttribute("form", form)
+        model.addAttribute("isOwnerOrganization", organizations.any { it.name == form.owner })
 
         return "project/create"
     }
@@ -513,9 +516,28 @@ class ProjectViewController(
             val orgUserList = organizationUserRepository.findByUserIdAndRoleId(loginUser.id!!, RoleType.ORG_ADMIN.roleType)
             val organizations = orgUserList.map { it.organization }
 
+            val redisplayForm = NewProjectForm().apply {
+                this.owner = trimmedOwner
+                this.name = name
+                this.overview = overview
+                this.projectScope = try {
+                    ProjectScope.valueOf(projectScope.uppercase())
+                } catch (ex: IllegalArgumentException) {
+                    ProjectScope.PUBLIC
+                }
+                this.vcs = vcs
+                this.code = code
+                this.issue = issue
+                this.pullRequest = pullRequest
+                this.review = review
+                this.milestone = milestone
+                this.board = board
+            }
             model.addAttribute("currentUser", loginUser)
             model.addAttribute("organizations", organizations)
             model.addAttribute("error", e.message ?: "프로젝트 생성 도중 오류가 발생했습니다.")
+            model.addAttribute("form", redisplayForm)
+            model.addAttribute("isOwnerOrganization", organizations.any { it.name == redisplayForm.owner })
             return "project/create"
         }
     }
@@ -1092,4 +1114,20 @@ class ProjectViewController(
             null
         }
     }
+}
+
+// yona ProjectApp.newProjectForm()/newProject() — Play Form의 값 자동 재바인딩(validation
+// 실패 시 입력값 보존) 대응. 실패 후 폼을 다시 그릴 때도 사용자가 입력했던 값을 그대로 유지한다.
+class NewProjectForm {
+    var owner: String = ""
+    var name: String = ""
+    var overview: String = ""
+    var projectScope: ProjectScope = ProjectScope.PUBLIC
+    var vcs: String = "GIT"
+    var code: Boolean = true
+    var issue: Boolean = true
+    var pullRequest: Boolean = true
+    var review: Boolean = true
+    var milestone: Boolean = true
+    var board: Boolean = true
 }

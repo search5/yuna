@@ -30,6 +30,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.web.context.WebApplicationContext
@@ -46,6 +47,10 @@ import com.github.search5.yona.domain.user.UserVerificationRepository
 import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.organization.OrganizationUserRepository
 
 class TemplateEquivalenceSpec @Autowired constructor(
     private val wac: WebApplicationContext,
@@ -62,7 +67,9 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val recentIssueService: RecentIssueService,
     private val userSettingRepository: UserSettingRepository,
     private val userVerificationRepository: UserVerificationRepository,
-    private val milestoneRepository: MilestoneRepository
+    private val milestoneRepository: MilestoneRepository,
+    private val organizationRepository: OrganizationRepository,
+    private val organizationUserRepository: OrganizationUserRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -1108,6 +1115,119 @@ class TemplateEquivalenceSpec @Autowired constructor(
                         ).andReturn().response.contentAsString
                     )
                     memberDoc.select("div.labels-wrap").size shouldBe 0
+                }
+            }
+
+            describe("[Test-19-25] 프로젝트 생성 화면(project/create.scala.html) 동치성 검증") {
+                val orgRole = roleRepository.findById(RoleType.ORG_ADMIN.roleType).orElseGet {
+                    roleRepository.save(Role(id = RoleType.ORG_ADMIN.roleType, name = "ORG_ADMIN"))
+                }
+                val org = organizationRepository.findAll().find { it.name == "create-test-org" }
+                    ?: organizationRepository.save(Organization(name = "create-test-org"))
+                if (organizationUserRepository.findAll().none { it.organization.id == org.id && it.user.id == member.id }) {
+                    organizationUserRepository.save(OrganizationUser(user = member, organization = org, role = orgRole))
+                }
+                val existingOrgProj = projectRepository.findAll().find { it.owner == org.name && it.name == "dup-proj" }
+                    ?: projectRepository.save(Project(name = "dup-proj", owner = org.name, projectScope = ProjectScope.PUBLIC))
+
+                it("PROTECTED(그룹공개) 옵션이 legacy와 동일하게 존재해야 한다(백엔드는 이미 ProjectScope.PROTECTED 지원)") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/projectform").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    doc.select("input#protected[value=PROTECTED]").size shouldBe 1
+                    doc.select("li#opt-protected").size shouldBe 1
+                    // 소유자 기본값은 본인 계정(user 타입)이라 opt-protected는 초기 숨김 상태여야 한다
+                    doc.select("li#opt-protected[style*=display:none]").size shouldBe 1
+                }
+
+                it("검증 실패로 폼이 재표시될 때 legacy의 Form 바인딩처럼 입력값이 보존되어야 한다") {
+                    val result = mockMvc.perform(
+                        post("/projectform")
+                            .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                            .with(SecurityMockMvcRequestPostProcessors.csrf())
+                            .param("owner", org.name)
+                            .param("name", existingOrgProj.name)
+                            .param("overview", "재입력 검증용 설명")
+                            .param("projectScope", "PROTECTED")
+                            .param("vcs", "GIT")
+                            .param("code", "true")
+                    ).andReturn()
+
+                    val doc = Jsoup.parse(result.response.contentAsString)
+                    doc.select("textarea#description").text() shouldBe "재입력 검증용 설명"
+                    doc.select("input#project-name").attr("value") shouldBe existingOrgProj.name
+                    doc.select("input#protected").hasAttr("checked") shouldBe true
+                    doc.select("option[value='${org.name}']").hasAttr("selected") shouldBe true
+                    // 소유자가 조직이므로 opt-protected는 노출 상태로 재표시되어야 한다
+                    doc.select("li#opt-protected[style*=display:block]").size shouldBe 1
+                }
+            }
+
+            describe("[Test-19-25] 게시판 목록 화면(board/list.scala.html) 동치성 검증") {
+                val noticePost = postingRepository.findAll().find { it.project.id == publicProj.id && it.number == 20L }
+                    ?: postingRepository.save(
+                        Posting(
+                            title = "[공지] 점검 안내",
+                            body = "내용",
+                            project = publicProj,
+                            authorId = owner.id!!,
+                            authorLoginId = owner.loginId,
+                            authorName = owner.name,
+                            number = 20L,
+                            notice = true
+                        )
+                    )
+                val bracketPost = postingRepository.findAll().find { it.project.id == publicProj.id && it.number == 21L }
+                    ?: postingRepository.save(
+                        Posting(
+                            title = "[bugfix] 버그 수정 안내",
+                            body = "내용",
+                            project = publicProj,
+                            authorId = owner.id!!,
+                            authorLoginId = owner.loginId,
+                            authorName = owner.name,
+                            number = 21L
+                        )
+                    )
+
+                it("공지글은 legacy처럼 상단 공지 목록에만 노출되고 일반 목록에는 중복 노출되지 않아야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${publicProj.name}/posts").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    doc.select("ul.notice-wrap li").size shouldBe 1
+                    doc.select("ul.post-list-wrap:not(.notice-wrap) li[href*='/post/${noticePost.number}']").size shouldBe 0
+                }
+
+                it("제목의 대괄호 접두어는 legacy처럼 .bracket-word로 분리되고 링크 텍스트에서는 제거되어야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${publicProj.name}/posts").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    val row = doc.select("li[href*='/post/${bracketPost.number}']").first()
+                    row?.select(".bracket-word")?.text() shouldBe "[bugfix]"
+                    row?.select("a.title")?.text() shouldBe "버그 수정 안내"
+                }
+            }
+
+            describe("[Test-19-26] 게시판 상세 화면(board/view.scala.html) 삭제 확인 모달 i18n 검증") {
+                it("삭제 확인 모달의 예/아니오 버튼은 하드코딩 텍스트가 아니라 메시지 키를 사용해야 한다") {
+                    val post = postingRepository.findAll().find { it.project.id == publicProj.id }!!
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${publicProj.name}/post/${post.number}").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    doc.select("#deleteConfirm .modal-footer button.ybtn-danger").text() shouldBe "예"
+                    doc.select("#deleteConfirm .modal-footer button[data-dismiss=modal]").text() shouldBe "아니요"
                 }
             }
         }
