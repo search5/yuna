@@ -174,6 +174,50 @@ class TemplateHelper(
         return issueRepository.countByParentId(issueId) > 0
     }
 
+    // yona error/notfound.scala.html의 로컬 함수 getMenuType/getReturnURL/getMessage 대응
+    // (P-템플릿 #45). 이슈/게시글/마일스톤/코드 등 프로젝트 내 서브 리소스를 찾지 못했을 때
+    // 쓰는 컨텍스트 인지형 404 화면이 여러 컨트롤러에서 공통으로 참조하는 로직이라, 호출부마다
+    // 중복 구현하지 않도록 TemplateHelper에 한 곳으로 모았다. (TASK-0259: 그룹3 error/* 기반
+    // 작업이 이 worktree 분기 이후에 별도 병렬 워크트리에서 완료돼 아직 병합돼 있지 않아, Board/
+    // Compare 컨트롤러 작업에 필요한 만큼만 이식했다.)
+    fun notFoundActiveMenu(targetType: String?): String {
+        return when (targetType) {
+            "issue_post" -> "issue"
+            "board_post" -> "board"
+            "milestone" -> "milestone"
+            "code" -> "code"
+            else -> ""
+        }
+    }
+
+    fun notFoundReturnUrl(project: Project, targetType: String?): String {
+        val owner = project.owner
+        val name = project.name
+        return when (targetType) {
+            "issue_post" -> "/$owner/$name/issues?state=all"
+            "board_post" -> "/$owner/$name/posts"
+            "milestone" -> "/$owner/$name/milestones"
+            // yona notfound.scala.html: case "code" => routes.ProjectApp.settingForm(...) 그대로 —
+            // 코드/브랜치를 못 찾았을 때는 코드 목록이 아니라 프로젝트 설정(기본 브랜치 조정)으로 보낸다.
+            "code" -> "/$owner/$name/setting"
+            else -> "javascript:history.back();"
+        }
+    }
+
+    fun notFoundMessage(title: String?, targetType: String?): String {
+        val locale = LocaleContextHolder.getLocale()
+        if (targetType.isNullOrEmpty()) {
+            return messageSource.getMessage("error.notfound", null, locale)
+        }
+        val fallback = messageSource.getMessage("error.notfound", null, locale)
+        // yona error.notfound.code처럼 {0} 자리표시자를 쓰는 메시지가 있어(예: 브랜치 이름) title을
+        // 인자로 넘기되, title이 없는 대다수 targetType(issue_post/board_post/milestone 등은
+        // 플레이스홀더가 없다)에서는 빈 문자열을 넘겨 MessageFormat이 "null" 문자열을 찍는 사고를
+        // 막는다. targetType이 알려지지 않은 값이면(legacy가 messages.<targetType> 키가 아예 없는
+        // 경우 조회에 실패하는 것과 달리 예외로 500이 나는 걸 막기 위해) 제네릭 문구로 대체한다.
+        return messageSource.getMessage("error.notfound.$targetType", arrayOf(title ?: ""), fallback, locale) ?: fallback
+    }
+
     fun countByParentIssueIdAndState(parentId: Long, state: State): Long {
         return issueRepository.countByParentIdAndState(parentId, state)
     }
