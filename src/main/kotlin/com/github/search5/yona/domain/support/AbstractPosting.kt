@@ -28,6 +28,14 @@ abstract class AbstractPosting(
     var authorLoginId: String? = null,
     var authorName: String? = null,
 
+    // yona AbstractPosting.updatedByAuthorId 대응 (P2-02) — 편집자(마지막 수정자) 정보.
+    // yona는 id만 저장하고 뷰에서 User.find.byId(...)로 매번 조회하지만, yuna는 이미 author*
+    // 필드들을 엔티티에 비정규화해 두는 기존 컨벤션(authorId/authorLoginId/authorName)을 그대로
+    // 따라 updatedBy도 동일하게 비정규화한다(조회 왕복 없이 템플릿에서 바로 사용 가능).
+    var updatedByAuthorId: Long? = null,
+    var updatedByAuthorLoginId: String? = null,
+    var updatedByAuthorName: String? = null,
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id", nullable = false)
     var project: Project,

@@ -45,7 +45,22 @@
                             <span class="loginid"> <strong>@</strong><span th:text="${issue.authorLoginId}">loginId</span></span>
                         </a>
                     </div>
-                    
+
+                    <!-- legacy issue/view.scala.html:169 "@if(StringUtils.isNotEmpty(issue.history))" 블록 대응 (#41, TASK-0257) -->
+                    <div class="posting-history" th:if="${issue.history != null and !#strings.isEmpty(issue.history)}">
+                        <a th:if="${currentUser == null}" th:href="@{/users/loginform}" th:text="#{change.history}">변경 이력</a>
+                        <th:block th:if="${currentUser != null}">
+                            <a href="#-yona-posting-history" data-toggle="modal">
+                                <span class="lastUpdatedBy" th:if="${issue.updatedByAuthorId != null}">
+                                    <span th:text="${issue.updatedByAuthorName != null ? issue.updatedByAuthorName : issue.updatedByAuthorLoginId}">수정자</span>
+                                    <span th:text="${templateHelper.agoOrDateString(issue.updatedDate)}">방금 전</span>
+                                </span>
+                                <span th:text="#{change.edited}">수정됨</span>
+                            </a>
+                            <div th:replace="~{common/partial_history :: partial_history(${issue})}"></div>
+                        </th:block>
+                    </div>
+
                     <div th:id="'issue-' + ${issue.number}" class="hide">
                         <form th:action="@{/api/{owner}/{projectName}/issues/{number}/content(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}">
                             <textarea th:text="${issue.body}"></textarea>
@@ -124,7 +139,16 @@
                         <div class="watcher-list" style="margin-top: 10px;"></div>
 
                         <span class="act-row">
-                            <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:onclick="|window.location='/${project.owner}/${project.name}/issue/${issue.number}/editform'|"><i class="yobicon-edit-2"></i></button>
+                            <!-- legacy 원본은 onclick="window.location='...'" 인라인 핸들러를 쓰지만,
+                                 Thymeleaf 3.1+는 th:onclick 같은 이벤트핸들러 속성 안에서 문자열을 반환하는
+                                 변수식(${...})을 신뢰하지 않는 컨텍스트로 취급해 차단한다(TemplateProcessingException:
+                                 "Only variable expressions returning numbers or booleans are allowed in this
+                                 context") — 실제로 isAllowedUpdate=true인 로그인 사용자(작성자/매니저)가
+                                 이슈를 볼 때마다 500 에러가 나는 상태였다(TASK-0257에서 실제 렌더링 테스트로
+                                 발견). Thymeleaf 공식 에러 메시지가 권장하는 대로 data-* 속성에 URL을 담고
+                                 정적(비-th:) onclick에서 읽어오는 방식으로 안전하게 우회한다 — 동작은 legacy와
+                                 동일(클릭 시 editform으로 이동). -->
+                            <button th:if="${isAllowedUpdate}" type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.edit}" th:data-edit-url="@{/{owner}/{projectName}/issue/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}" onclick="window.location=this.getAttribute('data-edit-url')"><i class="yobicon-edit-2"></i></button>
                             <a th:if="${!isAllowedUpdate}" th:href="@{/{owner}/{projectName}/issue/{number}/editform(owner=${project.owner}, projectName=${project.name}, number=${issue.number})}">
                                 <button type="button" class="icon btn-transparent-with-fontsize-lineheight ml10 pt5px" data-toggle="tooltip" th:title="#{button.show.original}"><i class="yobicon-edit-2"></i></button>
                             </a>

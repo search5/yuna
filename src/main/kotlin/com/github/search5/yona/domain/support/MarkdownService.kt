@@ -18,4 +18,10 @@ interface MarkdownService {
     // 프로젝트 기본 브랜치 기준 절대경로(코드브라우저/파일 다운로드 경로)로 먼저 치환한다.
     fun renderFileInCodeBrowser(source: String, project: Project): String
     fun renderFileInReadme(source: String, project: Project): String
+
+    // yona Markdown.java:215-217 sanitize() 대응 (P2-02, common/partial_history.scala.html).
+    // render()와 달리 commonmark 마크다운 파싱을 거치지 않고 이미 만들어진 HTML 문자열(예:
+    // AbstractPostingApp.addToHistory()가 만든 <div class='history-made-by'>...</div> 조각)을
+    // 그대로 새니타이즈 정책만 적용해 통과시킨다.
+    fun sanitize(html: String): String
 }

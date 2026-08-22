@@ -450,6 +450,71 @@ class PullRequestViewController(
         return "pullrequest/create"
     }
 
+    // yona PullRequestApp.mergeResult() 대응 (#178, TASK-0257). legacy 라우트
+    // "GET /:ownerName/:project/newPullRequest/mergeResult"의 대응 경로. PR 생성/수정 화면에서
+    // from/to 브랜치를 바꿀 때마다 AJAX(GET, query string)로 호출해 커밋 프리뷰 + 충돌 여부 조각을
+    // 돌려받는다. legacy는 fromProjectId/toProjectId로 연관 프로젝트(fork) 간 PR도 지원하지만,
+    // yuna는 createPullRequestForm()/PullRequestController.CreatePullRequestRequest와 동일하게
+    // "연관 프로젝트 조회" 서브시스템이 아직 없어 from/to 프로젝트를 항상 이 프로젝트 자신으로
+    // 고정한다(그룹11 #168에서 이미 문서화된 동일 스코프 축소, create.html 상단 주석 참고).
+    // legacy validateBeforePullRequest()(ProjectUser.isGuest 체크) 대응은 createPullRequestForm()과
+    // 동일한 멤버/그룹 접근 체크를 재사용한다.
+    @GetMapping("/{owner}/{projectName}/pull/mergeResult")
+    fun mergeResult(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam(required = false) fromBranch: String?,
+        @RequestParam(required = false) toBranch: String?,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return "error/404"
+
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
+            return "error/403"
+        }
+
+        val repository = repositoryService.getRepository(project)
+        val branches = try {
+            repository.getRefNames().map { it.substringAfter("refs/heads/") }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        // legacy "StringUtils.defaultIfBlank(request().getQueryString("fromBranch"),
+        // fromBranches.get(0).getName())" 대응 — 브랜치가 지정되지 않으면 첫 번째 브랜치를 기본값으로 쓴다.
+        val resolvedFromBranch = fromBranch?.takeIf { it.isNotBlank() } ?: branches.firstOrNull()
+        val resolvedToBranch = toBranch?.takeIf { it.isNotBlank() } ?: branches.firstOrNull()
+
+        if (resolvedFromBranch == null || resolvedToBranch == null) {
+            model.addAttribute("fromProject", project)
+            model.addAttribute("pullRequestTitle", null)
+            model.addAttribute("pullRequestBody", null)
+            model.addAttribute("commits", emptyList<Any>())
+            model.addAttribute("conflict", null)
+            return "pullrequest/partial_merge_result :: mergeResult"
+        }
+
+        // legacy attemptMerge()/mergeResult() 모두 JGit 예외를 그대로 던지지만(500), 이 컨트롤러의
+        // 다른 attemptMerge() 호출부(PR 상세/수정 화면 렌더링, line 274/566)와 동일하게 화면을 깨뜨리지
+        // 않도록 실패 시 "변경 사항 없음"으로 완화한다.
+        val preview = try {
+            pullRequestService.previewMerge(project, project, resolvedFromBranch, resolvedToBranch)
+        } catch (e: Exception) {
+            null
+        }
+
+        model.addAttribute("fromProject", project)
+        model.addAttribute("pullRequestTitle", preview?.suggestedTitle)
+        model.addAttribute("pullRequestBody", preview?.suggestedBody)
+        model.addAttribute("commits", preview?.commits ?: emptyList<Any>())
+        model.addAttribute("conflict", preview?.conflict)
+
+        return "pullrequest/partial_merge_result :: mergeResult"
+    }
+
     // yona PullRequestApp.editPullRequestForm 대응. 실제 제목/본문 수정은
     // PullRequestController.updatePullRequest(PUT /api/.../pullrequests/{number})가 처리하므로,
     // 여기서는 기존 값이 채워진 폼만 렌더링하고 동일한 권한 체크(작성자 또는 매니저)만 수행한다.
