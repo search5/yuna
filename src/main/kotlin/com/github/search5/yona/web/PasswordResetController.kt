@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.mail.MailService
 import com.github.search5.yona.domain.user.PasswordResetService
 import com.github.search5.yona.domain.user.UserRepository
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.*
@@ -13,7 +14,9 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes
 class PasswordResetController(
     private val passwordResetService: PasswordResetService,
     private val userRepository: UserRepository,
-    private val mailService: MailService
+    private val mailService: MailService,
+    // yona utils.Config.getSiteName() 대응.
+    @Value("\${yuna.site-name:Yona}") private val siteName: String
 ) {
 
     private fun getServerUrl(request: HttpServletRequest): String {
@@ -30,10 +33,14 @@ class PasswordResetController(
     // 1. 비밀번호 찾기 메일 신청 화면 (GET /lostPassword)
     @GetMapping("/lostPassword")
     fun lostPasswordForm(model: Model): String {
+        model.addAttribute("siteName", siteName)
         return "user/lostPassword"
     }
 
     // 2. 비밀번호 찾기 메일 발송 처리 (POST /lostPassword)
+    // yona PasswordResetApp.requestResetPasswordEmail() 대응 — 아이디/이메일이 일치하지 않으면 i18n 메시지 키를
+    // errorMessage로 담아 그대로 재렌더링하고(항상 200), 메일 발송 자체가 예외로 실패한 경우는 legacy와 동일하게
+    // 화면에 별도 에러를 노출하지 않는다(legacy sendPasswordResetMail()도 실패를 그저 로그만 남기고 삼킨다).
     @PostMapping("/lostPassword")
     fun requestResetPasswordEmail(
         @RequestParam("loginId") loginId: String,
@@ -41,10 +48,11 @@ class PasswordResetController(
         request: HttpServletRequest,
         model: Model
     ): String {
+        model.addAttribute("siteName", siteName)
         val user = userRepository.findByLoginId(loginId).orElse(null)
-        
+
         if (user == null || user.email != emailAddress) {
-            model.addAttribute("errorMessage", "입력한 아이디와 이메일 주소가 일치하지 않습니다.")
+            model.addAttribute("errorMessage", "site.resetPasswordEmail.invalidRequest")
             return "user/lostPassword"
         }
 
@@ -53,21 +61,19 @@ class PasswordResetController(
 
         val serverUrl = getServerUrl(request)
         val resetPasswordUrl = "$serverUrl/user/reset-password?hash=$hashString"
-        val htmlContent = """
-            <h3>[Yona] 비밀번호 재설정 안내</h3>
-            <p>아래 링크를 클릭하여 새로운 비밀번호를 설정해 주세요:</p>
-            <p><a href="$resetPasswordUrl">$resetPasswordUrl</a></p>
-            <p>이 링크는 생성 후 1시간 동안만 유효합니다.</p>
-        """.trimIndent()
 
-        return try {
-            mailService.sendHtmlMail(user.email, user.name, "[Yona] 비밀번호 재설정 요청", htmlContent)
-            model.addAttribute("successMessage", "비밀번호 재설정 링크가 포함된 메일이 발송되었습니다.")
-            "user/lostPassword"
+        try {
+            mailService.sendHtmlMail(
+                user.email,
+                user.name,
+                "[$siteName] 비밀번호 재설정",
+                "비밀번호 재설정 안내\n\n$resetPasswordUrl"
+            )
+            model.addAttribute("isSent", true)
         } catch (e: Exception) {
-            model.addAttribute("errorMessage", "메일 발송에 실패했습니다: ${e.message}")
-            "user/lostPassword"
+            // legacy sendPasswordResetMail()도 EmailException을 잡아 로그만 남기고 화면에는 아무것도 노출하지 않는다.
         }
+        return "user/lostPassword"
     }
 
     // 3. 비밀번호 재설정 링크 접속 화면 (GET /user/reset-password)

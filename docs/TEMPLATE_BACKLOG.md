@@ -347,20 +347,20 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
-| 210 | [ ] | `site/siteMngLayout.scala.html` | (없음, 신규) | 관리자 화면 공통 레이아웃(그룹1의 siteLayout과의 관계 확인) |
-| 211 | [~] | `site/data.scala.html` | `site/data.html` | |
-| 212 | [~] | `site/diagnostic.scala.html` | `site/diagnostic.html` | |
-| 213 | [ ] | `site/setting.scala.html` | `site/setting.html` | yuna에 파일 자체가 없음 |
-| 214 | [~] | `site/update.scala.html` | `site/update.html` | |
-| 215 | [~] | `site/mail.scala.html` | `site/mail.html` | |
-| 216 | [~] | `site/massMail.scala.html` | `site/massMail.html` | |
-| 217 | [~] | `site/userList.scala.html` | `site/userList.html` | |
-| 218 | [~] | `site/projectList.scala.html` | `site/projectList.html` | |
-| 219 | [~] | `site/postList.scala.html` | `site/postList.html` | |
-| 220 | [~] | `site/issueList.scala.html` | `site/issueList.html` | |
-| 221 | [~] | `site/lostPassword.scala.html` | `user/lostPassword.html` | 위치 이동됨(그룹5와 중복 체크 — 여기서는 표만) |
-| 222 | [ ] | `site/partial_pagination.scala.html` | `site/partial_pagination.html` | 공용 페이지네이션 컨트롤 |
-| 223 | [ ] | `site/partial_paginationForUserList.scala.html` | `site/partial_paginationForUserList.html` | |
+| 210 | [x] | `site/siteMngLayout.scala.html` | `site/layout.html :: sidebar/breadcrumb` | 그룹1 #3(TASK-0222)에서 이미 조각 조합으로 치환 확인됨 — 이번에 사이드바 update 배지 누락만 추가 수정(TASK-0250) |
+| 211 | [x] | `site/data.scala.html` | `site/data.html` | TASK-0250: `<title>` 버그 + 스트레이 `</div>` 수정 |
+| 212 | [x] | `site/diagnostic.scala.html` | `site/diagnostic.html` | TASK-0250: `<title>` 버그 수정 |
+| 213 | [x] | `site/setting.scala.html` | `site/setting.html` | TASK-0250: 신규 작성(legacy도 라우트 없는 죽은 TODO 스텁 — 그 상태 그대로 이식) |
+| 214 | [x] | `site/update.scala.html` | `site/update.html` | TASK-0250: `<title>` 버그 수정 |
+| 215 | [x] | `site/mail.scala.html` | `site/mail.html` | 이미 legacy와 일치 확인(코드 변경 없음) |
+| 216 | [x] | `site/massMail.scala.html` | `site/massMail.html` | TASK-0250: 스트레이 `</div>` 수정 |
+| 217 | [x] | `site/userList.scala.html` | `site/userList.html` | TASK-0250: `<title>` 버그 + yuna 독자 서버사이드 페이지네이션을 legacy yobi.Pagination.js 위젯으로 복구 |
+| 218 | [x] | `site/projectList.scala.html` | `site/projectList.html` | TASK-0250: `<title>` 하드코딩 버그 + 독자 페이지네이션 복구 + `console.log` 누락 복원 |
+| 219 | [x] | `site/postList.scala.html` | `site/postList.html` | TASK-0250: `<title>` 버그 + 스트레이 `</div>` + 페이지네이션 파라미터명(`page`) 불일치 수정 |
+| 220 | [x] | `site/issueList.scala.html` | `site/issueList.html` | TASK-0250: `<title>` 하드코딩 버그 + 독자 페이지네이션 복구 |
+| 221 | [x] | `site/lostPassword.scala.html` | `user/lostPassword.html` | TASK-0250: **완전한 독자 페이지였음을 발견**(GNB/footer 없음, i18n 미사용) — site/layout 기반으로 재작성 |
+| 222 | [x] | `site/partial_pagination.scala.html` | `site/partial_pagination.html` | TASK-0250: 신규 작성(legacy도 호출부 없는 죽은 파샬 — 그 상태 그대로 이식) |
+| 223 | [x] | `site/partial_paginationForUserList.scala.html` | `site/partial_paginationForUserList.html` | TASK-0250: 신규 작성(마찬가지로 죽은 파샬, 링크 대상만 legacy pageNum→yuna page 파라미터로 환산) |
 
 ## 그룹 14 — `search/*` 통합검색 (10개, #224~233)
 
@@ -1046,3 +1046,74 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   분리 검증, `\|:\|` 없는 화면의 하위호환 검증).
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(GREEN, 60 tests).
   다음은 나머지 보류 항목(#8,10,12,13,20,23,38~41,45,47,49,50,53,57,70,82,83,90,108)을 번호 순으로 재작업.
+
+### 그룹13 `site/*` 사이트 관리자 (#210~223) 14개 처리 (TASK-0250)
+
+- **#210(siteMngLayout)**: 그룹1 #3(TASK-0222)에서 9개(당시 `setting.html`은 아직 없어서 미포함) 관리자 화면이
+  이미 `site/layout.html`의 `head`/`gnb`/`breadcrumb`/`sidebar`/`footer`/`scripts` 조각을 조합하는 방식으로
+  legacy `siteMngLayout.scala.html`(breadcrumb + 사이드바 내비 데코레이터)과 동등하게 이식돼 있음을 재확인.
+  다만 legacy 사이드바의 "update" 메뉴 항목에 `@if(YobiUpdate.versionToUpdate != null) { <span class=
+  "notification-badge">1</span> }` 알림 배지가 `site/layout.html :: sidebar` 조각에서 누락돼 있어
+  `yonaUpdateService.isUpdateRequired()`로 동일하게 복구.
+- **#213(setting)**: yuna에 파일 자체가 없었음. legacy `site/setting.scala.html`을 확인한 결과 `@siteMngLayout
+  (message) { TODO }` 형태의 미구현 스텁이었고, `SiteApp.java`/`conf/routes` 전수 검색 결과 이 템플릿을
+  렌더링하는 컨트롤러 액션이 legacy에도 전혀 없었다(사이드바 메뉴에도 "설정" 항목이 없음) — 즉 legacy에서도
+  도달 불가능한 죽은 파일. 새 라우트를 만들지 않고(legacy에 없는 것을 새로 만드는 것은 방침 위반) 그 상태
+  그대로 `site/setting.html`을 신규 작성(레이아웃 조각 조합 + 본문에 "TODO" 텍스트만).
+- **#211/#216/#219(data/massMail/postList) 버그 발견**: 세 파일 모두 본문 마지막에 대응하는 여는 태그가 없는
+  **스트레이 `</div>` 1개**가 남아있었다(`site/layout.html::footer` 바로 앞). 잘못된 HTML이라 브라우저는
+  관대하게 무시하지만 legacy에는 없는 구조라 제거.
+- **#211/#212/#214/#217/#218/#219/#220 `<title>` 정합성 버그 발견**: legacy 9개 관리자 화면은 컨트롤러가
+  넘기는 `message`(i18n 키, 대부분 `"title.siteSetting"`="사이트 설정", `projectList`만 `"title.projectList"`
+  ="프로젝트 목록")를 `<title>`에 쓰는데, yuna 쪽은 제각각이었다: `userList`/`issueList`/`projectList`는
+  `<head>` 프래그먼트 호출에 **하드코딩된 한국어 문자열**("사용자 관리"/"이슈 관리"/"프로젝트 관리")을 직접
+  박아뒀고, `data`/`diagnostic`/`postList`/`update`는 사이드바 메뉴 라벨 키(`site.sidebar.data` 등)를 대신
+  쓰고 있었다. `SiteViewController`의 `userList`/`projectList`/`issueList`/`data`/`diagnose` 5개 액션에
+  legacy와 동일한 `message` 모델 속성을 추가하고(`postList`/`mail`/`massMail`/`update`는 이미 있었음), 7개
+  템플릿 전부 `head(#{${message}})`(기존 `mail.html`/`massMail.html`이 이미 쓰던 패턴)로 통일.
+- **#217/#218/#220(userList/projectList/issueList) 페이지네이션 "yuna식 독자 구현" 발견**: legacy 4개
+  목록 화면(userList/postList/projectList/issueList) 전부 `<div id="pagination"></div>` + JS
+  `yobi.Pagination.update($("#pagination"), totalPages)` 클라이언트 위젯(`yona-lib.js`에 번들, prev/페이지
+  입력창/총페이지/next 렌더링)을 쓴다 — legacy `site/partial_pagination(ForUserList).scala.html`은 이 위젯과
+  무관한 **완전히 별개의 죽은 파샬**(아래 #222/#223 참고)이다. `postList.html`만 legacy와 동일한 위젯 패턴을
+  쓰고 있었고, `userList`/`projectList`/`issueList` 3개는 서버사이드로 직접 렌더링한 Bootstrap `<ul class=
+  "pagination">`(다른 CSS 클래스, "«/»" 대신 legacy의 "Prev"/"Next" 텍스트도 없음, `yobi.Pagination.js`
+  자체를 아예 안 씀)로 완전히 다른 구현이었다 — 방침 1(yuna식 독자 구현 금지)/알려진 버그 패턴 위반. 3개
+  파일 모두 `postList.html`과 동일한 `<div id="pagination"></div>` + `yobi.Pagination.update(...)` 패턴으로
+  교체. 부수적으로 `projectList.html`이 legacy에 있던 `console.log($(this).data('href'));`(삭제 버튼 클릭
+  핸들러 안)도 누락하고 있어 함께 복원.
+- **페이지네이션 파라미터명 불일치(신규 발견, legacy에는 없던 버그)**: `yobi.Pagination.js`는 기본적으로
+  URL 쿼리 파라미터명 `pageNum`을 읽고 쓰는데, yuna의 실제 `/sites/{userList,projectList,postList,issueList}`
+  컨트롤러는 전부 `page` 파라미터를 받는다(legacy의 Ebean 기반 `pageNum` 관례를 이 프로젝트가 이미 `page`로
+  치환해온 기존 컨벤션). 4개 화면 모두 `yobi.Pagination.update(...)` 호출에 `{"paramNameForPage": "page"}`
+  옵션을 추가해 실제 페이지 이동 링크가 맞는 쿼리 파라미터를 가리키도록 수정(`postList.html`도 기존에 이
+  옵션이 빠져 있어 클릭해도 페이지가 안 넘어가는 잠재 버그였음).
+- **#221(lostPassword) 중대 발견**: `user/lostPassword.html`이 그룹5(#71~73)에서 이미 발견/수정했던 것과
+  똑같은 "완전한 독자 페이지" 패턴이었다 — 자체 `<head>`만 있고 `site/layout`의 GNB/footer 조각을 전혀
+  쓰지 않았으며, `PasswordResetController`가 `errorMessage`/`successMessage`에 i18n 키 대신 하드코딩된
+  한국어 문자열을 직접 담고 있었다(legacy는 `site.resetPasswordEmail.invalidRequest` 같은 메시지 키를
+  모델에 담아 뷰에서 `Messages()`로 해석). `site/layout` 기반(`head`/`gnb`/`footer`/`scripts`)으로
+  재작성하고, 컨트롤러도 legacy `PasswordResetApp`과 동일하게 i18n 키 기반(`site.resetPasswordEmail.
+  invalidRequest`, `isSent`+`site.mail.sended`)으로 교체, `title.resetPasswordFor(siteName)` 사이트명
+  파라미터(legacy `utils.Config.getSiteName()`)도 `@Value("\${yuna.site-name:Yona}")`로 대응. 메일 발송이
+  예외로 실패하는 경우 legacy `sendPasswordResetMail()`도 로그만 남기고 화면에 아무것도 노출하지 않는
+  것까지 동일하게 유지(방침상 legacy 그대로).
+- **#222/#223(partial_pagination[ForUserList]) 신규 작성**: legacy-yona 저장소 전체를 전수 검색한 결과
+  두 파샬 모두 **어떤 컨트롤러/템플릿에서도 호출되지 않는 죽은 파일**임을 확인(실제 페이지네이션은 위에서
+  설명한 `yobi.Pagination.js` 위젯이 전담). 새 호출부를 만들지 않고 legacy와 동일한 구조/연산(prev/숫자
+  윈도우/next, `pageNum` 계산)만 이식한 Thymeleaf 프래그먼트로 신규 작성 — `partial_pagination.html`은
+  범용(`listUrl` 파라미터로 대상 지정), `partial_paginationForUserList.html`은 legacy가 `routes.SiteApp.
+  userList(index - 1)`(Ebean 0-based)로 하드코딩했던 링크를, yuna의 실제 `GET /sites/userList`가 받는
+  1-based `page` 파라미터로 환산해 연결(Play 라우트 헬퍼 → 실제 `@GetMapping` 경로 치환 컨벤션).
+- **legacy와 다르게 처리한 지점**: 페이지네이션 파라미터명(`pageNum`→`page`)은 이 프로젝트가 그룹 초반부터
+  이미 확립한 컨벤션에 맞춘 것으로 legacy 자체의 변경은 아님. 나머지는 전부 순수 버그 수정/누락 복원.
+- **테스트**: 새 `SiteAdminTemplateEquivalenceSpec.kt`(`[SiteAdmin-1]`~`[SiteAdmin-7]`) — 사이드바 업데이트
+  배지, `<title>` 메시지 키, `<div>` 태그 균형, 페이지네이션 위젯 마크업, `site/setting.html`/`partial_
+  pagination*.html`(테스트 전용 래퍼 템플릿 `src/test/resources/templates/site/__test_partial_*_wrapper.html`
+  경유), `user/lostPassword.html` GNB/footer 및 에러 메시지 키 검증. `PasswordResetControllerSpec.kt`의
+  `successMessage` 단언을 `isSent`로 갱신.
+- **검증**: 이 세션 진행 중 gradle 데몬이 다른 병렬 워크트리들과의 리소스 경합으로 OOM을 반복해, 코디네이터
+  지시에 따라 `./gradlew` 실행 없이 코드 리뷰(구문/HTML 태그 균형/Thymeleaf 표현식 정합성 수동 검토, `sec:
+  authorize`가 순수 `org.thymeleaf.context.Context`로는 평가 불가함을 바이트코드로 직접 확인해 테스트 설계를
+  안전한 방식으로 수정)만으로 마무리하고 로컬 커밋함 — **전체 회귀(`./gradlew test`)는 아직 미실행**이며
+  코디네이터가 병합 후 중앙에서 실행 예정.
