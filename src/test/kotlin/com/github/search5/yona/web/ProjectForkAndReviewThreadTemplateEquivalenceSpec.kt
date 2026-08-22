@@ -152,8 +152,6 @@ class ProjectForkAndReviewThreadTemplateEquivalenceSpec @Autowired constructor(
 
                     doc.select("#helpMessage img.img-polaroid").size shouldBe 1
                     doc.select("#helpMessage p.lead").size shouldBe 1
-                    // forkedProjects 모델 속성이 아직 컨트롤러에서 내려오지 않아(TODO 문서화) "이미 존재" 분기는
-                    // 구조상 존재하되 항상 비활성이어야 한다.
                     doc.select("#helpMessage .help-messages.center-txt").size shouldBe 0
                 }
 
@@ -185,6 +183,34 @@ class ProjectForkAndReviewThreadTemplateEquivalenceSpec @Autowired constructor(
                     // $yobi.loadModule은 이 코드베이스 전반에서 쓰는 동적 모듈 로더라 <script src=...> 태그가
                     // 직접 있지 않다(legacy도 동일) — loadModule 호출 문자열만 확인한다.
                     html.contains("loadModule(\"project.Fork\")") shouldBe true
+                }
+
+                // legacy PullRequestApp.newFork()의 Project.findByOwnerAndOriginalProject(destination, project)
+                // 대응 — 이전엔 GET newFork 진입점에서 이 조회 자체가 빠져 있어(TODO 문서화) forkedProjects가
+                // 항상 비어 있었다. 컨트롤러 수정 후 실제로 경고 분기가 노출되는지 검증(반드시 이 describe 블록의
+                // 마지막에 둬서 위의 "포크된 프로젝트 없음" 전제를 쓰는 앞선 테스트들에 영향을 주지 않는다).
+                it("현재 사용자가 이미 이 프로젝트를 포크했다면 legacy와 동일하게 '이미 존재' 경고 분기가 노출되어야 한다") {
+                    val alreadyForked = projectRepository.findAll().find { it.name == "pfr-already-forked" }
+                        ?: projectRepository.save(
+                            Project(
+                                name = "pfr-already-forked",
+                                owner = orgAdminMember.loginId,
+                                projectScope = ProjectScope.PUBLIC,
+                                vcs = "GIT",
+                                originalProject = publicProj
+                            )
+                        )
+
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/pfr-owner/pfr-public-proj/newFork").with(SecurityMockMvcRequestPostProcessors.user(orgAdminDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    doc.select("#helpMessage .help-messages.center-txt").size shouldBe 1
+                    val link = doc.select("#helpMessage .help-messages.center-txt a")
+                    link.size shouldBe 1
+                    link.attr("href") shouldBe "/${alreadyForked.owner}/${alreadyForked.name}"
                 }
             }
 

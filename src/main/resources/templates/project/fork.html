@@ -32,10 +32,9 @@
                         </legend>
                         <div id="helpMessage" class="well">
                             <div class="row-fluid">
-                                <!-- forkedProjects: yuna ProjectViewController.newFork()가 아직 이 모델
-                                     속성을 넘겨주지 않아(TODO: Project.findByOwnerAndOriginalProject(destination, project)
-                                     대응 조회를 컨트롤러에 추가) 항상 비어 있는 것으로 취급된다.
-                                     구조는 legacy와 동일하게 두 분기를 모두 유지한다. -->
+                                <!-- forkedProjects: ProjectViewController.newFork()가 legacy
+                                     Project.findByOwnerAndOriginalProject(destination, project) 대응 조회로
+                                     채워준다 — 이미 이 프로젝트를 복사한 적 있으면 경고 분기가 노출된다. -->
                                 <div th:if="${forkedProjects == null or forkedProjects.isEmpty()}">
                                     <div class="pull-left"><img class="img-polaroid" th:src="@{/images/fork-pull/fork.jpg}"><br></div>
                                     <div class="pull-left help-messages">
