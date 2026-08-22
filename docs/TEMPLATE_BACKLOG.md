@@ -29,7 +29,22 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
   해당 뷰 이름을 반환하도록 이식되어 있는 경우가 많으므로(`docs/PARITY_BACKLOG.md` P0~P2 항목들), 뷰만 채우면 바로 붙는다.
 - 작업 순서는 **의존성 우선**(레이아웃/공용 파샬 → 화면 도메인)이며, 각 그룹 내부는 대체로 legacy 파일시스템 순서를 따른다.
   番호는 전체 작업 순서(1~242)를 나타낸다 — 반드시 순서대로 할 필요는 없지만, 앞 번호가 뒤 번호에 의존(레이아웃/공용 파샬을
-  include)하는 경우가 많아 순서를 지키는 편이 재작업을 줄인다.
+  include)하는 경우가 많아 순서를 지키는 편이 재작업을 줄인다. 단, 레이아웃(그룹1)이 공용 파샬(그룹2, 예: navbar/footer/
+  scripts)을 include하는 **역방향 의존**이 실제로 있으므로, 그 경우엔 필요한 공용 파샬을 먼저(또는 함께) 처리한다.
+- **TDD로 진행한다.** 파일마다 다음 순서를 지킨다:
+  1. legacy `.scala.html` 원본을 읽고, yuna 쪽에 검증 가능한(=CSS 선택자/텍스트/속성으로 단언 가능한) 구체적 차이점을
+     찾는다(예: "로그인 시에만 댓글 폼이 보인다", "코드 비공개 프로젝트에서는 CODE 탭이 숨겨진다").
+  2. `src/test/kotlin/com/github/search5/yona/web/TemplateEquivalenceSpec.kt`(이미 존재하는 템플릿 렌더링 검증
+     하네스 — `AbstractIntegrationTest` 확장, 실제 Spring 컨텍스트+MockMvc로 실제 페이지를 렌더링해 Jsoup으로
+     파싱 후 CSS 선택자 단언)에 새 `describe` 블록으로 그 차이점을 검증하는 테스트를 먼저 추가한다. 파일이 아직
+     없는 화면이면 컨트롤러가 그 뷰 이름을 반환하는지부터 확인(없으면 `docs/PARITY_BACKLOG.md` 확인 후 컨트롤러도
+     함께 이식). 도메인이 크게 다르면(레이아웃, PR/코드리뷰 등) `XxxTemplateEquivalenceSpec.kt`처럼 별도 스펙
+     파일을 새로 만들어도 된다(같은 하네스 패턴 재사용).
+  3. `./gradlew test --tests "..."`로 레드 확인(템플릿 미비로 실패해야 정상).
+  4. 템플릿을 legacy 그대로 채워 넣어 그린 전환.
+  5. 영향받는 인접 템플릿/기존 테스트도 함께 재실행해 회귀 확인, 전체 스위트로 마무리 확인.
+  6. 이 문서의 상태(`[ ]`/`[~]`/`[i]` → `[x]`)와 진행 로그, 필요시 `docs/PARITY_BACKLOG.md`(새 컨트롤러 엔드포인트를
+     이식한 경우)를 갱신하고 커밋한다.
 
 ## 상태 기호
 
