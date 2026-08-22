@@ -83,7 +83,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 11 | [x] | `common/footer.scala.html` | `site/layout.html :: footer` (인라인) | 확인 완료 — 완전 일치(TASK-0224 조사 중 대조 완료, 코드 변경 없음) |
 | 12 | [x] | `common/scripts.scala.html` | `site/layout.html :: scripts` (인라인) | 완료(TASK-0224, TDD). tplYobiToast, "U" 단축키, pageshow NProgress 해제, iframe 히스토리 동기화 스크립트 이식. Play flash-scope 제네릭 순회(title/description 특수케이스)는 yuna의 warning/error/info 3키 모델로 이미 아키텍처 치환되어 있었음(선행 세션) |
 | 13 | [x] | `common/usermenu.scala.html` | `site/layout.html :: gnb` (인라인) | 완료(TASK-0224, TDD). 내 이슈 카운터 배지(`myOpenIssueCount`), 게스트 새 그룹 만들기 숨김 이식. `NAVBAR_CUSTOM_LINK_NAME/URL` 커스텀 링크와 OAuth 세션 불일치 경고는 미이식(저가치·백엔드 설정 부재, 문서에 기록) |
-| 14 | [~] | `common/usermenu_tab_content_list.scala.html` | `common/usermenu_tab_content_list.html` | 확인: yuna 파일이 307줄로 legacy(16줄)보다 훨씬 크며 이미 여러 조각이 통합된 것으로 보임 — 상세 줄단위 대조는 아직 미실시(향후 세션에서 처리) |
+| 14 | [x] | `common/usermenu_tab_content_list.scala.html` | `common/usermenu_tab_content_list.html` | 완료(TASK-0225, TDD). legacy가 include하는 3개 파샬(`index/my{OrganizationList,ProjectList,RecentIssueList}.scala.html`) 중 `myRecentIssueList`(최근 방문 이슈 탭)만 완전히 누락돼 있었음을 발견해 이식. yuna가 legacy에 없는 "전체" 탭을 추가로 갖고 있는 점은 그대로 유지(비고: 이미 동작 중인 기능 삭제는 이번 범위 밖) |
 | 15 | [~] | `common/loginDialog.scala.html` | `site/layout.html :: scripts` (인라인) | 부분 완료(TASK-0224). jquery-ui 스크립트 로드 이식(TDD). `useSocialLoginOnly` 폼 숨김 토글과 legacy의 동적 OAuth 프로바이더 목록(`forProviders`)은 yuna가 Spring Security OAuth2 정적 클라이언트 등록 방식이라 구조적으로 다름 — 하드코딩된 github/google 버튼으로 아키텍처적으로 치환된 상태(선행 세션), 토글 자체는 백엔드 설정 부재로 미이식(저가치 코너케이스로 판단, 문서에 기록) |
 | 16 | [~] | `common/select2.scala.html` | `common/select2.html` | 상세 줄단위 대조 미실시(향후 세션에서 처리) |
 | 17 | [x] | `common/calendar.scala.html` | `common/calendar.html` | 확인 완료 — 완전 일치(TASK-0224 조사 중 대조 완료, 코드 변경 없음) |
@@ -562,3 +562,30 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
   각각 RED 확인 후 구현.
 - **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec"`(RED 확인 후 GREEN),
   전체 회귀 `./gradlew test` 통과.
+
+### #14 `common/usermenu_tab_content_list.scala.html` (TASK-0225)
+
+- **원인**: legacy 이 파일은 `index/myOrganizationList`/`myProjectList`/`myRecentIssueList` 3개 파샬을 include하는
+  얇은 조합 파일이다. yuna의 `common/usermenu_tab_content_list.html`(307줄)은 `myOrganizationList`+`myProjectList`
+  내용은 이미 갖추고 있었으나, **`myRecentIssueList`(최근 방문한 이슈 탭) 전체가 빠져 있었다** — 탭 패널 마크업뿐
+  아니라 `site/layout.html`의 GNB 사이드바 탭 메뉴(`common/usermenu.scala.html` 대응, #13에서 이미 손댄 영역)에도
+  탭 버튼 자체가 없었다(yuna는 legacy에 없는 "전체" 탭으로 대체돼 있었음). 백엔드는 `RecentIssueService.
+  getRecentIssues(User)`(P1-09)가 이미 존재했으나 `/user/usermenuTabContentList` 컨트롤러가 이를 모델에 담지
+  않고 있었다.
+- **구현 내용**:
+  - `UserViewController`에 `RecentIssueService` 주입, `usermenuTabContentList()`에
+    `visitedIssues = recentIssueService.getRecentIssues(loginUser)` 모델 속성 추가.
+  - `common/usermenu_tab_content_list.html`에 `id="myRecentIssueList"` 탭 패널 추가(검색창 + `visitedIssues`
+    반복 렌더링, legacy `myRecentIssueList_partial.scala.html`의 `data-toggle=popover`/`project-item-container`/
+    `issue-item` 구조를 그대로 이식).
+  - `site/layout.html`의 `gnb`/`errorGnb` 사이드바 탭 메뉴에 "최근 방문 이슈" 탭 버튼을 `myProjectList` 다음
+    (legacy와 동일 순서: Favorite→Project→RecentIssue) 위치에 추가.
+- **legacy와 다르게 처리한 지점**: yuna가 이미 갖고 있던 "전체"(`allProjectList`) 탭은 legacy에는 없는 항목이지만,
+  이미 완성돼 동작 중인 기능을 삭제하는 것은 파괴적 변경이라 이번 범위에서 제거하지 않고 4번째 탭으로 유지했다
+  (legacy 3탭 + yuna 추가 1탭). 완전한 legacy 동치화를 원하면 별도 결정 필요 — 백로그에 기록.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-10] 사용자 메뉴 탭 콘텐츠(common/usermenu_tab_content_list.
+  scala.html) 동치성 검증` 2종(최근 방문 이슈 렌더링, GNB 탭 버튼 노출). `RecentIssueService.recordIssueVisit`로
+  실제 방문 이력을 시딩해 검증. `UserViewControllerSpec.kt`(기존 mockk 기반 스펙)이 생성자 시그니처 변경으로
+  깨져 `recentIssueService` mock을 추가해 함께 고쳤다(회귀).
+- **검증**: `./gradlew test --tests "com.github.search5.yona.web.TemplateEquivalenceSpec" --tests
+  "com.github.search5.yona.web.UserViewControllerSpec"`(RED 확인 후 GREEN), 전체 회귀 `./gradlew test` 통과.
