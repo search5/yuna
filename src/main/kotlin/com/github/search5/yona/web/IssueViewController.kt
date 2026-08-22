@@ -218,8 +218,11 @@ class IssueViewController(
         // yona partial_list_wrap.scala.html:84-86 "currentPage.getPageIndex==0 && !param.hasCondition
         // && !param.state.equals(CLOSED)" 대응 (그룹7 #119). 검색/필터 조건이 전혀 없는 목록 첫 페이지
         // (닫힌 이슈 탭 제외)에서만, 로그인한 작성자 본인의 초안(State.DRAFT) 이슈를 최상단에 노출한다.
-        val hasCondition = !filter.isNullOrBlank() || authorId != null || assigneeId != null ||
-            milestoneId != null || commenterId != null || !labelIds.isNullOrEmpty() || !dueDate.isNullOrBlank()
+        // legacy SearchCondition.hasCondition()은 assigneeId/authorId/mentionId/commenterId/sharerId/
+        // favoriteId만 검사한다 — filter(텍스트 검색)/milestoneId/labelIds/dueDate는 포함되지 않는다
+        // (예: 마일스톤이나 라벨로만 필터링해도 초안 영역은 그대로 보인다). yuna는 mentionId/sharerId/
+        // favoriteId 파라미터를 아직 지원하지 않아 그 부분은 항상 false로 취급한다.
+        val hasCondition = authorId != null || assigneeId != null || commenterId != null
         val draftIssues = if (loginUser != null && actualPage == 0 && !hasCondition && state != State.CLOSED) {
             issueRepository.findByProjectAndAuthorLoginIdAndIsDraftTrueOrderByNumberDesc(project, loginUser.loginId!!)
         } else {
@@ -716,16 +719,28 @@ class IssueViewController(
             ?: return if (wantsJson) ResponseEntity.notFound().build<Any>() else "redirect:/error/404"
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
-        if (loginUser == null || !loginUser.isMemberOf(project)) {
+        if (loginUser == null) {
             return if (wantsJson) ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build<Any>() else "redirect:/error/403"
         }
 
+        // yona IssueApp.massUpdate() 대응 — legacy는 프로젝트 멤버십을 통째로 게이트하지 않고
+        // 이슈 1건씩 AccessControl.isAllowed(user, issue, Operation.UPDATE)로 권한을 확인해
+        // updatedItems/rejectedByPermission을 집계한 뒤, 아무것도 갱신하지 못하고 권한 거부만
+        // 있었을 때에만 403을 반환한다(updatedItems==0 && rejectedByPermission>0). 이전 구현은
+        // 여기서 loginUser.isMemberOf(project)로 선제 차단했는데, User.isMemberOf()는 User
+        // 엔티티에 매핑된(mappedBy="user") 지연 컬렉션 projectUsers를 참조해 같은 트랜잭션 안에서
+        // User가 먼저 로드된 뒤 ProjectUser가 별도로 저장되면 스냅샷이 갱신되지 않아 실제로는
+        // 멤버인데도 false가 되는 문제도 있었다(그룹7 #127 TASK-0260에서 massUpdate가 403을
+        // 반환하는 원인으로 실측 확인됨). 이제는 legacy처럼 이슈 단위 권한 체크만 쓴다.
         var firstUpdatedIssue: Issue? = null
+        var updatedItems = 0
+        var rejectedByPermission = 0
         val issueIds = form.issues.mapNotNull { it.id }
         if (issueIds.isNotEmpty()) {
             val issuesToUpdate = issueRepository.findAllById(issueIds)
             for (issue in issuesToUpdate) {
                 if (issue.project.id != project.id) continue
+                if (issue.isDraft) continue
 
                 // 1. 삭제
                 if (delete) {
@@ -733,9 +748,18 @@ class IssueViewController(
                         // yona Project.delete() 이슈 삭제 대응 (P0-19) — 댓글/이벤트/즐겨찾기/첨부파일/
                         // 타이틀헤드까지 함께 정리하는 IssueServiceImpl.deleteIssueCascade() 재사용.
                         issueService.deleteIssueCascade(issue)
+                        updatedItems++
+                    } else {
+                        rejectedByPermission++
                     }
                     continue
                 }
+
+                if (!accessControl.isAllowedToUpdateIssue(loginUser, project, issue.authorLoginId)) {
+                    rejectedByPermission++
+                    continue
+                }
+                updatedItems++
 
                 // 2. 상태 변경
                 if (!form.state.isNullOrEmpty()) {
@@ -804,6 +828,11 @@ class IssueViewController(
             // yona IssueApp.massUpdate() "issueMassUpdate.issues.get(0)" 대응 — JSON 응답의 마감일
             // 메시지는 폼에 담긴 첫 번째 이슈 기준으로 계산한다(우리 위젯은 항상 이슈 1건만 보낸다).
             firstUpdatedIssue = issuesToUpdate.firstOrNull { it.project.id == project.id }
+        }
+
+        // yona IssueApp.massUpdate() "if (updatedItems == 0 && rejectedByPermission > 0) return forbidden(...)" 대응.
+        if (updatedItems == 0 && rejectedByPermission > 0) {
+            return if (wantsJson) ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build<Any>() else "redirect:/error/403"
         }
 
         if (wantsJson) {

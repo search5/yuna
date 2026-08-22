@@ -17,6 +17,7 @@ import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.YonaUserDetails
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
@@ -100,8 +101,10 @@ class IssueInlineUpdateWidgetTemplateRenderingSpec @Autowired constructor(
                         .param("issues[0].id", issue.id.toString())
                         .param("isDueDateChanged", "true")
                         .param("dueDate", "2099-01-01")
-                ).andReturn()
-                println("STATUS=" + res.response.status + " BODY=" + res.response.contentAsString)
+                ).andExpect(status().isOk).andReturn()
+
+                val updated = issueRepository.findById(issue.id!!).orElseThrow()
+                updated.dueDate shouldNotBe null
             }
         }
     }
