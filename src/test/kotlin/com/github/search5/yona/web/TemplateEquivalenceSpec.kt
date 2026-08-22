@@ -919,6 +919,18 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     json.get("isExist").asBoolean() shouldBe true
                 }
             }
+
+            describe("[Test-19-19] 비밀번호 재설정 화면(user/resetPassword.scala.html) 동치성 검증") {
+                it("비밀번호 재설정 화면은 site/layout 기반 전체 GNB와 footer, resetPassword 모듈 스크립트를 포함해야 한다") {
+                    val result = mockMvc.perform(get("/user/reset-password").param("hash", "dummy-hash")).andReturn()
+                    val doc = Jsoup.parse(result.response.contentAsString)
+
+                    doc.select("form[name='gnb-search-form']").size shouldBe 1
+                    doc.select("footer.page-footer-outer").size shouldBe 1
+                    doc.select("script[src*='lib/validate.js']").size shouldBe 1
+                    doc.select("script[src*='service/yobi.resetPassword.js']").size shouldBe 1
+                }
+            }
         }
     }
 }
