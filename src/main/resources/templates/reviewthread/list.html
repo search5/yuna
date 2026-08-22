@@ -1,220 +1,102 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head>
-<meta charset="utf-8">
-<title th:text="${project.name} + ' - 리뷰 목록'">Yona</title>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico">
-<link rel="stylesheet" type="text/css" media="all" href="/bootstrap/css/bootstrap.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobicon/style.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/usermenu.css">
-<link rel="stylesheet" type="text/css" media="all" href="/stylesheets/yobi.css">
-<style>
-  .gnb-wrap {
-      background-color: #1a1c22;
-      border-bottom: 1px solid #2d3038;
-      padding: 10px 20px;
-  }
-  .gnb-brand {
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff !important;
-      text-decoration: none;
-  }
-  .gnb-menu {
-      float: right;
-  }
-  .gnb-menu a {
-      color: #ccc;
-      margin-left: 15px;
-      text-decoration: none;
-  }
-  .gnb-menu a:hover {
-      color: #fff;
-  }
-  .project-header {
-      background-color: #f8f9fa;
-      padding: 20px;
-      border-bottom: 1px solid #e9ecef;
-      margin-bottom: 20px;
-  }
-  .project-sidebar {
-      background: #fafbfc;
-      border: 1px solid #d8dee2;
-      border-radius: 3px;
-      padding: 15px;
-  }
-  .menu-list a {
-      display: block;
-      padding: 8px 10px;
-      color: #0366d6;
-      text-decoration: none;
-      border-bottom: 1px solid #eaecef;
-  }
-  .menu-list a:hover {
-      background-color: #f1f8ff;
-  }
-  .num-badge {
-      background-color: #999;
-      color: #fff;
-      padding: 2px 6px;
-      font-size: 11px;
-      border-radius: 9px;
-      margin-left: 5px;
-  }
-  .active .num-badge {
-      background-color: #337ab7;
-  }
-  .post-item {
-      border-bottom: 1px solid #eaecef;
-      padding: 15px 10px;
-      list-style: none;
-  }
-  .post-item:hover {
-      background-color: #fafbfc;
-  }
-  .post-id {
-      color: #76787a;
-      font-size: 13px;
-      margin-right: 10px;
-  }
-</style>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko"
+      th:with="reviewMenuLabel=#{menu.review}, pageTitle=${project.name + ' - ' + reviewMenuLabel}">
+<head th:replace="~{site/layout :: head(title=${pageTitle})}">
 </head>
-<body class="theme-default">
+<body class="prj" id="html-body">
 <div id="main" class="main">
-  <!-- GNB (상단 바) -->
-  <div class="gnb-wrap clearfix">
-    <a href="/" class="gnb-brand">Yona</a>
-    <div class="gnb-menu">
-      <span sec:authorize="isAnonymous()">
-        <a th:href="@{/login}">로그인</a>
-        <a th:href="@{/signup}">회원가입</a>
-      </span>
-      <span sec:authorize="isAuthenticated()">
-        <span style="color: #fff;" sec:authentication="name">사용자</span>님
-        <a th:href="@{/logout}">로그아웃</a>
-      </span>
-    </div>
-  </div>
+    <div th:replace="~{site/layout :: gnb}"></div>
 
-  <!-- 프로젝트 헤더 -->
-  <div class="project-header">
-    <div class="container">
-      <h2>
-        <a th:href="@{/projects/{owner}/{name}(owner=${project.owner}, name=${project.name})}" th:text="${project.owner} + ' / ' + ${project.name}">Owner / Project</a>
-      </h2>
-    </div>
-  </div>
+    <div th:replace="~{project/header :: header(${project})}"></div>
+    <div th:replace="~{project/menu :: menu(${project}, 'review')}"></div>
 
-  <!-- 메인 컨텐츠 영역 -->
-  <div class="container">
-    <div class="row">
-      <!-- 사이드바 필터 -->
-      <div class="col-md-3">
-        <div class="project-sidebar" style="margin-bottom: 20px;">
-          <h4>필터</h4>
-          <ul class="nav nav-pills nav-stacked" style="margin-top: 10px;">
-            <li th:classappend="${param.participantId == null && param.authorId == null} ? 'active'">
-              <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, state=${param.state}, filter=${param.filter})}">
-                전체 리뷰 <span class="num-badge" th:text="${countEveryone}">0</span>
-              </a>
-            </li>
-            <li th:if="${currentUser != null}" th:classappend="${param.participantId == currentUser.id} ? 'active'">
-              <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, participantId=${currentUser.id}, state=${param.state}, filter=${param.filter})}">
-                참여한 리뷰 <span class="num-badge" th:text="${countParticipant}">0</span>
-              </a>
-            </li>
-            <li th:if="${currentUser != null}" th:classappend="${param.authorId == currentUser.id} ? 'active'">
-              <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, authorId=${currentUser.id}, state=${param.state}, filter=${param.filter})}">
-                내가 만든 리뷰 <span class="num-badge" th:text="${countAuthor}">0</span>
-              </a>
-            </li>
-          </ul>
-
-          <hr/>
-          <form th:action="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name})}" method="get">
-            <input type="hidden" name="authorId" th:value="${param.authorId}"/>
-            <input type="hidden" name="participantId" th:value="${param.participantId}"/>
-            <input type="hidden" name="state" th:value="${param.state}"/>
-            <input type="hidden" name="orderBy" th:value="${param.orderBy}"/>
-            <input type="hidden" name="orderDir" th:value="${param.orderDir}"/>
-            <div class="input-group">
-              <input type="text" name="filter" class="form-control" placeholder="검색어 입력..." th:value="${param.filter}"/>
-              <span class="input-group-btn">
-                <button class="btn btn-default" type="submit"><i class="yobicon-search"></i></button>
-              </span>
+    <!-- legacy reviewthread/list.scala.html 1:1 이식 (P2-46 계열, 그룹11). -->
+    <div class="project-page-wrap">
+        <div class="row-fluid issue-list-wrap">
+            <div class="span2 search-wrap span-hard-wrap">
+                <div class="inner advanced">
+                    <ul class="lst-stacked unstyled">
+                        <li th:classappend="${param.participantId == null and param.authorId == null} ? 'active'">
+                            <a href="#" data-toggle="filter">
+                                <span th:text="#{review.allReview}">모든 리뷰</span> <span class="num-badge pull-right" th:text="${countEveryone}">0</span>
+                            </a>
+                        </li>
+                        <li th:if="${currentUser != null}" th:classappend="${param.participantId == currentUser.id} ? 'active'">
+                            <a href="#" data-toggle="filter" data-type="participantId" th:data-value="${currentUser.id}">
+                                <span th:text="#{review.involvingYou}">참여한 리뷰</span> <span class="num-badge pull-right" th:text="${countParticipant}">0</span>
+                            </a>
+                        </li>
+                        <li th:if="${currentUser != null}" th:classappend="${param.authorId == currentUser.id} ? 'active'">
+                            <a href="#" data-toggle="filter" data-type="authorId" th:data-value="${currentUser.id}">
+                                <span th:text="#{review.createdByYou}">내가 만든 리뷰</span> <span class="num-badge pull-right" th:text="${countAuthor}">0</span>
+                            </a>
+                        </li>
+                    </ul>
+                    <form id="search" name="search" th:action="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name})}" method="get">
+                        <input type="hidden" name="authorId" th:value="${param.authorId}">
+                        <input type="hidden" name="participantId" th:value="${param.participantId}">
+                        <input type="hidden" name="orderDir" th:value="${param.orderDir}">
+                        <input type="hidden" name="orderBy" th:value="${param.orderBy}">
+                        <input type="hidden" name="state" th:value="${param.state}">
+                        <hr class="hide-in-mobile">
+                        <div class="search-bar span-hard-wrap">
+                            <input name="filter" class="textbox full" type="text" th:value="${param.filter}">
+                            <button type="submit" class="search-btn"><i class="yobicon-search"></i></button>
+                        </div>
+                    </form>
+                </div>
             </div>
-          </form>
+            <div class="span10 span-hard-wrap">
+                <div class="pull-right filters">
+                    <!-- makeSortLink("createdDate", ...) — 리뷰 목록의 유일한 정렬 필드가 createdDate라
+                         param.orderBy == 'createdDate' 분기가 사실상 항상 참이지만, legacy의 두 분기 구조를
+                         그대로 유지한다. -->
+                    <th:block th:if="${param.orderBy == 'createdDate'}">
+                        <a href="#" data-field="createdDate" th:data-value="${param.orderDir == 'asc'} ? 'desc' : 'asc'" class="filter" data-toggle="order">
+                            <i class="ico btn-gray-arrow" th:classappend="${param.orderDir == 'desc'} ? 'down'"></i><span th:text="#{common.order.date}">날짜순</span>
+                        </a>
+                    </th:block>
+                    <th:block th:unless="${param.orderBy == 'createdDate'}">
+                        <a href="#" data-field="createdDate" data-value="desc" class="filter" data-toggle="order">
+                            <i class="ico btn-gray-arrow down"></i><span th:text="#{common.order.date}">날짜순</span>
+                        </a>
+                    </th:block>
+                </div>
+                <ul class="nav nav-tabs nm">
+                    <li th:classappend="${param.state == 'OPEN'} ? 'active'">
+                        <a href="#" data-type="state" data-value="OPEN" data-toggle="filter">
+                            <span th:text="#{issue.state.open}">열림</span> <span class="num-badge" th:text="${countOpen}">0</span>
+                        </a>
+                    </li>
+                    <li th:classappend="${param.state == 'CLOSED'} ? 'active'">
+                        <a href="#" data-type="state" data-value="CLOSED" data-toggle="filter">
+                            <span th:text="#{issue.state.closed}">닫힘</span> <span class="num-badge" th:text="${countClosed}">0</span>
+                        </a>
+                    </li>
+                </ul>
+                <div class="review-list-wrap" th:insert="~{reviewthread/partial_list :: list(${project}, ${commentThreads}, ${param})}"></div>
+                <div class="pull-left" style="padding:10px;">
+                    <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, authorId=${param.authorId}, participantId=${param.participantId}, orderBy=${param.orderBy}, orderDir=${param.orderDir}, state=${param.state}, filter=${param.filter}, format='xls')}" class="ybtn small">
+                        <i class="yobicon-file-excel"></i> <span th:text="#{issue.downloadAsExcel}">엑셀파일로 다운받기</span>
+                    </a>
+                </div>
+                <div id="pagination"></div>
+            </div>
         </div>
-      </div>
-
-      <!-- 리뷰 목록 영역 -->
-      <div class="col-md-9">
-        <ul class="nav nav-tabs" style="margin-bottom: 20px;">
-          <li th:classappend="${param.state == 'OPEN'} ? 'active'">
-            <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, authorId=${param.authorId}, participantId=${param.participantId}, state='OPEN', filter=${param.filter})}">
-              열림 <span class="num-badge" th:text="${countOpen}">0</span>
-            </a>
-          </li>
-          <li th:classappend="${param.state == 'CLOSED'} ? 'active'">
-            <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, authorId=${param.authorId}, participantId=${param.participantId}, state='CLOSED', filter=${param.filter})}">
-              닫힘 <span class="num-badge" th:text="${countClosed}">0</span>
-            </a>
-          </li>
-        </ul>
-
-        <div style="background: #fff; border: 1px solid #d8dee2; border-radius: 3px;">
-          <!-- 목록 루프 -->
-          <ul class="post-list-wrap" style="padding-left: 0; margin-bottom: 0;">
-            <li class="post-item" th:each="thread : ${commentThreads.content}">
-              <div class="title-wrap">
-                <span class="post-id" th:text="${thread.id}">1</span>
-                <a th:href="@{/{owner}/{name}/pullRequest/{prId}(owner=${project.owner}, name=${project.name}, prId=${thread.pullRequest != null ? thread.pullRequest.id : 0})}" 
-                   class="title" th:text="${!thread.reviewComments.isEmpty() ? thread.getFirstReviewComment().contents : '내용 없음'}" style="font-weight: bold; font-size: 15px; color: #337ab7;">
-                  리뷰 내용
-                </a>
-              </div>
-              <div class="infos" style="margin-top: 5px; font-size: 12px; color: #76787a;">
-                <span class="infos-item" th:text="${thread.author != null ? thread.author.name : '작성자 없음'}">작성자</span> &middot;
-                <span class="infos-item" th:text="${thread.createdDate}">방금 전</span>
-                <span class="infos-item" th:if="${thread.reviewComments.size() > 1}" th:text="'댓글 ' + (${thread.reviewComments.size() - 1}) + '개'" style="margin-left: 10px; color: #b94a48;">댓글 2개</span>
-              </div>
-            </li>
-            <li class="text-center" th:if="${commentThreads.content.isEmpty()}" style="padding: 40px; color: #999;">
-              등록된 리뷰 스레드가 없습니다.
-            </li>
-          </ul>
-        </div>
-
-        <!-- 하단 액션 & 페이징 -->
-        <div style="margin-top: 20px;" class="clearfix">
-          <div class="pull-left">
-            <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, authorId=${param.authorId}, participantId=${param.participantId}, state=${param.state}, filter=${param.filter}, format='xls')}" class="btn btn-default btn-sm">
-              <i class="yobicon-file-excel"></i> 엑셀로 다운로드
-            </a>
-          </div>
-
-          <!-- 페이징 -->
-          <div class="pull-right" th:if="${commentThreads.totalPages > 1}">
-            <ul class="pagination" style="margin: 0;">
-              <li th:classappend="${commentThreads.first} ? 'disabled'">
-                <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, authorId=${param.authorId}, participantId=${param.participantId}, state=${param.state}, filter=${param.filter}, page=${commentThreads.number - 1})}">&laquo;</a>
-              </li>
-              <li th:each="i : ${#numbers.sequence(0, commentThreads.totalPages - 1)}" th:classappend="${i == commentThreads.number} ? 'active'">
-                <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, authorId=${param.authorId}, participantId=${param.participantId}, state=${param.state}, filter=${param.filter}, page=${i})}" th:text="${i + 1}">1</a>
-              </li>
-              <li th:classappend="${commentThreads.last} ? 'disabled'">
-                <a th:href="@{/{owner}/{name}/reviews(owner=${project.owner}, name=${project.name}, authorId=${param.authorId}, participantId=${param.participantId}, state=${param.state}, filter=${param.filter}, page=${commentThreads.number + 1})}">&raquo;</a>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-      </div>
     </div>
-  </div>
 
+    <footer th:replace="~{site/layout :: footer}"></footer>
 </div>
+
+<th:block th:replace="~{site/layout :: scripts}"></th:block>
+<script type="text/javascript" th:inline="javascript">
+    $(function(){
+        $yobi.loadModule("review.List", {
+            "elPagination": $("#pagination"),
+            "nTotalPages" : [[${commentThreads.totalPages}]],
+            "welSearchForm": $("form[name='search']")
+        });
+    });
+</script>
 </body>
 </html>

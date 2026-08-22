@@ -3,6 +3,7 @@ package com.github.search5.yona.web
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.Operation
+import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
@@ -21,18 +22,27 @@ import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
 import com.github.search5.yona.domain.pullrequest.PullRequestTimelineItem
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.vcs.PushedBranch
+import com.github.search5.yona.domain.vcs.PushedBranchRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.attachment.AttachmentRepository
+import org.springframework.context.MessageSource
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.Specification
+import jakarta.persistence.criteria.Predicate
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
+import java.time.Duration
+import java.time.Instant
 
 @Controller
 class PullRequestViewController(
@@ -47,7 +57,11 @@ class PullRequestViewController(
     private val pullRequestCommitRepository: PullRequestCommitRepository,
     private val issueRepository: IssueRepository,
     private val accessControl: AccessControl,
-    private val codeReviewService: CodeReviewService
+    private val codeReviewService: CodeReviewService,
+    private val pushedBranchRepository: PushedBranchRepository,
+    private val watchService: WatchService,
+    private val messageSource: MessageSource,
+    private val attachmentRepository: AttachmentRepository
 ) {
     // 이슈 자동 닫기 정규식 패턴 (대소문자 구분 없이 close(s/d), fix(es/ed), resolve(s/d) #숫자)
     private val closePattern = "(?i)(?:close[s|d]?|fix[e[s|d]]?|resolve[s|d]?)\\s+#(\\d+)".toRegex()
@@ -59,6 +73,8 @@ class PullRequestViewController(
         @PathVariable projectName: String,
         @RequestParam(required = false, defaultValue = "open") state: String,
         @RequestParam(required = false, defaultValue = "0") page: Int,
+        @RequestParam(required = false) filter: String?,
+        @RequestParam(required = false) contributorId: Long?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -74,15 +90,13 @@ class PullRequestViewController(
             "all" -> State.ALL
             else -> State.OPEN
         }
+        val states = if (stateEnum == State.ALL) null else listOf(stateEnum)
 
         val pageable = PageRequest.of(page, ITEMS_PER_PAGE, Sort.by(Sort.Direction.DESC, "id"))
-        val prPage = if (stateEnum == State.ALL) {
-            pullRequestRepository.findByToProject(project, pageable)
-        } else {
-            pullRequestRepository.findByToProjectAndState(project, stateEnum, pageable)
-        }
+        val spec = buildPullRequestSpec(project, matchFromProject = false, states = states, filter = filter, contributorId = contributorId)
+        val prPage = pullRequestRepository.findAll(spec, pageable)
 
-        return renderList(model, project, loginUser, prPage, state)
+        return renderList(model, project, loginUser, prPage, state, filter, contributorId)
     }
 
     // yona PullRequestApp.closedPullRequests 대응. CLOSED/MERGED 상태를 모두 "닫힌 PR"로 취급한다.
@@ -91,6 +105,8 @@ class PullRequestViewController(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @RequestParam(required = false, defaultValue = "0") page: Int,
+        @RequestParam(required = false) filter: String?,
+        @RequestParam(required = false) contributorId: Long?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -102,9 +118,10 @@ class PullRequestViewController(
         }
 
         val pageable = PageRequest.of(page, ITEMS_PER_PAGE, Sort.by(Sort.Direction.DESC, "id"))
-        val prPage = pullRequestRepository.findByToProjectAndStateIn(project, listOf(State.CLOSED, State.MERGED), pageable)
+        val spec = buildPullRequestSpec(project, matchFromProject = false, states = listOf(State.CLOSED, State.MERGED), filter = filter, contributorId = contributorId)
+        val prPage = pullRequestRepository.findAll(spec, pageable)
 
-        return renderList(model, project, loginUser, prPage, "closed")
+        return renderList(model, project, loginUser, prPage, "closed", filter, contributorId)
     }
 
     // yona PullRequestApp.sentPullRequests 대응. 이 프로젝트가 출발지(fromProject)인 PR 목록.
@@ -113,6 +130,7 @@ class PullRequestViewController(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @RequestParam(required = false, defaultValue = "0") page: Int,
+        @RequestParam(required = false) filter: String?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -124,9 +142,12 @@ class PullRequestViewController(
         }
 
         val pageable = PageRequest.of(page, ITEMS_PER_PAGE, Sort.by(Sort.Direction.DESC, "id"))
-        val prPage = pullRequestRepository.findByFromProject(project, pageable)
+        // legacy git/partial_search.scala.html: sent 탭은 상세검색(보낸이) 사이드바가 없어
+        // contributorId 조건을 받지 않는다(검색창 filter는 계속 지원).
+        val spec = buildPullRequestSpec(project, matchFromProject = true, states = null, filter = filter, contributorId = null)
+        val prPage = pullRequestRepository.findAll(spec, pageable)
 
-        return renderList(model, project, loginUser, prPage, "sent")
+        return renderList(model, project, loginUser, prPage, "sent", filter, null)
     }
 
     private fun checkMemberAccess(
@@ -136,26 +157,106 @@ class PullRequestViewController(
         return accessControl.isAllowed(loginUser, project, Operation.READ)
     }
 
+    // yona PullRequestApp.SearchCondition(category/filter/contributorId) 대응(그룹11 #167/#182) —
+    // yuna는 별도 SearchCondition 클래스 없이 JPA Specification으로 동일한 3가지 조건(대상 프로젝트,
+    // 상태 목록, 제목 필터, 보낸이)을 표현한다. matchFromProject=true면 "sent" 탭처럼 fromProject
+    // 기준으로 검색한다.
+    private fun buildPullRequestSpec(
+        project: Project,
+        matchFromProject: Boolean,
+        states: List<State>?,
+        filter: String?,
+        contributorId: Long?
+    ): Specification<PullRequest> = Specification { root, _, cb ->
+        val predicates = mutableListOf<Predicate>()
+        predicates += cb.equal(root.get<Project>(if (matchFromProject) "fromProject" else "toProject"), project)
+        if (states != null) {
+            predicates += root.get<State>("state").`in`(states)
+        }
+        if (!filter.isNullOrBlank()) {
+            predicates += cb.like(cb.lower(root.get("title")), "%${filter.lowercase()}%")
+        }
+        if (contributorId != null) {
+            predicates += cb.equal(root.get<User>("contributor").get<Long>("id"), contributorId)
+        }
+        cb.and(*predicates.toTypedArray())
+    }
+
     private fun renderList(
         model: Model,
         project: Project,
         loginUser: User?,
         prPage: Page<PullRequest>,
-        state: String
+        state: String,
+        filter: String?,
+        contributorId: Long?
     ): String {
         model.addAttribute("project", project)
         model.addAttribute("prPage", prPage)
         model.addAttribute("state", state)
+        // legacy git/list.scala.html의 requestType 파라미터(현재 활성 탭: open/closed/sent) 대응.
+        model.addAttribute("requestType", state)
         model.addAttribute("currentUser", loginUser)
+        model.addAttribute("filter", filter ?: "")
+        model.addAttribute("contributorId", contributorId)
+
+        // 탭 뱃지 카운트: legacy conditionForOpen/Closed/Accepted/Sent(condition.clone.setCategory(...))
+        // 대응 — 현재 filter/contributorId 조건은 유지한 채 상태(카테고리)만 바꿔 카운트한다.
+        model.addAttribute("openCount", pullRequestRepository.count(buildPullRequestSpec(project, false, listOf(State.OPEN), filter, contributorId)))
+        model.addAttribute("closedCount", pullRequestRepository.count(buildPullRequestSpec(project, false, listOf(State.CLOSED, State.MERGED), filter, contributorId)))
+        if (project.isForkedFromOrigin) {
+            model.addAttribute("acceptedCount", pullRequestRepository.count(buildPullRequestSpec(project, true, listOf(State.MERGED), filter, null)))
+            model.addAttribute("sentCount", pullRequestRepository.count(buildPullRequestSpec(project, true, null, filter, null)))
+        }
+
+        // legacy User.findPullRequestContributorsByProjectId(project.id) 대응 — 상세검색 "보낸이" 드롭다운.
+        model.addAttribute("contributors", pullRequestRepository.findDistinctContributorsByToProject(project))
+
+        // legacy git/partial_list.scala.html: branchItemName(project.defaultBranch()) == branchItemName(req.toBranch)
+        // 대응 — 목록에서 "기본 브랜치로 병합" 여부를 강조 표시하는 데 쓴다.
+        model.addAttribute("defaultBranch", defaultBranchFor(project))
+
+        // legacy git/partial_recently_pushed_branches.scala.html 대응 — 1시간 이내에 push된 브랜치를
+        // (포크 프로젝트면 이 프로젝트 자신의, 원본 프로젝트면 로그인 사용자가 소유한 fork들의) 노출한다.
+        val cutoff = Instant.now().minus(Duration.ofHours(1))
+        val pushedBranches: List<PushedBranch> = if (project.isForkedFromOrigin) {
+            pushedBranchRepository.findByProjectAndPushedDateAfter(project, cutoff)
+        } else if (loginUser != null && accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.PULL_REQUEST)) {
+            pushedBranchRepository.findByOriginalProjectAndOwnerAndPushedDateAfter(project, loginUser.loginId, cutoff)
+        } else {
+            emptyList()
+        }
+        model.addAttribute("pushedBranches", pushedBranches)
+        model.addAttribute(
+            "pushedBranchDefaultBranches",
+            pushedBranches.associate { (it.id ?: 0L) to defaultBranchFor(it.project) }
+        )
+
         return "pullrequest/list"
     }
 
+    // legacy git/partial_recently_pushed_branches.scala.html의 defaultBranch(project) 로컬 헬퍼
+    // (isForkedFromOrigin이면 originalProject 기준, 아니면 자기 자신 기준 기본 브랜치) 대응.
+    private fun defaultBranchFor(project: Project?): String {
+        if (project == null) return "master"
+        val target = project.originalProject ?: project
+        return try {
+            repositoryService.getRepository(target).getDefaultBranch().substringAfter("refs/heads/")
+        } catch (e: Exception) {
+            "master"
+        }
+    }
+
+    // legacy git/view.scala.html 대응 (그룹11 #170) — legacy는 이 URL이 단일 "개요(overview)" 페이지고
+    // "변경사항(changes)" 탭은 완전히 별도 URL(viewChangesInternal, #171)이다. 과거에는 이 컨트롤러가
+    // ?tab=conversation/commits/changes 세 값을 받는 자체 확장 구조였으나(legacy에 없는 "commits" 탭
+    // 포함), 이번 재작업에서 legacy 구조에 맞춰 tab 쿼리파라미터를 제거하고 항상 "overview"만 렌더링
+    //하도록 되돌렸다 — "changes"는 /pull/{number}/changes 경로(viewChangesInternal)가 전담한다.
     @GetMapping("/{owner}/{projectName}/pull/{number}")
     fun viewPullRequest(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @PathVariable number: Long,
-        @RequestParam(required = false, defaultValue = "conversation") tab: String,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -175,51 +276,95 @@ class PullRequestViewController(
             null
         }
 
-        if (tab == "changes") {
-            val diffs = try {
-                pullRequestService.getDiff(pullRequest)
-            } catch (e: Exception) {
-                emptyList()
-            }
-            model.addAttribute("diffs", diffs)
-
-            // yona PullRequest.java:1063-1103 getCodeCommentThreadsForChanges() 대응 (P1-114) —
-            // viewChangesInternal()과 동일하게 buildCommentThreadsForChanges() 재사용(commitId 없는
-            // "전체 변경사항" 경로).
-            val commentThreads = buildCommentThreadsForChanges(pullRequest, null)
-            model.addAttribute("commentThreads", commentThreads)
-        } else if (tab == "conversation") {
-            // yona git/view.scala.html의 conversation 탭 + partial_pull_request_event.scala.html
-            // 대응 (P2-39, P1-106 범위 정정) — legacy conversation 탭은 pullRequestEvents만
-            // 시간순으로 표시하고 댓글 스레드는 전혀 렌더링하지 않는다(댓글은 오직 "changes" 탭의
-            // diff 인라인에서만 노출). P1-106에서 댓글 스레드를 함께 타임라인에 넣었던 것은 legacy
-            // 원본 범위를 넘어선 yuna 자체 확장이었음을 확인해(P2-39) 되돌린다 — 사용자 확인 완료.
-            // legacy 파샬이 실제로 렌더링하는 이벤트 타입(STATE_CHANGED/MERGED/REVIEW_STATE_CHANGED)만
-            // 다루고, 그 외(NEW_PULL_REQUEST/COMMIT_CHANGED)는 legacy의 "case _ => {}"와 동일하게
-            // 화면에서 제외한다.
-            val renderedEventTypes = setOf(
-                EventType.PULL_REQUEST_STATE_CHANGED,
-                EventType.PULL_REQUEST_MERGED,
-                EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
-            )
-            val events = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
-                .filter { it.eventType in renderedEventTypes }
-            val timeline = events.map {
-                PullRequestTimelineItem(date = it.created, event = it)
-            }.sortedBy { it.date }
-            model.addAttribute("timeline", timeline)
-        }
+        // legacy git/view.scala.html의 renderEventsOnPullRequest(pull) + partial_pull_request_event.
+        // scala.html 대응(P2-39/P1-106 범위 재정정) — 이전 세션은 legacy가 PULL_REQUEST_COMMIT_CHANGED를
+        // "case _ => {}"로 제외한다고 잘못 기록했으나(P2-39 코멘트), legacy partial_pull_request_event.
+        // scala.html을 다시 대조해보면 COMMIT_CHANGED에 대한 전용 case가 있어 실제로는 렌더링한다 —
+        // 이번 재작업에서 필터에 포함시켜 바로잡는다.
+        val renderedEventTypes = setOf(
+            EventType.PULL_REQUEST_STATE_CHANGED,
+            EventType.PULL_REQUEST_MERGED,
+            EventType.PULL_REQUEST_REVIEW_STATE_CHANGED,
+            EventType.PULL_REQUEST_COMMIT_CHANGED
+        )
+        val events = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest)
+            .filter { it.eventType in renderedEventTypes }
+        val timeline = events.map {
+            PullRequestTimelineItem(date = it.created, event = it)
+        }.sortedBy { it.date }
+        model.addAttribute("timeline", timeline)
 
         val referredIssues = getReferredIssues(pullRequest)
         model.addAttribute("referredIssues", referredIssues)
+
+        addCommonPrAttributes(model, project, pullRequest, loginUser)
+
+        // legacy git/view.scala.html의 AttachmentApp.getFileList(ResourceType.PULL_REQUEST, pull.id)
+        // 대응 — PR 본문에 첨부된 파일 목록(issue/board view.html과 동일한 attachmentsJson 패턴).
+        val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.PULL_REQUEST, pullRequest.id.toString())
+        val attachmentsJson = attachments.joinToString(prefix = "{\"attachments\":[", postfix = "]}", separator = ",") { attach ->
+            val id = attach.id?.toString() ?: ""
+            val mimeType = attach.mimeType ?: ""
+            val name = attach.name.replace("\"", "\\\"").replace("\n", "\\n")
+            val url = "/files/${attach.id}"
+            val size = attach.size?.toString() ?: "0"
+            """{"id":"$id","mimeType":"$mimeType","name":"$name","url":"$url","size":$size}"""
+        }
+        model.addAttribute("attachmentsJson", attachmentsJson)
 
         model.addAttribute("project", project)
         model.addAttribute("pr", pullRequest)
         model.addAttribute("mergeResult", mergeResult)
         model.addAttribute("currentUser", loginUser)
-        model.addAttribute("tab", tab)
+        model.addAttribute("tab", "overview")
 
         return "pullrequest/view"
+    }
+
+    // legacy git/partial_info.scala.html(리뷰 참여/뱃지)과 git/partial_state.scala.html(브랜치
+    // 삭제/복구 가능 여부)이 필요로 하는, overview/changes 두 화면이 공통으로 쓰는 속성들을 계산해
+    // 모델에 채운다(그룹11 #170/#171 공통 부분).
+    private fun addCommonPrAttributes(model: Model, project: Project, pullRequest: PullRequest, loginUser: User?) {
+        val isWatching = loginUser?.let {
+            watchService.isWatching(it, ResourceType.PULL_REQUEST, pullRequest.id.toString())
+        } ?: false
+        model.addAttribute("isWatching", isWatching)
+
+        // legacy PullRequest.isAcceptable() 대응 — 열림 상태 + 충돌 없음 + 병합중 아님 + (리뷰어
+        // 수 강제 프로젝트면) 참여 리뷰어 수가 최소 인원 이상.
+        val meetsReviewerCount = !project.isUsingReviewerCount || pullRequest.reviewers.size >= project.defaultReviewerCount
+        val isAcceptable = pullRequest.state == State.OPEN && pullRequest.isConflict != true &&
+            pullRequest.isMerging != true && meetsReviewerCount
+        model.addAttribute("isAcceptable", isAcceptable)
+        val disabledAcceptReason = when {
+            isAcceptable -> null
+            pullRequest.isConflict == true -> messageSource.getMessage("pullRequest.is.not.safe", null, org.springframework.context.i18n.LocaleContextHolder.getLocale())
+            pullRequest.isMerging == true -> messageSource.getMessage("pullRequest.is.merging", null, java.util.Locale.KOREA)
+            !meetsReviewerCount -> messageSource.getMessage("pullRequest.is.not.safe", null, org.springframework.context.i18n.LocaleContextHolder.getLocale())
+            else -> null
+        }
+        model.addAttribute("disabledAcceptReason", disabledAcceptReason)
+
+        val openThreadCount = commentThreadRepository.findByPullRequest(pullRequest)
+            .count { it.state == CommentThread.ThreadState.OPEN }
+        model.addAttribute("openThreadCount", openThreadCount)
+
+        // legacy git/partial_state.scala.html의 canDeleteBranch/canRestoreBranch 대응 — 병합된 PR의
+        // 원본(from) 브랜치가 아직 존재하면 삭제 버튼을, 이미 삭제됐다면 복구 버튼을 보여준다.
+        var canDeleteBranch = false
+        var canRestoreBranch = false
+        if (pullRequest.state == State.MERGED) {
+            try {
+                val refs = repositoryService.getRepository(pullRequest.fromProject).getRefNames()
+                val exists = refs.any { it.substringAfter("refs/heads/") == pullRequest.fromBranch }
+                canDeleteBranch = exists
+                canRestoreBranch = !exists
+            } catch (e: Exception) {
+                // 브랜치 존재 여부를 확인할 수 없으면 두 버튼 모두 감춘다(안전한 기본값).
+            }
+        }
+        model.addAttribute("canDeleteBranch", canDeleteBranch)
+        model.addAttribute("canRestoreBranch", canRestoreBranch)
     }
 
     private fun getReferredIssues(pullRequest: PullRequest): List<Issue> {
@@ -258,10 +403,19 @@ class PullRequestViewController(
         return result
     }
 
+    // yona PullRequestApp.newPullRequestForm(...)?fromBranch=...&toBranch=... 대응(그룹11 #167/#168) —
+    // git/partial_recently_pushed_branches.scala.html의 "풀 리퀘스트 보내기" 버튼이 이 쿼리 파라미터로
+    // 브랜치를 미리 채워 링크한다. 단, legacy는 fromProjectId/toProjectId도 쿼리로 받아 fork
+    // 프로젝트 간(cross-fork) PR 생성을 지원하지만, yuna Project 엔티티에는 legacy의
+    // getAssociationProjects() 상당 기능(같은 원본을 공유하는 fork들 목록)이 아직 없어 그 부분은
+    // 이번 포팅 범위에서 제외했다(아래 create.html 폼도 동일 프로젝트 내 브랜치→브랜치로만 지원) —
+    // 자세한 사유는 최종 보고 참고.
     @GetMapping("/{owner}/{projectName}/pull/new")
     fun createPullRequestForm(
         @PathVariable owner: String,
         @PathVariable projectName: String,
+        @RequestParam(required = false) fromBranch: String?,
+        @RequestParam(required = false) toBranch: String?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -290,6 +444,8 @@ class PullRequestViewController(
         model.addAttribute("branches", branches)
         model.addAttribute("defaultBranch", defaultBranch)
         model.addAttribute("currentUser", loginUser)
+        model.addAttribute("prefillFromBranch", fromBranch ?: "")
+        model.addAttribute("prefillToBranch", toBranch ?: defaultBranch)
 
         return "pullrequest/create"
     }
@@ -424,6 +580,8 @@ class PullRequestViewController(
 
         val commentThreads = buildCommentThreadsForChanges(pullRequest, commitId)
         val referredIssues = getReferredIssues(pullRequest)
+
+        addCommonPrAttributes(model, project, pullRequest, loginUser)
 
         model.addAttribute("project", project)
         model.addAttribute("pr", pullRequest)

@@ -304,14 +304,31 @@ class IssueViewController(
         // 존재를 알고도 소비하지 않아 댓글만 보이고 상태/담당자/라벨/마일스톤/이동 이력이 전혀 안 보였다.
         val events = issueEventRepository.findByIssueOrderByCreatedAsc(issue)
             .filter { it.eventType != EventType.ISSUE_BODY_CHANGED }
+        // legacy issue/partial_comment.scala.html/common.childComments() 대응(그룹11 #25/#29/#30/#31
+        // 재작업) — 대댓글(parentComment != null)은 최상위 타임라인에 별도 항목으로 나타나지 않고
+        // 부모 댓글 아래 common/childComments 조각에서만 렌더링된다. 이전에는 이 필터가 없어 대댓글이
+        // 최상위 댓글과 동일하게 중복 노출되고 있었다(버그).
+        val topLevelComments = comments.filter { it.parentComment == null }
+        val childCommentsByParentId: Map<Long, List<com.github.search5.yona.domain.issue.IssueComment>> =
+            comments.filter { it.parentComment != null }
+                .groupBy { it.parentComment!!.id!! }
         val timeline = (
-            comments.map { IssueTimelineItem(kind = "COMMENT", date = it.createdDate ?: Instant.EPOCH, comment = it) } +
+            topLevelComments.map { IssueTimelineItem(kind = "COMMENT", date = it.createdDate ?: Instant.EPOCH, comment = it) } +
                 events.map { IssueTimelineItem(kind = "EVENT", date = it.created, event = it) }
             ).sortedBy { it.date }
+
+        // legacy issue/partial_comment.scala.html의 isAllowed(..., Operation.DELETE) 대응 —
+        // 매니저는 남의 댓글도 삭제할 수 있다(CommentController의 실제 권한 체크와 동일 기준).
+        val isProjectManager = loginUser != null && projectUserRepository.findByProjectIdAndUserId(project.id!!, loginUser.id!!)
+            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .orElse(false)
 
         model.addAttribute("project", project)
         model.addAttribute("issue", issue)
         model.addAttribute("comments", comments)
+        model.addAttribute("childCommentsByParentId", childCommentsByParentId)
+        model.addAttribute("isProjectManager", isProjectManager)
+        model.addAttribute("commentApiBase", "/api/projects/${project.id}/issues/${issue.number}/comments")
         model.addAttribute("timeline", timeline)
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("isWatching", isWatching)
