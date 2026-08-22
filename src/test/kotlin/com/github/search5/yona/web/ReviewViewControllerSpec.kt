@@ -152,9 +152,9 @@ class ReviewViewControllerSpec : DescribeSpec({
             verify { codeReviewService.deleteReviewComment(300L, user) }
         }
 
-        it("[Test-13-1-4] 타인의 Git 커밋 댓글 삭제 시 error/403 뷰를 반환해야 한다") {
+        it("[Test-13-1-4] 타인의 Git 커밋 댓글 삭제 시 error/forbidden 뷰를 반환해야 한다") {
             val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
-            
+
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
             every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
             every { codeReviewService.deleteReviewComment(300L, user) } throws IllegalArgumentException("Permission denied")
@@ -164,7 +164,7 @@ class ReviewViewControllerSpec : DescribeSpec({
                     .principal(auth)
             )
                 .andExpect(status().isOk)
-                .andExpect(view().name("error/403"))
+                .andExpect(view().name("error/forbidden"))
         }
 
         it("SVN 프로젝트의 커밋 댓글 삭제 시 deleteCommitComment가 호출되어야 한다") {
@@ -184,7 +184,7 @@ class ReviewViewControllerSpec : DescribeSpec({
             verify { codeReviewService.deleteCommitComment(400L, user) }
         }
 
-        it("[Test-13-1-5] 타인의 SVN 커밋 댓글 삭제 시 error/403 뷰를 반환해야 한다") {
+        it("[Test-13-1-5] 타인의 SVN 커밋 댓글 삭제 시 error/forbidden 뷰를 반환해야 한다") {
             val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "SUBVERSION")
 
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
@@ -196,12 +196,12 @@ class ReviewViewControllerSpec : DescribeSpec({
                     .principal(auth)
             )
                 .andExpect(status().isOk)
-                .andExpect(view().name("error/403"))
+                .andExpect(view().name("error/forbidden"))
         }
 
         // yona PullRequestApp.java:591 @IsCreatable(ResourceType.REVIEW_COMMENT) 대응 (P0-24).
         describe("POST /{owner}/{projectName}/pullRequest/{pullRequestId}/comments 권한 체크") {
-            it("REVIEW_COMMENT 생성 권한이 없으면 error/403 뷰를 반환하고 댓글을 생성하지 않아야 한다") {
+            it("REVIEW_COMMENT 생성 권한이 없으면 error/forbidden 뷰를 반환하고 댓글을 생성하지 않아야 한다") {
                 val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
                 every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
@@ -213,7 +213,7 @@ class ReviewViewControllerSpec : DescribeSpec({
                         .principal(auth)
                 )
                     .andExpect(status().isOk)
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
 
                 verify(exactly = 0) { codeReviewService.createReviewComment(any(), any(), any(), any(), any(), any(), any()) }
             }
@@ -245,7 +245,7 @@ class ReviewViewControllerSpec : DescribeSpec({
 
         // yona CodeHistoryApp.java:189 @IsCreatable(ResourceType.COMMIT_COMMENT) 대응 (P0-24).
         describe("POST /{owner}/{projectName}/commit/{commitId}/comments 권한 체크") {
-            it("COMMIT_COMMENT 생성 권한이 없으면 error/403 뷰를 반환하고 댓글을 생성하지 않아야 한다") {
+            it("COMMIT_COMMENT 생성 권한이 없으면 error/forbidden 뷰를 반환하고 댓글을 생성하지 않아야 한다") {
                 val project = Project(id = 10L, name = "yona-project", owner = "gildong", vcs = "GIT")
                 every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
@@ -257,7 +257,7 @@ class ReviewViewControllerSpec : DescribeSpec({
                         .principal(auth)
                 )
                     .andExpect(status().isOk)
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
 
                 verify(exactly = 0) { codeReviewService.createReviewComment(any(), any(), any(), any(), any(), any(), any()) }
                 verify(exactly = 0) { codeReviewService.createCommitComment(any(), any(), any(), any(), any(), any(), any()) }

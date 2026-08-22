@@ -65,7 +65,11 @@ class ReviewThreadController(
 
         val isCodeAccessible = checkCodeAccessibility(project, currentUser)
         if (!isCodeAccessible) {
-            return "error/403"
+            // yona ReviewThreadApp.java:41 @IsAllowed(value = Operation.READ) 대응 (P-템플릿 #47) —
+            // IsAllowedAction.call()이 접근 거부 시 forbidden(ErrorViews.Forbidden.render(
+            // "error.forbidden", project))를 돌려준다. 프로젝트는 이미 찾았으므로 컨텍스트 인지형 403.
+            model.addAttribute("project", project)
+            return "error/forbidden"
         }
 
         if (format == "xls") {
