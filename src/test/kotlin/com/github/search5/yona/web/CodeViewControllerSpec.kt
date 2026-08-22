@@ -119,9 +119,14 @@ class CodeViewControllerSpec : DescribeSpec({
                 val memberOnlyProject = Project(id = 4L, owner = "testowner", name = "memberonly-project", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "memberonly-project") } returns Optional.of(memberOnlyProject)
 
+                // yona CodeApp.java:60-62 forbidden(ErrorViews.Forbidden.render("error.forbidden", project))
+                // 대응 (P-템플릿 #47) — Forbidden의 (String,Project) 2-arg 오버로드는 컨텍스트 인지형
+                // forbidden.render(messageKey, project)로 귀결되므로 error/forbidden으로 바로잡았다
+                // (기존 assertion은 제네릭 error/403이었음).
                 mockMvc.perform(get("/testowner/memberonly-project/code"))
                     .andExpect(status().isOk)
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
+                    .andExpect(model().attribute("project", memberOnlyProject))
             }
         }
 
