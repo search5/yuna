@@ -54,6 +54,17 @@ import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.user.FavoriteProject
 import com.github.search5.yona.domain.user.FavoriteProjectRepository
+import com.github.search5.yona.domain.issue.IssueComment
+import com.github.search5.yona.domain.issue.IssueCommentRepository
+import com.github.search5.yona.domain.board.PostingComment
+import com.github.search5.yona.domain.board.PostingCommentRepository
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
+import com.github.search5.yona.domain.pullrequest.CommentThreadRepository
+import com.github.search5.yona.domain.pullrequest.ReviewComment
+import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.SimpleCommentThread
+import com.github.search5.yona.domain.user.UserIdent
 
 @TestPropertySource(properties = ["github.allow.migration=true"])
 class TemplateEquivalenceSpec @Autowired constructor(
@@ -74,7 +85,12 @@ class TemplateEquivalenceSpec @Autowired constructor(
     private val milestoneRepository: MilestoneRepository,
     private val organizationRepository: OrganizationRepository,
     private val organizationUserRepository: OrganizationUserRepository,
-    private val favoriteProjectRepository: FavoriteProjectRepository
+    private val favoriteProjectRepository: FavoriteProjectRepository,
+    private val issueCommentRepository: IssueCommentRepository,
+    private val postingCommentRepository: PostingCommentRepository,
+    private val pullRequestRepository: PullRequestRepository,
+    private val commentThreadRepository: CommentThreadRepository,
+    private val reviewCommentRepository: ReviewCommentRepository
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)
@@ -1389,6 +1405,246 @@ class TemplateEquivalenceSpec @Autowired constructor(
                 it("로그인하지 않은 사용자는 로그인 폼으로 리다이렉트되어야 한다") {
                     mockMvc.perform(get("/migration"))
                         .andExpect(status().is3xxRedirection)
+                }
+            }
+
+            describe("[Test-19-34] 통합 검색 화면(search/*.scala.html) 동치성 검증") {
+                val searchKeyword = "zzsearchkw31"
+                val longBody = "긴 본문 테스트를 위한 앞부분 채우기 문장입니다 " +
+                    "$searchKeyword 그리고 스니펫이 본문 전체보다 짧아져서 말줄임표가 붙는지 확인하기 위해 " +
+                    "이 뒤에도 계속 이어지는 아주 긴 문장을 덧붙입니다 테스트 테스트 테스트 테스트 테스트"
+
+                val searchProj = projectRepository.findAll().find { it.name == "search-fixture-proj" } ?: projectRepository.save(
+                    Project(
+                        name = "search-fixture-proj",
+                        owner = "owner",
+                        projectScope = ProjectScope.PUBLIC,
+                        isCodeAccessibleMemberOnly = false,
+                        vcs = "GIT",
+                        overview = "프로젝트 설명 $searchKeyword",
+                        lastPushedDate = java.time.Instant.now()
+                    )
+                )
+
+                val searchForkProj = projectRepository.findAll().find { it.name == "search-fixture-fork-proj" } ?: projectRepository.save(
+                    Project(
+                        name = "search-fixture-fork-proj",
+                        owner = "owner",
+                        projectScope = ProjectScope.PUBLIC,
+                        isCodeAccessibleMemberOnly = false,
+                        vcs = "GIT",
+                        overview = "포크 프로젝트 설명 $searchKeyword",
+                        originalProject = searchProj
+                    )
+                )
+
+                val issueWithAuthor = issueRepository.findAll().find { it.title == "검색이슈-작성자있음" } ?: issueRepository.save(
+                    Issue(
+                        title = "검색이슈-작성자있음",
+                        body = longBody,
+                        project = searchProj,
+                        authorId = member.id,
+                        authorLoginId = member.loginId,
+                        authorName = member.name,
+                        number = 9101L
+                    )
+                )
+
+                val issueNoAuthor = issueRepository.findAll().find { it.title == "검색이슈-작성자없음" } ?: issueRepository.save(
+                    Issue(
+                        title = "검색이슈-작성자없음",
+                        body = "작성자 없는 이슈 본문 $searchKeyword",
+                        project = searchProj,
+                        authorId = null,
+                        authorLoginId = null,
+                        authorName = null,
+                        number = 9102L
+                    )
+                )
+
+                val postWithAuthor = postingRepository.findAll().find { it.title == "검색게시글-작성자있음" } ?: postingRepository.save(
+                    Posting(
+                        title = "검색게시글-작성자있음",
+                        body = longBody,
+                        project = searchProj,
+                        authorId = member.id,
+                        authorLoginId = member.loginId,
+                        authorName = member.name,
+                        number = 9201L
+                    )
+                )
+
+                val milestoneWithDue = milestoneRepository.findAll().find { it.title == "검색마일스톤-기한있음" } ?: milestoneRepository.save(
+                    Milestone(
+                        title = "검색마일스톤-기한있음",
+                        contents = "마일스톤 설명 $searchKeyword",
+                        dueDate = java.time.Instant.now().plusSeconds(86400 * 3),
+                        project = searchProj
+                    )
+                )
+
+                val milestoneNoDue = milestoneRepository.findAll().find { it.title == "검색마일스톤-기한없음" } ?: milestoneRepository.save(
+                    Milestone(
+                        title = "검색마일스톤-기한없음",
+                        contents = "마일스톤 설명2 $searchKeyword",
+                        dueDate = null,
+                        project = searchProj
+                    )
+                )
+
+                val searchUser = userRepository.findByLoginId("search-fixture-user").orElseGet {
+                    userRepository.save(User(loginId = "search-fixture-user", name = "검색픽스처유저$searchKeyword", email = "search-fixture-user@yona.io"))
+                }
+
+                val issueCommentNoAuthor = issueCommentRepository.findAll().find { it.contents.contains(searchKeyword) && it.issue.id == issueWithAuthor.id }
+                    ?: issueCommentRepository.save(
+                        IssueComment(contents = "이슈댓글 내용 작성자없음 $searchKeyword", authorId = null, authorLoginId = null, authorName = null, issue = issueWithAuthor)
+                    )
+
+                val postCommentWithAuthor = postingCommentRepository.findAll().find { it.contents.contains(searchKeyword) && it.posting.id == postWithAuthor.id }
+                    ?: postingCommentRepository.save(
+                        PostingComment(contents = "게시글댓글 내용 $searchKeyword", authorId = member.id, authorLoginId = member.loginId, authorName = member.name, posting = postWithAuthor)
+                    )
+
+                val pr = pullRequestRepository.findAll().find { it.title == "검색PR제목" } ?: pullRequestRepository.save(
+                    PullRequest(title = "검색PR제목", toProject = searchProj, fromProject = searchProj, contributor = member, number = 9301L)
+                )
+
+                val prThread = commentThreadRepository.findAll().find { it.pullRequest?.id == pr.id } ?: commentThreadRepository.save(
+                    SimpleCommentThread(author = UserIdent(member), pullRequest = pr, project = searchProj)
+                )
+
+                val prReviewComment = reviewCommentRepository.findAll().find { it.thread?.id == prThread.id && it.contents.contains(searchKeyword) }
+                    ?: reviewCommentRepository.save(
+                        ReviewComment(contents = "PR 리뷰 댓글 $searchKeyword", author = UserIdent(member), thread = prThread)
+                    )
+
+                val commitThread = commentThreadRepository.findAll().find { it.pullRequest == null && it.commitId == "abcdef1234567890" }
+                    ?: commentThreadRepository.save(
+                        SimpleCommentThread(author = UserIdent(member), project = searchProj, commitId = "abcdef1234567890")
+                    )
+
+                val commitReviewComment = reviewCommentRepository.findAll().find { it.thread?.id == commitThread.id && it.contents.contains(searchKeyword) }
+                    ?: reviewCommentRepository.save(
+                        ReviewComment(contents = "커밋리뷰 댓글 $searchKeyword", author = UserIdent(member), thread = commitThread)
+                    )
+
+                it("이슈 탭: 스니펫 말줄임표, 작성자 링크/작성자없음 폴백, 프로젝트링크 owner/name 표기, 페이지네이션 위젯이 legacy와 일치해야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/search").param("keyword", searchKeyword).param("searchType", "issue"))
+                            .andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    val items = doc.select("div.search-result-wrap li.search-list-item")
+
+                    val authored = items.first { it.select(".title").text() == issueWithAuthor.title }
+                    authored.select(".search-content-body").text().contains(".....") shouldBe true
+                    val authorLink = authored.select(".search-meta-info a.meta-item:not(.project-link)")
+                    authorLink.attr("href") shouldBe "/${member.loginId}"
+                    authorLink.text() shouldBe member.name
+                    authored.select(".project-link").text() shouldBe "${searchProj.owner}/${searchProj.name}"
+
+                    val noAuthor = items.first { it.select(".title").text() == issueNoAuthor.title }
+                    noAuthor.select(".search-meta-info span.meta-item").first()!!.text() shouldBe "작성자 없음"
+
+                    doc.select("#pagination").size shouldBe 1
+                    doc.html().contains("yobi.Pagination.update") shouldBe true
+                }
+
+                it("프로젝트 탭: 로고/포크뱃지/전체 개요(스니펫 아님)/생성일·코드업데이트 문구가 legacy와 일치해야 하고, 페이지네이션이 없어야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/search").param("keyword", searchKeyword).param("searchType", "project"))
+                            .andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    val items = doc.select("div.search-result-wrap li.search-list-item.project")
+
+                    val original = items.first { it.select(".title").text() == "${searchProj.owner}/${searchProj.name}" }
+                    original.select(".search-content-body").text() shouldBe searchProj.overview
+                    original.select(".search-content-body").text().contains(".....") shouldBe false
+                    original.text().contains("마지막 코드 업데이트") shouldBe true
+                    original.select(".search-meta-info.nm.np").size shouldBe 0
+
+                    val fork = items.first { it.select(".title").text() == "${searchForkProj.owner}/${searchForkProj.name}" }
+                    fork.select(".search-meta-info.nm.np").size shouldBe 1
+                    fork.select(".search-meta-info.nm.np").text().contains("원본 프로젝트") shouldBe true
+                    fork.select(".search-meta-info.nm.np a").attr("href") shouldBe "/${searchProj.owner}/${searchProj.name}"
+
+                    doc.select("#pagination").size shouldBe 0
+                }
+
+                it("사용자 탭: 아바타 이미지와 userinfo.since 가입일 문구가 legacy와 일치해야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/search").param("keyword", searchKeyword).param("searchType", "user"))
+                            .andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    val item = doc.select("div.search-result-wrap li.search-list-item.project")
+                        .first { it.select(".title").text().startsWith(searchUser.name) }
+
+                    item.select("a.avatar-wrap img").attr("src") shouldBe "/assets/images/default-avatar-128.png"
+                    item.select(".infos-item").text().contains("가입일") shouldBe true
+                }
+
+                it("마일스톤 탭: 기한이 없으면 기한 영역 자체가 렌더링되지 않아야 한다(legacy 그대로)") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/search").param("keyword", searchKeyword).param("searchType", "milestone"))
+                            .andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    val items = doc.select("div.search-result-wrap li.search-list-item")
+
+                    val withDue = items.first { it.select(".title").text() == milestoneWithDue.title }
+                    withDue.select(".due-date.meta-item").size shouldBe 1
+                    withDue.select(".due-date.meta-item").text().contains("기한") shouldBe true
+
+                    val noDue = items.first { it.select(".title").text() == milestoneNoDue.title }
+                    noDue.select(".due-date.meta-item").size shouldBe 0
+                }
+
+                it("이슈댓글/게시글댓글 탭: 제목이 legacy 그대로 'Re) ' 접두사여야 하고 noAuthor 메시지키가 도메인별로 달라야 한다") {
+                    val issueCommentDoc = Jsoup.parse(
+                        mockMvc.perform(get("/search").param("keyword", searchKeyword).param("searchType", "issue_comment"))
+                            .andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    val icItem = issueCommentDoc.select("div.search-result-wrap li.search-list-item")
+                        .first { it.select(".title-wrap a").text() == "Re) ${issueWithAuthor.title}" }
+                    icItem.select(".title-wrap a").attr("href").endsWith("#comment-${issueCommentNoAuthor.id}") shouldBe true
+                    icItem.select(".search-meta-info span.meta-item").first()!!.text() shouldBe "작성자 없음"
+
+                    val postCommentDoc = Jsoup.parse(
+                        mockMvc.perform(get("/search").param("keyword", searchKeyword).param("searchType", "post_comment"))
+                            .andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    val pcItem = postCommentDoc.select("div.search-result-wrap li.search-list-item")
+                        .first { it.select(".title-wrap a").text() == "Re) ${postWithAuthor.title}" }
+                    pcItem.select(".title-wrap a").attr("href").endsWith("#comment-${postCommentWithAuthor.id}") shouldBe true
+                    pcItem.select(".search-meta-info a.meta-item:not(.project-link)").text() shouldBe member.name
+                }
+
+                it("리뷰(코드리뷰댓글) 탭: PR 스레드는 /pull/ 라우트로, 커밋 스레드는 제목없이 전체가 링크로 감싸여야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/search").param("keyword", searchKeyword).param("searchType", "review"))
+                            .andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    val items = doc.select("div.search-result-wrap li.search-list-item")
+
+                    val prItem = items.first { it.select(".title-wrap a").text() == "Re) ${pr.title}" }
+                    val prLink = prItem.select(".title-wrap a").attr("href")
+                    prLink.contains("/${searchProj.owner}/${searchProj.name}/pull/${pr.number}") shouldBe true
+                    prLink.contains("/pullRequest/") shouldBe false
+
+                    val commitItem = items.first { it.select(".search-content-body").text().contains("커밋리뷰") }
+                    commitItem.select(".title-wrap").size shouldBe 0
+                    val wrappingLink = commitItem.select(".search-content > a")
+                    wrappingLink.size shouldBe 1
+                    wrappingLink.attr("href").contains("/${searchProj.owner}/${searchProj.name}/commit/${commitThread.commitId}") shouldBe true
+                }
+
+                it("카테고리 탭: 현재 검색타입에 active 클래스가, 결과 0건인 타입에 empty 클래스가 legacy와 동일하게 붙어야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(get("/search").param("keyword", searchKeyword).param("searchType", "issue"))
+                            .andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    val issueTab = doc.select("a[data-type=issue]").first()!!.parent()!!
+                    issueTab.hasClass("active") shouldBe true
+                    issueTab.hasClass("empty") shouldBe false
                 }
             }
         }
