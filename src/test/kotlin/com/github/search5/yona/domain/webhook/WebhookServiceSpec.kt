@@ -62,6 +62,17 @@ private fun testCommit(message: String, authorName: String = "tester", authorEma
     return RevWalk(repo).use { it.parseCommit(commitId) }
 }
 
+// sender.name/project.name처럼 Kotlin 타입상 non-null인 필드라도, Hibernate가 프록시/리플렉션으로
+// 값을 null로 주입할 가능성에 대비해 방어적으로 `?: ""` 처리된 분기가 실제 코드에 존재한다. 이런
+// 분기는 Kotlin 컴파일러가 non-null 타입에 null을 대입하는 것 자체를 막기 때문에 일반적인 생성자
+// 호출이나 mockk의 every {} returns null로는 재현할 수 없다 — 리플렉션으로 필드를 직접 덮어써서
+// 검증한다(실제 Hibernate가 하는 일과 동일한 방식).
+private fun forceNullField(target: Any, fieldName: String) {
+    val field = target.javaClass.getDeclaredField(fieldName)
+    field.isAccessible = true
+    field.set(target, null)
+}
+
 // sendRequestAsync()의 실제 HTTP 왕복(비동기 콜백/헤더/상태코드 분기)을 검증하기 위한 실제 로컬
 // HTTP 서버. mockk로는 WebhookServiceImpl 내부에서 직접 new한 HttpClient를 가로챌 수 없어
 // (외부에서 주입되는 의존성이 아님) 실제 소켓 통신으로 검증한다.
@@ -1174,6 +1185,549 @@ class WebhookServiceSpec : DescribeSpec({
                 verify(exactly = 1) { webhookRepository.findByProjectId(1L) }
                 verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
             }
+        }
+
+        // 커버리지 최종 보강: sender.name/webhook.project?.name처럼 Kotlin 타입상으로는 non-null이지만
+        // 방어적으로 ?: 처리된 필드들. Hibernate가 프록시/리플렉션으로 null을 주입할 가능성에 대비한
+        // 코드라 mockk로 non-null 타입 필드에 강제로 null을 주입해 검증한다(임의 스킵 아님).
+        describe("커버리지 최종 보강 - non-null 타입 필드에 대한 방어적 분기") {
+            it("sender.name이 null이면(방어적 분기) raw JSON의 sender 필드가 빈 문자열이어야 한다") {
+                val jsonWebhook = Webhook(
+                    id = 111L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.JSON
+                )
+                val senderWithNullName = User(id = 2L, loginId = "sender", name = "송신자")
+                forceNullField(senderWithNullName, "name")
+                val issue = Issue(id = 130L, title = "이슈", body = "내용", project = project, number = 50)
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_ISSUE, senderWithNullName, issue)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("sender").asText() shouldBe ""
+            }
+
+            it("webhook.project.name이 null이면(방어적 분기) raw JSON의 project 필드가 빈 문자열이어야 한다") {
+                val projectWithNullName = Project(id = 4L, name = "임시", owner = "owner")
+                forceNullField(projectWithNullName, "name")
+                val jsonWebhook = Webhook(
+                    id = 112L, project = projectWithNullName, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.JSON
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = Issue(id = 131L, title = "이슈", body = "내용", project = project, number = 51)
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_ISSUE, sender, issue)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("project").asText() shouldBe ""
+            }
+        }
+
+        // 커버리지 최종 보강: buildPushPayload()의 sender.id/project.id/project.owner/project.name(방어적)
+        // null 분기, 그리고 커밋 author/committer의 name·email·when이 모두 null인 조합.
+        describe("커버리지 최종 보강 - buildPushPayload 나머지 null 분기") {
+            val jsonWebhook = Webhook(
+                id = 113L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.JSON
+            )
+
+            it("sender.id가 null이면 sender.id 필드는 0이어야 한다") {
+                val senderWithoutId = User(id = null, loginId = "noid", name = "아이디없음")
+                val commit = testCommit("no sender id commit")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, senderWithoutId, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("sender").get("id").asLong() shouldBe 0L
+            }
+
+            it("project는 존재하지만 id/owner가 null이면 repository.id는 0, repository.owner는 빈 문자열이어야 한다") {
+                val projectWithoutIdAndOwner = Project(id = null, name = "no-id-owner", owner = null)
+                val jsonWebhookNoIdOwner = Webhook(
+                    id = 114L, project = projectWithoutIdAndOwner, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.JSON
+                )
+                val sender = User(id = 5L, loginId = "gildong", name = "홍길동")
+                val commit = testCommit("no project id/owner commit")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhookNoIdOwner, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("repository").get("id").asLong() shouldBe 0L
+                json.get("repository").get("owner").asText() shouldBe ""
+            }
+
+            it("project.name이 null이면(방어적 분기) repository.name이 빈 문자열이어야 한다") {
+                val projectWithNullName = Project(id = 8L, name = "임시", owner = "owner")
+                forceNullField(projectWithNullName, "name")
+                val jsonWebhookNullName = Webhook(
+                    id = 115L, project = projectWithNullName, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.JSON
+                )
+                val sender = User(id = 5L, loginId = "gildong", name = "홍길동")
+                val commit = testCommit("null project name commit")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhookNullName, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("repository").get("name").asText() shouldBe ""
+            }
+
+            it("커밋 author/committer의 name·email·when이 모두 null이면(플랫폼 타입 방어 분기) 빈 문자열로 채워야 한다") {
+                val identAllNull = mockk<PersonIdent>(relaxed = true)
+                every { identAllNull.name } returns null
+                every { identAllNull.emailAddress } returns null
+                every { identAllNull.`when` } returns null
+                val commitWithNullFields = mockk<RevCommit>(relaxed = true)
+                every { commitWithNullFields.name } returns "deadbeef2"
+                every { commitWithNullFields.fullMessage } returns "필드 없음 커밋"
+                every { commitWithNullFields.authorIdent } returns identAllNull
+                every { commitWithNullFields.committerIdent } returns identAllNull
+                val pushed = PushedCommits(listOf(commitWithNullFields), listOf("refs/heads/master"))
+                val sender = User(id = 5L, loginId = "gildong", name = "홍길동")
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+                val commitNode = json.get("commits").get(0)
+
+                commitNode.get("timestamp").asText() shouldBe ""
+                commitNode.get("author").get("name").asText() shouldBe ""
+                commitNode.get("author").get("email").asText() shouldBe ""
+                commitNode.get("committer").get("name").asText() shouldBe ""
+                commitNode.get("committer").get("email").asText() shouldBe ""
+            }
+
+            it("sender.email이 null이면(방어적 분기) pusher.email이 빈 문자열이어야 한다") {
+                val senderWithNullEmail = User(id = 5L, loginId = "gildong", name = "홍길동", email = "real@yona.io")
+                forceNullField(senderWithNullEmail, "email")
+                val commit = testCommit("null email commit")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, senderWithNullEmail, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("pusher").get("email").asText() shouldBe ""
+            }
+
+            // commit.authorIdent.when.toInstant() 이후의 ?.atZone()?.format() 체인은 java.time.Instant/
+            // ZonedDateTime의 JDK 계약(never null)에 의해 정상적으로는 도달 불가능하지만, mockk가 이
+            // final JDK 클래스까지 모킹 가능한 것을 확인해 실제로 null을 주입해 검증한다.
+            it("authorInstant.atZone()이 null을 반환하면(플랫폼 타입 방어 분기) timestamp가 빈 문자열이어야 한다") {
+                val instantWithNullZone = mockk<java.time.Instant>(relaxed = true)
+                every { instantWithNullZone.atZone(any()) } returns null
+                val dateReturningMockInstant = mockk<java.util.Date>(relaxed = true)
+                every { dateReturningMockInstant.toInstant() } returns instantWithNullZone
+                val identWithMockDate = mockk<PersonIdent>(relaxed = true)
+                every { identWithMockDate.`when` } returns dateReturningMockInstant
+                val commitMock = mockk<RevCommit>(relaxed = true)
+                every { commitMock.name } returns "mockedsha1"
+                every { commitMock.fullMessage } returns "메시지1"
+                every { commitMock.authorIdent } returns identWithMockDate
+                every { commitMock.committerIdent } returns identWithMockDate
+                val pushed = PushedCommits(listOf(commitMock), listOf("refs/heads/master"))
+                val sender = User(id = 5L, loginId = "gildong", name = "홍길동")
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("commits").get(0).get("timestamp").asText() shouldBe ""
+            }
+
+            it("authorInstant.atZone().format()이 null을 반환하면(플랫폼 타입 방어 분기) timestamp가 빈 문자열이어야 한다") {
+                val zonedDateTimeWithNullFormat = mockk<java.time.ZonedDateTime>(relaxed = true)
+                every { zonedDateTimeWithNullFormat.format(any()) } returns null
+                val instantWithNullFormat = mockk<java.time.Instant>(relaxed = true)
+                every { instantWithNullFormat.atZone(any<java.time.ZoneId>()) } returns zonedDateTimeWithNullFormat
+                val dateReturningMockInstant = mockk<java.util.Date>(relaxed = true)
+                every { dateReturningMockInstant.toInstant() } returns instantWithNullFormat
+                val identWithMockDate = mockk<PersonIdent>(relaxed = true)
+                every { identWithMockDate.`when` } returns dateReturningMockInstant
+                val commitMock = mockk<RevCommit>(relaxed = true)
+                every { commitMock.name } returns "mockedsha2"
+                every { commitMock.fullMessage } returns "메시지2"
+                every { commitMock.authorIdent } returns identWithMockDate
+                every { commitMock.committerIdent } returns identWithMockDate
+                val pushed = PushedCommits(listOf(commitMock), listOf("refs/heads/master"))
+                val sender = User(id = 5L, loginId = "gildong", name = "홍길동")
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("commits").get(0).get("timestamp").asText() shouldBe ""
+            }
+        }
+
+        // 커버리지 최종 보강: buildAttachmentJSON()의 Issue.body null 분기, 그리고 ReviewComment의
+        // "부모 스레드는 있지만 pullRequest가 없는" 분기(buildAttachmentJSON/buildResourceLink/threadKeyOf
+        // 세 곳 모두에 영향을 준다).
+        describe("커버리지 최종 보강 - Issue.body null / ReviewComment 부모 PR 없음") {
+            val slackWebhook = Webhook(
+                id = 120L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.DETAIL_SLACK
+            )
+            val simpleWebhook = Webhook(
+                id = 121L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.SIMPLE
+            )
+            val hangoutWebhook = Webhook(
+                id = 122L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+            )
+            val sender = User(id = 2L, loginId = "sender", name = "송신자")
+
+            it("Issue.body가 null이면 attachment text가 빈 문자열이어야 한다") {
+                val issueWithoutBody = Issue(id = 140L, title = "본문 없는 이슈", body = null, project = project, number = 60)
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issueWithoutBody)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("attachments").get(0).get("text").asText() shouldBe ""
+            }
+
+            it("PullRequest.body가 null이면 attachment text가 빈 문자열이어야 한다") {
+                val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
+                val prWithoutBody = PullRequest(
+                    id = 63L, title = "PR", body = null,
+                    toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature/no-body",
+                    contributor = contributor, number = 11
+                )
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_PULL_REQUEST, sender, prWithoutBody)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("attachments").get(0).get("text").asText() shouldBe ""
+            }
+
+            // Assignee.user는 Kotlin 타입상 non-null이지만, Hibernate가 프록시/리플렉션으로 null을
+            // 주입할 가능성에 대비한 방어적 분기(resource.assignee?.user?.name)가 실제 코드에 존재한다.
+            it("Assignee.user가 null이면(방어적 분기) attachment 담당자 필드가 빈 문자열이어야 한다") {
+                val assigneeUser = User(id = 8L, loginId = "assignee", name = "담당자이름")
+                val assignee = Assignee(id = 1L, user = assigneeUser, project = project)
+                forceNullField(assignee, "user")
+                val issueWithBrokenAssignee = Issue(
+                    id = 141L, title = "담당자 깨진 이슈", body = "내용", project = project, number = 61,
+                    assignee = assignee
+                )
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issueWithBrokenAssignee)
+                val json = ObjectMapper().readTree(payload)
+                val fields = json.get("attachments").get(0).get("fields")
+
+                fields.get(0).get("value").asText() shouldBe ""
+            }
+
+            it("Assignee.user.name이 null이면(방어적 분기) attachment 담당자 필드가 빈 문자열이어야 한다") {
+                val assigneeUser = User(id = 8L, loginId = "assignee", name = "담당자이름")
+                forceNullField(assigneeUser, "name")
+                val assignee = Assignee(id = 1L, user = assigneeUser, project = project)
+                val issueWithNamelessAssignee = Issue(
+                    id = 142L, title = "담당자 이름 없는 이슈", body = "내용", project = project, number = 62,
+                    assignee = assignee
+                )
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_ISSUE, sender, issueWithNamelessAssignee)
+                val json = ObjectMapper().readTree(payload)
+                val fields = json.get("attachments").get(0).get("fields")
+
+                fields.get(0).get("value").asText() shouldBe ""
+            }
+
+            val threadWithoutPR = CodeCommentThread(id = 410L, pullRequest = null, project = project)
+            val reviewCommentNoParent = ReviewComment(id = 510L, contents = "리뷰 댓글", thread = threadWithoutPR)
+
+            it("buildAttachmentJSON: 부모 스레드는 있지만 pullRequest가 없으면 본문/필드가 비어야 한다") {
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewCommentNoParent)
+                val json = ObjectMapper().readTree(payload)
+                val attachment = json.get("attachments").get(0)
+
+                attachment.get("text").asText() shouldBe ""
+                attachment.get("fields").size() shouldBe 0
+            }
+
+            it("buildResourceLink: 부모 스레드는 있지만 pullRequest가 없으면 링크 없이 본문 텍스트만 반환해야 한다") {
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewCommentNoParent)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe "[test-project] 송신자님이 새 리뷰 댓글을 등록했습니다."
+            }
+
+            it("threadKeyOf: 부모 스레드는 있지만 pullRequest가 없으면 자기 자신의 키(REVIEW_COMMENT)를 사용해야 한다") {
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(122L, ResourceType.REVIEW_COMMENT, "510")
+                } returns null
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewCommentNoParent)
+
+                verify(exactly = 1) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(122L, ResourceType.REVIEW_COMMENT, "510")
+                }
+            }
+
+            it("threadKeyOf: 부모 풀 리퀘스트의 id가 null이면 resourceId가 비어 스레드 조회를 하지 않아야 한다") {
+                val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
+                val prWithoutId = PullRequest(
+                    id = null, title = "PR", body = "본문",
+                    toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature/z",
+                    contributor = contributor, number = 8
+                )
+                val threadWithPRNoId = CodeCommentThread(id = 411L, pullRequest = prWithoutId, project = project)
+                val reviewComment = ReviewComment(id = 511L, contents = "리뷰 댓글", thread = threadWithPRNoId)
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewComment)
+
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(any(), any(), any())
+                }
+            }
+
+            it("threadKeyOf: ReviewComment의 부모 스레드 자체가 null이면 자기 자신의 키(REVIEW_COMMENT)를 사용해야 한다") {
+                val reviewCommentNoThread = ReviewComment(id = 512L, contents = "리뷰 댓글", thread = null)
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(122L, ResourceType.REVIEW_COMMENT, "512")
+                } returns null
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewCommentNoThread)
+
+                verify(exactly = 1) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(122L, ResourceType.REVIEW_COMMENT, "512")
+                }
+            }
+
+            it("ReviewComment의 부모 PR.body가 null이면 attachment text가 빈 문자열이어야 한다") {
+                val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
+                val pullRequestNoBody = PullRequest(
+                    id = 64L, title = "PR", body = null,
+                    toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature/pr-no-body",
+                    contributor = contributor, number = 12
+                )
+                val threadWithBodylessPR = CodeCommentThread(id = 413L, pullRequest = pullRequestNoBody, project = project)
+                val reviewComment = ReviewComment(id = 513L, contents = "리뷰 댓글", thread = threadWithBodylessPR)
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewComment)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("attachments").get(0).get("text").asText() shouldBe ""
+            }
+        }
+
+        // 커버리지 최종 보강: getResourceId()의 각 리소스 타입별 id=null 분기. Posting/IssueComment/
+        // PostingComment/ReviewComment/PullRequest는 buildResourceLink 경로로, CommitComment/PushedCommits는
+        // threadKeyOf(DETAIL_HANGOUT_CHAT) 경로로 도달한다. 후자는 resourceId가 빈 문자열이 되어
+        // buildPayload의 스레드 조회 가드(resId.isNotBlank())에 걸려 저장소 조회 자체는 일어나지 않는다.
+        describe("커버리지 최종 보강 - getResourceId() id=null 분기") {
+            val simpleWebhook = Webhook(
+                id = 130L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.SIMPLE
+            )
+            val hangoutWebhook = Webhook(
+                id = 131L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+            )
+            val sender = User(id = 2L, loginId = "sender", name = "송신자")
+
+            it("Posting의 id가 null이면 resourceId로 빈 문자열을 사용해야 한다") {
+                val postingWithoutId = Posting(id = null, title = "ID없는 게시글", body = "내용", project = project, number = 70)
+                every { notificationUrlResolver.getUrl(ResourceType.BOARD_POST, "") } returns "https://yona.example.com/posting"
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_POSTING, sender, postingWithoutId)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 게시글을 작성했습니다. <https://yona.example.com/posting|#70: ID없는 게시글>"
+            }
+
+            it("IssueComment 자신의 id가 null이면 resourceId로 빈 문자열을 사용해야 한다") {
+                val parentIssue = Issue(id = 150L, title = "부모 이슈", body = "내용", project = project, number = 71)
+                val commentWithoutId = IssueComment(id = null, contents = "댓글", issue = parentIssue)
+                every { notificationUrlResolver.getUrl(ResourceType.ISSUE_COMMENT, "") } returns "https://yona.example.com/comment"
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_COMMENT, sender, commentWithoutId)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 댓글을 등록했습니다. <https://yona.example.com/comment|#71: 부모 이슈>"
+            }
+
+            it("PostingComment 자신의 id가 null이면 resourceId로 빈 문자열을 사용해야 한다") {
+                val parentPosting = Posting(id = 160L, title = "부모 게시글", body = "내용", project = project, number = 72)
+                val commentWithoutId = PostingComment(id = null, contents = "댓글", posting = parentPosting)
+                every { notificationUrlResolver.getUrl(ResourceType.NONISSUE_COMMENT, "") } returns "https://yona.example.com/pcomment"
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_COMMENT, sender, commentWithoutId)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 댓글을 등록했습니다. <https://yona.example.com/pcomment|#72: 부모 게시글>"
+            }
+
+            it("ReviewComment 자신의 id가 null이면 resourceId로 빈 문자열을 사용해야 한다") {
+                val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
+                val pullRequest = PullRequest(
+                    id = 62L, title = "PR", body = "본문",
+                    toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature/id-null",
+                    contributor = contributor, number = 9
+                )
+                val thread = CodeCommentThread(id = 412L, pullRequest = pullRequest, project = project)
+                val reviewCommentWithoutId = ReviewComment(id = null, contents = "리뷰", thread = thread)
+                every { notificationUrlResolver.getUrl(ResourceType.REVIEW_COMMENT, "") } returns "https://yona.example.com/review"
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewCommentWithoutId)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 리뷰 댓글을 등록했습니다. <https://yona.example.com/review|#9: PR>"
+            }
+
+            it("PullRequest의 id가 null이면 resourceId로 빈 문자열을 사용해야 한다") {
+                val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
+                val prWithoutId = PullRequest(
+                    id = null, title = "ID없는 PR", body = "내용",
+                    toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature/pr-id-null",
+                    contributor = contributor, number = 10
+                )
+                every { notificationUrlResolver.getUrl(ResourceType.PULL_REQUEST, "") } returns "https://yona.example.com/pr"
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_PULL_REQUEST, sender, prWithoutId)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 풀 리퀘스트를 생성했습니다. <https://yona.example.com/pr|#10: ID없는 PR>"
+            }
+
+            it("CommitComment의 id가 null이면(threadKeyOf 경로) resourceId가 비어 스레드 조회를 하지 않아야 한다") {
+                val commitCommentWithoutId = CommitComment(id = null, project = project, contents = "커밋 댓글")
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMENT, sender, commitCommentWithoutId)
+
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(any(), any(), any())
+                }
+            }
+
+            it("PushedCommits는(threadKeyOf 경로) 커밋이 없으면 스레드 조회를 하지 않고, 있으면 첫 커밋 이름으로 조회해야 한다") {
+                val pushedEmpty = PushedCommits(emptyList(), listOf("refs/heads/master"))
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMIT, sender, pushedEmpty)
+
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(any(), any(), any())
+                }
+
+                val commit = testCommit("threadkey push commit")
+                val pushedNonEmpty = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(131L, ResourceType.COMMIT, commit.name)
+                } returns null
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMIT, sender, pushedNonEmpty)
+
+                verify(exactly = 1) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(131L, ResourceType.COMMIT, commit.name)
+                }
+            }
+
+            // RevCommit.getName()은 JGit 클래스의 메서드라 Kotlin이 플랫폼 타입(String!)으로 보고,
+            // Long.toString()류의 JDK 표준 라이브러리 정적 메서드(항상 non-null 보장)와 달리 mockk로
+            // null을 주입할 수 있다 — 커밋이 있어도 이름이 null이면 resourceId가 빈 문자열이어야 한다.
+            it("PushedCommits의 첫 커밋 이름(RevCommit.name)이 null이면 resourceId로 빈 문자열을 사용해야 한다") {
+                val commitWithNullName = mockk<RevCommit>(relaxed = true)
+                every { commitWithNullName.name } returns null
+                val pushedNullName = PushedCommits(listOf(commitWithNullName), listOf("refs/heads/master"))
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMIT, sender, pushedNullName)
+
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(any(), any(), any())
+                }
+            }
+        }
+
+        // 커버리지 최종 보강: threadKeyOf()의 PostingComment 분기(기존에 IssueComment/ReviewComment/
+        // CommitComment만 검증돼 있었음)와 그 부모 게시글 id=null 조합.
+        describe("커버리지 최종 보강 - threadKeyOf PostingComment 분기") {
+            val hangoutWebhook = Webhook(
+                id = 132L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+            )
+            val sender = User(id = 2L, loginId = "sender", name = "송신자")
+
+            it("게시글 댓글은 부모 게시글(BOARD_POST)을 스레드 키로 조회해야 한다") {
+                val parentPosting = Posting(id = 240L, title = "부모 게시글", body = "내용", project = project, number = 41)
+                val comment = PostingComment(id = 340L, contents = "댓글", posting = parentPosting)
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(132L, ResourceType.BOARD_POST, "240")
+                } returns null
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMENT, sender, comment)
+
+                verify(exactly = 1) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(132L, ResourceType.BOARD_POST, "240")
+                }
+            }
+
+            it("게시글 댓글의 부모 게시글 id가 null이면 resourceId가 비어 스레드 조회를 하지 않아야 한다") {
+                val parentPostingNoId = Posting(id = null, title = "ID없는 부모 게시글", body = "내용", project = project, number = 42)
+                val comment = PostingComment(id = 341L, contents = "댓글", posting = parentPostingNoId)
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMENT, sender, comment)
+
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(any(), any(), any())
+                }
+            }
+
+            it("이슈 댓글의 부모 이슈 id가 null이면 resourceId가 비어 스레드 조회를 하지 않아야 한다") {
+                val parentIssueNoId = Issue(id = null, title = "ID없는 부모 이슈", body = "내용", project = project, number = 43)
+                val comment = IssueComment(id = 350L, contents = "댓글", issue = parentIssueNoId)
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMENT, sender, comment)
+
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(any(), any(), any())
+                }
+            }
+        }
+
+        // 커버리지 최종 보강: sendRequestAsync()의 secret이 빈 문자열(blank)인 분기, 그리고 콜백 람다의
+        // statusCode < 200(1xx 정보성 응답) 분기.
+        describe("커버리지 최종 보강 - sendRequestAsync 나머지 분기") {
+            it("secret이 빈 문자열(blank)이면 Authorization 헤더를 담지 않아야 한다") {
+                val (server, latch, received) = startCapturingHttpServer(200, "{}")
+                try {
+                    val blankSecretWebhook = Webhook(
+                        id = 142L, project = project,
+                        payloadUrl = "http://127.0.0.1:${server.address.port}/hook",
+                        secret = "   ", gitPush = true, webhookType = WebhookType.SIMPLE
+                    )
+                    every { webhookRepository.findByProjectId(1L) } returns listOf(blankSecretWebhook)
+                    val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                    val issue = Issue(id = 122L, title = "이슈", body = "내용", project = project, number = 37)
+
+                    webhookService.sendWebhook(project, EventType.NEW_ISSUE, sender, issue)
+
+                    latch.await(5, TimeUnit.SECONDS) shouldBe true
+                    synchronized(received) { received[0].authorizationHeader } shouldBe null
+                } finally {
+                    server.stop(0)
+                }
+            }
+
+            // sendRequestAsync$lambda$0의 statusCode < 200(1xx) 분기는 실측 결과 도달 불가능으로
+            // 판단해 테스트를 작성하지 않는다 — 근거: com.sun.net.httpserver.HttpServer는 rCode가
+            // 1xx면 "forcing contentLen = -1"로 강제해 응답 본문 쓰기 자체가 IOException(stream
+            // closed)으로 실패하고, 설령 서버가 1xx만 보내고 끝내더라도 java.net.http.HttpClient는
+            // RFC 9110에 따라 1xx 중간 응답을 최종 응답으로 절대 넘기지 않고 내부적으로 계속 대기한다
+            // (실제로 재현: sendAsync 대신 client.send()로 직접 확인한 결과 응답이 영원히 도달하지
+            // 않고 타임아웃). 즉 HttpResponse.statusCode()가 200 미만 값을 반환하는 상황 자체가 이
+            // JDK HttpClient 구현에서는 발생할 수 없다.
         }
     }
 })

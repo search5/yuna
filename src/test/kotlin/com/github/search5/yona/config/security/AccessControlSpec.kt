@@ -571,4 +571,374 @@ class AccessControlSpec : DescribeSpec({
             accessControl.isAllowedToUpdateMilestone(stranger, privateProject) shouldBe false
         }
     }
+
+    // ==================== TASK-0259 AccessControl 분기 커버리지 보강 (전담 범위) ====================
+    // isAllowedToReadProject / isProjectResourceCreatable / isAllowedToUpdateIssue /
+    // isOrganizationAdmin / isIssueCommentCreatable / isPostingCommentCreatable /
+    // isAllowedIfGroupMember / getVisibleProjects / isAllowedIfSharer(Issue,User) /
+    // isOrganizationMember / isAllowed(User,Project,Operation) / isAllowed(User,Organization,Operation)
+    // 미실행 분기를 실제 소스 조건 기준으로 하나씩 커버한다. 다른 2개 에이전트가 동시에 이 파일에
+    // describe 블록을 추가하므로 기존 블록은 절대 수정하지 않고 파일 끝에만 추가한다.
+
+    describe("isAllowedToReadProject(user, project)") {
+        val emptyLoginIdReader = User(id = 950L, loginId = "", name = "emptyLoginIdReader")
+
+        it("PUBLIC 프로젝트는 비로그인 사용자에게 READ 허용") {
+            accessControl.isAllowedToReadProject(null, publicProject) shouldBe true
+        }
+        it("PUBLIC 프로젝트라도 게스트는 READ 거부") {
+            accessControl.isAllowedToReadProject(guest, publicProject) shouldBe false
+        }
+        it("PUBLIC 프로젝트는 일반 로그인 사용자에게 READ 허용") {
+            accessControl.isAllowedToReadProject(stranger, publicProject) shouldBe true
+        }
+        it("PRIVATE 프로젝트는 비로그인 사용자 READ 거부") {
+            accessControl.isAllowedToReadProject(null, privateProject) shouldBe false
+        }
+        it("PRIVATE 프로젝트는 게스트 READ 거부") {
+            accessControl.isAllowedToReadProject(guest, privateProject) shouldBe false
+        }
+        it("PRIVATE 프로젝트는 loginId가 빈 문자열인 사용자 READ 거부") {
+            accessControl.isAllowedToReadProject(emptyLoginIdReader, privateProject) shouldBe false
+        }
+        it("사이트 매니저는 PRIVATE 프로젝트도 READ 허용") {
+            accessControl.isAllowedToReadProject(siteManager, privateProject) shouldBe true
+        }
+        it("조직 관리자는 소속 PROTECTED 프로젝트 READ 허용") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isAllowedToReadProject(orgAdminUser, protectedProject) shouldBe true
+        }
+        it("프로젝트 멤버는 PRIVATE 프로젝트 READ 허용") {
+            accessControl.isAllowedToReadProject(member, privateProject) shouldBe true
+        }
+        it("그룹(조직) 멤버는 PROTECTED 프로젝트 READ 허용") {
+            val groupOrg = Organization(id = 951L, name = "readGroupOrg")
+            val groupUser = User(id = 952L, loginId = "readGroupUser", name = "readGroupUser")
+            groupOrg.organizationUsers.add(
+                OrganizationUser(user = groupUser, organization = groupOrg, role = Role(id = RoleType.ORG_MEMBER.roleType))
+            )
+            val groupProtectedProject = Project(id = 953L, name = "readGroupProtected", projectScope = ProjectScope.PROTECTED, organization = groupOrg)
+            accessControl.isAllowedToReadProject(groupUser, groupProtectedProject) shouldBe true
+        }
+        it("사이트매니저/조직관리자/멤버/그룹멤버 전부 아니면 PRIVATE 프로젝트 READ 거부") {
+            accessControl.isAllowedToReadProject(stranger, privateProject) shouldBe false
+        }
+        it("조직의 id가 없으면(영속화 전 상태) 조직관리자 여부를 안전하게 false로 처리한다") {
+            val orgWithoutId = Organization(id = null, name = "orgWithoutId")
+            val projectWithOrgNoId = Project(id = 954L, name = "projNoOrgId", projectScope = ProjectScope.PRIVATE, organization = orgWithoutId)
+            accessControl.isAllowedToReadProject(stranger, projectWithOrgNoId) shouldBe false
+        }
+        it("사용자 id가 없으면(영속화 전 상태) 조직관리자 여부를 안전하게 false로 처리한다") {
+            val userWithoutId = User(id = null, loginId = "userWithoutId", name = "userWithoutId")
+            accessControl.isAllowedToReadProject(userWithoutId, protectedProject) shouldBe false
+        }
+    }
+
+    describe("isProjectResourceCreatable(user, project, resourceType)") {
+        val emptyLoginIdCreator = User(id = 1010L, loginId = "", name = "emptyLoginIdCreator")
+        val bpGroupOrg = Organization(id = 1011L, name = "bpGroupOrg")
+        val bpGroupUser = User(id = 1012L, loginId = "bpGroupUser", name = "bpGroupUser")
+        bpGroupOrg.organizationUsers.add(
+            OrganizationUser(user = bpGroupUser, organization = bpGroupOrg, role = Role(id = RoleType.ORG_MEMBER.roleType))
+        )
+        val bpGroupPublicProject = Project(id = 1013L, name = "bpGroupPublic", projectScope = ProjectScope.PUBLIC, organization = bpGroupOrg)
+
+        it("user가 null이면 거부") {
+            accessControl.isProjectResourceCreatable(null, privateProject, ResourceType.ISSUE_POST) shouldBe false
+        }
+        it("게스트는 거부") {
+            accessControl.isProjectResourceCreatable(guest, privateProject, ResourceType.ISSUE_POST) shouldBe false
+        }
+        it("loginId가 빈 문자열이면 거부") {
+            accessControl.isProjectResourceCreatable(emptyLoginIdCreator, privateProject, ResourceType.ISSUE_POST) shouldBe false
+        }
+        it("사이트 매니저는 어떤 리소스든 생성 허용") {
+            accessControl.isProjectResourceCreatable(siteManager, privateProject, ResourceType.CODE) shouldBe true
+        }
+        it("조직 관리자는 소속 프로젝트에서 리소스 생성 허용") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isProjectResourceCreatable(orgAdminUser, protectedProject, ResourceType.CODE) shouldBe true
+        }
+        it("프로젝트 멤버는 리소스 생성 허용") {
+            accessControl.isProjectResourceCreatable(member, privateProject, ResourceType.CODE) shouldBe true
+        }
+        it("그룹(조직) 멤버는 PUBLIC 프로젝트에서 리소스 생성 허용") {
+            accessControl.isProjectResourceCreatable(bpGroupUser, bpGroupPublicProject, ResourceType.CODE) shouldBe true
+        }
+        it("비공개 프로젝트의 비멤버는 거부") {
+            accessControl.isProjectResourceCreatable(stranger, privateProject, ResourceType.ISSUE_POST) shouldBe false
+        }
+        it("공개 프로젝트의 비멤버는 허용된 리소스 타입(ISSUE_POST 등)이면 생성 허용") {
+            accessControl.isProjectResourceCreatable(stranger, publicProject, ResourceType.ISSUE_POST) shouldBe true
+        }
+        it("공개 프로젝트의 비멤버라도 허용되지 않은 리소스 타입(CODE 등)이면 거부") {
+            accessControl.isProjectResourceCreatable(stranger, publicProject, ResourceType.CODE) shouldBe false
+        }
+    }
+
+    describe("isAllowedToUpdateIssue(user, project, authorLoginId)") {
+        val emptyLoginIdUpdater = User(id = 1020L, loginId = "", name = "emptyLoginIdUpdater")
+
+        it("user가 null이면 거부") {
+            accessControl.isAllowedToUpdateIssue(null, privateProject, null) shouldBe false
+        }
+        it("게스트 사용자는 거부") {
+            accessControl.isAllowedToUpdateIssue(guest, privateProject, guest.loginId) shouldBe false
+        }
+        it("loginId가 빈 문자열이면 거부") {
+            accessControl.isAllowedToUpdateIssue(emptyLoginIdUpdater, privateProject, null) shouldBe false
+        }
+        it("사이트 매니저는 허용") {
+            accessControl.isAllowedToUpdateIssue(siteManager, privateProject, null) shouldBe true
+        }
+        it("조직 관리자는 소속 프로젝트에서 허용") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isAllowedToUpdateIssue(orgAdminUser, protectedProject, null) shouldBe true
+        }
+        it("조직 멤버(관리자 아님)는 자동으로 이슈 UPDATE 권한을 얻지 않는다") {
+            stubOrgRole(org, orgMemberUser, RoleType.ORG_MEMBER)
+            accessControl.isAllowedToUpdateIssue(orgMemberUser, protectedProject, null) shouldBe false
+        }
+        it("프로젝트 매니저는 허용") {
+            accessControl.isAllowedToUpdateIssue(managerUser, privateProject, null) shouldBe true
+        }
+        it("일반 멤버는 작성자가 아니어도 허용") {
+            accessControl.isAllowedToUpdateIssue(member, privateProject, stranger.loginId) shouldBe true
+        }
+        it("멤버가 아니어도 이슈 작성자 본인이면 허용") {
+            accessControl.isAllowedToUpdateIssue(stranger, privateProject, stranger.loginId) shouldBe true
+        }
+        it("authorLoginId가 null이면 작성자 일치로 인정되지 않는다") {
+            accessControl.isAllowedToUpdateIssue(stranger, privateProject, null) shouldBe false
+        }
+        it("사이트매니저/조직관리자/매니저/멤버/작성자 전부 아니면 거부") {
+            accessControl.isAllowedToUpdateIssue(stranger, privateProject, "someone-else") shouldBe false
+        }
+    }
+
+    // isIssueCommentCreatable/isPostingCommentCreatable 자체는 기존 describe 블록에서 대부분
+    // 커버됐으나, 사이트 전역 익명 차단(allowsAnonymousAccess=false)과 posting.authorId==null
+    // 분기는 아직 실행된 적이 없어 보강한다.
+    describe("isIssueCommentCreatable/isPostingCommentCreatable - 사이트 전역 익명 차단 및 작성자 null 분기 보강") {
+        val restrictedAccessControl = AccessControl(
+            projectUserRepository, organizationUserRepository,
+            userRepository, organizationRepository,
+            issueRepository, postingRepository,
+            reviewCommentRepository, commitCommentRepository,
+            milestoneRepository,
+            allowsAnonymousAccess = false
+        )
+        val issueNoAuthor = Issue(id = 910L, title = "익명차단 이슈", project = privateProject, number = 90L)
+        val postingNoAuthor = Posting(id = 920L, title = "작성자 없는 글", project = privateProject, number = 91L)
+
+        it("사이트 전역 익명 차단 설정 시 비로그인 사용자는 이슈 댓글을 달 수 없다") {
+            restrictedAccessControl.isIssueCommentCreatable(null, publicProject, issueNoAuthor) shouldBe false
+        }
+        it("사이트 전역 익명 차단 설정이라도 로그인 사용자(이슈 댓글)는 영향받지 않는다") {
+            restrictedAccessControl.isIssueCommentCreatable(member, privateProject, issueNoAuthor) shouldBe true
+        }
+        it("사이트 전역 익명 차단 설정 시 비로그인 사용자는 게시글 댓글을 달 수 없다") {
+            restrictedAccessControl.isPostingCommentCreatable(null, publicProject, postingNoAuthor) shouldBe false
+        }
+        it("사이트 전역 익명 차단 설정이라도 로그인 사용자(게시글 댓글)는 영향받지 않는다") {
+            restrictedAccessControl.isPostingCommentCreatable(member, privateProject, postingNoAuthor) shouldBe true
+        }
+        it("게시글 작성자 정보가 없으면(authorId=null) 작성자 우회 없이 프로젝트 권한 규칙을 따른다") {
+            accessControl.isPostingCommentCreatable(stranger, privateProject, postingNoAuthor) shouldBe false
+        }
+    }
+
+    describe("isAllowedIfGroupMember(project, user)") {
+        val gmOrg = Organization(id = 990L, name = "gmOrg")
+        val gmOrgMemberUser = User(id = 991L, loginId = "gmOrgMember", name = "gmOrgMember")
+        val gmOrgAdminUser = User(id = 992L, loginId = "gmOrgAdmin", name = "gmOrgAdmin")
+        val gmOrgOtherRoleUser = User(id = 993L, loginId = "gmOrgOtherRole", name = "gmOrgOtherRole")
+        val gmStrangerUser = User(id = 994L, loginId = "gmStranger", name = "gmStranger")
+        gmOrg.organizationUsers.add(OrganizationUser(user = gmOrgMemberUser, organization = gmOrg, role = Role(id = RoleType.ORG_MEMBER.roleType)))
+        gmOrg.organizationUsers.add(OrganizationUser(user = gmOrgAdminUser, organization = gmOrg, role = Role(id = RoleType.ORG_ADMIN.roleType)))
+        gmOrg.organizationUsers.add(OrganizationUser(user = gmOrgOtherRoleUser, organization = gmOrg, role = Role(id = RoleType.MANAGER.roleType)))
+
+        val gmPublicProject = Project(id = 995L, name = "gmPublic", projectScope = ProjectScope.PUBLIC, organization = gmOrg)
+        val gmProtectedProject = Project(id = 996L, name = "gmProtected", projectScope = ProjectScope.PROTECTED, organization = gmOrg)
+        val gmPrivateProject = Project(id = 997L, name = "gmPrivate", projectScope = ProjectScope.PRIVATE, organization = gmOrg)
+
+        it("프로젝트에 조직이 없으면 false") {
+            accessControl.isAllowedIfGroupMember(privateProject, stranger) shouldBe false
+        }
+        it("조직이 있어도 PRIVATE 프로젝트면 false(공개/보호 프로젝트만 대상)") {
+            accessControl.isAllowedIfGroupMember(gmPrivateProject, gmOrgMemberUser) shouldBe false
+        }
+        it("PUBLIC 프로젝트 + 조직 멤버(ORG_MEMBER)는 true") {
+            accessControl.isAllowedIfGroupMember(gmPublicProject, gmOrgMemberUser) shouldBe true
+        }
+        it("PROTECTED 프로젝트 + 조직 관리자(ORG_ADMIN)는 true") {
+            accessControl.isAllowedIfGroupMember(gmProtectedProject, gmOrgAdminUser) shouldBe true
+        }
+        it("조직 소속이지만 ORG_MEMBER/ORG_ADMIN이 아닌 역할은 false") {
+            accessControl.isAllowedIfGroupMember(gmPublicProject, gmOrgOtherRoleUser) shouldBe false
+        }
+        it("조직에 아예 소속되지 않은 사용자는 false") {
+            accessControl.isAllowedIfGroupMember(gmPublicProject, gmStrangerUser) shouldBe false
+        }
+    }
+
+    // getVisibleProjects는 기존 describe 블록에서 32/34 분기까지 커버됐고, 남은 것은
+    // hideProjectListing=true일 때 else 분기가 emptyList()로 빠지는 경로뿐이다.
+    describe("getVisibleProjects - hideProjectListing=true 분기 보강") {
+        it("hideProjectListing=true이면 조직관리자/조직멤버가 아닌 사용자에게 빈 목록을 반환한다") {
+            val hiddenListingAccessControl = AccessControl(
+                projectUserRepository, organizationUserRepository,
+                userRepository, organizationRepository,
+                issueRepository, postingRepository,
+                reviewCommentRepository, commitCommentRepository,
+                milestoneRepository,
+                hideProjectListing = true
+            )
+            val hideOrg = Organization(id = 970L, name = "hideListingOrg")
+            val hidePublicProject = Project(id = 971L, name = "hidePublic", projectScope = ProjectScope.PUBLIC, organization = hideOrg)
+            hideOrg.projects = mutableListOf(hidePublicProject)
+
+            val result = hiddenListingAccessControl.getVisibleProjects(hideOrg, stranger)
+            result shouldBe emptyList()
+        }
+    }
+
+    describe("isAllowedIfSharer(issue, user)") {
+        val sharerTarget = User(id = 980L, loginId = "sharerTarget", name = "sharerTarget")
+        val baseIssue = Issue(id = 981L, title = "공유 이슈", project = privateProject, number = 95L)
+        baseIssue.sharers.add(IssueSharer(id = 1L, loginId = sharerTarget.loginId, user = sharerTarget, issue = baseIssue))
+
+        val childIssueSharedViaParent = Issue(id = 982L, title = "부모 공유 자식 이슈", project = privateProject, number = 96L, parent = baseIssue)
+
+        val unsharedParent = Issue(id = 984L, title = "공유 없는 부모", project = privateProject, number = 98L)
+        val childOfUnsharedParent = Issue(id = 985L, title = "공유 없는 부모의 자식", project = privateProject, number = 99L, parent = unsharedParent)
+
+        it("parent가 없고 이슈 자체가 공유돼 있으면 true") {
+            accessControl.isAllowedIfSharer(baseIssue, sharerTarget) shouldBe true
+        }
+        it("parent가 없고 이슈 자체가 공유돼 있지 않으면 false") {
+            accessControl.isAllowedIfSharer(baseIssue, stranger) shouldBe false
+        }
+        it("parent가 있고 parent가 공유돼 있으면 true (자식 이슈 자체의 공유 여부와 무관)") {
+            accessControl.isAllowedIfSharer(childIssueSharedViaParent, sharerTarget) shouldBe true
+        }
+        it("parent가 있지만 parent도 자식 자신도 공유돼 있지 않으면 false") {
+            accessControl.isAllowedIfSharer(childOfUnsharedParent, sharerTarget) shouldBe false
+        }
+    }
+
+    describe("isOrganizationAdmin(organization, user) - Organization/User 오버로드") {
+        it("organization이 null이면 false") {
+            accessControl.isOrganizationAdmin(null, orgAdminUser) shouldBe false
+        }
+        it("user가 null이면 false") {
+            accessControl.isOrganizationAdmin(org, null) shouldBe false
+        }
+        it("organization의 id가 없으면(영속화 전) false") {
+            val orgNoId = Organization(id = null, name = "orgAdminNoId")
+            accessControl.isOrganizationAdmin(orgNoId, orgAdminUser) shouldBe false
+        }
+        it("user의 id가 없으면(영속화 전) false") {
+            val userNoId = User(id = null, loginId = "orgAdminUserNoId", name = "orgAdminUserNoId")
+            accessControl.isOrganizationAdmin(org, userNoId) shouldBe false
+        }
+        it("조회 결과가 없으면(Optional.empty) false") {
+            accessControl.isOrganizationAdmin(org, stranger) shouldBe false
+        }
+        it("역할이 ORG_ADMIN이 아니면 false") {
+            stubOrgRole(org, orgMemberUser, RoleType.ORG_MEMBER)
+            accessControl.isOrganizationAdmin(org, orgMemberUser) shouldBe false
+        }
+        it("역할이 ORG_ADMIN이면 true") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isOrganizationAdmin(org, orgAdminUser) shouldBe true
+        }
+    }
+
+    // isOrganizationMember(Organization, User)는 private이라 ASSIGN_ISSUE 경로(isAllowed(user,
+    // project, operation))를 통해 간접적으로 모든 분기(조직 null/조직 id null/사용자 null/사용자 id
+    // null/역할 불일치/Optional.empty/역할 일치)를 검증한다.
+    describe("isAllowed(user, project, operation) - PROJECT 리소스 보강 (ASSIGN_ISSUE/READ/WATCH/LEAVE/기타 연산 잔여 분기)") {
+        it("ASSIGN_ISSUE는 이미 프로젝트 멤버라면 조직 소속 여부와 무관하게 허용") {
+            accessControl.isAllowed(member, privateProject, Operation.ASSIGN_ISSUE) shouldBe true
+        }
+        it("ASSIGN_ISSUE는 비로그인 사용자는 거부") {
+            accessControl.isAllowed(null, orgPublicProject, Operation.ASSIGN_ISSUE) shouldBe false
+        }
+        it("ASSIGN_ISSUE는 조직이 없는 PUBLIC 프로젝트에서 비멤버에게 거부") {
+            accessControl.isAllowed(stranger, publicProject, Operation.ASSIGN_ISSUE) shouldBe false
+        }
+        it("ASSIGN_ISSUE는 조직의 id가 없으면(영속화 전) 비멤버에게 거부") {
+            val orgNoId = Organization(id = null, name = "assignOrgNoId")
+            val projOrgNoId = Project(id = 998L, name = "assignProjOrgNoId", projectScope = ProjectScope.PUBLIC, organization = orgNoId)
+            accessControl.isAllowed(stranger, projOrgNoId, Operation.ASSIGN_ISSUE) shouldBe false
+        }
+        it("ASSIGN_ISSUE는 사용자 id가 없으면(영속화 전) 비멤버에게 거부") {
+            val userNoId = User(id = null, loginId = "assignUserNoId", name = "assignUserNoId")
+            accessControl.isAllowed(userNoId, orgPublicProject, Operation.ASSIGN_ISSUE) shouldBe false
+        }
+        it("ASSIGN_ISSUE는 조직 조회 결과가 없으면(Optional.empty) 비멤버에게 거부") {
+            accessControl.isAllowed(stranger, orgPublicProject, Operation.ASSIGN_ISSUE) shouldBe false
+        }
+        it("ASSIGN_ISSUE는 조직 역할이 ORG_MEMBER가 아니면(ORG_ADMIN이라도) 비멤버에게 거부") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isAllowed(orgAdminUser, orgPublicProject, Operation.ASSIGN_ISSUE) shouldBe false
+        }
+        it("READ는 조직 관리자에게 PROTECTED 프로젝트 허용") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isAllowed(orgAdminUser, protectedProject, Operation.READ) shouldBe true
+        }
+        it("WATCH는 조직 관리자에게 PROTECTED 프로젝트 허용") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isAllowed(orgAdminUser, protectedProject, Operation.WATCH) shouldBe true
+        }
+        it("READ는 그룹(조직) 멤버에게 PROTECTED 프로젝트 허용") {
+            val opGroupOrg = Organization(id = 999L, name = "opGroupOrg")
+            val opGroupUser = User(id = 1000L, loginId = "opGroupUser", name = "opGroupUser")
+            opGroupOrg.organizationUsers.add(OrganizationUser(user = opGroupUser, organization = opGroupOrg, role = Role(id = RoleType.ORG_MEMBER.roleType)))
+            val opGroupProtectedProject = Project(id = 1001L, name = "opGroupProtected", projectScope = ProjectScope.PROTECTED, organization = opGroupOrg)
+            accessControl.isAllowed(opGroupUser, opGroupProtectedProject, Operation.READ) shouldBe true
+        }
+        it("WATCH는 그룹(조직) 멤버에게 PROTECTED 프로젝트 허용") {
+            val opGroupOrg2 = Organization(id = 1002L, name = "opGroupOrg2")
+            val opGroupUser2 = User(id = 1003L, loginId = "opGroupUser2", name = "opGroupUser2")
+            opGroupOrg2.organizationUsers.add(OrganizationUser(user = opGroupUser2, organization = opGroupOrg2, role = Role(id = RoleType.ORG_MEMBER.roleType)))
+            val opGroupProtectedProject2 = Project(id = 1004L, name = "opGroupProtected2", projectScope = ProjectScope.PROTECTED, organization = opGroupOrg2)
+            accessControl.isAllowed(opGroupUser2, opGroupProtectedProject2, Operation.WATCH) shouldBe true
+        }
+        it("LEAVE는 비로그인 사용자는 거부") {
+            accessControl.isAllowed(null, privateProject, Operation.LEAVE) shouldBe false
+        }
+        listOf(Operation.DELETE, Operation.ACCEPT, Operation.REOPEN, Operation.CLOSE).forEach { op ->
+            it("$op 연산은 매니저에게 허용된다") {
+                accessControl.isAllowed(managerUser, privateProject, op) shouldBe true
+            }
+            it("$op 연산은 매니저/조직관리자가 아니면 거부된다") {
+                accessControl.isAllowed(stranger, privateProject, op) shouldBe false
+            }
+        }
+    }
+
+    describe("isAllowed(user, organization, operation) - ORGANIZATION 리소스 보강") {
+        val restrictedAccessControl = AccessControl(
+            projectUserRepository, organizationUserRepository,
+            userRepository, organizationRepository,
+            issueRepository, postingRepository,
+            reviewCommentRepository, commitCommentRepository,
+            milestoneRepository,
+            allowsAnonymousAccess = false
+        )
+        it("사이트 전역 익명 차단 시 비로그인 사용자는 READ도 거부된다") {
+            restrictedAccessControl.isAllowed(null, org, Operation.READ) shouldBe false
+        }
+        it("사이트 전역 익명 차단 시라도 로그인 사용자는 READ 허용된다") {
+            restrictedAccessControl.isAllowed(orgMemberUser, org, Operation.READ) shouldBe true
+        }
+        it("사이트 매니저는 어떤 연산이든 항상 허용된다") {
+            accessControl.isAllowed(siteManager, org, Operation.UPDATE) shouldBe true
+        }
+        it("READ가 아닌 연산은 비로그인 사용자에게 조직관리자 여부로 판단되어 거부된다") {
+            accessControl.isAllowed(null, org, Operation.UPDATE) shouldBe false
+        }
+    }
 })

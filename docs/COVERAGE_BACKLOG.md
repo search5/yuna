@@ -38,6 +38,14 @@
 - 구조적 한계로 목표 사실상 최대치 도달([i]): `IssueExcelService`(BRANCH 88.1%, 나머지는 Kotlin non-null 타입상 도달 불가)
 - 진행 중([~], 다음 배치에서 계속): `AccessControl`(BRANCH 38.4%, 최우선), `NotificationMessageResolver`(82.8%), `WebhookServiceImpl`(79.8%), `IssueShareServiceImpl`(93.9%, 근소 미달)
 
+## 진행 현황 갱신 (2026-08-24 00:45, 2차 배치 완료 후)
+
+- 전체 클래스: 478개, 95% 미만: **265개**(-3, AccessControl은 근접했으나 아직 미달)
+- 라인: 79.1%, 분기: 61.3%, 메서드: 74.8%, 클래스: 91.7%
+- 추가 완료([x]): `NotificationMessageResolver`(BRANCH 96.8%), `WebhookServiceImpl`(95.2%)
+- 구조적 한계로 최대치 도달([i]): `IssueShareServiceImpl`(BRANCH 93.9%, 도달 가능 분기 100% 커버 — `type` 파라미터 미사용 실버그 확정)
+- 대폭 개선했으나 아직 미달([~]): `AccessControl`(BRANCH 38.4%→89.7%, 141개 남음, `isAllowed(...)` 오버로드 10종에 분산 — 다음 배치 최우선 마무리 대상)
+
 
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
@@ -67,7 +75,7 @@
 | `OAuth2UserInfoFactory` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `OAuth2AccountMergeService` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
 | **config/security** | | | | | | | | |
-| `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [~] | 2026-08-23: `isAllowedToUpdatePosting`(18/18 분기)·`isAllowedToUpdateMilestone`(14/14 분기) 100% 완료(18 tests 신규, `AccessControlSpec.kt`). 전체 회귀 확정치: LINE 65.4%, BRANCH 38.4%(878→844 미실행, 소폭 개선), METHOD 97.4% — 여전히 대부분 미달. 나머지 메서드(특히 `isAllowed(...)` 오버로드 다수, `getVisibleProjects`, `isAllowedAttachment`)는 아직 미착수 — 다음 배치 최우선 |
+| `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [~] | 2026-08-23: 3개 에이전트 병렬(`AccessControlSpec.kt` 헬퍼그룹 174 tests 전체, `AccessControlIssuePostingSpec.kt` 100 tests, `AccessControlPullRequestSpec.kt` 97 tests, 총 371 신규). 전체 회귀 확정치: LINE 97.9%, BRANCH 89.7%(141개 미실행 남음, 대부분 `isAllowed(...)` 오버로드 10종에 분산), METHOD 100% — 목표에 근접, 다음 배치에서 마무리 |
 | **config/svn** | | | | | | | | |
 | `SvnAuthorizationFilter` | 96.2 | 73.8 | 100.0 | 2 | 11 | 0 | [ ] | |
 | **domain/attachment** | | | | | | | | |
@@ -94,7 +102,7 @@
 | `PullRequestMergeEventListener` | 96.1 | 73.7 | 100.0 | 4 | 10 | 0 | [ ] | |
 | `PullRequestMergeEvent` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
 | **domain/issue** | | | | | | | | |
-| `IssueShareServiceImpl` | 33.9 | 8.8 | 27.8 | 119 | 104 | 13 | [~] | 2026-08-23: 43 tests(`IssueShareServiceImplSpec.kt`, 9개 describe 블록). 전체 회귀 확정치: LINE 99.4%, BRANCH 93.9%(목표 95%에 근소 미달), METHOD 100%. 도달 불가능 1건(`User.avatarUrl` non-null이라 elvis 우측 불가) 반영해도 근소 부족 — 남은 분기 추가 확인 필요. **의심 사항(버그 아닐 수 있음, 확인 필요)**: `findSharableUsers(query, type: String?)`의 `type` 파라미터가 메서드 본문에서 전혀 참조되지 않음 — 원래 타입별 필터링을 하려던 미완성 코드일 가능성, 별도 확인 필요 |
+| `IssueShareServiceImpl` | 33.9 | 8.8 | 27.8 | 119 | 104 | 13 | [i] | 2026-08-23: 46 tests(43+3, `IssueShareServiceImplSpec.kt`). 도달 가능한 분기는 전부 커버(담당자-없음+작성자==본인, 사이트관리자 조회 루프 진입, 검색결과 0건 루프 미진입 등 3건 추가). 도달 불가능 근거 확정: `mapUser`의 `user.avatarUrl ?: ""`(`User.avatarUrl` non-null) + `findAssignableUsers`의 `issue.assignee?.user?.id` 두 곳(각 최대 2분기, `Assignee.user`가 `@JoinColumn(nullable=false)` non-null이라 두번째 safe-call 도달 불가, `if(assignee!=null)` 블록 내부라 첫번째도 구조적으로 도달 불가) — 구조적 한계로 95% 미만이어도 최대치 도달로 인정. **실버그 확정**: `findSharableUsers(query, type: String?)`의 `type` 파라미터가 메서드 본문에서 전혀 참조되지 않음(죽은 파라미터, 타입별 필터링 미완성으로 추정) — 미수정, 별도 검토 필요 |
 | `IssueExcelService` | 3.6 | 0.0 | 16.7 | 106 | 42 | 5 | [i] | 2026-08-23: 신규 5 tests, `IssueExcelServiceSpec.kt`. 전체 회귀 확정치: LINE 98.2%, BRANCH 88.1%(37/42), METHOD 100% — 도달 가능한 분기는 100%(37/37) 커버, 미실행 5개는 `Milestone.title`/`AbstractPosting.title`/`Assignee.user`/`User.name`/`Comment.contents`가 전부 non-null 타입이라 elvis/safe-call의 null 분기가 Kotlin 타입 시스템상 생성 자체가 불가능(순수 코드로 만들 방법 없음) — 구조적 한계로 95% 미달을 인정. 라인 미실행 2개는 `workbook.close()` 실패 catch 블록으로 내부에서 워크북을 생성해 주입 지점이 없어 정상 흐름에서 트리거 불가 |
 | `IssueServiceImpl` | 96.6 | 64.2 | 64.2 | 13 | 58 | 19 | [ ] | |
 | `IssueSpecification` | 50.7 | 44.8 | 100.0 | 33 | 32 | 0 | [ ] | |
@@ -134,7 +142,7 @@
 | `Milestone` | 100.0 | 100.0 | 64.3 | 0 | 0 | 5 | [ ] | |
 | **domain/notification** | | | | | | | | |
 | `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [ ] | |
-| `NotificationMessageResolver` | 40.2 | 41.4 | 60.0 | 67 | 92 | 4 | [~] | 2026-08-23: `NotificationMessageResolverSpec.kt`에 246줄 추가, 49/49 GREEN(직접 재검증, 에이전트 최종 보고 자체는 비정상 응답이라 무시하고 코디네이터가 컴파일+테스트로 직접 확인함). 전체 회귀 확정치: LINE 100%, BRANCH 82.8%(목표 미달), METHOD 100% — 다음 배치에서 남은 분기 보강 필요 |
+| `NotificationMessageResolver` | 40.2 | 41.4 | 60.0 | 67 | 92 | 4 | [x] | 2026-08-23: `NotificationMessageResolverSpec.kt`에 총 64 tests(246줄+잔여 15건). 단독 측정 LINE 100%, BRANCH 96.8%(152/157), METHOD 100% — 목표 달성. 도달 불가능 5건 확정(`ReviewComment.contents`/`User.name` non-null이라 elvis null분기 불가) |
 | `NotificationUrlResolver` | 55.7 | 27.4 | 83.3 | 27 | 53 | 1 | [x] | 2026-08-23: 39 tests(+32)로 `getUrlToView`/`getUrl`/`urlToContainer` 전체 when-분기·null 케이스 커버. 전체 회귀 확정치: LINE 100%, BRANCH 98.6%, METHOD 100% — 목표 달성. 버그 아님: `COMMENT_THREAD`의 `urlToContainer` null 시 앵커까지 사라진 빈 문자열 반환 — 의도된 동작으로 보여 그대로 테스트에 반영 |
 | `NotificationEventMerger` | 90.2 | 65.9 | 100.0 | 5 | 14 | 0 | [ ] | |
 | `UserProjectNotification` | 64.3 | 0.0 | 23.1 | 5 | 2 | 10 | [ ] | |
@@ -256,7 +264,7 @@
 | `Watch` | 81.8 | 100.0 | 30.0 | 2 | 0 | 7 | [ ] | |
 | `WatchService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
 | **domain/webhook** | | | | | | | | |
-| `WebhookServiceImpl` | 86.0 | 57.0 | 90.5 | 35 | 117 | 2 | [~] | 2026-08-23: `WebhookServiceSpec.kt`에 30 tests 추가(24→60개 전체 재확인), 60/60 GREEN(코디네이터 재검증). 실제 HTTP 서버(`HttpServer`)로 sendRequestAsync까지 검증. 전체 회귀 확정치: LINE 99.2%, BRANCH 79.8%(목표 미달), METHOD 100% — 다음 배치에서 남은 분기 보강 필요 |
+| `WebhookServiceImpl` | 86.0 | 57.0 | 90.5 | 35 | 117 | 2 | [x] | 2026-08-23: `WebhookServiceSpec.kt`에 총 91 tests(24→60→91). 단독 측정 LINE 100%, BRANCH 95.2%(259/272), METHOD 100% — 목표 달성. `javap` 바이트코드 역어셈블로 도달 불가능 13건 확정(`String.valueOf(long)`/문자열템플릿/`TuplesKt.to()` 등 JDK/Kotlin 표준 라이브러리가 non-null을 보장하는 지점). non-null 타입 필드의 방어적 분기는 reflection으로 null을 강제 주입해 실제로 커버 |
 | `WebhookNotificationEventListener` | 96.7 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
 | `WebhookRepository$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
 | `WebhookRepository` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |

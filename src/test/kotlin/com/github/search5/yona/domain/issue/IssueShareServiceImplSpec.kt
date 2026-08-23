@@ -341,6 +341,37 @@ class IssueShareServiceImplSpec : DescribeSpec({
 
             result.shouldBeEmpty()
         }
+
+        it("담당자가 없고 작성자가 현재 사용자와 동일하면 작성자 지정 항목을 추가하지 않는다") {
+            val i = Issue(id = 120L, title = "이슈20", body = null, project = project, number = 20L, authorId = 10L, assignee = null)
+            every { userRepository.findById(10L) } returns Optional.of(currentUser)
+            every { projectUserRepository.findByProjectId(1L) } returns emptyList()
+
+            val result = service.findAssignableUsers(i, "", currentUser)
+
+            result.map { it["name"] } shouldContainExactly listOf("나에게 지정")
+        }
+
+        it("사이트관리자가 조회하면 배정 가능 후보 목록 반복문이 자기 자신을 순회한다") {
+            val siteManager = User(id = 65L, loginId = "siteadmin2", name = "사이트관리자2", state = UserState.SITE_ADMIN)
+            val i = Issue(id = 121L, title = "이슈21", body = null, project = project, number = 21L, authorId = null, assignee = null)
+            every { projectUserRepository.findByProjectId(1L) } returns emptyList()
+            every { userRepository.findAllById(setOf(65L)) } returns listOf(siteManager)
+
+            val result = service.findAssignableUsers(i, "", siteManager)
+
+            result shouldHaveSize 2
+            result[1]["loginId"] shouldBe "siteadmin2"
+        }
+
+        it("검색어가 있고 검색 결과가 없으면 반복문을 순회하지 않고 빈 목록을 반환한다") {
+            val i = Issue(id = 122L, title = "이슈22", body = null, project = project, number = 22L)
+            every { userRepository.searchUsers(any(), any()) } returns PageImpl(emptyList())
+
+            val result = service.findAssignableUsers(i, "없음", currentUser)
+
+            result.shouldBeEmpty()
+        }
     }
 
     describe("IssueShareServiceImpl.findSharerByloginIds") {

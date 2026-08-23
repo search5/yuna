@@ -88,6 +88,11 @@ class NotificationMessageResolverSpec : DescribeSpec({
             resolver.getMessage(event(EventType.ISSUE_MILESTONE_CHANGED, newValue = "1.0 릴리즈"), locale) shouldBe "notification.milestone.changed(1.0 릴리즈)"
         }
 
+        it("ISSUE_MILESTONE_CHANGED: newValue가 null이어도(isNullOrBlank의 null 분기) noMilestone을 인자로 담는다") {
+            every { messageSource.getMessage("issue.noMilestone", any(), any<String>(), Locale.getDefault()) } returns "마일스톤 없음"
+            resolver.getMessage(event(EventType.ISSUE_MILESTONE_CHANGED, newValue = null), locale) shouldBe "notification.milestone.changed(마일스톤 없음)"
+        }
+
         it("NEW_ISSUE/NEW_POSTING/NEW_PULL_REQUEST/NEW_COMMIT/COMMENT_UPDATED는 newValue를 그대로 반환한다") {
             resolver.getMessage(event(EventType.NEW_ISSUE, newValue = "이슈 본문"), locale) shouldBe "이슈 본문"
             resolver.getMessage(event(EventType.NEW_POSTING, newValue = "게시글 본문"), locale) shouldBe "게시글 본문"
@@ -96,12 +101,24 @@ class NotificationMessageResolverSpec : DescribeSpec({
             resolver.getMessage(event(EventType.COMMENT_UPDATED, newValue = "수정된 댓글"), locale) shouldBe "수정된 댓글"
         }
 
+        it("NEW_ISSUE: newValue가 null이면(orEmpty의 null 분기) 빈 문자열을 반환한다") {
+            resolver.getMessage(event(EventType.NEW_ISSUE, newValue = null), locale) shouldBe ""
+        }
+
         it("PULL_REQUEST_COMMIT_CHANGED는 newValue를 그대로 반환한다") {
             resolver.getMessage(event(EventType.PULL_REQUEST_COMMIT_CHANGED, newValue = "커밋 변경"), locale) shouldBe "커밋 변경"
         }
 
+        it("PULL_REQUEST_COMMIT_CHANGED: newValue가 null이면(orEmpty의 null 분기) 빈 문자열을 반환한다") {
+            resolver.getMessage(event(EventType.PULL_REQUEST_COMMIT_CHANGED, newValue = null), locale) shouldBe ""
+        }
+
         it("NEW_COMMENT: oldValue가 null이어도 'null' 문자열을 붙이지 않는다") {
             resolver.getMessage(event(EventType.NEW_COMMENT, newValue = "댓글 내용", oldValue = null), locale) shouldBe "댓글 내용"
+        }
+
+        it("NEW_COMMENT: newValue가 null이고 oldValue가 있으면(두 orEmpty의 나머지 분기) oldValue만 반환한다") {
+            resolver.getMessage(event(EventType.NEW_COMMENT, newValue = null, oldValue = "인용된 이전 내용"), locale) shouldBe "인용된 이전 내용"
         }
 
         it("ISSUE_BODY_CHANGED/POSTING_BODY_CHANGED는 DiffUtil로 렌더링한다") {
@@ -121,9 +138,18 @@ class NotificationMessageResolverSpec : DescribeSpec({
             resolver.getMessage(event(EventType.PULL_REQUEST_STATE_CHANGED, newValue = "CLOSED"), locale) shouldBe "notification.pullrequest.closed(CLOSED)"
         }
 
+        it("PULL_REQUEST_STATE_CHANGED: newValue가 null이면(OPEN이 아니므로 else, newValue의 두 orEmpty 모두 null 분기) 빈 key suffix를 쓴다") {
+            resolver.getMessage(event(EventType.PULL_REQUEST_STATE_CHANGED, newValue = null), locale) shouldBe "notification.pullrequest.()"
+        }
+
         it("PULL_REQUEST_MERGED: 코드워드 키가 없으면 원본 값을 default로 보여준다") {
             resolver.getMessage(event(EventType.PULL_REQUEST_MERGED, oldValue = "부가 설명", newValue = "임의 제목"), locale) shouldBe
                 "notification.type.pullrequest.merged.임의 제목(임의 제목)\n부가 설명"
+        }
+
+        it("PULL_REQUEST_MERGED: newValue/oldValue가 모두 null이면(각 orEmpty의 null 분기) 빈 문자열들로 채운다") {
+            resolver.getMessage(event(EventType.PULL_REQUEST_MERGED, oldValue = null, newValue = null), locale) shouldBe
+                "notification.type.pullrequest.merged.()\n"
         }
 
         it("MEMBER_ENROLL_REQUEST: REQUEST/CANCEL 값에 따라 분기한다") {
@@ -166,6 +192,12 @@ class NotificationMessageResolverSpec : DescribeSpec({
                 "notification.pullrequest.reviewed()"
         }
 
+        it("PULL_REQUEST_REVIEW_STATE_CHANGED: senderId는 있지만 사용자를 찾을 수 없으면(?.loginId의 null 분기) 빈 loginId를 인자로 담는다") {
+            every { userRepository.findById(6L) } returns Optional.empty()
+            resolver.getMessage(event(EventType.PULL_REQUEST_REVIEW_STATE_CHANGED, newValue = "DONE", senderId = 6L), locale) shouldBe
+                "notification.pullrequest.reviewed()"
+        }
+
         it("REVIEW_THREAD_STATE_CHANGED: CLOSED 여부로 분기한다") {
             resolver.getMessage(event(EventType.REVIEW_THREAD_STATE_CHANGED, newValue = "CLOSED"), locale) shouldBe "notification.reviewthread.closed()"
             resolver.getMessage(event(EventType.REVIEW_THREAD_STATE_CHANGED, newValue = "OPEN"), locale) shouldBe "notification.reviewthread.reopened()"
@@ -176,9 +208,25 @@ class NotificationMessageResolverSpec : DescribeSpec({
                 "notification.type.issue.moved(구프로젝트,신프로젝트)"
         }
 
+        it("ISSUE_MOVED: oldValue/newValue가 모두 null이면(각 orEmpty의 null 분기) 빈 문자열들로 채운다") {
+            resolver.getMessage(event(EventType.ISSUE_MOVED, oldValue = null, newValue = null), locale) shouldBe
+                "notification.type.issue.moved(,)"
+        }
+
         it("ISSUE_SHARER_CHANGED: newValue(loginId)가 있으면 해당 사용자 이름으로 added 메시지를 만든다") {
             every { userRepository.findByLoginId("sharer1") } returns Optional.of(User(loginId = "sharer1", name = "공유대상"))
             resolver.getMessage(event(EventType.ISSUE_SHARER_CHANGED, newValue = "sharer1"), locale) shouldBe "notification.issue.sharer.added(공유대상)"
+        }
+
+        // 도달 불가능 분기 메모: `user?.name ?: newValue`(라인 123)와 RESOURCE_DELETED의
+        // `user?.name ?: newValue.orEmpty()`(라인 140)는 User.name이 User.kt에서
+        // `@Column(nullable = false) var name: String = ""`로 널이 아니게 선언돼 있어, user가 non-null이면
+        // user.name도 항상 non-null이다. 즉 "user는 non-null인데 elvis가 발동"하는 조합은 코드상 존재할 수
+        // 없다 - JaCoCo는 safe-call(user null 체크)과 elvis(결과 null 체크)를 별개 분기로 세어 이 불가능한
+        // 조합 1개씩을 항상 미실행으로 남긴다(아래 두 테스트로 도달 가능한 나머지 조합은 모두 태운다).
+        it("ISSUE_SHARER_CHANGED: newValue(loginId)로 사용자를 찾을 수 없으면(user?.name의 null 분기, elvis 발동) newValue 자체를 이름으로 쓴다") {
+            every { userRepository.findByLoginId("unknown-sharer") } returns Optional.empty()
+            resolver.getMessage(event(EventType.ISSUE_SHARER_CHANGED, newValue = "unknown-sharer"), locale) shouldBe "notification.issue.sharer.added(unknown-sharer)"
         }
 
         it("ISSUE_SHARER_CHANGED: newValue가 비어있고 oldValue만 있으면 deleted 메시지를 반환한다") {
@@ -189,12 +237,20 @@ class NotificationMessageResolverSpec : DescribeSpec({
             resolver.getMessage(event(EventType.ISSUE_SHARER_CHANGED, oldValue = null, newValue = null), locale) shouldBe ""
         }
 
+        it("ISSUE_SHARER_CHANGED: newValue/oldValue가 모두 빈 문자열이면(oldValue의 isNullOrBlank가 blank-true 분기) 빈 문자열을 반환한다") {
+            resolver.getMessage(event(EventType.ISSUE_SHARER_CHANGED, oldValue = "", newValue = ""), locale) shouldBe ""
+        }
+
         it("ISSUE_LABEL_CHANGED: yuna는 loginId가 아니라 라벨 이름 목록을 저장하므로 그대로 인자로 쓴다") {
             resolver.getMessage(event(EventType.ISSUE_LABEL_CHANGED, newValue = "bug, urgent"), locale) shouldBe "notification.issue.label.added(bug, urgent)"
         }
 
         it("ISSUE_LABEL_CHANGED: newValue가 없고 oldValue만 있으면 deleted 메시지를 반환한다") {
             resolver.getMessage(event(EventType.ISSUE_LABEL_CHANGED, oldValue = "bug", newValue = ""), locale) shouldBe "notification.issue.label.deleted()"
+        }
+
+        it("ISSUE_LABEL_CHANGED: newValue/oldValue가 모두 빈 문자열이면(oldValue의 isNullOrBlank가 blank-true 분기) 빈 문자열을 반환한다") {
+            resolver.getMessage(event(EventType.ISSUE_LABEL_CHANGED, oldValue = "", newValue = ""), locale) shouldBe ""
         }
 
         it("ISSUE_LABEL_CHANGED: newValue/oldValue가 모두 없으면 빈 문자열을 반환한다") {
@@ -209,6 +265,10 @@ class NotificationMessageResolverSpec : DescribeSpec({
         it("RESOURCE_DELETED: newValue로 사용자를 찾으면 그 사용자 이름을 인자로 쓴다") {
             every { userRepository.findByLoginId("deleter1") } returns Optional.of(User(loginId = "deleter1", name = "삭제자"))
             resolver.getMessage(event(EventType.RESOURCE_DELETED, newValue = "deleter1"), locale) shouldBe "notification.resource.deleted(삭제자)"
+        }
+
+        it("RESOURCE_DELETED: newValue가 null이면(newValue?.let의 null 분기, orEmpty의 null 분기) 빈 문자열을 인자로 쓴다") {
+            resolver.getMessage(event(EventType.RESOURCE_DELETED, newValue = null), locale) shouldBe "notification.resource.deleted()"
         }
 
         it("정의되지 않은 이벤트 타입은 warn 로그를 남기고 eventType.messageKey를 기본 로케일로 반환한다") {
@@ -255,14 +315,31 @@ class NotificationMessageResolverSpec : DescribeSpec({
 
     // yona NotificationEvent.buildCommentedCodeMessage() 대응 - resolveReviewCommentMessage/buildCommentedCodeMessage의
     // 모든 분기(리소스ID 파싱 실패, 댓글/스레드/프로젝트/커밋 부재, 리포지토리 예외, diff 매칭, hunk 유무, 라인 종류)를 태운다.
+    //
+    // 도달 불가능 분기 메모: resolveReviewCommentMessage의
+    // `buildCommentedCodeMessage(reviewComment, locale) ?: event.newValue.orEmpty()` (라인 177) 중
+    // elvis의 null 분기(및 그 안에서만 평가되는 event.newValue.orEmpty()의 두 하위 분기)는 테스트로 만들 수 없다.
+    // buildCommentedCodeMessage()의 모든 return 경로는 reviewComment.contents(ReviewComment.kt의
+    // `var contents: String = ""`, 널이 아닌 String)이거나 message.toString()이라 실제로 null을 반환하는
+    // 경로가 코드상 존재하지 않는다. 함수 시그니처가 방어적으로 String?를 쓸 뿐, 구현이 null을 만들지 않으므로
+    // 임의 판단이 아니라 소스 코드 근거로 확인된 도달 불가능 분기다(총 6개 미실행 분기 중 3개).
     describe("NEW_REVIEW_COMMENT (resolveReviewCommentMessage/buildCommentedCodeMessage)") {
         it("resourceId가 숫자가 아니면 newValue를 그대로 반환한다") {
             resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "폴백", resourceId = "abc"), locale) shouldBe "폴백"
         }
 
+        it("resourceId가 숫자가 아니고 newValue도 null이면(orEmpty의 null 분기) 빈 문자열을 반환한다") {
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = null, resourceId = "abc"), locale) shouldBe ""
+        }
+
         it("리뷰 댓글을 찾을 수 없으면 newValue를 그대로 반환한다") {
             every { reviewCommentRepository.findById(900L) } returns Optional.empty()
             resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "폴백2", resourceId = "900"), locale) shouldBe "폴백2"
+        }
+
+        it("리뷰 댓글을 찾을 수 없고 newValue도 null이면(orEmpty의 null 분기) 빈 문자열을 반환한다") {
+            every { reviewCommentRepository.findById(920L) } returns Optional.empty()
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = null, resourceId = "920"), locale) shouldBe ""
         }
 
         it("thread가 없으면 댓글 내용을 그대로 반환한다") {
@@ -290,6 +367,14 @@ class NotificationMessageResolverSpec : DescribeSpec({
             every { reviewCommentRepository.findById(904L) } returns Optional.of(orphanComment)
 
             resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "예외 폴백", resourceId = "904"), locale) shouldBe "예외 폴백"
+        }
+
+        it("바깥 catch로 폴백하는 상황에서 newValue도 null이면(orEmpty의 null 분기) 빈 문자열을 반환한다") {
+            val thread = CodeCommentThread(id = 919L)
+            val orphanComment = ReviewComment(id = 912L, contents = "고아2", thread = thread)
+            every { reviewCommentRepository.findById(912L) } returns Optional.of(orphanComment)
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = null, resourceId = "912"), locale) shouldBe ""
         }
 
         it("스레드가 CodeCommentThread가 아니면(SimpleCommentThread) 댓글 내용을 그대로 반환한다") {
