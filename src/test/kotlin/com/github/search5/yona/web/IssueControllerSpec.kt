@@ -34,6 +34,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
 import com.github.search5.yona.domain.organization.OrganizationRepository
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.pullrequest.CommitCommentRepository
@@ -48,6 +50,7 @@ import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.issue.IssueComment
 import java.security.MessageDigest
+import java.time.Instant
 
 class IssueControllerSpec : DescribeSpec({
     val issueService = mockk<IssueService>()
@@ -175,6 +178,26 @@ class IssueControllerSpec : DescribeSpec({
 
                 pageableSlot.captured.pageSize shouldBe 45
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/issues"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("state 파라미터를 지정하면 findByProjectAndState로 조회해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { issueRepository.findByProjectAndState(project, State.CLOSED, any<Pageable>()) } returns PageImpl(emptyList(), pageRequest, 0)
+
+                mockMvc.perform(get("/api/projects/1/issues").param("state", "CLOSED").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { issueRepository.findByProjectAndState(project, State.CLOSED, any<Pageable>()) }
+                verify(exactly = 0) { issueRepository.findByProject(any(), any()) }
+            }
         }
 
         describe("GET /api/projects/{projectId}/issues/{issueId}") {
@@ -253,6 +276,37 @@ class IssueControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.title").value("초안 이슈2"))
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/issues/1"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(get("/api/projects/1/issues/999").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            // yona IssueApp.java:267-269 issue()의 draft 전용 게이트 대응 (P1-84). 비로그인 사용자는
+            // user == null이므로 isDraft && (user == null || ...) 분기에서 checkReadPermission보다
+            // 먼저 403을 받는다.
+            it("초안(draft) 이슈는 비로그인 사용자가 조회하면 403 Forbidden을 반환해야 한다") {
+                val draftIssue = Issue(
+                    id = 8L, number = 8L, title = "초안 이슈", body = "본문", project = project,
+                    authorId = user.id, authorLoginId = user.loginId, state = State.DRAFT, isDraft = true
+                )
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 8L) } returns draftIssue
+
+                mockMvc.perform(get("/api/projects/1/issues/8"))
+                    .andExpect(status().isForbidden)
+            }
         }
 
         describe("GET /api/projects/{projectId}/issues/{issueId}/timeline") {
@@ -300,6 +354,23 @@ class IssueControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/api/projects/1/issues/7/timeline").principal(otherAuth))
                     .andExpect(status().isOk)
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/issues/1/timeline"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("공유자도 아니고 프로젝트 멤버도 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 30L) } returns false
+
+                mockMvc.perform(get("/api/projects/1/issues/5/timeline").principal(otherAuth))
+                    .andExpect(status().isForbidden)
             }
         }
 
@@ -359,6 +430,115 @@ class IssueControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.state").value("DRAFT"))
 
                 verify(exactly = 1) { issueService.createIssue(any(), user, null, null, null, true) }
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                val jsonContent = """{ "title": "제목", "body": "내용", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    post("/api/projects/999/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("익명 사용자면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                val jsonContent = """{ "title": "제목", "body": "내용", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            // checkWritePermission()의 existsByProjectIdAndUserId=false && isAllowedIfGroupMember=false 분기 대응.
+            it("프로젝트 멤버가 아니고 그룹(조직) 멤버도 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 30L) } returns false
+
+                val jsonContent = """{ "title": "제목", "body": "내용", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.createIssue(any(), any(), any(), any(), any(), any()) }
+            }
+
+            // checkWritePermission()의 existsByProjectIdAndUserId=false && isAllowedIfGroupMember=true 분기 대응 (P1-57).
+            // 프로젝트 직접 멤버가 아니어도 PUBLIC/PROTECTED 프로젝트의 조직 멤버면 쓰기 권한을 가진다.
+            it("프로젝트 멤버가 아니어도 공개 프로젝트의 조직 멤버면 이슈를 생성할 수 있어야 한다") {
+                val organization = Organization(id = 1L, name = "TestOrg")
+                val orgProject = Project(id = 7L, name = "OrgProject", projectScope = ProjectScope.PUBLIC, organization = organization)
+                val orgRole = Role(id = RoleType.ORG_MEMBER.roleType)
+                organization.organizationUsers.add(OrganizationUser(user = otherUser, organization = organization, role = orgRole))
+
+                every { projectRepository.findById(7L) } returns Optional.of(orgProject)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(7L, 30L) } returns false
+                every { issueService.createIssue(any(), otherUser, null, null, null, false) } returns issue
+
+                val jsonContent = """{ "title": "제목", "body": "내용", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    post("/api/projects/7/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("assigneeId를 지정하면 담당자를 조회해서 서비스에 전달해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { userRepository.findById(30L) } returns Optional.of(otherUser)
+                every { issueService.createIssue(any(), user, otherUser, null, null, false) } returns issue
+
+                val jsonContent = """{ "title": "제목", "body": "내용", "milestoneId": null, "assigneeId": 30, "labelIds": null }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+
+                verify(exactly = 1) { issueService.createIssue(any(), user, otherUser, null, null, false) }
+            }
+
+            it("body를 생략하면 빈 문자열로 이슈를 생성해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                val issueSlot = slot<Issue>()
+                every { issueService.createIssue(capture(issueSlot), user, null, null, null, false) } returns issue
+
+                val jsonContent = """{ "title": "제목", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+
+                issueSlot.captured.body shouldBe ""
             }
         }
 
@@ -420,6 +600,89 @@ class IssueControllerSpec : DescribeSpec({
                         .principal(otherAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                val jsonContent = """{ "title": "t", "body": "b", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    put("/api/projects/999/issues/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                val jsonContent = """{ "title": "t", "body": "b", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("익명 사용자면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+
+                val jsonContent = """{ "title": "t", "body": "b", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("작성자도 관리자도 담당자도 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+
+                val jsonContent = """{ "title": "t", "body": "b", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.updateIssue(any(), any(), any(), any(), any(), any(), any()) }
+            }
+
+            it("assigneeId를 지정하면 담당자를 조회해서 서비스에 전달해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { userRepository.findById(30L) } returns Optional.of(otherUser)
+                every { issueService.updateIssue(5L, "제목", "내용", user, otherUser, null, null) } returns issue
+
+                val jsonContent = """{ "title": "제목", "body": "내용", "milestoneId": null, "assigneeId": 30, "labelIds": null }"""
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { issueService.updateIssue(5L, "제목", "내용", user, otherUser, null, null) }
             }
         }
 
@@ -537,6 +800,49 @@ class IssueControllerSpec : DescribeSpec({
 
                 verify(exactly = 1) { issueService.moveIssue(6L, 3L, otherUser) }
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                val jsonContent = """{ "targetProjectId": 3 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/999/issues/5/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                val jsonContent = """{ "targetProjectId": 3 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/999/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("익명 사용자면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+
+                val jsonContent = """{ "targetProjectId": 3 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                )
+                    .andExpect(status().isUnauthorized)
+            }
         }
 
         // yona IssueApp.editIssue()의 "if (issue.isPublish) { ... }" 발행 전환 대응 (P1-65).
@@ -598,6 +904,21 @@ class IssueControllerSpec : DescribeSpec({
 
                 verify(exactly = 1) { issueService.publishIssue(6L, otherUser) }
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/999/issues/5/publish").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("익명 사용자면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+
+                mockMvc.perform(post("/api/projects/1/issues/5/publish"))
+                    .andExpect(status().isUnauthorized)
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/issues/{issueId}") {
@@ -646,6 +967,97 @@ class IssueControllerSpec : DescribeSpec({
 
                 verify(exactly = 1) { issueService.deleteIssueCascade(issue) }
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/999/issues/5").principal(managerAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(delete("/api/projects/1/issues/999").principal(managerAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("익명 사용자면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+
+                mockMvc.perform(delete("/api/projects/1/issues/5"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("작성자도 관리자도 담당자도 아니면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/1/issues/5").principal(otherAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.deleteIssueCascade(any()) }
+            }
+        }
+
+        // yona IssueApp.java의 상태 전환(open/close) 대응. 담당자/작성자/매니저만 상태를 바꿀 수 있다.
+        describe("POST /api/projects/{projectId}/issues/{issueId}/state") {
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/999/issues/5/state").param("state", "CLOSED").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(post("/api/projects/1/issues/999/state").param("state", "CLOSED").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("익명 사용자면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+
+                mockMvc.perform(post("/api/projects/1/issues/5/state").param("state", "CLOSED"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            // isManagerOrAuthorOrAssignee()의 projectUserRepository.findByProjectIdAndUserId(...).map { role == MANAGER }
+            // 람다가 false를 반환하는 경로 대응 — Optional이 비어있지 않고(MEMBER 존재) 매니저가 아닌 경우.
+            it("작성자도 관리자도 담당자도 아닌 일반 멤버면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                val otherMemberProjectUser = ProjectUser(id = 102L, user = otherUser, project = project, role = memberRole)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 30L) } returns Optional.of(otherMemberProjectUser)
+
+                mockMvc.perform(post("/api/projects/1/issues/5/state").param("state", "CLOSED").principal(otherAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.changeState(any(), any(), any()) }
+            }
+
+            it("작성자가 상태를 변경하면 200 OK와 함께 갱신된 이슈를 반환해야 한다") {
+                val closedIssue = Issue(id = 5L, number = 5L, title = "이슈 제목", body = "이슈 내용", project = project, authorId = user.id, state = State.CLOSED)
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueService.changeState(5L, State.CLOSED, "testuser") } returns closedIssue
+
+                mockMvc.perform(post("/api/projects/1/issues/5/state").param("state", "CLOSED").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.state").value("CLOSED"))
+
+                verify(exactly = 1) { issueService.changeState(5L, State.CLOSED, "testuser") }
+            }
         }
 
         // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101).
@@ -674,6 +1086,21 @@ class IssueControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { issueService.upvoteWeight(any()) }
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/999/issues/5/upvoteWeight").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(post("/api/projects/1/issues/999/upvoteWeight").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
         }
 
         describe("POST /api/projects/{projectId}/issues/{issueId}/downvoteWeight") {
@@ -688,6 +1115,32 @@ class IssueControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.weight").value(-1))
 
                 verify(exactly = 1) { issueService.downvoteWeight(5L) }
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/999/issues/5/downvoteWeight").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(post("/api/projects/1/issues/999/downvoteWeight").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("프로젝트 멤버가 아니면 403 Forbidden을 반환하고 서비스를 호출하지 않아야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+
+                mockMvc.perform(post("/api/projects/1/issues/5/downvoteWeight").principal(otherAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueService.downvoteWeight(any()) }
             }
         }
 
@@ -769,6 +1222,113 @@ class IssueControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isUnauthorized)
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                val jsonContent = """{ "issueBodyChecksum": "x", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/999/issues/5/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                val jsonContent = """{ "issueBodyChecksum": "x", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/999/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            // lastComment.authorLoginId가 null인 경우(익명/탈퇴 등) commentAuthor 조회 자체를 건너뛰고
+            // commentAuthorName도 null이어야 한다 — authorLoginId?.let{} 분기의 null 경로.
+            it("최신 댓글의 작성자 loginId가 없으면 commentAuthorName은 null이어야 한다") {
+                val anonymousComment = IssueComment(id = 51L, contents = "익명 댓글", authorLoginId = null, issue = issue)
+                val checksum = MessageDigest.getInstance("SHA-1")
+                    .digest("이슈 내용".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns listOf(anonymousComment)
+
+                val jsonContent = """{ "issueBodyChecksum": "$checksum", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.commentAuthorName").value(org.hamcrest.Matchers.nullValue()))
+            }
+
+            // 댓글 작성자의 loginId는 남아있지만(탈퇴 등) userRepository에서 찾지 못하는 경우
+            // commentAuthor?.getDisplayName() ?: lastComment.authorLoginId 의 우변(엘비스 false 대체) 경로.
+            it("댓글 작성자를 찾을 수 없으면 loginId를 그대로 이름으로 사용해야 한다") {
+                val ghostComment = IssueComment(id = 52L, contents = "탈퇴한 사람 댓글", authorLoginId = "ghostuser", issue = issue)
+                val checksum = MessageDigest.getInstance("SHA-1")
+                    .digest("이슈 내용".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(5L) } returns listOf(ghostComment)
+                every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+
+                val jsonContent = """{ "issueBodyChecksum": "$checksum", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.commentAuthorName").value("ghostuser"))
+            }
+
+            // (issue.updatedDate ?: issue.createdDate)?.toEpochMilli() 의 non-null 경로 대응.
+            it("이슈에 updatedDate가 있으면 issueUpdateDate에 epoch milli 값을 채워야 한다") {
+                val updatedInstant = Instant.parse("2026-01-01T00:00:00Z")
+                val updatedIssue = Issue(
+                    id = 20L, number = 20L, title = "이슈 제목", body = "이슈 내용", project = project,
+                    authorId = user.id, state = State.OPEN, updatedDate = updatedInstant
+                )
+                val checksum = MessageDigest.getInstance("SHA-1")
+                    .digest("이슈 내용".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 20L) } returns updatedIssue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(20L) } returns emptyList()
+
+                val jsonContent = """{ "issueBodyChecksum": "$checksum", "numOfComments": 0 }"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/20/detectChange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.issueUpdateDate").value(updatedInstant.toEpochMilli()))
+            }
         }
 
         // yona IssueApi.java:319-349 updateIssueContent()의 isModifiedByOthers() 충돌 감지 대응 (P1-102).
@@ -810,6 +1370,87 @@ class IssueControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.storedContent").value("이슈 내용"))
 
                 verify(exactly = 0) { issueRepository.save(any()) }
+            }
+
+            it("익명 사용자면 401 Unauthorized를 반환해야 한다") {
+                val jsonContent = """{ "content": "내용", "original": "이슈 내용" }"""
+
+                mockMvc.perform(
+                    patch("/api/projects/1/issues/5/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                val jsonContent = """{ "content": "내용", "original": "이슈 내용" }"""
+
+                mockMvc.perform(
+                    patch("/api/projects/999/issues/5/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 이슈면 404를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                val jsonContent = """{ "content": "내용", "original": "이슈 내용" }"""
+
+                mockMvc.perform(
+                    patch("/api/projects/1/issues/999/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("원본은 일치하지만 수정 권한이 없으면 403 Forbidden을 반환하고 저장하지 않아야 한다") {
+                val contentIssue = Issue(id = 17L, number = 17L, title = "이슈 제목", body = "이슈 내용", project = project, authorId = user.id, state = State.OPEN)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 17L) } returns contentIssue
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+
+                val jsonContent = """{ "content": "내용", "original": "이슈 내용" }"""
+
+                mockMvc.perform(
+                    patch("/api/projects/1/issues/17/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { issueRepository.save(any()) }
+            }
+
+            // issue.body ?: "" 엘비스의 null 경로 대응 — 본문이 아직 없는(null) 이슈도 정상 처리돼야 한다.
+            it("이슈 본문이 null이어도 정상적으로 갱신해야 한다") {
+                val emptyBodyIssue = Issue(id = 18L, number = 18L, title = "이슈 제목", body = null, project = project, authorId = user.id, state = State.OPEN)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 18L) } returns emptyBodyIssue
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueRepository.save(emptyBodyIssue) } returns emptyBodyIssue
+
+                val jsonContent = """{ "content": "새 내용", "original": "" }"""
+
+                mockMvc.perform(
+                    patch("/api/projects/1/issues/18/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.body").value("새 내용"))
             }
         }
     }

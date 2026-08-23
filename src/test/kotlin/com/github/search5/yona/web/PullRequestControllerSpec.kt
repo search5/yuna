@@ -110,6 +110,15 @@ class PullRequestControllerSpec : DescribeSpec({
         val userAuth = UsernamePasswordAuthenticationToken("testuser", "password")
         val managerAuth = UsernamePasswordAuthenticationToken("manageruser", "password")
 
+        // changeState/deleteFromBranch/restoreFromBranch의 isManagerOrContributor 3분기(계약자/매니저/일반멤버)와
+        // checkWritePermission의 멤버 허용 분기를 실제로 밟기 위한 추가 액터.
+        val plainMemberUser = User(id = 60L, loginId = "plainmember", name = "일반멤버")
+        plainMemberUser.projectUsers.add(ProjectUser(id = 104L, user = User(id = 999_913L, loginId = "_membership_placeholder"), project = project, role = memberRole))
+        val plainMemberAuth = UsernamePasswordAuthenticationToken("plainmember", "password")
+
+        val outsiderUser = User(id = 70L, loginId = "outsider", name = "비멤버")
+        val outsiderAuth = UsernamePasswordAuthenticationToken("outsider", "password")
+
         describe("GET /api/projects/{projectId}/pullrequests") {
             it("비공개 프로젝트일 때 프로젝트 멤버라면 200 OK와 PR 목록을 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
@@ -120,6 +129,21 @@ class PullRequestControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/projects/1/pullrequests").param("state", "OPEN").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$[0].title").value("PR 제목"))
+            }
+
+            it("존재하지 않는 프로젝트를 조회하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/pullrequests").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            // getLoginUser()의 authentication==null 분기와 checkReadPermission() false 분기를 함께 검증한다.
+            it("비로그인 사용자가 비공개 프로젝트를 조회하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(get("/api/projects/1/pullrequests"))
+                    .andExpect(status().isForbidden)
             }
         }
 
@@ -133,6 +157,31 @@ class PullRequestControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/projects/1/pullrequests/1").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.title").value("PR 제목"))
+            }
+
+            it("존재하지 않는 프로젝트를 조회하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/pullrequests/1").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비공개 프로젝트를 비멤버가 조회하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("outsider") } returns Optional.of(outsiderUser)
+
+                mockMvc.perform(get("/api/projects/1/pullrequests/1").principal(outsiderAuth))
+                    .andExpect(status().isForbidden)
+            }
+
+            it("존재하지 않는 PR 번호를 조회하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(get("/api/projects/1/pullrequests/999").principal(userAuth))
+                    .andExpect(status().isNotFound)
             }
         }
 
@@ -152,6 +201,31 @@ class PullRequestControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/projects/1/pullrequests/1/timeline").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$[0].newValue").value("MERGED"))
+            }
+
+            it("존재하지 않는 프로젝트의 타임라인을 조회하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/pullrequests/1/timeline").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비공개 프로젝트를 비멤버가 타임라인 조회하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("outsider") } returns Optional.of(outsiderUser)
+
+                mockMvc.perform(get("/api/projects/1/pullrequests/1/timeline").principal(outsiderAuth))
+                    .andExpect(status().isForbidden)
+            }
+
+            it("존재하지 않는 PR 번호의 타임라인을 조회하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(get("/api/projects/1/pullrequests/999/timeline").principal(userAuth))
+                    .andExpect(status().isNotFound)
             }
         }
 
@@ -240,6 +314,33 @@ class PullRequestControllerSpec : DescribeSpec({
                     .andExpect(status().isForbidden)
 
                 verify(exactly = 0) { pullRequestService.createPullRequest(any(), any(), any(), any(), any(), any(), any()) }
+            }
+
+            it("존재하지 않는 프로젝트로 PR을 제출하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                val jsonContent = """{"title": "PR 제목", "body": "PR 본문", "fromProjectId": 2, "fromBranch": "feature", "toBranch": "master"}"""
+
+                mockMvc.perform(
+                    post("/api/projects/999/pullrequests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 PR을 제출하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                val jsonContent = """{"title": "PR 제목", "body": "PR 본문", "fromProjectId": 2, "fromBranch": "feature", "toBranch": "master"}"""
+
+                mockMvc.perform(
+                    post("/api/projects/1/pullrequests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                )
+                    .andExpect(status().isUnauthorized)
             }
         }
 
@@ -381,6 +482,43 @@ class PullRequestControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isConflict)
             }
+
+            it("존재하지 않는 프로젝트의 PR을 수정하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/999/pullrequests/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title": "제목", "body": "본문"}""")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 PR을 수정하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title": "제목", "body": "본문"}""")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 PR 번호를 수정하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title": "제목", "body": "본문"}""")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
         }
 
         describe("POST /api/projects/{projectId}/pullrequests/{number}/merge") {
@@ -398,6 +536,41 @@ class PullRequestControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            it("존재하지 않는 프로젝트에서 머지를 시도하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/999/pullrequests/1/merge").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 머지를 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/merge"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("프로젝트 멤버가 아니면 머지를 403 Forbidden으로 거부해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("outsider") } returns Optional.of(outsiderUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 70L) } returns false
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/merge").principal(outsiderAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { pullRequestService.merge(any(), any()) }
+            }
+
+            it("존재하지 않는 PR 번호를 머지하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/999/merge").principal(userAuth))
+                    .andExpect(status().isNotFound)
             }
         }
 
@@ -434,6 +607,30 @@ class PullRequestControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { pullRequestService.addReviewer(any(), any()) }
             }
+
+            it("존재하지 않는 프로젝트에 리뷰어를 등록하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/999/pullrequests/1/reviewers").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 리뷰어 등록을 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/reviewers"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 PR 번호에 리뷰어를 등록하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/999/reviewers").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/pullrequests/{number}/reviewers") {
@@ -468,6 +665,30 @@ class PullRequestControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { pullRequestService.removeReviewer(any(), any()) }
             }
+
+            it("존재하지 않는 프로젝트에서 리뷰어를 해제하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/999/pullrequests/1/reviewers").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 리뷰어 해제를 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(delete("/api/projects/1/pullrequests/1/reviewers"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 PR 번호의 리뷰어를 해제하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(delete("/api/projects/1/pullrequests/999/reviewers").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/pullrequests/{number}/fromBranch") {
@@ -483,6 +704,59 @@ class PullRequestControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            // isManagerOrContributor()가 false(계약자도 매니저도 아님)여도 checkWritePermission()의
+            // 프로젝트 멤버 허용 분기로 통과하는 케이스 — !isManagerOrContributor && !checkWritePermission
+            // 호출부의 두 서브식 조합 중 "멤버라서 허용"에 해당한다.
+            it("계약자도 매니저도 아닌 일반 프로젝트 멤버도 원본 브랜치를 삭제할 수 있어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("plainmember") } returns Optional.of(plainMemberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 60L) } returns Optional.of(
+                    ProjectUser(id = 105L, user = plainMemberUser, project = project, role = memberRole)
+                )
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 60L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.deleteFromBranch(50L) } returns pullRequest
+
+                mockMvc.perform(delete("/api/projects/1/pullrequests/1/fromBranch").principal(plainMemberAuth))
+                    .andExpect(status().isOk)
+            }
+
+            it("계약자도 매니저도 프로젝트 멤버도 아니면 원본 브랜치 삭제를 403 Forbidden으로 거부해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("outsider") } returns Optional.of(outsiderUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 70L) } returns Optional.empty()
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 70L) } returns false
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+
+                mockMvc.perform(delete("/api/projects/1/pullrequests/1/fromBranch").principal(outsiderAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { pullRequestService.deleteFromBranch(any()) }
+            }
+
+            it("존재하지 않는 프로젝트의 원본 브랜치를 삭제하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/999/pullrequests/1/fromBranch").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 원본 브랜치 삭제를 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(delete("/api/projects/1/pullrequests/1/fromBranch"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 PR 번호의 원본 브랜치를 삭제하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(delete("/api/projects/1/pullrequests/999/fromBranch").principal(userAuth))
+                    .andExpect(status().isNotFound)
             }
         }
 
@@ -500,6 +774,56 @@ class PullRequestControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
             }
+
+            it("계약자도 매니저도 아닌 일반 프로젝트 멤버도 원본 브랜치를 복원할 수 있어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("plainmember") } returns Optional.of(plainMemberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 60L) } returns Optional.of(
+                    ProjectUser(id = 106L, user = plainMemberUser, project = project, role = memberRole)
+                )
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 60L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.restoreFromBranch(50L) } returns pullRequest
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/fromBranch").principal(plainMemberAuth))
+                    .andExpect(status().isOk)
+            }
+
+            it("계약자도 매니저도 프로젝트 멤버도 아니면 원본 브랜치 복원을 403 Forbidden으로 거부해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("outsider") } returns Optional.of(outsiderUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 70L) } returns Optional.empty()
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 70L) } returns false
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/fromBranch").principal(outsiderAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { pullRequestService.restoreFromBranch(any()) }
+            }
+
+            it("존재하지 않는 프로젝트의 원본 브랜치를 복원하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/999/pullrequests/1/fromBranch").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 원본 브랜치 복원을 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/fromBranch"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 PR 번호의 원본 브랜치를 복원하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/999/fromBranch").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
         }
 
         describe("POST /api/projects/{projectId}/pullrequests/{number}/merge - 리뷰어 부족 케이스") {
@@ -515,6 +839,85 @@ class PullRequestControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isBadRequest)
+            }
+        }
+
+        // changeState()는 isManagerOrContributor(계약자 또는 매니저) 또는 checkWritePermission(일반 멤버)
+        // 중 하나라도 허용하면 통과한다. 4가지 액터(계약자/매니저/일반멤버/비멤버)로 전체 조합을 검증한다.
+        describe("POST /api/projects/{projectId}/pullrequests/{number}/state") {
+            it("PR 작성자(계약자)가 상태를 변경하면 200 OK를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.changeState(50L, State.CLOSED, "testuser") } returns pullRequest
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/state").param("state", "CLOSED").principal(userAuth))
+                    .andExpect(status().isOk)
+            }
+
+            // isManagerOrContributor()의 projectUserRepository.findByProjectIdAndUserId().map{ role==MANAGER }
+            // 분기(true)를 검증 — 계약자가 아니어도 매니저면 checkWritePermission() 평가 없이 허용된다.
+            it("계약자가 아닌 프로젝트 매니저가 상태를 변경하면 200 OK를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 20L) } returns Optional.of(
+                    ProjectUser(id = 107L, user = managerUser, project = project, role = managerRole)
+                )
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.changeState(50L, State.CLOSED, "manageruser") } returns pullRequest
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/state").param("state", "CLOSED").principal(managerAuth))
+                    .andExpect(status().isOk)
+            }
+
+            it("계약자도 매니저도 아닌 일반 프로젝트 멤버가 상태를 변경하면 200 OK를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("plainmember") } returns Optional.of(plainMemberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 60L) } returns Optional.of(
+                    ProjectUser(id = 108L, user = plainMemberUser, project = project, role = memberRole)
+                )
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 60L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.changeState(50L, State.CLOSED, "plainmember") } returns pullRequest
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/state").param("state", "CLOSED").principal(plainMemberAuth))
+                    .andExpect(status().isOk)
+            }
+
+            it("계약자도 매니저도 프로젝트 멤버도 아니면 상태 변경을 403 Forbidden으로 거부해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("outsider") } returns Optional.of(outsiderUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 70L) } returns Optional.empty()
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 70L) } returns false
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/state").param("state", "CLOSED").principal(outsiderAuth))
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { pullRequestService.changeState(any(), any(), any()) }
+            }
+
+            it("존재하지 않는 프로젝트의 PR 상태를 변경하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/projects/999/pullrequests/1/state").param("state", "CLOSED").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 PR 상태 변경을 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/1/state").param("state", "CLOSED"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 PR 번호의 상태를 변경하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(post("/api/projects/1/pullrequests/999/state").param("state", "CLOSED").principal(userAuth))
+                    .andExpect(status().isNotFound)
             }
         }
     }

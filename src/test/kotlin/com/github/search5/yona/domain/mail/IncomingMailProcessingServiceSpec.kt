@@ -662,5 +662,734 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
             }
         }
+
+        // postprocessHtmlBody()의 5개 outcome 분기 각각의 "리소스가 이미 사라졌으면 저장을 건너뛴다"
+        // 경로(orElse(null) ?: return)와, IssueComment/PostingComment/CommitComment 분기의 cid 치환+저장
+        // 경로를 보강한다. IssueCreated/ReviewCommentCreated의 성공 경로는 기존 테스트에서 이미 커버됨.
+        describe("postprocessHtmlBody의 리소스 타입별 나머지 분기 (동시성으로 리소스가 사라진 경우 포함)") {
+            it("새 이슈 생성 직후 이슈가 사라지면(동시성) HTML 후처리를 건너뛰어야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val htmlBody = "<p>본문</p>"
+                val savedIssue = Issue(id = 105L, title = "메일로 만든 이슈", body = htmlBody, project = project, number = 9L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { issueRepository.findById(105L) } returns Optional.empty()
+
+                val message = baseMessage().copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                verify(exactly = 0) { issueRepository.save(any()) }
+            }
+
+            it("기존 이슈 댓글 답장의 HTML 본문에 있는 cid: 참조를 치환해 이슈 댓글을 갱신해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalIssueEmail = OriginalEmail(
+                    id = 1L, messageId = "<original@mail.example.com>",
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "50"
+                )
+                every { originalEmailRepository.findByMessageId("<original@mail.example.com>") } returns Optional.of(originalIssueEmail)
+                val existingIssue = Issue(id = 50L, title = "기존 이슈", body = "...", project = project, number = 3L)
+                every { issueRepository.findById(50L) } returns Optional.of(existingIssue)
+
+                val htmlBody = "<p>답장: <img src=\"cid:reply1\"></p>"
+                val savedComment = IssueComment(id = 210L, contents = htmlBody, issue = existingIssue)
+                every { commentService.createIssueComment(50L, htmlBody, sender) } returns savedComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { issueCommentRepository.findById(210L) } returns Optional.of(savedComment)
+                every { issueCommentRepository.save(any()) } returnsArgument 0
+
+                val savedAttachment = Attachment(id = 601L, name = "reply.png", containerType = ResourceType.ISSUE_POST, containerId = "50")
+                every {
+                    attachmentService.store(any(), "reply.png", ResourceType.ISSUE_POST, "50", "gildong")
+                } returns (savedAttachment to true)
+
+                val attachment = InboundAttachment(
+                    fileName = "reply.png", contentType = "image/png", bytes = byteArrayOf(1), contentId = "reply1"
+                )
+                val message = baseMessage(inReplyTo = "<original@mail.example.com>", attachments = listOf(attachment))
+                    .copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                val bodySlot = slot<IssueComment>()
+                verify(exactly = 1) { issueCommentRepository.save(capture(bodySlot)) }
+                bodySlot.captured.contents shouldBe "<p>답장: <img src=\"/files/601\"></p>"
+            }
+
+            it("기존 이슈 댓글 답장 처리 중 그 댓글이 사라지면 HTML 후처리를 건너뛰어야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalIssueEmail = OriginalEmail(
+                    id = 1L, messageId = "<original@mail.example.com>",
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "50"
+                )
+                every { originalEmailRepository.findByMessageId("<original@mail.example.com>") } returns Optional.of(originalIssueEmail)
+                val existingIssue = Issue(id = 50L, title = "기존 이슈", body = "...", project = project, number = 3L)
+                every { issueRepository.findById(50L) } returns Optional.of(existingIssue)
+                val htmlBody = "<p>답장 본문</p>"
+                val savedComment = IssueComment(id = 211L, contents = htmlBody, issue = existingIssue)
+                every { commentService.createIssueComment(50L, htmlBody, sender) } returns savedComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { issueCommentRepository.findById(211L) } returns Optional.empty()
+
+                val message = baseMessage(inReplyTo = "<original@mail.example.com>").copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                verify(exactly = 0) { issueCommentRepository.save(any()) }
+            }
+
+            it("게시글 댓글 답장의 HTML 본문에 있는 cid: 참조를 치환해 게시글 댓글을 갱신해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalPostingEmail = OriginalEmail(
+                    id = 2L, messageId = "<original-post@mail.example.com>",
+                    resourceType = ResourceType.BOARD_POST, resourceId = "70"
+                )
+                every { originalEmailRepository.findByMessageId("<original-post@mail.example.com>") } returns Optional.of(originalPostingEmail)
+                val existingPosting = Posting(id = 70L, title = "기존 게시글", body = "...", project = project, number = 4L)
+                every { postingRepository.findById(70L) } returns Optional.of(existingPosting)
+
+                val htmlBody = "<p>답장: <img src=\"cid:pimg\"></p>"
+                val savedComment = PostingComment(id = 310L, contents = htmlBody, posting = existingPosting)
+                every { commentService.createPostingComment(70L, htmlBody, sender) } returns savedComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { postingCommentRepository.findById(310L) } returns Optional.of(savedComment)
+                every { postingCommentRepository.save(any()) } returnsArgument 0
+
+                val savedAttachment = Attachment(id = 602L, name = "p.png", containerType = ResourceType.BOARD_POST, containerId = "70")
+                every {
+                    attachmentService.store(any(), "p.png", ResourceType.BOARD_POST, "70", "gildong")
+                } returns (savedAttachment to true)
+
+                val attachment = InboundAttachment(
+                    fileName = "p.png", contentType = "image/png", bytes = byteArrayOf(1), contentId = "pimg"
+                )
+                val message = baseMessage(references = "<original-post@mail.example.com>", attachments = listOf(attachment))
+                    .copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                val bodySlot = slot<PostingComment>()
+                verify(exactly = 1) { postingCommentRepository.save(capture(bodySlot)) }
+                bodySlot.captured.contents shouldBe "<p>답장: <img src=\"/files/602\"></p>"
+            }
+
+            it("게시글 댓글 답장 처리 중 그 댓글이 사라지면 HTML 후처리를 건너뛰어야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalPostingEmail = OriginalEmail(
+                    id = 2L, messageId = "<original-post@mail.example.com>",
+                    resourceType = ResourceType.BOARD_POST, resourceId = "70"
+                )
+                every { originalEmailRepository.findByMessageId("<original-post@mail.example.com>") } returns Optional.of(originalPostingEmail)
+                val existingPosting = Posting(id = 70L, title = "기존 게시글", body = "...", project = project, number = 4L)
+                every { postingRepository.findById(70L) } returns Optional.of(existingPosting)
+                val htmlBody = "<p>답장 본문</p>"
+                val savedComment = PostingComment(id = 311L, contents = htmlBody, posting = existingPosting)
+                every { commentService.createPostingComment(70L, htmlBody, sender) } returns savedComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { postingCommentRepository.findById(311L) } returns Optional.empty()
+
+                val message = baseMessage(references = "<original-post@mail.example.com>").copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                verify(exactly = 0) { postingCommentRepository.save(any()) }
+            }
+
+            it("커밋 댓글 답장의 HTML 본문에 있는 cid: 참조를 치환해 커밋 댓글을 갱신해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalCommitEmail = OriginalEmail(
+                    id = 4L, messageId = "<commit@mail.example.com>",
+                    resourceType = ResourceType.COMMIT_COMMENT, resourceId = "80"
+                )
+                every { originalEmailRepository.findByMessageId("<commit@mail.example.com>") } returns Optional.of(originalCommitEmail)
+                val originalCommitComment = CommitComment(
+                    id = 80L, project = project, commitId = "abc123", path = "b.kt", line = 5,
+                    contents = "원본 댓글", author = UserIdent(sender)
+                )
+                every { commitCommentRepository.findById(80L) } returns Optional.of(originalCommitComment)
+
+                val htmlBody = "<p>답장: <img src=\"cid:cimg\"></p>"
+                val savedCommitComment = CommitComment(id = 510L, project = project, commitId = "abc123", contents = htmlBody, author = UserIdent(sender))
+                every {
+                    codeReviewService.createCommitComment(project, "abc123", htmlBody, "b.kt", 5, null, sender)
+                } returns savedCommitComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { commitCommentRepository.findById(510L) } returns Optional.of(savedCommitComment)
+                every { commitCommentRepository.save(any()) } returnsArgument 0
+
+                val savedAttachment = Attachment(id = 603L, name = "c.png", containerType = ResourceType.COMMIT_COMMENT, containerId = "510")
+                every {
+                    attachmentService.store(any(), "c.png", ResourceType.COMMIT_COMMENT, "510", "gildong")
+                } returns (savedAttachment to true)
+
+                val attachment = InboundAttachment(
+                    fileName = "c.png", contentType = "image/png", bytes = byteArrayOf(1), contentId = "cimg"
+                )
+                val message = baseMessage(inReplyTo = "<commit@mail.example.com>", attachments = listOf(attachment))
+                    .copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                val bodySlot = slot<CommitComment>()
+                verify(exactly = 1) { commitCommentRepository.save(capture(bodySlot)) }
+                bodySlot.captured.contents shouldBe "<p>답장: <img src=\"/files/603\"></p>"
+            }
+
+            it("커밋 댓글 답장 처리 중 새로 생성된 댓글이 사라지면 HTML 후처리를 건너뛰어야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalCommitEmail = OriginalEmail(
+                    id = 4L, messageId = "<commit@mail.example.com>",
+                    resourceType = ResourceType.COMMIT_COMMENT, resourceId = "80"
+                )
+                every { originalEmailRepository.findByMessageId("<commit@mail.example.com>") } returns Optional.of(originalCommitEmail)
+                val originalCommitComment = CommitComment(
+                    id = 80L, project = project, commitId = "abc123", path = "b.kt", line = 5,
+                    contents = "원본 댓글", author = UserIdent(sender)
+                )
+                every { commitCommentRepository.findById(80L) } returns Optional.of(originalCommitComment)
+                val htmlBody = "<p>답장 본문</p>"
+                val savedCommitComment = CommitComment(id = 511L, project = project, commitId = "abc123", contents = htmlBody, author = UserIdent(sender))
+                every {
+                    codeReviewService.createCommitComment(project, "abc123", htmlBody, "b.kt", 5, null, sender)
+                } returns savedCommitComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { commitCommentRepository.findById(511L) } returns Optional.empty()
+
+                val message = baseMessage(inReplyTo = "<commit@mail.example.com>").copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                verify(exactly = 0) { commitCommentRepository.save(any()) }
+            }
+
+            it("코드리뷰 스레드 답장 처리 중 새로 생성된 리뷰 댓글이 사라지면 HTML 후처리를 건너뛰어야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalReviewEmail = OriginalEmail(
+                    id = 3L, messageId = "<review@mail.example.com>",
+                    resourceType = ResourceType.COMMENT_THREAD, resourceId = "60"
+                )
+                every { originalEmailRepository.findByMessageId("<review@mail.example.com>") } returns Optional.of(originalReviewEmail)
+                val thread = CodeCommentThread(id = 60L, project = project, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                every { commentThreadRepository.findById(60L) } returns Optional.of(thread)
+                val htmlBody = "<p>답장 본문</p>"
+                val savedReviewComment = ReviewComment(id = 402L, contents = htmlBody, author = UserIdent(sender))
+                every {
+                    codeReviewService.createReviewComment(project, null, null, htmlBody, null, 60L, sender)
+                } returns savedReviewComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { reviewCommentRepository.findById(402L) } returns Optional.empty()
+
+                val message = baseMessage(inReplyTo = "<review@mail.example.com>").copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                verify(exactly = 0) { reviewCommentRepository.save(any()) }
+            }
+
+            it("HTML 본문에서 cid가 아닌 href와 매핑되지 않는 cid는 그대로 두고, 매핑되는 cid만 치환해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val htmlBody = "<p><img src=\"cid:img1\"><a href=\"https://example.com\">link</a><a href=\"cid:missing\">no attachment</a></p>"
+                val savedIssue = Issue(id = 104L, title = "메일로 만든 이슈", body = htmlBody, project = project, number = 8L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { issueRepository.findById(104L) } returns Optional.of(savedIssue)
+                every { issueRepository.save(any()) } returnsArgument 0
+
+                val savedAttachment = Attachment(id = 777L, name = "img.png", containerType = ResourceType.ISSUE_POST, containerId = "104")
+                every {
+                    attachmentService.store(any(), "img.png", ResourceType.ISSUE_POST, "104", "gildong")
+                } returns (savedAttachment to true)
+
+                val attachment = InboundAttachment(
+                    fileName = "img.png", contentType = "image/png", bytes = byteArrayOf(1), contentId = "img1"
+                )
+                val message = baseMessage(attachments = listOf(attachment)).copy(textBody = htmlBody, isHtml = true)
+
+                service.process(message)
+
+                val bodySlot = slot<Issue>()
+                verify(exactly = 1) { issueRepository.save(capture(bodySlot)) }
+                bodySlot.captured.body shouldBe "<p><img src=\"/files/777\"><a href=\"https://example.com\">link</a><a href=\"cid:missing\">no attachment</a></p>"
+            }
+
+            // 프로젝트 읽기 권한 자체가 없으면 processTarget()이 attachAttachments/postprocessHtmlBody
+            // 호출 이전에 곧바로 Rejected를 반환하므로, 이 케이스는 그 두 메서드의 else 분기가 아니라
+            // "아예 호출되지 않음"을 검증한다(else 분기 자체는 위 동시성 테스트에서 별도로 검증).
+            it("프로젝트 읽기 권한이 없어 Rejected가 반환되면 첨부파일 저장도 HTML 후처리도 시도하지 않아야 한다") {
+                val privateProject = Project(id = 30L, name = "secret2", owner = "dlab", projectScope = ProjectScope.PRIVATE)
+                every { projectRepository.findByOwnerAndName("dlab", "secret2") } returns Optional.of(privateProject)
+                val attachment = InboundAttachment(fileName = "ignored.png", contentType = "image/png", bytes = byteArrayOf(1))
+                val message = baseMessage(recipients = listOf("yona+dlab/secret2@example.com"), attachments = listOf(attachment))
+                    .copy(textBody = "<p>본문</p>", isHtml = true)
+
+                val result = service.process(message)
+
+                result.size shouldBe 1
+                result[0].shouldBeInstanceOf<IncomingMailOutcome.Rejected>()
+                verify(exactly = 0) { attachmentService.store(any(), any(), any(), any(), any()) }
+                verify(exactly = 0) { issueRepository.save(any()) }
+            }
+
+            it("첨부파일 저장 중 예외가 발생해도 나머지 처리를 계속하고, 실패한 첨부의 cid는 치환하지 않아야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val htmlBody = "<img src=\"cid:good\"><img src=\"cid:bad\">"
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = htmlBody, project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+                every { issueRepository.findById(100L) } returns Optional.of(savedIssue)
+                every { issueRepository.save(any()) } returnsArgument 0
+
+                val savedAttachment = Attachment(id = 1L, name = "good.png", containerType = ResourceType.ISSUE_POST, containerId = "100")
+                every {
+                    attachmentService.store(any(), "good.png", ResourceType.ISSUE_POST, "100", "gildong")
+                } returns (savedAttachment to true)
+                every {
+                    attachmentService.store(any(), "bad.png", ResourceType.ISSUE_POST, "100", "gildong")
+                } throws RuntimeException("스토리지 오류")
+
+                val attachments = listOf(
+                    InboundAttachment(fileName = "good.png", contentType = "image/png", bytes = byteArrayOf(1), contentId = "good"),
+                    InboundAttachment(fileName = "bad.png", contentType = "image/png", bytes = byteArrayOf(2), contentId = "bad")
+                )
+                val message = baseMessage(attachments = attachments).copy(textBody = htmlBody, isHtml = true)
+
+                val result = service.process(message)
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+                verify(exactly = 1) { attachmentService.store(any(), "good.png", ResourceType.ISSUE_POST, "100", "gildong") }
+                verify(exactly = 1) { attachmentService.store(any(), "bad.png", ResourceType.ISSUE_POST, "100", "gildong") }
+                val bodySlot = slot<Issue>()
+                verify(exactly = 1) { issueRepository.save(capture(bodySlot)) }
+                bodySlot.captured.body shouldBe "<img src=\"/files/1\"><img src=\"cid:bad\">"
+            }
+
+            it("게시글 댓글 답장에도 첨부파일이 그 댓글에 연결돼야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalPostingEmail = OriginalEmail(
+                    id = 2L, messageId = "<original-post@mail.example.com>",
+                    resourceType = ResourceType.BOARD_POST, resourceId = "70"
+                )
+                every { originalEmailRepository.findByMessageId("<original-post@mail.example.com>") } returns Optional.of(originalPostingEmail)
+                val existingPosting = Posting(id = 70L, title = "기존 게시글", body = "...", project = project, number = 4L)
+                every { postingRepository.findById(70L) } returns Optional.of(existingPosting)
+                val savedComment = PostingComment(id = 300L, contents = "메일 본문 내용", posting = existingPosting)
+                every { commentService.createPostingComment(70L, "메일 본문 내용", sender) } returns savedComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val attachment = InboundAttachment(fileName = "notes.txt", contentType = "text/plain", bytes = byteArrayOf(1))
+
+                service.process(baseMessage(references = "<original-post@mail.example.com>", attachments = listOf(attachment)))
+
+                verify(exactly = 1) {
+                    attachmentService.store(any(), "notes.txt", ResourceType.BOARD_POST, "70", "gildong")
+                }
+            }
+        }
+
+        // resolveByDeterministicMessageId()의 나머지 분기: 잘못된 형식/미지원 타입/조회 실패 등
+        // OriginalEmail 레코드가 없을 때(UI에서 만든 리소스 X, 순수 미스) 폴백 파싱이 어떻게
+        // 실패하는지를 각각 검증한다(P1-60).
+        describe("결정론적 Message-ID 역파싱 폴백의 나머지 실패 분기") {
+            it("Message-ID에 @가 없으면(형식 오류) 폴백하지 않고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<malformed>") } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<malformed>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("Message-ID 경로에 슬래시가 없으면(타입만 있음) 폴백하지 않고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<issue_post@yona.example.com>") } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<issue_post@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            // "milestone"(위 테스트)은 ResourceType.getValue()가 파싱에는 성공하고 이후 when절의
+            // else로 빠지는 경우이고, 이 테스트는 ResourceType.getValue() 자체가 IllegalArgumentException을
+            // 던지는 try/catch 분기를 검증한다 — 서로 다른 코드 경로다.
+            it("Message-ID의 리소스 타입 세그먼트가 어떤 ResourceType과도 일치하지 않으면 폴백하지 않고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<bogus_type/5@yona.example.com>") } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<bogus_type/5@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("OriginalEmail 없이 board_post Message-ID를 역파싱하면 그 게시글에 댓글을 추가해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<board_post/70@yona.example.com>") } returns Optional.empty()
+                val existingPosting = Posting(id = 70L, title = "기존 게시글", body = "...", project = project, number = 4L)
+                every { postingRepository.findById(70L) } returns Optional.of(existingPosting)
+                val savedComment = PostingComment(id = 800L, contents = "메일 본문 내용", posting = existingPosting)
+                every { commentService.createPostingComment(70L, "메일 본문 내용", sender) } returns savedComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<board_post/70@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.PostingCommentCreated(800L, 70L))
+            }
+
+            it("OriginalEmail 없이 code_comment Message-ID를 역파싱하면 그 커밋 댓글에 답글을 추가해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<code_comment/80@yona.example.com>") } returns Optional.empty()
+                val originalCommitComment = CommitComment(
+                    id = 80L, project = project, commitId = "abc123", path = "b.kt", line = 5,
+                    contents = "원본 댓글", author = UserIdent(sender)
+                )
+                every { commitCommentRepository.findById(80L) } returns Optional.of(originalCommitComment)
+                val savedCommitComment = CommitComment(id = 850L, project = project, commitId = "abc123", contents = "메일 본문 내용", author = UserIdent(sender))
+                every {
+                    codeReviewService.createCommitComment(project, "abc123", "메일 본문 내용", "b.kt", 5, null, sender)
+                } returns savedCommitComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<code_comment/80@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.CommitCommentCreated(850L))
+            }
+
+            it("OriginalEmail 없이 comment_thread Message-ID를 역파싱하면 그 스레드에 리뷰 댓글을 추가해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<comment_thread/60@yona.example.com>") } returns Optional.empty()
+                val thread = CodeCommentThread(id = 60L, project = project, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                every { commentThreadRepository.findById(60L) } returns Optional.of(thread)
+                val savedReviewComment = ReviewComment(id = 950L, contents = "메일 본문 내용", author = UserIdent(sender))
+                every {
+                    codeReviewService.createReviewComment(project, null, null, "메일 본문 내용", null, 60L, sender)
+                } returns savedReviewComment
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<comment_thread/60@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.ReviewCommentCreated(950L, 60L))
+            }
+
+            it("역파싱된 리소스 타입이 스레드로 지원하지 않는 타입(milestone)이면 폴백하지 않고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<milestone/5@yona.example.com>") } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<milestone/5@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("review_comment Message-ID의 리소스 ID가 숫자가 아니면 폴백하지 않고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<review_comment/abc@yona.example.com>") } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<review_comment/abc@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+                verify(exactly = 0) { reviewCommentRepository.findById(any()) }
+            }
+
+            it("review_comment Message-ID가 가리키는 리뷰 댓글이 이미 삭제됐으면 폴백하지 않고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<review_comment/999@yona.example.com>") } returns Optional.empty()
+                every { reviewCommentRepository.findById(999L) } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<review_comment/999@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("review_comment Message-ID가 가리키는 리뷰 댓글에 스레드 정보가 없으면 폴백하지 않고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { originalEmailRepository.findByMessageId("<review_comment/901@yona.example.com>") } returns Optional.empty()
+                val orphanComment = ReviewComment(id = 901L, contents = "UI로 작성한 댓글", author = UserIdent(sender), thread = null)
+                every { reviewCommentRepository.findById(901L) } returns Optional.of(orphanComment)
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<review_comment/901@yona.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+        }
+
+        // resolveResourceProject()의 나머지 분기(비숫자 resourceId, 미지원 리소스 타입, 리소스를
+        // 찾을 수 없음, 리소스는 있지만 project가 비어 있음)를 detail 직접 명시 경로(resolveDirectResource)로
+        // 검증한다. 성공 경로(4종 타입 모두 project 조회 성공)는 기존 테스트에서 이미 커버됨.
+        describe("resolveResourceProject의 나머지 분기 (detail 직접 명시 경로로 검증, P1-32)") {
+            it("직접 명시한 resourceId가 숫자가 아니면 무시하고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/issue_post/abc@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("직접 명시한 리소스 타입이 스레드로 지원하지 않는 타입(milestone)이면 무시하고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/milestone/5@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("직접 명시한 issue_post 리소스를 찾을 수 없으면 무시하고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { issueRepository.findById(999L) } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/issue_post/999@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("직접 명시한 board_post 리소스를 찾을 수 없으면 무시하고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { postingRepository.findById(999L) } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/board_post/999@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("직접 명시한 comment_thread 리소스를 찾을 수 없으면 무시하고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { commentThreadRepository.findById(999L) } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/comment_thread/999@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("직접 명시한 comment_thread는 있지만 project 정보가 없으면 무시하고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val orphanThread = CodeCommentThread(id = 60L, project = null, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                every { commentThreadRepository.findById(60L) } returns Optional.of(orphanThread)
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/comment_thread/60@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("직접 명시한 code_comment 리소스를 찾을 수 없으면 무시하고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                every { commitCommentRepository.findById(999L) } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/code_comment/999@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("직접 명시한 code_comment는 있지만 project 정보가 없으면 무시하고 새 이슈로 처리해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val orphanCommitComment = CommitComment(
+                    id = 80L, project = null, commitId = "abc123", contents = "원본 댓글", author = UserIdent(sender)
+                )
+                every { commitCommentRepository.findById(80L) } returns Optional.of(orphanCommitComment)
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(recipients = listOf("yona+dlab/hive/code_comment/80@example.com")))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+        }
+
+        // 스레드 라우팅(resolveThreads/resolveResourceProject) 시점과 실제 댓글 생성
+        // (createComment/createReviewCommentReply/createCommitCommentReply) 시점 사이에 리소스가
+        // 사라지는 동시성 상황을 재현한다. 같은 id로 두 번 조회하되 두 번째 조회 결과만 다르게 스텁해
+        // createComment 계열 메서드 자신의 null-체크 분기(이미 라우팅된 스레드이므로
+        // resolveResourceProject의 동일 분기로는 도달할 수 없는 지점)를 검증한다.
+        describe("스레드 생성 시점의 동시성으로 인한 나머지 Rejected 분기") {
+            // 이 케이스는 부수적으로 outcome이 Rejected일 때 attachAttachments()/postprocessHtmlBody()가
+            // 각각의 when절 else 분기(지원하는 5개 outcome 타입이 아니므로 곧바로 반환)를 타는지도 함께 검증한다.
+            // Rejected는 processTarget()의 프로젝트 읽기 권한 체크에서도 발생할 수 있지만 그 경우는
+            // attachAttachments/postprocessHtmlBody 호출 이전에 이미 반환되므로 이 두 메서드의 else
+            // 분기에 도달시키려면 반드시 createComment/createIssue 내부에서 발생한 Rejected여야 한다.
+            it("스레드 라우팅 이후 이슈가 삭제되면 댓글 생성 없이 Rejected를 반환하고, 첨부파일 저장과 HTML 후처리도 시도하지 않아야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalIssueEmail = OriginalEmail(
+                    id = 1L, messageId = "<original@mail.example.com>",
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "50"
+                )
+                every { originalEmailRepository.findByMessageId("<original@mail.example.com>") } returns Optional.of(originalIssueEmail)
+                val existingIssue = Issue(id = 50L, title = "기존 이슈", body = "...", project = project, number = 3L)
+                every { issueRepository.findById(50L) } returnsMany listOf(Optional.of(existingIssue), Optional.empty())
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val attachment = InboundAttachment(fileName = "ignored.png", contentType = "image/png", bytes = byteArrayOf(1))
+                val message = baseMessage(inReplyTo = "<original@mail.example.com>", attachments = listOf(attachment))
+                    .copy(textBody = "<p>본문</p>", isHtml = true)
+
+                val result = service.process(message)
+
+                result.size shouldBe 1
+                result[0].shouldBeInstanceOf<IncomingMailOutcome.Rejected>()
+                verify(exactly = 0) { commentService.createIssueComment(any(), any(), any()) }
+                verify(exactly = 0) { attachmentService.store(any(), any(), any(), any(), any()) }
+                verify(exactly = 0) { issueRepository.save(any()) }
+                verify(exactly = 0) { issueCommentRepository.save(any()) }
+            }
+
+            it("스레드 라우팅 이후 코드리뷰 스레드가 삭제되면 리뷰 댓글 생성 없이 Rejected를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalReviewEmail = OriginalEmail(
+                    id = 3L, messageId = "<review@mail.example.com>",
+                    resourceType = ResourceType.COMMENT_THREAD, resourceId = "60"
+                )
+                every { originalEmailRepository.findByMessageId("<review@mail.example.com>") } returns Optional.of(originalReviewEmail)
+                val thread = CodeCommentThread(id = 60L, project = project, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                every { commentThreadRepository.findById(60L) } returnsMany listOf(Optional.of(thread), Optional.empty())
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<review@mail.example.com>"))
+
+                result.size shouldBe 1
+                result[0].shouldBeInstanceOf<IncomingMailOutcome.Rejected>()
+                verify(exactly = 0) { codeReviewService.createReviewComment(any(), any(), any(), any(), any(), any(), any()) }
+            }
+
+            it("코드리뷰 스레드는 남아 있지만 프로젝트 정보만 사라지면 Rejected를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalReviewEmail = OriginalEmail(
+                    id = 3L, messageId = "<review@mail.example.com>",
+                    resourceType = ResourceType.COMMENT_THREAD, resourceId = "60"
+                )
+                every { originalEmailRepository.findByMessageId("<review@mail.example.com>") } returns Optional.of(originalReviewEmail)
+                val threadWithProject = CodeCommentThread(id = 60L, project = project, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                val threadWithoutProject = CodeCommentThread(id = 60L, project = null, codeRange = CodeRange(path = "a.kt", startLine = 1))
+                every { commentThreadRepository.findById(60L) } returnsMany listOf(Optional.of(threadWithProject), Optional.of(threadWithoutProject))
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<review@mail.example.com>"))
+
+                result.size shouldBe 1
+                result[0].shouldBeInstanceOf<IncomingMailOutcome.Rejected>()
+            }
+
+            it("스레드 라우팅 이후 커밋 댓글이 삭제되면 커밋 댓글 생성 없이 Rejected를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalCommitEmail = OriginalEmail(
+                    id = 4L, messageId = "<commit@mail.example.com>",
+                    resourceType = ResourceType.COMMIT_COMMENT, resourceId = "80"
+                )
+                every { originalEmailRepository.findByMessageId("<commit@mail.example.com>") } returns Optional.of(originalCommitEmail)
+                val originalCommitComment = CommitComment(
+                    id = 80L, project = project, commitId = "abc123", path = "b.kt", line = 5,
+                    contents = "원본 댓글", author = UserIdent(sender)
+                )
+                every { commitCommentRepository.findById(80L) } returnsMany listOf(Optional.of(originalCommitComment), Optional.empty())
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<commit@mail.example.com>"))
+
+                result.size shouldBe 1
+                result[0].shouldBeInstanceOf<IncomingMailOutcome.Rejected>()
+                verify(exactly = 0) { codeReviewService.createCommitComment(any(), any(), any(), any(), any(), any(), any()) }
+            }
+
+            it("커밋 댓글은 남아 있지만 프로젝트 정보만 사라지면 Rejected를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalCommitEmail = OriginalEmail(
+                    id = 4L, messageId = "<commit@mail.example.com>",
+                    resourceType = ResourceType.COMMIT_COMMENT, resourceId = "80"
+                )
+                every { originalEmailRepository.findByMessageId("<commit@mail.example.com>") } returns Optional.of(originalCommitEmail)
+                val withProject = CommitComment(
+                    id = 80L, project = project, commitId = "abc123", path = "b.kt", line = 5,
+                    contents = "원본 댓글", author = UserIdent(sender)
+                )
+                val withoutProject = CommitComment(
+                    id = 80L, project = null, commitId = "abc123", path = "b.kt", line = 5,
+                    contents = "원본 댓글", author = UserIdent(sender)
+                )
+                every { commitCommentRepository.findById(80L) } returnsMany listOf(Optional.of(withProject), Optional.of(withoutProject))
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<commit@mail.example.com>"))
+
+                result.size shouldBe 1
+                result[0].shouldBeInstanceOf<IncomingMailOutcome.Rejected>()
+            }
+        }
+
+        describe("process()의 나머지 분기 (수신 주소 파싱/필터링, 스레드 소실, OriginalEmail 저장 여부)") {
+            it("수신 주소 형식이 잘못돼(@ 없음) 파싱할 수 없으면 그 주소는 무시하고 빈 목록을 반환해야 한다") {
+                val result = service.process(baseMessage(recipients = listOf("not-an-email")))
+
+                result shouldBe emptyList()
+            }
+
+            it("수신 주소에 detail(plus 태그)이 전혀 없으면(순수 기준 주소) 무시하고 빈 목록을 반환해야 한다") {
+                val result = service.process(baseMessage(recipients = listOf("yona@example.com")))
+
+                result shouldBe emptyList()
+            }
+
+            it("In-Reply-To가 가리키는 원본 이메일은 있지만 참조된 이슈가 이미 삭제됐으면 스레드 매칭을 포기하고 새 이슈를 생성해야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.of(project)
+                val originalIssueEmail = OriginalEmail(
+                    id = 5L, messageId = "<deleted@mail.example.com>",
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "999"
+                )
+                every { originalEmailRepository.findByMessageId("<deleted@mail.example.com>") } returns Optional.of(originalIssueEmail)
+                every { issueRepository.findById(999L) } returns Optional.empty()
+                val savedIssue = Issue(id = 100L, title = "메일로 만든 이슈", body = "메일 본문 내용", project = project, number = 1L)
+                every { issueService.createIssue(any(), sender, null, null, null) } returns savedIssue
+                every { originalEmailRepository.save(any()) } returnsArgument 0
+
+                val result = service.process(baseMessage(inReplyTo = "<deleted@mail.example.com>"))
+
+                result shouldBe listOf(IncomingMailOutcome.IssueCreated(100L, "dlab", "hive"))
+            }
+
+            it("모든 대상이 Rejected면 OriginalEmail을 저장하지 않아야 한다") {
+                every { projectRepository.findByOwnerAndName("dlab", "hive") } returns Optional.empty()
+
+                service.process(baseMessage())
+
+                verify(exactly = 0) { originalEmailRepository.save(any()) }
+            }
+        }
     }
 })
