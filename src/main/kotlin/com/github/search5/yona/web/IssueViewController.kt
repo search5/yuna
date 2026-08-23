@@ -924,13 +924,33 @@ class IssueViewController(
             return "error/forbidden"
         }
 
-        val assigneeUser = request.assigneeLoginId?.let { 
-            if (it.isNotBlank()) userRepository.findByLoginId(it).orElse(null) else null 
+        // yona editIssue()의 hasTargetProject()/isRequestedToOtherProject()/moveIssueToOtherProject()
+        // 대응 — issue/edit.html의 targetProjectId select(다른 프로젝트로 이동)가 이 필드가 없어 실제로는
+        // 죽은 UI였다(P1-66 재검토로 발견). moveIssue()(P1-48)는 이미 legacy와 동일하게 구현돼 있었으나
+        // 아무 데서도 호출되지 않고 있었음 — 여기서 배선한다.
+        var redirectProject = project
+        val requestedTargetProjectId = request.targetProjectId
+        if (requestedTargetProjectId != null && requestedTargetProjectId != project.id) {
+            val targetProject = projectRepository.findById(requestedTargetProjectId).orElse(null)
+                ?: run {
+                    model.addAttribute("project", project)
+                    return "error/notfound"
+                }
+            if (!accessControl.isProjectResourceCreatable(loginUser, targetProject, ResourceType.ISSUE_POST)) {
+                model.addAttribute("project", targetProject)
+                return "error/forbidden"
+            }
+            issueService.moveIssue(issue.id!!, targetProject.id!!, loginUser)
+            redirectProject = targetProject
+        }
+
+        val assigneeUser = request.assigneeLoginId?.let {
+            if (it.isNotBlank()) userRepository.findByLoginId(it).orElse(null) else null
         }
 
         issue.title = request.title
         issue.body = request.body ?: ""
-        
+
         if (!request.dueDate.isNullOrBlank()) {
             try {
                 val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -946,7 +966,7 @@ class IssueViewController(
         val parentIssue = request.parentIssueId?.let { issueRepository.findById(it).orElse(null) }
         issue.parent = parentIssue
 
-        issueService.updateIssue(
+        val updated = issueService.updateIssue(
             issueId = issue.id!!,
             title = request.title,
             body = request.body ?: "",
@@ -956,7 +976,7 @@ class IssueViewController(
             labelIds = request.labelIds
         )
 
-        return "redirect:/$owner/$projectName/issue/$number"
+        return "redirect:/${redirectProject.owner}/${redirectProject.name}/issue/${updated.number}"
     }
 
     companion object {
@@ -995,5 +1015,7 @@ data class IssueForm(
     var milestoneId: Long? = null,
     var dueDate: String? = null,
     var labelIds: List<Long>? = null,
-    var parentIssueId: Long? = null
+    var parentIssueId: Long? = null,
+    // yona Issue.java targetProjectId(transient 폼 필드) 대응 (P1-66).
+    var targetProjectId: Long? = null
 )

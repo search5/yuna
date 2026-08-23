@@ -90,7 +90,11 @@ class IndexController(
         authentication: Authentication?,
         model: Model
     ): String {
-        val user = getLoginUser(authentication) ?: return "error/401"
+        // yona actions/AnonymousCheckAction.java 대응 — legacy는 401 상태를 별도로 보여주는 페이지가
+        // 없고 비로그인 사용자를 항상 로그인 폼으로 302 리다이렉트한다(Secured.onUnauthorized()도 동일한
+        // redirect(loginFormUrl) 패턴). "재확인 필요"로 남아있던 divergence를 legacy 소스 확인 후 수정
+        // (TASK-0264).
+        val user = getLoginUser(authentication) ?: return "redirect:/users/loginform"
         
         val pageIndex = if (size > 0) from / size else 0
         val pageSize = if (size > 0) size else 20

@@ -139,6 +139,16 @@ class IndexControllerSpec : DescribeSpec({
                     .andExpect(view().name("index/partial_notifications"))
                     .andExpect(model().attributeExists("notifications"))
             }
+
+            // yona actions/AnonymousCheckAction.java 대응 — 비로그인 사용자는 별도 401 에러 페이지가
+            // 아니라 로그인 폼으로 302 리다이렉트된다(Secured.onUnauthorized()/AnonymousCheckAction 둘 다
+            // redirect(loginFormUrl) 패턴). legacy에 "401 상태를 보여주는 페이지" 자체가 없음을
+            // 재확인(TASK-0264)하고 발견한 divergence를 수정.
+            it("비로그인 상태로 요청하면 로그인 폼으로 리다이렉트해야 한다") {
+                mockMvc.perform(get("/_notifications").param("from", "0").param("size", "20"))
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/users/loginform"))
+            }
         }
     }
 })

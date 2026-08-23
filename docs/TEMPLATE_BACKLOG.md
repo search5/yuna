@@ -67,8 +67,8 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 2 | [x] | `layout_framed.scala.html` | `site/layout_framed.html` | 완료(TASK-0221, TDD). og/twitter 메타태그·nprogress/magnific-popup 자산·popover 초기화·GA 스크립트 이식. sidebar()는 이미 이 파일에 인라인되어 있었음(→ #7과 동일 파일로 처리) |
 | 3 | [x] | `siteLayout.scala.html` | `site/{data,diagnostic,issueList,mail,massMail,postList,projectList,update,userList}.html` (각 파일에 인라인 조합) | 완료(TASK-0222, TDD). 신규 데코레이터 파일 대신, 관리자 화면 9개가 이미 `head`/`gnb`/`breadcrumb`/`sidebar`/`scripts` 조각을 조합하고 있었음 — 빠져있던 `footer` 조각만 9개 파일에 공통 추가(legacy `siteLayout`이 `@content` 뒤에 `@common.footer()`를 감싸는 것과 동일 동작) |
 | 4 | [i] | `siteLayout_framed.scala.html` | `site/layout_framed.html` | 확인 결과 legacy에서 이 파일의 유일한 사용처는 `index/sidebar.scala.html`(빈 content로 `siteLayout_framed`→`layout_framed` 호출) — 즉 "사이드바+iframe 프레임 셸"이며, 이는 #2에서 이미 완료한 `site/layout_framed.html`(→`/user/sidebar`)과 동일 화면. 별도 신규 파일 불필요 |
-| 5 | [i] | `projectLayout.scala.html` | `project/*.html` 각 파일(인라인 조합) | `navbar+project.header+content+footer` 데코레이터 패턴은 이미 `project/home.html`/`members.html`/`setting.html`/`statistics.html`가 `site/layout::gnb`+`project/header::header`+`project/menu::menu`+`site/layout::footer` 조합으로 실현 중. **단, `change_vcs/delete/fork/issuelabels/setting_webhook/transfer/watchers.html`은 header/footer 조각이 빠져있음을 확인** — 그룹6(#87~112) 작업 시 각 파일 항목에서 직접 채워 넣을 것(지금은 그룹1 범위를 넘어서므로 보류, 그룹6 착수 시 최우선 처리) |
-| 6 | [i] | `organizationLayout.scala.html` | `organization/*.html` 각 파일(인라인 조합 필요) | `navbar(menuType,null,group)+content+footer` 패턴 대응. **`organization/*.html` 10개 파일 전부 `site/layout::gnb`/`footer` 조각이 하나도 포함돼 있지 않음을 확인** — project 그룹보다 미착수 정도가 훨씬 심함. 그룹12(#193~209) 착수 시 최우선 처리 |
+| 5 | [i] | `projectLayout.scala.html` | `project/*.html` 각 파일(인라인 조합) | `navbar+project.header+content+footer` 데코레이터 패턴은 이미 `project/home.html`/`members.html`/`setting.html`/`statistics.html`가 `site/layout::gnb`+`project/header::header`+`project/menu::menu`+`site/layout::footer` 조합으로 실현 중. **2026-08-23 정정**: 당시 header/footer 조각이 빠져있다고 기록했던 `change_vcs/delete/fork/issuelabels/setting_webhook/transfer/watchers.html` 7개는 그룹6 작업(TASK-0236/0237)에서 전부 site/layout 조각 기반으로 재작성 완료됨을 재확인(코드 재검증) |
+| 6 | [i] | `organizationLayout.scala.html` | `organization/*.html` 각 파일(인라인 조합 필요) | `navbar(menuType,null,group)+content+footer` 패턴 대응. **2026-08-23 정정**: 당시 "10개 파일 전부 gnb/footer 조각 없음"이라 기록했던 것은 그룹12 작업(TASK-0252 계열)에서 해소됨을 재확인 — 전체 화면 템플릿(`boardList/create/delete/issueList/list/members/pullRequestList/setting/view.html`)은 전부 `site/layout` 조각을 포함하고, 나머지(`boardList_partial/header/issueList_partial/issueList_quicksearch/issueSearch_partial/menu/partial_settingmenu/pullRequestList_partial.html`)는 전체 화면에 인라인 포함되는 프래그먼트라 자체 gnb/footer가 애초에 불필요한 것으로 확인 |
 | 7 | [i] | `sidebar.scala.html` | `site/layout_framed.html` (인라인) | #2 작업 중 확인: `site/layout_framed.html`의 `#sidebar` div가 이미 이 파일 내용을 인라인 포함(로그인 필수 분기는 컨트롤러 레벨 리다이렉트로 대체) |
 | 8 | [x] | `projectMenu.scala.html` | `project/menu.html` | 완료(TASK-0242, TDD). 리뷰/설정 카운트 배지 누락, PR 탭의 SVN 프로젝트 숨김 조건(`project.vcs=='GIT'`) 누락, 포크 프로젝트의 sentPullRequests 링크 분기 누락, 키보드 단축키(`htKeyMap`+`yobi.project.Global.js`) 스크립트 전체 누락을 발견해 복구 |
 | 9 | [x] | `restricted.scala.html` | (포팅 보류, 아래 참고) | **보류 결정(사유 기록)** — play-authenticate 모듈의 데모/테스트용 페이지(`Sshhh...don't tell anyone`, 하드코딩된 유튜브 영상, `currentAuth()`/`auth.getProvider()`/`auth.expires()` 등 해당 라이브러리 전용 API 표시). yuna는 Spring Security 기반이라 동등 개념(OAuth2AuthorizedClientService 등)을 새로 엮어야 하는데, 실사용 가치가 없는 라이브러리 데모 화면이라 투입 대비 효과가 지나치게 낮다고 판단해 보류. `docs/PARITY_BACKLOG.md`의 P1-27 최초 보류 결정처럼, 사용자가 이식을 원하면 언제든 재지시 가능 |
@@ -106,7 +106,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 34 | [i] | `common/showSubtasksCheckbox.scala.html` | `issue/list.html`(인라인) | 확인 완료 — `#two-column-mode-checkbox`/`#toggle-show-subtasks` 구조 완전 일치(코드 변경 없음) |
 | 35 | [x] | `common/tasklistBar.scala.html` | `issue/view.html`, `board/view.html`(인라인, 신규 추가) | 완료(TASK-0229, TDD). **발견**: `yona.Tasklist.js`/`gfm-task-list.js` 정적 자산은 이미 존재했지만 `.tasklist` 셸 마크업과 스크립트 로드가 두 페이지 모두에 전혀 없어 죽어있던 기능이었음. legacy와 동일 위치(본문 markdown-wrap 바로 앞)에 셸 추가 + `yona.Tasklist.js` 로드 추가 |
 | 36 | [i] | `common/twoColumnModeCheckboxArea.scala.html` | `issue/list.html` 등(인라인) | 확인 완료 — `#two-column-mode-checkbox`/`#two-column-mode` 구조 일치(코드 변경 없음) |
-| 37 | [x] | `common/issueLabelColor.scala.html` | `web/LabelStyleController.kt`(`GET /{owner}/{project}/issue/labels.css`) | 완료(TASK-0229, TDD). **발견**: 이 legacy 파일은 뷰가 아니라 `IssueLabelApp.labelStyles()` 컨트롤러가 `text/css`로 직접 렌더링하는 동적 스타일시트였고, yuna의 `LabelStyleController`가 이미 완전히 동일한 로직(RGB/hex 파싱+휘도 계산 포함)으로 이식돼 있었음(선행 세션) — 단 legacy가 이 스타일시트를 링크하는 10개 화면 중 `issue/view`/`issue/create`/`issue/edit`/`board/view`/`board/list` 5곳에 `<link>` 태그 자체가 빠져 있어 추가. `project/partial_dashboard_issuesbylabel`/`project/partial_issuelabels_list`(프로젝트 대시보드·라벨 설정 화면)는 대응 파일 존재 여부 확인 필요 — 미착수로 남김 |
+| 37 | [x] | `common/issueLabelColor.scala.html` | `web/LabelStyleController.kt`(`GET /{owner}/{project}/issue/labels.css`) | 완료(TASK-0229, TDD). **발견**: 이 legacy 파일은 뷰가 아니라 `IssueLabelApp.labelStyles()` 컨트롤러가 `text/css`로 직접 렌더링하는 동적 스타일시트였고, yuna의 `LabelStyleController`가 이미 완전히 동일한 로직(RGB/hex 파싱+휘도 계산 포함)으로 이식돼 있었음(선행 세션) — 단 legacy가 이 스타일시트를 링크하는 10개 화면 중 `issue/view`/`issue/create`/`issue/edit`/`board/view`/`board/list` 5곳에 `<link>` 태그 자체가 빠져 있어 추가. `project/partial_dashboard_issuesbylabel`(→ `project/home.html`에 인라인)/`project/partial_issuelabels_list`(프로젝트 대시보드·라벨 설정 화면)는 대응 파일 존재 여부 확인 필요라 미착수로 남겼었으나, **2026-08-23 정정**: 둘 다 `<link>` 태그가 이미 정상적으로 포함돼 있음을 재확인(`project/home.html:233`, `project/partial_issuelabels_list.html:67`) |
 | 38 | [x] | `common/commitMsg.scala.html` | `common/commitMsg.html`(신규 fragment) | 완료(TASK-0243). `common/commitMsg.html` fragment 신규 작성(short span/a + 멀티라인일 때 moreBtn + hidden pre.desc). legacy 실사용처는 `code/diff.scala.html`(forceExpand=true)와 `code/history.scala.html`(short+moreBtn) 2곳뿐임을 확인(view/svnDiff는 이 fragment를 쓰지 않고 별도 인라인 span) — 두 곳 모두 fragment 재사용으로 교체 |
 | 39 | [x] | `common/branchItem.scala.html` | `common/branchItem.html`(신규 fragment) | 완료(TASK-0243). legacy 실사용처는 `code/svnDiff.scala.html`의 브랜치 드롭다운(btn-group+dropdown-menu) 한 곳뿐 — 해당 드롭다운 자체가 yuna svnDiff.html에 통째로 빠져 있던 것도 함께 복구. `TemplateHelper.branchItemName`/`branchItemType`/`branchInHtml` 신규 추가(legacy `Branches.itemName/itemType/branchInHTML` 대응) |
 | 40 | [x] | `common/reviewForm.scala.html` | `common/reviewForm.html`(신규) | 완료(TASK-0251, 그룹11). `site/layout::markdownEditor` + `common/uploadForm`으로 정확히 이식 |
@@ -131,8 +131,13 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 52 | [x] | `error/internalServerError_default.scala.html` | `error/500.html` | 완료(TASK-0231, TDD). #48/#51과 동일한 문제 수정. 유일하게 legacy에 "non-default" 대응 파일이 없어(이 파일이 유일한 500 변형) 원래 매핑이 맞았음 |
 | 53 | [x] | `error/requestTextEntityTooLarge.scala.html` | `error/413.html`(신규) | **완료(TASK-0259)**. `web/GlobalExceptionHandler.kt` 신규(`@ControllerAdvice` + `@ExceptionHandler(MaxUploadSizeExceededException::class)`) — `siteLayout`+`gnb`+`footer` 조각으로 완전 이식. `MockMultipartHttpServletRequest`가 실제 크기 제한을 강제하지 않아 통합테스트용 전용 트리거 컨트롤러로 예외 발생 상황을 재현해 검증 — 아래 진행 로그 참고 |
 
-> yuna `error/401.html`은 legacy에 직접 대응 파일이 없음(legacy는 401을 별도 페이지로 안 두는 것으로 보임) — 이식 작업 중
-> legacy 라우팅/에러 핸들러에서 401이 실제로 어떻게 처리되는지(302 로그인 리다이렉트인지) 재확인 필요.
+> **2026-08-23 재확인 완료(TASK-0264)**: `app/controllers/Secured.java#onUnauthorized()`와
+> `app/actions/AnonymousCheckAction.java`를 직접 확인한 결과, legacy는 실제로 401 상태를 보여주는
+> 페이지 자체가 없고 비로그인 사용자를 항상 로그인 폼으로 302 리다이렉트한다(`redirect(loginFormUrl)`).
+> yuna `error/401.html`은 legacy에 대응 파일이 없는 순수 독자 구현이었고, 유일한 호출부
+> `IndexController.partialNotifications()`(`GET /_notifications`)도 실제로는 legacy와 다르게 401
+> 페이지를 반환하고 있었음을 확인 — `redirect:/users/loginform`으로 수정하고 이제 아무 데서도 쓰이지
+> 않는 `error/401.html`은 삭제했다.
 
 ## 그룹 4 — `index/*` 홈/대시보드 (16개, #54~69)
 
@@ -230,7 +235,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 123 | [i] | `issue/partial_select_label.scala.html` | `issue/list.html`에 인라인 | 확인 완료(TASK-0238). select2 기반 카테고리별 라벨 다중선택 구조는 일치하나, legacy는 라벨 dt 안에 `isManagerOf(project)`일 때만 보이는 `[편집]` 인라인 링크를 두는 반면 yuna는 별도 `.labels-wrap` 아이콘 버튼(#116에서 권한 게이트 복구함)으로 분리 배치 — 기능은 동등, DOM 구조만 소폭 차이(수용 가능한 수준으로 판단) |
 | 124 | [i] | `issue/partial_show_selected_label.scala.html` | `issue/partial_show_selected_label.html`(프래그먼트) | 확인 완료(TASK-0238). `dl`/`dt`/라벨 앵커 구조 일치, 수정 불필요 |
 | 125 | [x] | `issue/partial_select_subtask.scala.html` | `issue/edit.html`에 인라인(`subtask-wrap`) | **완료(TASK-0260)**. legacy를 다시 확인한 결과 select2 후보 목록은 AJAX 검색이 아니라 서버가 최대 300건(`Issue.findParentIssueByProject(project, "", 300)`)을 `<option>`으로 렌더링해두고 클라이언트 select2가 그 위에서 필터링하는 방식이라 별도 REST 검색 엔드포인트는 애초에 불필요했음(이전 조사 메모의 "REST 검색 엔드포인트 신규 필요"는 부정확한 추정이었음, 실제 구현 완료 후 정정). `IssueViewController.editIssueForm()`에 `IssueRepository.findByProjectAndParentIsNullOrderByCreatedDateDesc(project, PageRequest.of(0, 300))`로 후보군을 조회해 자기자신 제외(`it.id != issue.id`, legacy의 `.filter(issue.id != currentIssueId)` 대응) 후 `parentCandidates` 모델로 전달, `hasChildIssue`(`countByParentId > 0`, 이미 부모 이슈면 후보 자체를 비움) 게이트까지 legacy와 동일하게 구현. `targetProjectId`(이동 가능 프로젝트 select2)도 `movableProjects`로 함께 구현. `IssueEditSubtaskTemplateRenderingSpec` 그린 |
-| 126 | [x] | `issue/view.scala.html` | `issue/view.html` | 대체로 정밀 이식돼 있음을 확인(TASK-0238). 아래 #127,134~136에서 발견된 2건의 실질적 기능 누락은 백엔드 작업이 필요해 별도 보류 항목으로 기록 |
+| 126 | [x] | `issue/view.scala.html` | `issue/view.html` | 대체로 정밀 이식돼 있음을 확인(TASK-0238). 아래 #127,134~136에서 발견된 2건의 실질적 기능 누락은 백엔드 작업이 필요해 별도 보류 항목으로 기록. **2026-08-23 정정**: #127/134/135/136 모두 이후 TASK-0260에서 완료됨(각 행 참고) — "보류" 표기는 stale |
 | 127 | [x] | `issue/partial_assignee.scala.html` | `issue/view.html`에 인라인(우측 패널) | **완료(TASK-0260)**. view.html 우측 패널에 `issueUpdateForm`(legacy `<form id="issueUpdateForm" action="massUpdate">` 대응, `issues[0].id` hidden input 포함) + `isAllowedUpdate`일 때 담당자(`id="assignee"` hidden input, legacy `partial_assignee.scala.html`과 동일한 `name="assigneeLoginId"`)/마일스톤(select2, `project.isMilestoneEnabled` 게이트)/마감일(`data-toggle="calendar"`) 인라인 위젯을 추가하고, `$yobi.loadModule("issue.View", {...})` 호출에 `urls.massUpdate`를 전달해 배선을 완성. 담당자는 legacy와 동일하게 massUpdate가 아니라 전용 REST(`yonaAssgineeModule` + `IssueShareController`의 `assignableUsers`/`assignees` 엔드포인트, 이미 구현돼 있었음)로 즉시 저장됨. **massUpdate 403 근본 원인을 실측으로 확인**: (1) 이전 세션이 `loginUser.isMemberOf(project)`로 선제 차단했는데, `User.isMemberOf()`가 참조하는 `projectUsers`는 `mappedBy="user"` 지연 컬렉션이라 같은 트랜잭션 안에서 User가 먼저 로드된 뒤 ProjectUser가 별도로 저장되면 스냅샷이 갱신되지 않아 실제 멤버인데도 false가 되는 문제가 있었음. (2) 더 근본적으로 legacy `IssueApp.massUpdate()`는 애초에 프로젝트 멤버십을 통째로 게이트하지 않고 **이슈 1건씩** `AccessControl.isAllowed(user, issue, Operation.UPDATE)`로 권한을 확인해 `updatedItems`/`rejectedByPermission`을 집계한 뒤 "아무것도 갱신 못 하고 권한거부만 있었을 때"만 403을 반환하는 구조였음 — `IssueViewController.massUpdate()`를 이 legacy 구조 그대로 재작성(이슈별 `accessControl.isAllowedToUpdateIssue` 체크 + draft 스킵 + updatedItems==0 && rejectedByPermission>0일 때만 403). `IssueInlineUpdateWidgetTemplateRenderingSpec`의 massUpdate 테스트를 `status().isOk` + `dueDate` 갱신 확인 실제 검증으로 강화해 그린 확인 |
 | 128 | [i] | `issue/partial_comment.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238). 댓글 아바타/작성자/날짜/공감 리스트·모달/공감토글 버튼/마크다운 본문 구조 legacy와 일치 |
 | 129 | [i] | `issue/partial_comments.scala.html` | (view.html에 인라인) | 확인 완료(TASK-0238, 이전 P1-106에서 이미 이식). 댓글+이벤트 통합 타임라인(`issue.getTimeline()`) 구조 일치 |
@@ -1008,6 +1013,8 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **#145,146(create/edit) 조사**: README 자동 지정 체크박스(`post.readmefy`, `isProjectResourceCreatable
   (COMMIT)` 게이트)는 코드 저장소 연동(커밋으로부터 게시글 생성) 기능의 일부라 그룹10/11(code/git) 범위로
   판단, 이번 배치에서는 미이식 — 향후 그룹10/11 작업 시 board/create·edit.html도 함께 재검토 필요.
+  **2026-08-23 정정**: 그룹10/11 완료 후에도 실제로는 계속 미이식 상태였다가 TASK-0263에서 뒤늦게
+  완료됨(#145/#146 행 참고) — 이 메모의 "재검토 필요"는 이제 해소된 상태.
 - **#148(partial_comments)**: 이슈와 동일한 댓글+이벤트 타임라인 구조를 재사용해 이미 정확히 이식돼
   있음을 확인, 코드 변경 없음.
 - **legacy와 다르게 처리한 지점**: 없음(발견된 격차 전부 순수 버그 수정/기능 복구).
@@ -2201,3 +2208,51 @@ yuna에만 있는 자체 구현은 모두 제거해줘")로 남아있던 마지�
     회원을 하나 미리 만들어주는 것으로 해결(코드 수정 아님).
 - **결과**: `SvnRepositorySpec` 29/29, `SvnServletRequestWrapperSpec` 6/6, `SvnControllerSpec` 6/6,
   `SvnControllerOptionsIntegrationSpec` 1/1 전부 GREEN.
+
+### TASK-0265: 사용자 지시("백로그 항목에서 낡은 서술 다 고쳐줘")로 두 백로그 문서 전수 재검토
+
+- **방법**: "예정/재검토/보류/TODO/확인 필요/미확인/미착수/이월" 등 상태 불확실성을 드러내는 표현을
+  두 문서의 표 행(항목 단위)에서 전부 추출한 뒤, 각각을 실제 코드/템플릿 상태와 대조해 여전히
+  정확한지, 이미 다른 TASK에서 해소됐는데 표기만 안 갱신됐는지 하나씩 재확인. 진행 로그(`###` 절)
+  안의 시점 서술은 역사적 기록이라 원칙적으로 건드리지 않되, 뒤이은 절에서 이미 해소돼 사실상
+  중복인 경우만 대상으로 삼음.
+- **stale로 확인해 정정한 항목**:
+  - **#5**: 그룹6(`change_vcs/delete/fork/issuelabels/setting_webhook/transfer/watchers.html`)의
+    header/footer 조각 누락이 "그룹6 착수 시 최우선 처리"로 남아있었으나, 실제로는 이미 TASK-0236/
+    0237에서 전부 완료됨을 코드 재검증(7개 파일 전부 `site/layout` 참조 확인)으로 확인 — 정정.
+  - **#6**: `organization/*.html` 10개 파일이 "gnb/footer 조각 전무"라고 남아있었으나, 전체 화면
+    템플릿 8종은 이미 `site/layout`을 포함하고 나머지 8종은 애초에 전체 화면에 인라인되는
+    프래그먼트라 자체 gnb/footer가 불필요함을 확인 — 정정.
+  - **#37**: `project/partial_dashboard_issuesbylabel`/`partial_issuelabels_list`의 라벨 CSS
+    `<link>` 포함 여부가 "확인 필요 — 미착수"로 남아있었으나, 실제로는 둘 다 이미 포함돼 있음을
+    확인(`project/home.html:233`, `project/partial_issuelabels_list.html:67`) — 정정.
+  - **#126**: #127/134~136을 "별도 보류 항목"이라 기록해뒀으나 넷 다 TASK-0260에서 이미 완료됨을
+    재확인 — 정정.
+  - **error/401 블록쿼트**: "legacy 401 처리 방식 재확인 필요"로 남아있던 메모를 legacy
+    `Secured.onUnauthorized()`/`AnonymousCheckAction.java` 직접 확인으로 해소 — legacy는 401 상태
+    페이지 자체가 없고 항상 로그인 폼으로 302 리다이렉트함을 확인. **실버그 발견 및 수정**:
+    `IndexController.partialNotifications()`(`GET /_notifications`)가 비로그인 시 독자 구현
+    `error/401` 뷰를 반환하고 있어 legacy와 달랐음 — `redirect:/users/loginform`으로 수정하고
+    이제 아무 데서도 쓰이지 않는 `error/401.html`은 삭제. `IndexControllerSpec.kt`에 회귀 테스트 추가.
+  - **#145/#146 관련 그룹8 진행 로그**: "향후 그룹10/11 작업 시 재검토 필요"가 TASK-0263에서 이미
+    해소됐음을 알리는 정정 문구 추가(진행 로그 원문은 유지, 뒤이어 정정만 덧붙임).
+  - **`docs/PARITY_BACKLOG.md` P1-66**: "UI는 별도 트랙에서 진행 예정"이라 남아있었으나 재검토 중
+    `issue/edit.html`의 `targetProjectId` select 자체는 TASK-0238에서 이미 이식돼 있음을 발견 —
+    단, **실버그 발견**: `IssueViewController.editIssue()`가 바인딩하는 `IssueForm`에
+    `targetProjectId` 필드가 없어 폼을 제출해도 이슈가 실제로 이동하지 않는 죽은 UI였음(이미
+    legacy와 동일하게 구현돼 있던 `IssueService.moveIssue()`(P1-48)가 아무 데서도 호출되지 않고
+    있었음). `IssueForm`에 필드 추가 + `editIssue()`에 legacy `hasTargetProject()`/
+    `isRequestedToOtherProject()`/`moveIssueToOtherProject()` 대응 분기(대상 프로젝트 권한 확인 →
+    `moveIssue()` 호출 → 이동 후 프로젝트로 리다이렉트, 리다이렉트 시 이슈 번호도 이동 후 재채번된
+    번호를 쓰도록 수정) 추가. `IssueEditMoveProjectSpec.kt`(신규, 2 tests: 정상 이동/권한 없는
+    이동 거부) 추가.
+  - **재검토했지만 stale이 아니었던 항목들**: #9/#25/#108/#147/#168/#173/#188(TEMPLATE_BACKLOG),
+    P1-27/65/67/85/98/102(PARITY_BACKLOG)는 전부 이미 정확한 완료/문서화된 보류 기록이었음을
+    재확인, 코드 변경 없음. #38/#39(TASK-0230 시점 진행 로그의 "[~]/미확인" 서술)는 해당 항목의
+    실제 표 행(#38/#39 자체)이 이미 TASK-0243에서 정확히 갱신돼 있어 원본 그대로 둠(역사적 기록이며
+    독자가 표 행을 먼저 보면 혼동 없음). #107(partial_webhooks_list)의 "다음 배치로 이월" 메모도
+    바로 다음 절(TASK-0237)에서 이미 처리 완료로 이어져 있어 원본 유지.
+- **검증**: `IndexControllerSpec`(5, GREEN), `IssueEditMoveProjectSpec`(2, GREEN),
+  `IssueEditSubtaskTemplateRenderingSpec`(2, GREEN, 회귀 없음), `IssueViewControllerSpec`(11, GREEN,
+  회귀 없음), `UserViewControllerSpec`(15, GREEN, 회귀 없음). `./gradlew compileKotlin
+  compileTestKotlin` 클린.
