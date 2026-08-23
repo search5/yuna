@@ -131,13 +131,25 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 52 | [x] | `error/internalServerError_default.scala.html` | `error/500.html` | 완료(TASK-0231, TDD). #48/#51과 동일한 문제 수정. 유일하게 legacy에 "non-default" 대응 파일이 없어(이 파일이 유일한 500 변형) 원래 매핑이 맞았음 |
 | 53 | [x] | `error/requestTextEntityTooLarge.scala.html` | `error/413.html`(신규) | **완료(TASK-0259)**. `web/GlobalExceptionHandler.kt` 신규(`@ControllerAdvice` + `@ExceptionHandler(MaxUploadSizeExceededException::class)`) — `siteLayout`+`gnb`+`footer` 조각으로 완전 이식. `MockMultipartHttpServletRequest`가 실제 크기 제한을 강제하지 않아 통합테스트용 전용 트리거 컨트롤러로 예외 발생 상황을 재현해 검증 — 아래 진행 로그 참고 |
 
-> **2026-08-23 재확인 완료(TASK-0264)**: `app/controllers/Secured.java#onUnauthorized()`와
+> **2026-08-23 재확인 완료(TASK-0265)**: `app/controllers/Secured.java#onUnauthorized()`와
 > `app/actions/AnonymousCheckAction.java`를 직접 확인한 결과, legacy는 실제로 401 상태를 보여주는
 > 페이지 자체가 없고 비로그인 사용자를 항상 로그인 폼으로 302 리다이렉트한다(`redirect(loginFormUrl)`).
-> yuna `error/401.html`은 legacy에 대응 파일이 없는 순수 독자 구현이었고, 유일한 호출부
+> yuna `error/401.html`은 legacy에 대응 파일이 없는 순수 독자 구현이고, 명시적 호출부
 > `IndexController.partialNotifications()`(`GET /_notifications`)도 실제로는 legacy와 다르게 401
-> 페이지를 반환하고 있었음을 확인 — `redirect:/users/loginform`으로 수정하고 이제 아무 데서도 쓰이지
-> 않는 `error/401.html`은 삭제했다.
+> 페이지를 반환하고 있었음을 확인 — `redirect:/users/loginform`으로 수정.
+>
+> **2026-08-23 정정(TASK-0265 내)**: 위 수정과 함께 "아무 데서도 안 쓰인다"고 판단해
+> `error/401.html`을 삭제했으나, 이는 Kotlin/HTML 코드 내 명시적 문자열 참조만 grep한 결과였고
+> Spring Boot의 `DefaultErrorViewResolver`가 컨트롤러 코드의 명시적 참조 없이도 `error/{status}`
+> 네이밍 컨벤션으로 상태 코드에 맞는 템플릿을 자동 매칭하는 메커니즘(이 저장소엔 커스텀
+> `ErrorController`가 없어 그대로 활성화돼 있음, `error/400`/`403`/`404`/`413`/`500.html`도 전부
+> 같은 방식으로 쓰임)을 놓쳤다. 사용자 지적으로 재검증(`@SpringBootTest(webEnvironment=RANDOM_PORT)` +
+> 실제 임베디드 톰캣 + `Accept: text/html`로 `GitAuthorizationFilter`/`SvnAuthorizationFilter`의
+> `response.sendError(401, ...)`를 실제로 유발)한 결과, 파일 삭제 후에는 이 경로가 Spring Boot 기본
+> "Whitelabel Error Page"로 폴백되고 있었음을 실측으로 확인 — **삭제를 철회하고 파일을 복구했다**.
+> git/svn 프로토콜 클라이언트 자체는 응답 본문을 해석하지 않아(상태코드+`WWW-Authenticate` 헤더만
+> 사용) 기능적으로는 영향이 없었을 것이나, 브라우저가 우연히 그 경로에 접근했을 때 legacy에 없는
+> 일관성 없는 폴백 페이지가 나오는 것은 여전히 바람직하지 않아 원상 복구가 맞는 판단.
 
 ## 그룹 4 — `index/*` 홈/대시보드 (16개, #54~69)
 
@@ -2232,8 +2244,14 @@ yuna에만 있는 자체 구현은 모두 제거해줘")로 남아있던 마지�
     `Secured.onUnauthorized()`/`AnonymousCheckAction.java` 직접 확인으로 해소 — legacy는 401 상태
     페이지 자체가 없고 항상 로그인 폼으로 302 리다이렉트함을 확인. **실버그 발견 및 수정**:
     `IndexController.partialNotifications()`(`GET /_notifications`)가 비로그인 시 독자 구현
-    `error/401` 뷰를 반환하고 있어 legacy와 달랐음 — `redirect:/users/loginform`으로 수정하고
-    이제 아무 데서도 쓰이지 않는 `error/401.html`은 삭제. `IndexControllerSpec.kt`에 회귀 테스트 추가.
+    `error/401` 뷰를 반환하고 있어 legacy와 달랐음 — `redirect:/users/loginform`으로 수정.
+    `IndexControllerSpec.kt`에 회귀 테스트 추가. **자체 정정**: 처음엔 "아무 데서도 안 쓰인다"고
+    판단해 `error/401.html`을 삭제했으나, 사용자 지적으로 재검증한 결과 Spring Boot
+    `DefaultErrorViewResolver`의 상태코드 기반 암묵적 템플릿 매칭(`error/400/403/404/413/500.html`도
+    동일 메커니즘)을 통해 `GitAuthorizationFilter`/`SvnAuthorizationFilter`의 `sendError(401)`
+    경로가 실제로 이 파일을 쓰고 있었음을 실측(`@SpringBootTest(RANDOM_PORT)` + 실제 톰캣)으로
+    확인 — 삭제 시 Spring Boot 기본 Whitelabel Error Page로 폴백되는 걸 확인하고 파일을 복구했다.
+    상세는 위 블록쿼트의 "2026-08-23 정정" 참고.
   - **#145/#146 관련 그룹8 진행 로그**: "향후 그룹10/11 작업 시 재검토 필요"가 TASK-0263에서 이미
     해소됐음을 알리는 정정 문구 추가(진행 로그 원문은 유지, 뒤이어 정정만 덧붙임).
   - **`docs/PARITY_BACKLOG.md` P1-66**: "UI는 별도 트랙에서 진행 예정"이라 남아있었으나 재검토 중
