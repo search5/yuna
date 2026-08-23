@@ -46,6 +46,15 @@
 - 구조적 한계로 최대치 도달([i]): `IssueShareServiceImpl`(BRANCH 93.9%, 도달 가능 분기 100% 커버 — `type` 파라미터 미사용 실버그 확정)
 - 대폭 개선했으나 아직 미달([~]): `AccessControl`(BRANCH 38.4%→89.7%, 141개 남음, `isAllowed(...)` 오버로드 10종에 분산 — 다음 배치 최우선 마무리 대상)
 
+## 진행 현황 갱신 (2026-08-24 01:20, 3차 배치 완료 후)
+
+- 전체 클래스: 478개, 95% 미만: **260개**(-5)
+- 라인: 83.6%, 분기: 67.7%, 메서드: 77.5%, 클래스: 92.7%
+- 추가 완료([x]): `AccessControl`(BRANCH 95.3% — 이 저장소 최대 미커버 클래스 완주, 4개 파일 431 tests), `TemplateHelper`(96.2%)
+- 구조적 한계로 최대치 도달([i]): `GitRepository`(BRANCH 88.3%, 실제 JGit 저장소 기반 95 tests)
+- 진행 중([~], 다음 배치 계속): `ProjectViewController`(78.5%), `UserViewController`(87.9%, 근소 미달)
+- 누적 실버그 발견(전부 미수정, 별도 검토 필요): FileDiff.updateRange 중복추가, MigrationService 3건, diff_match_patch 2건(vendored, 도달불가), TemplateHelper.getVotersForName 클램프 오류(미트리거), GitRepository.getParentCommitOf NPE 위험(미트리거), ProjectViewController.projectLogo 하드코딩 개발자 로컬경로(배포결함 추정), IssueShareServiceImpl.findSharableUsers의 type 파라미터 미사용, PullRequest.contributor 관련 죽은 코드 1건
+
 
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
@@ -54,7 +63,7 @@
 | **YonaApplicationKt** | | | | | | | | |
 | `YonaApplicationKt` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [i] | `fun main()`이 `runApplication<YonaApplication>()`을 호출만 하는데, 실제로 호출하면 같은 JVM 안에서 실제 임베디드 톰캣+비-데몬 스레드를 가진 완전한 앱이 뜨고(main()이 리턴은 하지만 컨텍스트를 반환받지 못해 정리도 불가) 테스트 JVM에 잔류해 이후 테스트를 오염시킨다. 별도 프로세스로 기동하는 방식(subprocess)만 가능한데, 이 클래스가 위임하는 로직(ApplicationContext 부트스트랩) 자체는 이미 150여개의 `@SpringBootTest` 스펙이 동일하게 실행·검증하고 있어 별도 프로세스 스모크테스트가 주는 한계효용이 없다고 판단 — 구조적 제약으로 예외 인정 |
 | **config** | | | | | | | | |
-| `TemplateHelper` | 70.0 | 42.6 | 77.9 | 74 | 179 | 15 | [ ] | |
+| `TemplateHelper` | 70.0 | 42.6 | 77.9 | 74 | 179 | 15 | [x] | 2026-08-24: 신규 `TemplateHelperBranchSpec.kt`(순수 mockk, 200 tests), 기존 `TemplateHelperSpec.kt`는 그대로 유지. 전체 회귀 확정치: LINE 100%, BRANCH 96.2%, METHOD 98.5% — 목표 달성. **실버그 발견(미수정, 별도 검토 필요)**: `getVotersForName(voters, fromIndex, size)`가 충분히 음수인 `fromIndex`에서 `IllegalArgumentException`을 던질 수 있음(실제 템플릿 호출부는 전부 고정 양수 리터럴이라 현재는 미트리거) |
 | `GitServletConfig` | 48.0 | 7.1 | 33.3 | 26 | 13 | 4 | [ ] | |
 | `GitServletConfig$gitServletRegistrationBean$lfsServlet$1` | 5.3 | 0.0 | 50.0 | 18 | 12 | 1 | [ ] | |
 | `YonaAuthenticationSuccessHandler` | 14.3 | 0.0 | 50.0 | 12 | 12 | 1 | [ ] | |
@@ -75,7 +84,7 @@
 | `OAuth2UserInfoFactory` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `OAuth2AccountMergeService` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
 | **config/security** | | | | | | | | |
-| `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [~] | 2026-08-23: 3개 에이전트 병렬(`AccessControlSpec.kt` 헬퍼그룹 174 tests 전체, `AccessControlIssuePostingSpec.kt` 100 tests, `AccessControlPullRequestSpec.kt` 97 tests, 총 371 신규). 전체 회귀 확정치: LINE 97.9%, BRANCH 89.7%(141개 미실행 남음, 대부분 `isAllowed(...)` 오버로드 10종에 분산), METHOD 100% — 목표에 근접, 다음 배치에서 마무리 |
+| `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [x] | 2026-08-23~24: 4개 에이전트 걸쳐(헬퍼그룹 174 + IssuePosting 100 + PullRequest 97 + Final 60, 총 431 신규 테스트, 4개 파일). 전체 회귀 확정치: LINE 100%, BRANCH 95.3%, METHOD 100% — 목표 달성. 이 저장소 최대 미커버 클래스(1371개 분기)를 3차 배치에 걸쳐 완주 |
 | **config/svn** | | | | | | | | |
 | `SvnAuthorizationFilter` | 96.2 | 73.8 | 100.0 | 2 | 11 | 0 | [ ] | |
 | **domain/attachment** | | | | | | | | |
@@ -239,7 +248,7 @@
 | `UserIdent` | 100.0 | 100.0 | 66.7 | 0 | 0 | 3 | [ ] | |
 | `LinkedAccount` | 100.0 | 100.0 | 60.0 | 0 | 0 | 4 | [ ] | |
 | **domain/vcs** | | | | | | | | |
-| `GitRepository` | 42.5 | 24.8 | 59.6 | 230 | 155 | 23 | [ ] | |
+| `GitRepository` | 42.5 | 24.8 | 59.6 | 230 | 155 | 23 | [i] | 2026-08-24: 신규 `GitRepositorySpec.kt`(실제 bare JGit 저장소+저수준 커밋, mock 최소화, 95 tests). 전체 회귀 확정치: LINE 99.5%, METHOD 100%, BRANCH 88.3% — 남은 분기는 전부 코드 근거로 도달 불가능/비현실적 확인(JGit API 계약상 항상 non-null인 지점들, close() 실패 분기 등 상세는 스펙 파일 참고). **실버그 발견(현재 호출부에선 미트리거, 미수정)**: `getParentCommitOf()`가 부모 커밋을 `parseCommit()` 없이 반환해 반환값의 `getMessage()`/`getAuthorName()` 등 호출 시 NPE — 유일한 실사용처 `CodeViewController.kt:481`은 `.id`만 참조해(템플릿 `code/svnDiff.html:103`) 현재는 트리거 안 됨, 향후 `.message` 등 참조 추가 시 위험 |
 | `FileDiff` | 9.6 | 0.0 | 37.0 | 132 | 130 | 29 | [x] | 2026-08-23: 신규 60 tests, `FileDiffSpec.kt`. 단독 측정 LINE/BRANCH/METHOD/CLASS 전부 100%. **실버그 발견(수정은 별도 판단 필요)**: `updateRange(lineA, lineB)`가 lineA/lineB 조건을 독립된 `if`로 처리해 두 조건이 동시에 매치되면 같은 edit이 EditList에 중복 추가됨 — 테스트로 명시 문서화, 의도된 동작인지 불확실해 별도 수정 없이 사실만 기록 |
 | `BareCommit` | 61.0 | 30.6 | 87.5 | 53 | 34 | 1 | [ ] | |
 | `Hunk` | 0.0 | 0.0 | 0.0 | 26 | 18 | 15 | [ ] | |
@@ -278,8 +287,8 @@
 | `diff_match_patch$Diff` | 36.4 | 0.0 | 25.0 | 7 | 4 | 3 | [ ] | |
 | `diff_match_patch$LinesToCharsResult` | 0.0 | 100.0 | 0.0 | 5 | 0 | 1 | [ ] | |
 | **web** | | | | | | | | |
-| `ProjectViewController` | 50.0 | 32.5 | 74.0 | 327 | 301 | 13 | [ ] | |
-| `UserViewController` | 57.0 | 30.7 | 43.3 | 173 | 160 | 17 | [ ] | |
+| `ProjectViewController` | 50.0 | 32.5 | 74.0 | 327 | 301 | 13 | [~] | 2026-08-24: `ProjectViewControllerSpec.kt`에 80 tests 추가(31→111). 전체 회귀 확정치: LINE 96.0%, BRANCH 78.5%(아직 미달), METHOD 100% — 다음 배치에서 분기 보강 계속. **실버그 2건 발견(미수정, 별도 검토 필요)**: (1) `projectLogo()`의 기본 로고 폴백이 다른 개발자의 로컬 머신 절대경로(`/Users/mzc01-search5/.../project_default_logo.png`)로 하드코딩돼 있어 어떤 실제 배포 환경에서도 해당 분기가 존재할 수 없음 — 진짜 배포 결함으로 추정, (2) `getProjectHistory()`의 PR 섹션 `contributor?.let{} ?: "Unknown"`이 `PullRequest.contributor`가 non-null 타입이라 죽은 코드(nullable→non-null 리팩터 잔재로 추정) |
+| `UserViewController` | 57.0 | 30.7 | 43.3 | 173 | 160 | 17 | [~] | 2026-08-24: `UserViewControllerSpec.kt`에 63 tests 추가(15→78). 전체 회귀 확정치: LINE 98.3%, BRANCH 87.9%(아직 근소 미달), METHOD 93.3% — 다음 배치에서 마무리. 계정 관리(비밀번호 재설정 등) 보안 로직 포함해 검증. 도달 불가능 확정 1건: `userIssues()`의 `mentionService.getMentioningIssueIds(loginUser.id!!)` 강제 언래핑 이후 시점이라 when절 else 분기 도달 불가 |
 | `IssueViewController` | 69.6 | 45.1 | 78.9 | 158 | 167 | 4 | [ ] | |
 | `MilestoneViewController` | 49.0 | 31.7 | 50.0 | 151 | 142 | 7 | [ ] | |
 | `OrganizationViewController` | 66.8 | 46.5 | 72.2 | 96 | 123 | 5 | [ ] | |

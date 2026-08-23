@@ -53,6 +53,28 @@ import com.github.search5.yona.domain.organization.OrganizationUser
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import org.springframework.ui.ExtendedModelMap
 import org.springframework.http.HttpStatus
+import com.github.search5.yona.domain.vcs.Commit
+import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.Assignee
+import com.github.search5.yona.domain.issue.IssueLabel
+import com.github.search5.yona.domain.issue.IssueLabelCategory
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.milestone.Milestone
+import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.project.ProjectTransfer
+import com.github.search5.yona.domain.attachment.Attachment
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.user.UserState
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
+import jakarta.servlet.http.HttpServletRequest
+import java.util.Date
+import java.util.Locale
+import java.io.File
+import java.time.Instant
+import io.mockk.spyk
+import com.github.search5.yona.domain.vcs.SvnRepository
 
 class ProjectViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -653,6 +675,1251 @@ class ProjectViewControllerSpec : DescribeSpec({
         it("JSON API는 403 Forbidden을 반환해야 한다") {
             val response = hiddenController.projectsJson(query = "", filter = "", authentication = null)
             response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+    }
+
+    // ============================================================================================
+    // TASK-커버리지 — getProjectHistory / getProjectDashboardData / transferProject 등 JaCoCo 미실행
+    // 상위 메서드 보강. private 메서드는 projectHome(tabId=...)을 통해서만 도달 가능하므로 그 경로로
+    // 검증하고, ResponseEntity를 반환하는 REST/직접 호출 메서드는 mockMvc 없이 컨트롤러를 직접
+    // 호출해 분기별 응답을 검증한다(기존 HIDE_PROJECT_LISTING 테스트와 동일한 패턴).
+    // ============================================================================================
+
+    // yona ProjectApp.java history() 대응 — getProjectHistory는 private이라 projectHome(tabId가
+    // readme/dashboard가 아닌 경우)를 통해서만 도달 가능하다.
+    describe("getProjectHistory (GET /{owner}/{projectName}?tabId=history)") {
+        val historyProject = Project(id = 30L, name = "HistoryProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+        val historyUser = User(id = 30L, loginId = "historyuser", name = "히스토리유저")
+        val historyAuth = UsernamePasswordAuthenticationToken("historyuser", "password")
+
+        beforeTest {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "HistoryProj") } returns Optional.of(historyProject)
+            every { userRepository.findByLoginId("historyuser") } returns Optional.of(historyUser)
+            every { projectUserRepository.findByProjectId(30L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+        }
+
+        it("코드/이슈/게시글/PR이 모두 활성화된 프로젝트는 4가지 이력을 모두 조회해 최신순으로 정렬해야 한다") {
+            val playRepo = mockk<PlayRepository>()
+            every { repositoryService.getRepository(historyProject) } returns playRepo
+
+            val commitAuthor = User(id = 31L, loginId = "commitauthor", name = "커밋작성자")
+            val commit = mockk<Commit>()
+            every { commit.getAuthorEmail() } returns "author@yona.io"
+            every { commit.getAuthorName() } returns "커밋작성자원본"
+            every { commit.getCommitterDate() } returns Date.from(Instant.parse("2026-01-01T00:00:00Z"))
+            every { commit.getShortId() } returns "abc1234"
+            every { commit.getShortMessage() } returns "커밋 메시지"
+            every { commit.getId() } returns "abc1234567890"
+            every { playRepo.getHistory(0, 10, null, null) } returns listOf(commit)
+            every { userRepository.findByEmail("author@yona.io") } returns Optional.of(commitAuthor)
+
+            val issue = Issue(
+                id = 40L, title = "이슈제목", project = historyProject, number = 1L,
+                createdDate = Instant.parse("2026-01-02T00:00:00Z"), authorLoginId = "issueauthor", authorName = "이슈작성자원본"
+            )
+            every { issueRepository.findByProject(historyProject, any()) } returns PageImpl(listOf(issue))
+            every { userRepository.findByLoginId("issueauthor") } returns Optional.of(User(id = 32L, loginId = "issueauthor", name = "이슈작성자"))
+
+            val posting = Posting(
+                id = 700L, title = "게시글제목", project = historyProject, number = 2L,
+                createdDate = Instant.parse("2026-01-03T00:00:00Z"), authorLoginId = null, authorName = "게시글작성자원본"
+            )
+            every { postingRepository.findByProject(historyProject, any()) } returns PageImpl(listOf(posting))
+
+            val contributor = User(id = 33L, loginId = "prcontributor", name = "PR작성자")
+            val pull = PullRequest(
+                id = 800L, title = "PR제목", toProject = historyProject, fromProject = historyProject,
+                contributor = contributor, number = 3L, created = Instant.parse("2026-01-04T00:00:00Z")
+            )
+            every { pullRequestRepository.findByToProject(historyProject, any()) } returns PageImpl(listOf(pull))
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "HistoryProj", "history", historyAuth, model)
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 4
+            // 최신순 정렬(PR 1/4 -> 게시글 1/3 -> 이슈 1/2 -> 커밋 1/1) 검증
+            histories.map { it.what } shouldBe listOf("pullrequest", "post", "issue", "commit")
+            histories[0].who shouldBe "PR작성자"
+            histories[0].url shouldBe "/owner/HistoryProj/pullRequest/3"
+            histories[1].who shouldBe "게시글작성자원본"
+            histories[1].userPageUrl shouldBe "#"
+            histories[2].who shouldBe "이슈작성자원본"
+            histories[2].userPageUrl shouldBe "/user/issueauthor"
+            histories[3].who shouldBe "커밋작성자"
+            histories[3].shortTitle shouldBe "abc1234"
+        }
+
+        it("커밋 이력 조회 중 예외가 발생해도 무시하고 빈 이력을 반환해야 한다") {
+            val onlyCodeProject = Project(
+                id = 34L, name = "OnlyCodeProj", owner = "owner", projectScope = ProjectScope.PUBLIC,
+                isIssueEnabled = false, isBoardEnabled = false, isPullRequestEnabled = false
+            )
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "OnlyCodeProj") } returns Optional.of(onlyCodeProject)
+            every { projectUserRepository.findByProjectId(34L) } returns emptyList()
+            every { repositoryService.getRepository(onlyCodeProject) } throws RuntimeException("repo error")
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "OnlyCodeProj", "history", historyAuth, model)
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 0
+        }
+
+        it("코드/이슈/게시글/PR이 모두 비활성화된 프로젝트는 활동 이력이 비어 있어야 한다") {
+            val disabledProject = Project(
+                id = 35L, name = "DisabledProj", owner = "owner", projectScope = ProjectScope.PUBLIC,
+                isCodeEnabled = false, isIssueEnabled = false, isBoardEnabled = false, isPullRequestEnabled = false
+            )
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "DisabledProj") } returns Optional.of(disabledProject)
+            every { projectUserRepository.findByProjectId(35L) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "DisabledProj", "history", historyAuth, model)
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 0
+        }
+
+        it("커밋 작성자를 이메일로 찾지 못하면 authorName 또는 Unknown으로 대체해야 한다") {
+            val commitOnlyProject = Project(
+                id = 36L, name = "CommitFallbackProj", owner = "owner", projectScope = ProjectScope.PUBLIC,
+                isIssueEnabled = false, isBoardEnabled = false, isPullRequestEnabled = false
+            )
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CommitFallbackProj") } returns Optional.of(commitOnlyProject)
+            every { projectUserRepository.findByProjectId(36L) } returns emptyList()
+
+            val playRepo = mockk<PlayRepository>()
+            every { repositoryService.getRepository(commitOnlyProject) } returns playRepo
+
+            val commitNoEmail = mockk<Commit>()
+            every { commitNoEmail.getAuthorEmail() } returns null
+            every { commitNoEmail.getAuthorName() } returns "이메일없음작성자"
+            every { commitNoEmail.getCommitterDate() } returns null
+            every { commitNoEmail.getShortId() } returns "noemail1"
+            every { commitNoEmail.getShortMessage() } returns "이메일 없는 커밋"
+            every { commitNoEmail.getId() } returns "noemail1234"
+
+            val commitUnknown = mockk<Commit>()
+            every { commitUnknown.getAuthorEmail() } returns "ghost@yona.io"
+            every { commitUnknown.getAuthorName() } returns null
+            every { commitUnknown.getCommitterDate() } returns Date()
+            every { commitUnknown.getShortId() } returns "ghost123"
+            every { commitUnknown.getShortMessage() } returns "유령 커밋"
+            every { commitUnknown.getId() } returns "ghost1234567"
+
+            every { playRepo.getHistory(0, 10, null, null) } returns listOf(commitNoEmail, commitUnknown)
+            every { userRepository.findByEmail("ghost@yona.io") } returns Optional.empty()
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "CommitFallbackProj", "history", historyAuth, model)
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 2
+            histories.any { it.who == "이메일없음작성자" } shouldBe true
+            histories.any { it.who == "Unknown" } shouldBe true
+        }
+
+        it("이슈/게시글 작성자를 찾지 못하면 authorName 또는 Unknown, userPageUrl은 #으로 대체해야 한다") {
+            val noAuthorProject = Project(
+                id = 37L, name = "NoAuthorProj", owner = "owner", projectScope = ProjectScope.PUBLIC,
+                isCodeEnabled = false, isPullRequestEnabled = false
+            )
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoAuthorProj") } returns Optional.of(noAuthorProject)
+            every { projectUserRepository.findByProjectId(37L) } returns emptyList()
+
+            val issueNoLoginId = Issue(
+                id = 41L, title = "로그인아이디없음", project = noAuthorProject, number = 4L,
+                createdDate = Instant.now(), authorLoginId = null, authorName = null
+            )
+            every { issueRepository.findByProject(noAuthorProject, any()) } returns PageImpl(listOf(issueNoLoginId))
+
+            val postingNotFound = Posting(
+                id = 701L, title = "찾을수없는작성자", project = noAuthorProject, number = 5L,
+                createdDate = Instant.now(), authorLoginId = "ghostwriter", authorName = null
+            )
+            every { postingRepository.findByProject(noAuthorProject, any()) } returns PageImpl(listOf(postingNotFound))
+            every { userRepository.findByLoginId("ghostwriter") } returns Optional.empty()
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "NoAuthorProj", "history", historyAuth, model)
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 2
+            histories.forEach {
+                it.who shouldBe "Unknown"
+                it.userPageUrl shouldBe "#"
+            }
+        }
+    }
+
+    // yona project/home.scala.html 대시보드 탭 대응 — getProjectDashboardData는 private이라
+    // projectHome(tabId="dashboard")를 통해서만 도달 가능하다.
+    describe("getProjectDashboardData (GET /{owner}/{projectName}?tabId=dashboard)") {
+        val dashboardUser = User(id = 40L, loginId = "dashboarduser", name = "대시보드유저")
+        val dashboardAuth = UsernamePasswordAuthenticationToken("dashboarduser", "password")
+
+        beforeTest {
+            every { userRepository.findByLoginId("dashboarduser") } returns Optional.of(dashboardUser)
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+        }
+
+        it("이슈/마일스톤/PR/라벨이 있는 프로젝트에서 대시보드 데이터가 올바르게 계산돼야 한다") {
+            val project = Project(id = 40L, name = "DashboardProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val memberA = User(id = 41L, loginId = "membera", name = "회원A")
+            val userB = User(id = 42L, loginId = "userb", name = "회원B")
+
+            val milestone1 = Milestone(id = 50L, title = "마일스톤1", project = project, state = State.OPEN)
+            val milestone2 = Milestone(id = 51L, title = "마일스톤2(이슈없음)", project = project, state = State.OPEN)
+            val milestone3 = Milestone(id = 52L, title = "마일스톤3(전체집계누락)", project = project, state = State.OPEN)
+
+            val category1 = IssueLabelCategory(id = 1L, name = "카테고리1", project = project)
+            val category2 = IssueLabelCategory(id = 2L, name = "카테고리2", project = project)
+            val label1 = IssueLabel(id = 10L, category = category1, color = "#111111", name = "라벨1", project = project)
+            val label2 = IssueLabel(id = 11L, category = category1, color = "#222222", name = "라벨2", project = project)
+            val label3 = IssueLabel(id = 12L, category = category2, color = "#333333", name = "라벨3(미사용)", project = project)
+
+            val issue1 = Issue(
+                id = 1L, title = "이슈1", project = project, number = 1L, state = State.OPEN,
+                assignee = Assignee(user = userB, project = project), milestone = milestone1, labels = mutableSetOf(label1)
+            )
+            val issue2 = Issue(
+                id = 2L, title = "이슈2(미배정)", project = project, number = 2L, state = State.OPEN
+            )
+            val issue3 = Issue(
+                id = 3L, title = "이슈3", project = project, number = 3L, state = State.OPEN,
+                assignee = Assignee(user = userB, project = project), milestone = milestone1, labels = mutableSetOf(label1, label2)
+            )
+            // milestone3에 배정된 이슈지만 findByProject(전체 이슈) 조회 결과에는 포함되지 않아
+            // totalInMilestone==0 방어분기(0으로 나누기 가드)를 검증하기 위한 데이터.
+            val issue5 = Issue(
+                id = 5L, title = "이슈5(전체집계누락)", project = project, number = 5L, state = State.OPEN, milestone = milestone3
+            )
+            val closedIssue4 = Issue(
+                id = 4L, title = "이슈4(닫힘)", project = project, number = 4L, state = State.CLOSED, milestone = milestone1
+            )
+
+            val openIssues = listOf(issue1, issue2, issue3, issue5)
+            val allIssues = listOf(issue1, issue2, issue3, closedIssue4)
+
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "DashboardProj") } returns Optional.of(project)
+            every { projectUserRepository.findByProjectId(40L) } returns
+                listOf(ProjectUser(id = 400L, user = memberA, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+            every { issueRepository.findByProjectAndState(project, State.OPEN) } returns openIssues
+            every { issueRepository.findByProject(project) } returns allIssues
+            every { milestoneRepository.findByProjectAndState(project, State.OPEN) } returns listOf(milestone1, milestone2, milestone3)
+
+            val pr1 = PullRequest(id = 900L, title = "PR1", toProject = project, fromProject = project, contributor = userB, number = 1L, state = State.OPEN)
+            val pr2 = PullRequest(id = 901L, title = "PR2", toProject = project, fromProject = project, contributor = memberA, number = 2L, state = State.OPEN)
+            val pr3 = PullRequest(id = 902L, title = "PR3", toProject = project, fromProject = project, contributor = memberA, number = 3L, state = State.OPEN)
+            every { pullRequestRepository.findByToProjectAndState(project, State.OPEN, any()) } returns PageImpl(listOf(pr1, pr2))
+            every { pullRequestRepository.findByToProjectAndState(project, State.OPEN) } returns listOf(pr1, pr2, pr3)
+
+            every { issueLabelService.getLabels(40L) } returns listOf(label1, label2, label3)
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "DashboardProj", "dashboard", dashboardAuth, model)
+
+            model.getAttribute("openIssuesCount") shouldBe 4
+            model.getAttribute("notAssignedIssuesCount") shouldBe 2
+            model.getAttribute("notAssignedIssuesPercent") shouldBe 50
+            model.getAttribute("noMilestoneIssuesCount") shouldBe 1
+            model.getAttribute("totalOpenPullRequestsCount") shouldBe 3
+
+            @Suppress("UNCHECKED_CAST")
+            val assigneeList = model.getAttribute("assigneeList") as List<ProjectViewController.AssigneeDashboardDto>
+            assigneeList.size shouldBe 1
+            assigneeList[0].user shouldBe userB
+            assigneeList[0].count shouldBe 2
+            assigneeList[0].percent shouldBe 50
+
+            @Suppress("UNCHECKED_CAST")
+            val milestoneList = model.getAttribute("milestoneList") as List<ProjectViewController.MilestoneDashboardDto>
+            milestoneList.map { it.id } shouldBe listOf(50L, 52L) // openCount 내림차순: milestone1(2) -> milestone3(1), milestone2(0)는 제외
+            milestoneList[0].completionRate shouldBe 33 // 1/3*100
+            milestoneList[1].completionRate shouldBe 0 // totalInMilestone==0 방어분기
+
+            @Suppress("UNCHECKED_CAST")
+            val openPullRequests = model.getAttribute("openPullRequests") as List<PullRequest>
+            openPullRequests.size shouldBe 2
+
+            @Suppress("UNCHECKED_CAST")
+            val labelCategories = model.getAttribute("labelCategories") as List<ProjectViewController.LabelCategoryDashboardDto>
+            labelCategories.size shouldBe 2
+            val cat1Dto = labelCategories.first { it.name == "카테고리1" }
+            cat1Dto.labels.first { it.id == 10L }.count shouldBe 2
+            cat1Dto.labels.first { it.id == 11L }.count shouldBe 1
+            val cat2Dto = labelCategories.first { it.name == "카테고리2" }
+            cat2Dto.labels.first { it.id == 12L }.count shouldBe 0
+        }
+
+        it("이슈/마일스톤/PR/라벨이 없는 빈 프로젝트에서는 0으로 나누기 없이 안전하게 계산돼야 한다") {
+            val emptyProject = Project(id = 45L, name = "EmptyDashboardProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "EmptyDashboardProj") } returns Optional.of(emptyProject)
+            every { projectUserRepository.findByProjectId(45L) } returns
+                listOf(ProjectUser(id = 450L, user = dashboardUser, project = emptyProject, role = Role(id = RoleType.MEMBER.roleType)))
+            every { issueRepository.findByProjectAndState(emptyProject, State.OPEN) } returns emptyList()
+            every { issueRepository.findByProject(emptyProject) } returns emptyList()
+            every { milestoneRepository.findByProjectAndState(emptyProject, State.OPEN) } returns emptyList()
+            every { pullRequestRepository.findByToProjectAndState(emptyProject, State.OPEN, any()) } returns PageImpl(emptyList())
+            every { pullRequestRepository.findByToProjectAndState(emptyProject, State.OPEN) } returns emptyList()
+            every { issueLabelService.getLabels(45L) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "EmptyDashboardProj", "dashboard", dashboardAuth, model)
+
+            model.getAttribute("openIssuesCount") shouldBe 0
+            model.getAttribute("notAssignedIssuesCount") shouldBe 0
+            model.getAttribute("notAssignedIssuesPercent") shouldBe 0
+            model.getAttribute("noMilestoneIssuesCount") shouldBe 0
+            model.getAttribute("totalOpenPullRequestsCount") shouldBe 0
+
+            @Suppress("UNCHECKED_CAST")
+            val assigneeList = model.getAttribute("assigneeList") as List<ProjectViewController.AssigneeDashboardDto>
+            assigneeList.size shouldBe 0
+
+            @Suppress("UNCHECKED_CAST")
+            val milestoneList = model.getAttribute("milestoneList") as List<ProjectViewController.MilestoneDashboardDto>
+            milestoneList.size shouldBe 0
+
+            @Suppress("UNCHECKED_CAST")
+            val labelCategories = model.getAttribute("labelCategories") as List<ProjectViewController.LabelCategoryDashboardDto>
+            labelCategories.size shouldBe 0
+        }
+    }
+
+    // yona ProjectApp.java transferForm() 대응.
+    describe("GET /{owner}/{projectName}/transfer") {
+        val transferProject1 = Project(id = 500L, name = "TransferProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+        val transferManager = User(id = 500L, loginId = "transfermanager", name = "이관매니저")
+        val transferManagerAuth = UsernamePasswordAuthenticationToken("transfermanager", "password")
+        val transferOutsider = User(id = 501L, loginId = "transferoutsider", name = "이관외부인")
+        val transferOutsiderAuth = UsernamePasswordAuthenticationToken("transferoutsider", "password")
+
+        it("프로젝트가 없으면 error/404 뷰를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchTransferProj") } returns Optional.empty()
+            mockMvc.perform(get("/owner/NoSuchTransferProj/transfer").principal(transferManagerAuth))
+                .andExpect(view().name("error/404"))
+        }
+
+        it("로그인하지 않았으면 로그인 폼으로 리다이렉트해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj") } returns Optional.of(transferProject1)
+            mockMvc.perform(get("/owner/TransferProj/transfer"))
+                .andExpect(redirectedUrl("/users/loginform"))
+        }
+
+        it("MANAGER 권한이 없으면 error/forbidden 뷰를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj") } returns Optional.of(transferProject1)
+            every { userRepository.findByLoginId("transferoutsider") } returns Optional.of(transferOutsider)
+            every { projectUserRepository.findByProjectIdAndUserId(500L, 501L) } returns Optional.empty()
+
+            mockMvc.perform(get("/owner/TransferProj/transfer").principal(transferOutsiderAuth))
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("MANAGER 권한이 있으면 project/transfer 뷰를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj") } returns Optional.of(transferProject1)
+            every { userRepository.findByLoginId("transfermanager") } returns Optional.of(transferManager)
+            every { projectUserRepository.findByProjectIdAndUserId(500L, 500L) } returns
+                Optional.of(ProjectUser(id = 5000L, user = transferManager, project = transferProject1, role = Role(id = RoleType.MANAGER.roleType)))
+
+            mockMvc.perform(get("/owner/TransferProj/transfer").principal(transferManagerAuth))
+                .andExpect(status().isOk)
+                .andExpect(view().name("project/transfer"))
+        }
+    }
+
+    // yona ProjectApp.java transfer()/newTransferForm() 대응 — transferProject()가 성공 시 호출하는
+    // private sendTransferRequestMail()/getServerUrl()도 이 경로로만 도달 가능하므로 함께 검증한다.
+    describe("PUT /{owner}/{projectName}/transfer (transferProject + 이관 메일 발송)") {
+        val transferProject2 = Project(id = 55L, name = "TransferProj2", owner = "owner", projectScope = ProjectScope.PUBLIC)
+        val manager = User(id = 55L, loginId = "manager55", name = "매니저55")
+        val managerAuth = UsernamePasswordAuthenticationToken("manager55", "password")
+        val managerProjectUser = ProjectUser(id = 550L, user = manager, project = transferProject2, role = Role(id = RoleType.MANAGER.roleType))
+
+        fun mockRequest(scheme: String = "https", serverName: String = "yona.io", port: Int = 443): HttpServletRequest {
+            val request = mockk<HttpServletRequest>()
+            every { request.scheme } returns scheme
+            every { request.serverName } returns serverName
+            every { request.serverPort } returns port
+            return request
+        }
+
+        it("로그인하지 않았으면 401을 반환해야 한다") {
+            val response = projectViewController.transferProject("owner", "TransferProj2", "dest", mockRequest(), null)
+            response.statusCode shouldBe HttpStatus.UNAUTHORIZED
+        }
+
+        it("프로젝트가 없으면 404를 반환해야 한다") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchProj2") } returns Optional.empty()
+
+            val response = projectViewController.transferProject("owner", "NoSuchProj2", "dest", mockRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+
+        it("MANAGER 권한이 없으면 403을 반환해야 한다") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj2") } returns Optional.of(transferProject2)
+            every { projectUserRepository.findByProjectIdAndUserId(55L, 55L) } returns Optional.empty()
+
+            val response = projectViewController.transferProject("owner", "TransferProj2", "dest", mockRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+
+        it("이관 대상이 사용자도 조직도 아니면 400을 반환해야 한다") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj2") } returns Optional.of(transferProject2)
+            every { projectUserRepository.findByProjectIdAndUserId(55L, 55L) } returns Optional.of(managerProjectUser)
+            every { userRepository.findByLoginId("nowhere") } returns Optional.empty()
+            every { organizationRepository.findByName("nowhere") } returns Optional.empty()
+
+            val response = projectViewController.transferProject("owner", "TransferProj2", "nowhere", mockRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.BAD_REQUEST
+        }
+
+        it("자기 자신(현재 owner와 동일한 사용자)에게 이관 요청하면 400을 반환해야 한다") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj2") } returns Optional.of(transferProject2)
+            every { projectUserRepository.findByProjectIdAndUserId(55L, 55L) } returns Optional.of(managerProjectUser)
+            val selfUser = User(id = 999L, loginId = "owner", name = "본인")
+            every { userRepository.findByLoginId("owner") } returns Optional.of(selfUser)
+            every { organizationRepository.findByName("owner") } returns Optional.empty()
+
+            val response = projectViewController.transferProject("owner", "TransferProj2", "owner", mockRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.BAD_REQUEST
+        }
+
+        it("자기 자신(현재 owner와 동일한 조직)에게 이관 요청하면 400을 반환해야 한다") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj2") } returns Optional.of(transferProject2)
+            every { projectUserRepository.findByProjectIdAndUserId(55L, 55L) } returns Optional.of(managerProjectUser)
+            every { userRepository.findByLoginId("owner") } returns Optional.empty()
+            val selfOrg = Organization(id = 5000L, name = "owner")
+            every { organizationRepository.findByName("owner") } returns Optional.of(selfOrg)
+
+            val response = projectViewController.transferProject("owner", "TransferProj2", "owner", mockRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.BAD_REQUEST
+        }
+
+        it("정상 이관 요청이면 204와 Location 헤더를 반환하고 대상 사용자에게 이관 메일을 발송해야 한다 (포트 443)") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj2") } returns Optional.of(transferProject2)
+            every { projectUserRepository.findByProjectIdAndUserId(55L, 55L) } returns Optional.of(managerProjectUser)
+            val destUser = User(id = 60L, loginId = "destuser", name = "대상유저", email = "dest@yona.io")
+            every { userRepository.findByLoginId("destuser") } returns Optional.of(destUser)
+            every { organizationRepository.findByName("destuser") } returns Optional.empty()
+            val pt = ProjectTransfer(id = 900L, sender = manager, destination = "destuser", project = transferProject2, confirmKey = "confirmkey1", newProjectName = "TransferProj2")
+            every { projectService.requestNewTransfer(55L, 55L, "destuser") } returns pt
+
+            every { messageSource.getMessage(any(), any(), any()) } returns "메시지"
+            every { markdownService.render(any(), true, transferProject2) } returns "<p>html</p>"
+            every { mailService.sendHtmlMail("dest@yona.io", "Yona", any(), "<p>html</p>") } just Runs
+
+            val response = projectViewController.transferProject("owner", "TransferProj2", "destuser", mockRequest(port = 443), managerAuth)
+            response.statusCode shouldBe HttpStatus.NO_CONTENT
+            response.headers.getFirst("Location") shouldBe "/owner/TransferProj2"
+            verify(exactly = 1) { mailService.sendHtmlMail("dest@yona.io", "Yona", any(), "<p>html</p>") }
+        }
+
+        it("이관 대상이 조직이면 조직 관리자 전원에게만 메일을 발송해야 한다 (포트 80, 일반 멤버는 제외)") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj2") } returns Optional.of(transferProject2)
+            every { projectUserRepository.findByProjectIdAndUserId(55L, 55L) } returns Optional.of(managerProjectUser)
+            every { userRepository.findByLoginId("destorg") } returns Optional.empty()
+            val destOrg = Organization(id = 600L, name = "destorg")
+            every { organizationRepository.findByName("destorg") } returns Optional.of(destOrg)
+            val orgAdmin = User(id = 61L, loginId = "orgadmin", name = "조직관리자", email = "admin@yona.io")
+            val orgMember = User(id = 62L, loginId = "orgmember", name = "조직멤버", email = "member@yona.io")
+            every { organizationUserRepository.findByOrganizationId(600L) } returns listOf(
+                OrganizationUser(id = 1L, user = orgAdmin, organization = destOrg, role = Role(id = RoleType.ORG_ADMIN.roleType)),
+                OrganizationUser(id = 2L, user = orgMember, organization = destOrg, role = Role(id = RoleType.ORG_MEMBER.roleType))
+            )
+            val pt = ProjectTransfer(id = 901L, sender = manager, destination = "destorg", project = transferProject2, confirmKey = "confirmkey2", newProjectName = "TransferProj2")
+            every { projectService.requestNewTransfer(55L, 55L, "destorg") } returns pt
+
+            every { messageSource.getMessage(any(), any(), any()) } returns "메시지"
+            every { markdownService.render(any(), true, transferProject2) } returns "<p>html</p>"
+            every { mailService.sendHtmlMail("admin@yona.io", "Yona", any(), "<p>html</p>") } just Runs
+
+            val response = projectViewController.transferProject("owner", "TransferProj2", "destorg", mockRequest(scheme = "http", port = 80), managerAuth)
+            response.statusCode shouldBe HttpStatus.NO_CONTENT
+            verify(exactly = 1) { mailService.sendHtmlMail("admin@yona.io", "Yona", any(), "<p>html</p>") }
+            verify(exactly = 0) { mailService.sendHtmlMail("member@yona.io", "Yona", any(), "<p>html</p>") }
+        }
+
+        it("메일 발송 중 예외가 발생해도 이관 요청 자체는 204로 성공해야 한다") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj2") } returns Optional.of(transferProject2)
+            every { projectUserRepository.findByProjectIdAndUserId(55L, 55L) } returns Optional.of(managerProjectUser)
+            val destUser = User(id = 63L, loginId = "brokenmail", name = "메일깨짐", email = "broken@yona.io")
+            every { userRepository.findByLoginId("brokenmail") } returns Optional.of(destUser)
+            every { organizationRepository.findByName("brokenmail") } returns Optional.empty()
+            val pt = ProjectTransfer(id = 902L, sender = manager, destination = "brokenmail", project = transferProject2, confirmKey = "confirmkey3", newProjectName = "TransferProj2")
+            every { projectService.requestNewTransfer(55L, 55L, "brokenmail") } returns pt
+            every { messageSource.getMessage(any(), any(), any()) } throws RuntimeException("메시지 로드 실패")
+
+            val response = projectViewController.transferProject("owner", "TransferProj2", "brokenmail", mockRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.NO_CONTENT
+        }
+
+        it("이관 대상 이메일이 비어 있으면 메일 발송 없이도 정상 처리돼야 한다") {
+            every { userRepository.findByLoginId("manager55") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TransferProj2") } returns Optional.of(transferProject2)
+            every { projectUserRepository.findByProjectIdAndUserId(55L, 55L) } returns Optional.of(managerProjectUser)
+            val destUserNoEmail = User(id = 64L, loginId = "noemaildest", name = "이메일없음", email = "")
+            every { userRepository.findByLoginId("noemaildest") } returns Optional.of(destUserNoEmail)
+            every { organizationRepository.findByName("noemaildest") } returns Optional.empty()
+            val pt = ProjectTransfer(id = 903L, sender = manager, destination = "noemaildest", project = transferProject2, confirmKey = "confirmkey4", newProjectName = "TransferProj2")
+            every { projectService.requestNewTransfer(55L, 55L, "noemaildest") } returns pt
+            every { messageSource.getMessage(any(), any(), any()) } returns "메시지"
+            every { markdownService.render(any(), true, transferProject2) } returns "<p>html</p>"
+
+            val response = projectViewController.transferProject("owner", "TransferProj2", "noemaildest", mockRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.NO_CONTENT
+            verify(exactly = 0) { mailService.sendHtmlMail(any(), any(), any(), any()) }
+        }
+    }
+
+    // yona ProjectApp.java acceptTransfer() 대응.
+    describe("GET /project/transfer/{transferId}/{confirmKey} (acceptTransfer)") {
+        val acceptUser = User(id = 70L, loginId = "acceptuser", name = "수락자")
+        val acceptAuth = UsernamePasswordAuthenticationToken("acceptuser", "password")
+
+        it("로그인하지 않았으면 로그인 폼으로 리다이렉트해야 한다") {
+            val result = projectViewController.acceptTransfer(1L, "key", null, ExtendedModelMap())
+            result shouldBe "redirect:/users/loginform"
+        }
+
+        it("존재하지 않는 이관 요청이면 error/404를 반환해야 한다") {
+            every { userRepository.findByLoginId("acceptuser") } returns Optional.of(acceptUser)
+            every { projectTransferRepository.findById(999L) } returns Optional.empty()
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.acceptTransfer(999L, "key", acceptAuth, model)
+            result shouldBe "error/404"
+            model.getAttribute("errorMessage") shouldBe "존재하지 않는 이관 요청입니다."
+        }
+
+        it("이관 승인에 성공하면 새 프로젝트 위치로 리다이렉트해야 한다") {
+            val proj = Project(id = 80L, name = "OldName", owner = "olddest")
+            val sender = User(id = 71L, loginId = "sender71", name = "발신자")
+            val pt = ProjectTransfer(id = 10L, sender = sender, destination = "newdest", project = proj, confirmKey = "validkey", newProjectName = "newname")
+            every { userRepository.findByLoginId("acceptuser") } returns Optional.of(acceptUser)
+            every { projectTransferRepository.findById(10L) } returns Optional.of(pt)
+            every { projectService.acceptTransfer(10L, "validkey", 70L) } just Runs
+
+            val result = projectViewController.acceptTransfer(10L, "validkey", acceptAuth, ExtendedModelMap())
+            result shouldBe "redirect:/newdest/newname"
+        }
+
+        it("이관 승인 중 예외가 발생하면 error/500과 에러 메시지를 반환해야 한다") {
+            val proj = Project(id = 81L, name = "OldName2", owner = "olddest2")
+            val sender = User(id = 72L, loginId = "sender72", name = "발신자2")
+            val pt = ProjectTransfer(id = 11L, sender = sender, destination = "newdest2", project = proj, confirmKey = "badkey", newProjectName = "newname2")
+            every { userRepository.findByLoginId("acceptuser") } returns Optional.of(acceptUser)
+            every { projectTransferRepository.findById(11L) } returns Optional.of(pt)
+            every { projectService.acceptTransfer(11L, "badkey", 70L) } throws IllegalStateException("만료된 요청")
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.acceptTransfer(11L, "badkey", acceptAuth, model)
+            result shouldBe "error/500"
+            (model.getAttribute("errorMessage") as String).contains("만료된 요청") shouldBe true
+        }
+    }
+
+    // yona ProjectApp.java delete() 대응.
+    describe("DELETE /{owner}/{projectName}/delete (deleteProject)") {
+        val deleteProj = Project(id = 90L, name = "DeleteProj", owner = "owner")
+        val deleteManager = User(id = 90L, loginId = "deletemanager", name = "삭제매니저")
+        val deleteManagerAuth = UsernamePasswordAuthenticationToken("deletemanager", "password")
+
+        it("로그인하지 않았으면 401을 반환해야 한다") {
+            val response = projectViewController.deleteProject("owner", "DeleteProj", null)
+            response.statusCode shouldBe HttpStatus.UNAUTHORIZED
+        }
+
+        it("프로젝트가 없으면 404를 반환해야 한다") {
+            every { userRepository.findByLoginId("deletemanager") } returns Optional.of(deleteManager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchDeleteProj") } returns Optional.empty()
+
+            val response = projectViewController.deleteProject("owner", "NoSuchDeleteProj", deleteManagerAuth)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+
+        it("MANAGER 권한이 없으면 403을 반환해야 한다") {
+            every { userRepository.findByLoginId("deletemanager") } returns Optional.of(deleteManager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "DeleteProj") } returns Optional.of(deleteProj)
+            every { projectUserRepository.findByProjectIdAndUserId(90L, 90L) } returns Optional.empty()
+
+            val response = projectViewController.deleteProject("owner", "DeleteProj", deleteManagerAuth)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+
+        it("MANAGER 권한이 있으면 204와 Location:/ 헤더를 반환하며 삭제를 수행해야 한다") {
+            every { userRepository.findByLoginId("deletemanager") } returns Optional.of(deleteManager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "DeleteProj") } returns Optional.of(deleteProj)
+            every { projectUserRepository.findByProjectIdAndUserId(90L, 90L) } returns
+                Optional.of(ProjectUser(id = 900L, user = deleteManager, project = deleteProj, role = Role(id = RoleType.MANAGER.roleType)))
+            every { projectService.deleteProject(90L) } just Runs
+
+            val response = projectViewController.deleteProject("owner", "DeleteProj", deleteManagerAuth)
+            response.statusCode shouldBe HttpStatus.NO_CONTENT
+            response.headers.getFirst("Location") shouldBe "/"
+            verify(exactly = 1) { projectService.deleteProject(90L) }
+        }
+    }
+
+    // yona ProjectApp.java deleteForm() 대응.
+    describe("GET /{owner}/{projectName}/deleteform") {
+        it("프로젝트가 없으면 error/404 뷰를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchDF") } returns Optional.empty()
+            val result = projectViewController.deleteForm("owner", "NoSuchDF", null, ExtendedModelMap())
+            result shouldBe "error/404"
+        }
+
+        it("로그인하지 않았으면 로그인 폼으로 리다이렉트해야 한다") {
+            val proj = Project(id = 91L, name = "DFProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "DFProj") } returns Optional.of(proj)
+            val result = projectViewController.deleteForm("owner", "DFProj", null, ExtendedModelMap())
+            result shouldBe "redirect:/users/loginform"
+        }
+
+        it("MANAGER 권한이 없으면 error/forbidden 뷰를 반환해야 한다") {
+            val proj = Project(id = 92L, name = "DFProj2", owner = "owner")
+            val outsider = User(id = 92L, loginId = "dfoutsider", name = "외부인")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("dfoutsider", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "DFProj2") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("dfoutsider") } returns Optional.of(outsider)
+            every { projectUserRepository.findByProjectIdAndUserId(92L, 92L) } returns Optional.empty()
+
+            val result = projectViewController.deleteForm("owner", "DFProj2", outsiderAuth, ExtendedModelMap())
+            result shouldBe "error/forbidden"
+        }
+
+        it("MANAGER 권한이 있으면 project/delete 뷰를 반환해야 한다") {
+            val proj = Project(id = 93L, name = "DFProj3", owner = "owner")
+            val manager = User(id = 93L, loginId = "dfmanager", name = "삭매니저")
+            val managerAuth = UsernamePasswordAuthenticationToken("dfmanager", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "DFProj3") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("dfmanager") } returns Optional.of(manager)
+            every { projectUserRepository.findByProjectIdAndUserId(93L, 93L) } returns
+                Optional.of(ProjectUser(id = 930L, user = manager, project = proj, role = Role(id = RoleType.MANAGER.roleType)))
+
+            val result = projectViewController.deleteForm("owner", "DFProj3", managerAuth, ExtendedModelMap())
+            result shouldBe "project/delete"
+        }
+    }
+
+    // yona PullRequestApp.doClone() 대응.
+    describe("POST /api/{ownerName}/{projectName}/doClone") {
+        it("원본 프로젝트가 없으면 status=failed, url=/ 를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchClone") } returns Optional.empty()
+            val response = projectViewController.doClone("owner", "NoSuchClone", "dest", "name", null)
+            response.body?.get("status") shouldBe "failed"
+            response.body?.get("url") shouldBe "/"
+        }
+
+        it("로그인하지 않았으면 status=failed, url=/users/loginform 을 반환해야 한다") {
+            val original = Project(id = 100L, name = "CloneOrigin", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CloneOrigin") } returns Optional.of(original)
+            val response = projectViewController.doClone("owner", "CloneOrigin", "dest", "name", null)
+            response.body?.get("status") shouldBe "failed"
+            response.body?.get("url") shouldBe "/users/loginform"
+        }
+
+        it("정상적으로 fork되면 status=success와 새 프로젝트 URL을 반환해야 한다") {
+            val original = Project(id = 101L, name = "CloneOrigin2", owner = "owner")
+            val cloner = User(id = 100L, loginId = "cloner", name = "클로너")
+            val clonerAuth = UsernamePasswordAuthenticationToken("cloner", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CloneOrigin2") } returns Optional.of(original)
+            every { userRepository.findByLoginId("cloner") } returns Optional.of(cloner)
+            every { projectService.forkProject(101L, 100L, "clonedest", "clonedname") } returns
+                Project(id = 102L, name = "clonedname", owner = "clonedest")
+
+            val response = projectViewController.doClone("owner", "CloneOrigin2", "clonedest", "clonedname", clonerAuth)
+            response.body?.get("status") shouldBe "success"
+            response.body?.get("url") shouldBe "/clonedest/clonedname"
+        }
+
+        it("fork 도중 예외가 발생하면 status=failed와 pulls 화면 URL을 반환해야 한다") {
+            val original = Project(id = 103L, name = "CloneOrigin3", owner = "owner")
+            val cloner = User(id = 101L, loginId = "cloner2", name = "클로너2")
+            val clonerAuth = UsernamePasswordAuthenticationToken("cloner2", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CloneOrigin3") } returns Optional.of(original)
+            every { userRepository.findByLoginId("cloner2") } returns Optional.of(cloner)
+            every { projectService.forkProject(103L, 101L, "faildest", "failname") } throws RuntimeException("clone 실패")
+
+            val response = projectViewController.doClone("owner", "CloneOrigin3", "faildest", "failname", clonerAuth)
+            response.body?.get("status") shouldBe "failed"
+            response.body?.get("url") shouldBe "/owner/CloneOrigin3/pulls"
+        }
+    }
+
+    // yona PullRequestApp.fork() 대응.
+    describe("POST /{ownerName}/{projectName}/fork") {
+        it("원본 프로젝트가 없으면 error/404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchFork") } returns Optional.empty()
+            val result = projectViewController.fork("owner", "NoSuchFork", "dest", "name", "PUBLIC", null, ExtendedModelMap())
+            result shouldBe "error/404"
+        }
+
+        it("로그인하지 않았으면 로그인 폼으로 리다이렉트해야 한다") {
+            val original = Project(id = 110L, name = "ForkOrigin", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "ForkOrigin") } returns Optional.of(original)
+            val result = projectViewController.fork("owner", "ForkOrigin", "dest", "name", "PUBLIC", null, ExtendedModelMap())
+            result shouldBe "redirect:/users/loginform"
+        }
+
+        it("동일 소유자 아래 같은 이름의 프로젝트가 이미 있으면 project/fork 뷰에 에러를 담아 반환해야 한다") {
+            val original = Project(id = 111L, name = "ForkOrigin2", owner = "owner")
+            val forker = User(id = 110L, loginId = "forker", name = "포커")
+            val forkerAuth = UsernamePasswordAuthenticationToken("forker", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "ForkOrigin2") } returns Optional.of(original)
+            every { userRepository.findByLoginId("forker") } returns Optional.of(forker)
+            every { projectRepository.existsByOwnerAndName("forker", "dupname") } returns true
+            every { organizationUserRepository.findByUserIdAndRoleId(110L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
+            every { projectRepository.findByOwnerAndOriginalProject("forker", original) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.fork("owner", "ForkOrigin2", "forker", "dupname", "PUBLIC", forkerAuth, model)
+            result shouldBe "project/fork"
+            model.getAttribute("error") shouldBe "이미 동일한 소유자 밑에 같은 이름의 프로젝트가 존재합니다."
+        }
+
+        it("이름 충돌이 없으면 pullrequest/clone 뷰로 이동해야 한다") {
+            val original = Project(id = 112L, name = "ForkOrigin3", owner = "owner")
+            val forker = User(id = 111L, loginId = "forker2", name = "포커2")
+            val forkerAuth = UsernamePasswordAuthenticationToken("forker2", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "ForkOrigin3") } returns Optional.of(original)
+            every { userRepository.findByLoginId("forker2") } returns Optional.of(forker)
+            every { projectRepository.existsByOwnerAndName("forker2", "newname") } returns false
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.fork("owner", "ForkOrigin3", "forker2", "newname", "PRIVATE", forkerAuth, model)
+            result shouldBe "pullrequest/clone"
+            model.getAttribute("forkOwner") shouldBe "forker2"
+            model.getAttribute("forkName") shouldBe "newname"
+            model.getAttribute("forkProjectScope") shouldBe "PRIVATE"
+        }
+    }
+
+    // yona PullRequestApp.newFork() 대응.
+    describe("GET /{ownerName}/{projectName}/newFork") {
+        it("원본 프로젝트가 없으면 error/404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchNewFork") } returns Optional.empty()
+            val result = projectViewController.newFork("owner", "NoSuchNewFork", null, null, ExtendedModelMap())
+            result shouldBe "error/404"
+        }
+
+        it("로그인하지 않았으면 로그인 폼으로 리다이렉트해야 한다") {
+            val original = Project(id = 120L, name = "NewForkOrigin", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NewForkOrigin") } returns Optional.of(original)
+            val result = projectViewController.newFork("owner", "NewForkOrigin", null, null, ExtendedModelMap())
+            result shouldBe "redirect:/users/loginform"
+        }
+
+        it("forkOwner가 사용자가 관리하는 조직명과 일치하면 그 조직을 fork 대상으로 삼아야 한다") {
+            val original = Project(id = 121L, name = "NewForkOrigin2", owner = "owner")
+            val forker = User(id = 120L, loginId = "forker3", name = "포커3")
+            val forkerAuth = UsernamePasswordAuthenticationToken("forker3", "password")
+            val org = Organization(id = 700L, name = "myorg2")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NewForkOrigin2") } returns Optional.of(original)
+            every { userRepository.findByLoginId("forker3") } returns Optional.of(forker)
+            every { organizationUserRepository.findByUserIdAndRoleId(120L, RoleType.ORG_ADMIN.roleType) } returns
+                listOf(OrganizationUser(id = 1L, user = forker, organization = org, role = Role(id = RoleType.ORG_ADMIN.roleType)))
+            every { projectRepository.findByOwnerAndOriginalProject("myorg2", original) } returns
+                listOf(Project(id = 122L, name = "already-forked", owner = "myorg2"))
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.newFork("owner", "NewForkOrigin2", "myorg2", forkerAuth, model)
+            result shouldBe "project/fork"
+            @Suppress("UNCHECKED_CAST")
+            (model.getAttribute("forkedProjects") as List<Project>).size shouldBe 1
+        }
+
+        it("forkOwner가 관리 조직이 아니면 로그인 사용자 본인을 fork 대상으로 삼아야 한다") {
+            val original = Project(id = 123L, name = "NewForkOrigin3", owner = "owner")
+            val forker = User(id = 121L, loginId = "forker4", name = "포커4")
+            val forkerAuth = UsernamePasswordAuthenticationToken("forker4", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NewForkOrigin3") } returns Optional.of(original)
+            every { userRepository.findByLoginId("forker4") } returns Optional.of(forker)
+            every { organizationUserRepository.findByUserIdAndRoleId(121L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
+            every { projectRepository.findByOwnerAndOriginalProject("forker4", original) } returns emptyList()
+
+            val result = projectViewController.newFork("owner", "NewForkOrigin3", "notmyorg", forkerAuth, ExtendedModelMap())
+            result shouldBe "project/fork"
+        }
+    }
+
+    // yona ProjectApp.java projects() JSON API 대응 — hideProjectListing=true 케이스는
+    // HIDE_PROJECT_LISTING 스펙에서 이미 검증했으므로 그 외 분기를 보강한다.
+    describe("GET /projects (JSON, projectsJson)") {
+        it("로그인하지 않았으면 401을 반환해야 한다") {
+            val response = projectViewController.projectsJson("", "", null)
+            response.statusCode shouldBe HttpStatus.UNAUTHORIZED
+        }
+
+        it("사이트매니저면 findProjectsForAdmin 결과를 반환해야 한다") {
+            val siteManager = User(id = 200L, loginId = "sitemanager", name = "사이트매니저", state = UserState.SITE_ADMIN)
+            val siteManagerAuth = UsernamePasswordAuthenticationToken("sitemanager", "password")
+            every { userRepository.findByLoginId("sitemanager") } returns Optional.of(siteManager)
+            every { projectRepository.findProjectsForAdmin("admin-query", any()) } returns
+                PageImpl(listOf(Project(id = 201L, name = "adminproj", owner = "adminowner")))
+
+            val response = projectViewController.projectsJson("admin-query", "", siteManagerAuth)
+            response.statusCode shouldBe HttpStatus.OK
+            response.body shouldBe listOf("adminowner/adminproj")
+        }
+
+        it("query가 비어 있으면 filter 값을 검색어로 사용해야 한다") {
+            val siteManager = User(id = 202L, loginId = "sitemanager2", name = "사이트매니저2", state = UserState.SITE_ADMIN)
+            val siteManagerAuth = UsernamePasswordAuthenticationToken("sitemanager2", "password")
+            every { userRepository.findByLoginId("sitemanager2") } returns Optional.of(siteManager)
+            every { projectRepository.findProjectsForAdmin("filter-value", any()) } returns PageImpl(emptyList())
+
+            val response = projectViewController.projectsJson("", "filter-value", siteManagerAuth)
+            response.statusCode shouldBe HttpStatus.OK
+        }
+
+        it("일반 사용자이고 허용된 프로젝트가 없고 공개 프로젝트도 없으면 빈 목록을 반환해야 한다") {
+            val normalUser = User(id = 203L, loginId = "normaluser", name = "일반유저")
+            val normalAuth = UsernamePasswordAuthenticationToken("normaluser", "password")
+            every { userRepository.findByLoginId("normaluser") } returns Optional.of(normalUser)
+            every { projectRepository.findAllowedProjectIdsForUser(203L) } returns emptyList()
+            every { projectRepository.findPublicProjectIds() } returns emptyList()
+
+            val response = projectViewController.projectsJson("", "", normalAuth)
+            response.statusCode shouldBe HttpStatus.OK
+            response.body shouldBe emptyList()
+        }
+
+        it("일반 사용자이고 허용된 프로젝트가 없지만 공개 프로젝트는 있으면 공개 프로젝트 안에서 검색해야 한다") {
+            val normalUser = User(id = 204L, loginId = "normaluser2", name = "일반유저2")
+            val normalAuth = UsernamePasswordAuthenticationToken("normaluser2", "password")
+            every { userRepository.findByLoginId("normaluser2") } returns Optional.of(normalUser)
+            every { projectRepository.findAllowedProjectIdsForUser(204L) } returns emptyList()
+            every { projectRepository.findPublicProjectIds() } returns listOf(300L, 301L)
+            every { projectRepository.searchProjects(listOf(300L, 301L), "", any()) } returns
+                PageImpl(listOf(Project(id = 300L, name = "publicproj", owner = "publicowner")))
+
+            val response = projectViewController.projectsJson("", "", normalAuth)
+            response.statusCode shouldBe HttpStatus.OK
+            response.body shouldBe listOf("publicowner/publicproj")
+        }
+
+        it("일반 사용자이고 허용된 프로젝트가 있으면 그 안에서 검색하고 Content-Range 헤더를 채워야 한다") {
+            val normalUser = User(id = 205L, loginId = "normaluser3", name = "일반유저3")
+            val normalAuth = UsernamePasswordAuthenticationToken("normaluser3", "password")
+            every { userRepository.findByLoginId("normaluser3") } returns Optional.of(normalUser)
+            every { projectRepository.findAllowedProjectIdsForUser(205L) } returns listOf(400L)
+            every { projectRepository.searchProjects(listOf(400L), "query1", any()) } returns
+                PageImpl(listOf(Project(id = 400L, name = "allowedproj", owner = "allowedowner")))
+
+            val response = projectViewController.projectsJson("query1", "", normalAuth)
+            response.statusCode shouldBe HttpStatus.OK
+            response.body shouldBe listOf("allowedowner/allowedproj")
+            response.headers.getFirst("Content-Range") shouldBe "items 1/1"
+        }
+    }
+
+    // yona ProjectApp.java projects() HTML 목록 대응.
+    describe("GET /projects (HTML, projects)") {
+        it("비로그인 사용자이고 공개 프로젝트가 없으면 빈 페이지를 반환해야 한다") {
+            every { projectRepository.findPublicProjectIds() } returns emptyList()
+            val model = ExtendedModelMap()
+            val result = projectViewController.projects("", 1, null, model)
+            result shouldBe "project/list"
+            @Suppress("UNCHECKED_CAST")
+            (model.getAttribute("projects") as Page<Project>).isEmpty shouldBe true
+        }
+
+        it("비로그인 사용자이고 공개 프로젝트가 있으면 목록을 검색해 반환해야 한다") {
+            every { projectRepository.findPublicProjectIds() } returns listOf(500L)
+            every { projectRepository.searchProjects(listOf(500L), "%%", any()) } returns
+                PageImpl(listOf(Project(id = 500L, name = "listedproj", owner = "listedowner")))
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.projects("", 1, null, model)
+            result shouldBe "project/list"
+            @Suppress("UNCHECKED_CAST")
+            (model.getAttribute("projects") as Page<Project>).content.size shouldBe 1
+        }
+
+        it("로그인 사용자이고 허용된 프로젝트가 없으면 빈 페이지를 반환해야 한다") {
+            val user = User(id = 210L, loginId = "listuser", name = "목록유저")
+            val auth = UsernamePasswordAuthenticationToken("listuser", "password")
+            every { userRepository.findByLoginId("listuser") } returns Optional.of(user)
+            every { projectRepository.findAllowedProjectIdsForUser(210L) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.projects("", 1, auth, model)
+            result shouldBe "project/list"
+            @Suppress("UNCHECKED_CAST")
+            (model.getAttribute("projects") as Page<Project>).isEmpty shouldBe true
+        }
+
+        it("로그인 사용자이고 허용된 프로젝트가 있으면 필터 키워드로 검색해야 한다") {
+            val user = User(id = 211L, loginId = "listuser2", name = "목록유저2")
+            val auth = UsernamePasswordAuthenticationToken("listuser2", "password")
+            every { userRepository.findByLoginId("listuser2") } returns Optional.of(user)
+            every { projectRepository.findAllowedProjectIdsForUser(211L) } returns listOf(501L)
+            every { projectRepository.searchProjects(listOf(501L), "%키워드%", any()) } returns
+                PageImpl(listOf(Project(id = 501L, name = "필터매치", owner = "필터소유자")))
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.projects("키워드", 1, auth, model)
+            result shouldBe "project/list"
+        }
+    }
+
+    // yona ProjectApp.java logo() 대응. 첨부파일이 없을 때의 기본 로고 폴백 경로가
+    // "/Users/mzc01-search5/123/yuna/..." 로 하드코딩돼 있어(다른 개발자 로컬 macOS 절대경로로 보임),
+    // 어떤 배포 환경에서도 defaultImage.exists()==true 분기는 도달 불가능하다 — 최종 보고에 근거 기재.
+    describe("GET /projects/{projectId}/logo") {
+        it("첨부파일이 없으면(기본 로고 파일도 없는 환경) 404를 반환해야 한다") {
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.PROJECT, "99") } returns emptyList()
+
+            val response = projectViewController.projectLogo(99L)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+
+        it("첨부파일이 있고 실제 파일이 존재하면 200 OK와 파일 내용을 반환해야 한다") {
+            val tempFile = File.createTempFile("logo", ".png")
+            tempFile.deleteOnExit()
+            val attachment = Attachment(id = 1L, name = "logo.png", hash = "hash1", containerType = ResourceType.PROJECT, containerId = "100", mimeType = "image/png")
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.PROJECT, "100") } returns listOf(attachment)
+            every { attachmentService.getFile(attachment) } returns tempFile
+
+            val response = projectViewController.projectLogo(100L)
+            response.statusCode shouldBe HttpStatus.OK
+        }
+
+        it("첨부파일은 있지만 실제 파일이 존재하지 않으면 404를 반환해야 한다") {
+            val missingFile = File("/no/such/path/logo.png")
+            val attachment = Attachment(id = 2L, name = "logo.png", hash = "hash2", containerType = ResourceType.PROJECT, containerId = "101")
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.PROJECT, "101") } returns listOf(attachment)
+            every { attachmentService.getFile(attachment) } returns missingFile
+
+            val response = projectViewController.projectLogo(101L)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+    }
+
+    // yona CodeApp.java 다운로드 접근 제어 대응 — 조직(그룹) 멤버 우회 허용 분기 보강.
+    describe("GET /{owner}/{projectName}/code/{branch}/download 추가 분기") {
+        it("isCodeAccessibleMemberOnly가 true이고 직접 멤버는 아니지만 소속 조직 멤버라면 다운로드를 허용해야 한다") {
+            val org = Organization(id = 800L, name = "downloadorg")
+            val groupUser = User(id = 130L, loginId = "groupdownloader", name = "그룹다운로더")
+            org.organizationUsers.add(OrganizationUser(id = 1L, user = groupUser, organization = org, role = Role(id = RoleType.ORG_MEMBER.roleType)))
+            val groupProject = Project(id = 131L, name = "group-download-proj", owner = "owner", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT", organization = org)
+            val groupAuth = UsernamePasswordAuthenticationToken("groupdownloader", "password")
+            val playRepo = mockk<PlayRepository>()
+
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "group-download-proj") } returns Optional.of(groupProject)
+            every { userRepository.findByLoginId("groupdownloader") } returns Optional.of(groupUser)
+            every { projectUserRepository.existsByProjectIdAndUserId(131L, 130L) } returns false
+            every { repositoryService.getRepository(groupProject) } returns playRepo
+            every { repositoryService.getMetaDataFromAncestorDirectories(playRepo, "main", "") } returns listOf(mockk())
+            every { playRepo.getArchive(any(), "main") } returns Unit
+
+            mockMvc.perform(get("/owner/group-download-proj/code/main/download").principal(groupAuth))
+                .andExpect(status().isOk)
+        }
+
+        it("isCodeAccessibleMemberOnly가 false인 비공개 프로젝트에서 접근 권한이 없으면 403을 반환해야 한다") {
+            val privateProject = Project(id = 132L, name = "private-download-proj", owner = "owner", projectScope = ProjectScope.PRIVATE, isCodeAccessibleMemberOnly = false, vcs = "GIT")
+            val outsider = User(id = 133L, loginId = "downloadoutsider", name = "다운로드외부인")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("downloadoutsider", "password")
+
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "private-download-proj") } returns Optional.of(privateProject)
+            every { userRepository.findByLoginId("downloadoutsider") } returns Optional.of(outsider)
+
+            mockMvc.perform(get("/owner/private-download-proj/code/main/download").principal(outsiderAuth))
+                .andExpect(status().isForbidden)
+        }
+    }
+
+    // yona IssueLabelApp.update()/updateCategory() 대응 — 프로젝트 미존재/미인증 분기 보강
+    // (accessControl.isAllowed는 user.projectUsers 인메모리 컬렉션을 사용하므로 이미 성공 케이스는
+    // 기존 스펙에서 검증됨. 여기서는 그 앞단 가드만 보강한다).
+    describe("PUT /{owner}/{projectName}/issue/label/{id} 추가 분기") {
+        it("프로젝트가 없으면 404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchLabelProj") } returns Optional.empty()
+            val response = projectViewController.updateLabelForm("owner", "NoSuchLabelProj", 1L, "n", "c", 1L, null)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+
+        it("로그인하지 않았으면 403을 반환해야 한다") {
+            val proj = Project(id = 140L, name = "UpdLabelProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "UpdLabelProj") } returns Optional.of(proj)
+            val response = projectViewController.updateLabelForm("owner", "UpdLabelProj", 1L, "n", "c", 1L, null)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+    }
+
+    describe("PUT /{owner}/{projectName}/issue/label/category/{id} 추가 분기") {
+        it("프로젝트가 없으면 404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchCatProj") } returns Optional.empty()
+            val response = projectViewController.updateCategoryForm("owner", "NoSuchCatProj", 1L, "n", false, null)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+
+        it("로그인하지 않았으면 403을 반환해야 한다") {
+            val proj = Project(id = 141L, name = "UpdCatProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "UpdCatProj") } returns Optional.of(proj)
+            val response = projectViewController.updateCategoryForm("owner", "UpdCatProj", 1L, "n", false, null)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+    }
+
+    // yona IssueLabelApp.copyLabels() 대응 — 원본 프로젝트를 읽을 권한이 없거나 대상 프로젝트에
+    // 라벨 생성 권한이 없는 분기 보강(둘 다 accessControl의 인메모리 판정을 사용하므로
+    // user.projectUsers/project.projectScope 조합으로 자연스럽게 재현한다).
+    describe("POST /{owner}/{projectName}/copyLabels 추가 분기") {
+        it("원본 프로젝트를 읽을 권한이 없으면 라벨을 복사하지 않고 조용히 리다이렉트해야 한다") {
+            val toProject = Project(id = 150L, name = "CopyToProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val fromProject = Project(id = 151L, name = "CopyFromProj", owner = "otherowner", projectScope = ProjectScope.PRIVATE)
+            val copier = User(id = 150L, loginId = "copier", name = "복사자")
+            val copierAuth = UsernamePasswordAuthenticationToken("copier", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CopyToProj") } returns Optional.of(toProject)
+            every { userRepository.findByLoginId("copier") } returns Optional.of(copier)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("otherowner", "CopyFromProj") } returns Optional.of(fromProject)
+
+            mockMvc.perform(
+                MockMvcRequestBuilders.post("/owner/CopyToProj/copyLabels")
+                    .principal(copierAuth)
+                    .param("owner", "otherowner")
+                    .param("projectName", "CopyFromProj")
+            ).andExpect(status().is3xxRedirection)
+                .andExpect(redirectedUrl("/owner/CopyToProj/issue/labelsform"))
+
+            verify(exactly = 0) { issueLabelService.copyLabels(any(), any()) }
+        }
+
+        it("원본은 읽을 수 있지만 대상 프로젝트에 라벨 생성 권한이 없으면 복사하지 않아야 한다") {
+            val toProject = Project(id = 152L, name = "CopyToProj2", owner = "owner", projectScope = ProjectScope.PRIVATE)
+            val fromProject = Project(id = 153L, name = "CopyFromProj2", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val copier = User(id = 151L, loginId = "copier2", name = "복사자2")
+            val copierAuth = UsernamePasswordAuthenticationToken("copier2", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CopyToProj2") } returns Optional.of(toProject)
+            every { userRepository.findByLoginId("copier2") } returns Optional.of(copier)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "CopyFromProj2") } returns Optional.of(fromProject)
+
+            mockMvc.perform(
+                MockMvcRequestBuilders.post("/owner/CopyToProj2/copyLabels")
+                    .principal(copierAuth)
+                    .param("owner", "owner")
+                    .param("projectName", "CopyFromProj2")
+            ).andExpect(status().is3xxRedirection)
+
+            verify(exactly = 0) { issueLabelService.copyLabels(any(), any()) }
+        }
+    }
+
+    // yona IssueLabelApp.labelsForm() 대응 — 사이트매니저 우회 분기 및 앞단 가드 보강.
+    describe("GET /{owner}/{projectName}/issue/labelsform 추가 분기") {
+        it("MANAGER가 아니어도 사이트매니저면 라벨 설정 화면에 접근할 수 있어야 한다") {
+            val proj = Project(id = 160L, name = "SiteMgrLabelProj", owner = "owner")
+            val siteManager = User(id = 160L, loginId = "sitemgrlabel", name = "사이트매니저라벨", state = UserState.SITE_ADMIN)
+            val siteManagerAuth = UsernamePasswordAuthenticationToken("sitemgrlabel", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "SiteMgrLabelProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("sitemgrlabel") } returns Optional.of(siteManager)
+            every { projectUserRepository.findByProjectIdAndUserId(160L, 160L) } returns Optional.empty()
+            every { issueLabelService.getLabels(160L) } returns emptyList()
+
+            mockMvc.perform(get("/owner/SiteMgrLabelProj/issue/labelsform").principal(siteManagerAuth))
+                .andExpect(status().isOk)
+                .andExpect(view().name("project/issuelabels"))
+        }
+
+        it("MANAGER도 아니고 사이트매니저도 아니면 error/forbidden 뷰를 반환해야 한다") {
+            val proj = Project(id = 161L, name = "NoPermLabelProj", owner = "owner")
+            val outsider = User(id = 161L, loginId = "labeloutsider2", name = "라벨외부인2")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("labeloutsider2", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoPermLabelProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("labeloutsider2") } returns Optional.of(outsider)
+            every { projectUserRepository.findByProjectIdAndUserId(161L, 161L) } returns Optional.empty()
+
+            mockMvc.perform(get("/owner/NoPermLabelProj/issue/labelsform").principal(outsiderAuth))
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("프로젝트가 없으면 error/404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchLabelsForm") } returns Optional.empty()
+            mockMvc.perform(get("/owner/NoSuchLabelsForm/issue/labelsform"))
+                .andExpect(view().name("error/404"))
+        }
+
+        it("로그인하지 않았으면 로그인 폼으로 리다이렉트해야 한다") {
+            val proj = Project(id = 162L, name = "NoLoginLabelsForm", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoLoginLabelsForm") } returns Optional.of(proj)
+            mockMvc.perform(get("/owner/NoLoginLabelsForm/issue/labelsform"))
+                .andExpect(redirectedUrl("/users/loginform"))
+        }
+    }
+
+    // yona ProjectApp.java changeVCSForm() 대응 — 앞단 가드 및 SUBVERSION -> GIT 제안 분기 보강.
+    describe("GET /{owner}/{projectName}/changeVCS 추가 분기") {
+        it("프로젝트가 없으면 error/404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchVCSProj") } returns Optional.empty()
+            mockMvc.perform(get("/owner/NoSuchVCSProj/changeVCS"))
+                .andExpect(view().name("error/404"))
+        }
+
+        it("멤버가 아니면 error/forbidden을 반환해야 한다") {
+            val proj = Project(id = 170L, name = "VCSProj", owner = "owner")
+            val outsider = User(id = 170L, loginId = "vcsoutsider", name = "VCS외부인")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("vcsoutsider", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "VCSProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("vcsoutsider") } returns Optional.of(outsider)
+            every { projectUserRepository.existsByProjectIdAndUserId(170L, 170L) } returns false
+
+            mockMvc.perform(get("/owner/VCSProj/changeVCS").principal(outsiderAuth))
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("MANAGER 권한이 없는 일반 멤버라면 error/forbidden을 반환해야 한다") {
+            val proj = Project(id = 171L, name = "VCSProj2", owner = "owner")
+            val member = User(id = 171L, loginId = "vcsmember", name = "VCS멤버")
+            val memberAuth = UsernamePasswordAuthenticationToken("vcsmember", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "VCSProj2") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("vcsmember") } returns Optional.of(member)
+            every { projectUserRepository.existsByProjectIdAndUserId(171L, 171L) } returns true
+            every { projectUserRepository.findByProjectIdAndUserId(171L, 171L) } returns
+                Optional.of(ProjectUser(id = 1710L, user = member, project = proj, role = Role(id = RoleType.MEMBER.roleType)))
+
+            mockMvc.perform(get("/owner/VCSProj2/changeVCS").principal(memberAuth))
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("현재 VCS가 SUBVERSION이면 다음 VCS로 GIT을 제안해야 한다") {
+            val proj = Project(id = 172L, name = "VCSProj3", owner = "owner", vcs = "SUBVERSION")
+            val manager = User(id = 172L, loginId = "vcsmanager", name = "VCS매니저")
+            val managerAuth = UsernamePasswordAuthenticationToken("vcsmanager", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "VCSProj3") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("vcsmanager") } returns Optional.of(manager)
+            every { projectUserRepository.existsByProjectIdAndUserId(172L, 172L) } returns true
+            every { projectUserRepository.findByProjectIdAndUserId(172L, 172L) } returns
+                Optional.of(ProjectUser(id = 1720L, user = manager, project = proj, role = Role(id = RoleType.MANAGER.roleType)))
+
+            mockMvc.perform(get("/owner/VCSProj3/changeVCS").principal(managerAuth))
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("nextVcs", "GIT"))
+        }
+    }
+
+    // yona ProjectApp.java changeVCS() POST 대응 — 앞단 가드 보강(성공 케이스는 기존 스펙에 있음).
+    describe("POST /{owner}/{projectName}/changeVCS 추가 분기") {
+        it("로그인하지 않았으면 401을 반환해야 한다") {
+            val proj = Project(id = 182L, name = "AnyProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnyProj") } returns Optional.of(proj)
+
+            val response = projectViewController.changeVCS("owner", "AnyProj", null)
+            response.statusCode shouldBe HttpStatus.UNAUTHORIZED
+        }
+
+        it("프로젝트가 없으면 404를 반환해야 한다") {
+            val user = User(id = 180L, loginId = "vcspostuser", name = "VCS포스트유저")
+            val auth = UsernamePasswordAuthenticationToken("vcspostuser", "password")
+            every { userRepository.findByLoginId("vcspostuser") } returns Optional.of(user)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchVCSPost") } returns Optional.empty()
+
+            val response = projectViewController.changeVCS("owner", "NoSuchVCSPost", auth)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+
+        it("MANAGER 권한이 없으면 403을 반환해야 한다") {
+            val proj = Project(id = 181L, name = "VCSPostProj", owner = "owner")
+            val user = User(id = 181L, loginId = "vcspostuser2", name = "VCS포스트유저2")
+            val auth = UsernamePasswordAuthenticationToken("vcspostuser2", "password")
+            every { userRepository.findByLoginId("vcspostuser2") } returns Optional.of(user)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "VCSPostProj") } returns Optional.of(proj)
+            every { projectUserRepository.findByProjectIdAndUserId(181L, 181L) } returns Optional.empty()
+
+            val response = projectViewController.changeVCS("owner", "VCSPostProj", auth)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+    }
+
+    // yona ProjectApp.java setting() 대응 — 저장소 브랜치/기본 브랜치 조회 예외 처리 분기 보강.
+    describe("GET /{owner}/{projectName}/setting 저장소 조회 예외 처리") {
+        it("브랜치 목록/기본 브랜치 조회 중 예외가 발생하면 빈 목록과 master로 대체해야 한다") {
+            val proj = Project(id = 190L, name = "SettingExProj", owner = "owner")
+            val manager = User(id = 190L, loginId = "settingexmanager", name = "설정예외매니저")
+            val managerAuth = UsernamePasswordAuthenticationToken("settingexmanager", "password")
+            val playRepo = mockk<PlayRepository>()
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "SettingExProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("settingexmanager") } returns Optional.of(manager)
+            every { projectUserRepository.existsByProjectIdAndUserId(190L, 190L) } returns true
+            every { projectUserRepository.findByProjectIdAndUserId(190L, 190L) } returns
+                Optional.of(ProjectUser(id = 1900L, user = manager, project = proj, role = Role(id = RoleType.MANAGER.roleType)))
+            every { repositoryService.getRepository(proj) } returns playRepo
+            every { playRepo.getRefNames() } throws RuntimeException("branch 조회 실패")
+            every { playRepo.getDefaultBranch() } throws RuntimeException("default branch 조회 실패")
+
+            mockMvc.perform(get("/owner/SettingExProj/setting").principal(managerAuth))
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("branches", emptyList<String>()))
+                .andExpect(model().attribute("defaultBranch", "master"))
+        }
+    }
+
+    // yona GitApp/ProjectApp getReadmeFileName() 대응 — README.md 대문자 파일이 없을 때의
+    // 소문자/SVN 경로 폴백 분기 보강(기본 GIT + README.md 존재 케이스는 기존 스펙에 있음).
+    describe("getReadmeFileName 분기 (GET /{owner}/{projectName}?tabId=readme)") {
+        it("README.md는 없지만 소문자 readme.md는 있으면 소문자 파일명을 사용해야 한다") {
+            val proj = Project(id = 200L, name = "LowerReadmeProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val readmeUser = User(id = 200L, loginId = "lowerreadmeuser", name = "소문자README유저")
+            val auth = UsernamePasswordAuthenticationToken("lowerreadmeuser", "password")
+            val playRepo = mockk<PlayRepository>()
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "LowerReadmeProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("lowerreadmeuser") } returns Optional.of(readmeUser)
+            every { projectUserRepository.findByProjectId(200L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+            every { repositoryService.getRepository(proj) } returns playRepo
+            every { playRepo.isFile("README.md") } returns false
+            every { playRepo.isFile("readme.md") } returns true
+            every { playRepo.getRawFile("HEAD", "readme.md") } returns "소문자 리드미".toByteArray(Charsets.UTF_8)
+            every { markdownService.renderFileInReadme("소문자 리드미", proj) } returns "<p>소문자 리드미</p>"
+
+            mockMvc.perform(get("/owner/LowerReadmeProj").param("tabId", "readme").principal(auth))
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("readmeFileName", "readme.md"))
+        }
+
+        it("SVN 저장소는 /trunk/README.md 경로를 사용해야 한다") {
+            val proj = Project(id = 201L, name = "SvnReadmeProj", owner = "owner", projectScope = ProjectScope.PUBLIC, vcs = "SUBVERSION")
+            val svnUser = User(id = 201L, loginId = "svnreadmeuser", name = "SVN README유저")
+            val auth = UsernamePasswordAuthenticationToken("svnreadmeuser", "password")
+            // getReadmeFileName()은 repo.javaClass.simpleName에 "Svn"이 포함되는지로 SVN 여부를
+            // 판별하므로, mockk<PlayRepository>() 대신 실제 SvnRepository 인스턴스를 spyk로 감싸
+            // isFile/getRawFile만 오버라이드한다(생성자 부수효과는 없어 안전).
+            val svnRepo = spyk(SvnRepository(ownerName = "owner", projectName = "SvnReadmeProj", baseDir = "/tmp/yuna-test-svn-base", userResolver = { null }))
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "SvnReadmeProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("svnreadmeuser") } returns Optional.of(svnUser)
+            every { projectUserRepository.findByProjectId(201L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+            every { repositoryService.getRepository(proj) } returns svnRepo
+            every { svnRepo.isFile("README.md") } returns false
+            every { svnRepo.isFile("readme.md") } returns false
+            every { svnRepo.isFile("/trunk/README.md") } returns true
+            every { svnRepo.getRawFile("HEAD", "/trunk/README.md") } returns "SVN 리드미".toByteArray(Charsets.UTF_8)
+            every { markdownService.renderFileInReadme("SVN 리드미", proj) } returns "<p>SVN 리드미</p>"
+
+            mockMvc.perform(get("/owner/SvnReadmeProj").param("tabId", "readme").principal(auth))
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("readmeFileName", "/trunk/README.md"))
         }
     }
 })
