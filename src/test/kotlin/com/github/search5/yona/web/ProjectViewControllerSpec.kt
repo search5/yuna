@@ -1922,4 +1922,709 @@ class ProjectViewControllerSpec : DescribeSpec({
                 .andExpect(model().attribute("readmeFileName", "/trunk/README.md"))
         }
     }
+
+    // ============================================================================================
+    // TASK-분기커버리지 95% 보강 — 위 배치들에서 남은 미실행 분기. 실제 코드(if/elvis/try-catch/&&)를
+    // 근거로, 아직 어떤 테스트도 거치지 않은 조합만 추가한다(중복 작성 금지).
+    // ============================================================================================
+
+    // getProjectHistory 잔여 분기 — 게시글 작성자 조회 성공(positive), 각 소스의 createdDate/created가
+    // 없을 때의 Instant.now() 대체값, 활성화됐지만 조회 결과가 전부 비어있는 경우(반복문 0회) 보강.
+    describe("getProjectHistory 잔여 분기 보강") {
+        it("코드/이슈/게시글/PR이 모두 활성화됐지만 조회 결과가 모두 비어있으면 예외 없이 빈 이력을 반환해야 한다") {
+            val emptyResultProject = Project(id = 900L, name = "EmptyResultProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val historyUser2 = User(id = 900L, loginId = "historyuser2", name = "히스토리유저2")
+            val auth2 = UsernamePasswordAuthenticationToken("historyuser2", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "EmptyResultProj") } returns Optional.of(emptyResultProject)
+            every { userRepository.findByLoginId("historyuser2") } returns Optional.of(historyUser2)
+            every { projectUserRepository.findByProjectId(900L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+            val playRepo = mockk<PlayRepository>()
+            every { repositoryService.getRepository(emptyResultProject) } returns playRepo
+            every { playRepo.getHistory(0, 10, null, null) } returns emptyList()
+            every { issueRepository.findByProject(emptyResultProject, any()) } returns PageImpl(emptyList())
+            every { postingRepository.findByProject(emptyResultProject, any()) } returns PageImpl(emptyList())
+            every { pullRequestRepository.findByToProject(emptyResultProject, any()) } returns PageImpl(emptyList())
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "EmptyResultProj", "history", auth2, model)
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 0
+        }
+
+        it("게시글 작성자가 authorLoginId로 조회되어 발견되면 who/userPageUrl을 작성자 정보로 채워야 한다") {
+            val proj = Project(
+                id = 901L, name = "PostAuthorFoundProj", owner = "owner", projectScope = ProjectScope.PUBLIC,
+                isCodeEnabled = false, isIssueEnabled = false, isPullRequestEnabled = false
+            )
+            val user2 = User(id = 901L, loginId = "postauthoruser", name = "게시글작성자조회유저")
+            val auth2 = UsernamePasswordAuthenticationToken("postauthoruser", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PostAuthorFoundProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("postauthoruser") } returns Optional.of(user2)
+            every { projectUserRepository.findByProjectId(901L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+            val postAuthor = User(id = 902L, loginId = "foundpostauthor", name = "발견된게시글작성자")
+            val posting = Posting(
+                id = 800L, title = "게시글", project = proj, number = 1L,
+                createdDate = Instant.now(), authorLoginId = "foundpostauthor", authorName = "원본이름"
+            )
+            every { postingRepository.findByProject(proj, any()) } returns PageImpl(listOf(posting))
+            every { userRepository.findByLoginId("foundpostauthor") } returns Optional.of(postAuthor)
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "PostAuthorFoundProj", "history", auth2, model)
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 1
+            histories[0].userPageUrl shouldBe "/user/foundpostauthor"
+        }
+
+        it("이슈 생성일이 없으면 현재 시각으로 대체해야 한다") {
+            val proj = Project(
+                id = 903L, name = "IssueNoDateProj", owner = "owner", projectScope = ProjectScope.PUBLIC,
+                isCodeEnabled = false, isBoardEnabled = false, isPullRequestEnabled = false
+            )
+            val user2 = User(id = 903L, loginId = "issuenodateuser", name = "이슈날짜없는유저")
+            val auth2 = UsernamePasswordAuthenticationToken("issuenodateuser", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "IssueNoDateProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("issuenodateuser") } returns Optional.of(user2)
+            every { projectUserRepository.findByProjectId(903L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+            val issueNoDate = Issue(
+                id = 42L, title = "날짜없는이슈", project = proj, number = 1L,
+                createdDate = null, authorLoginId = null, authorName = "작성자"
+            )
+            every { issueRepository.findByProject(proj, any()) } returns PageImpl(listOf(issueNoDate))
+
+            val before = Instant.now()
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "IssueNoDateProj", "history", auth2, model)
+            val after = Instant.now()
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 1
+            (!histories[0].whenInstant.isBefore(before) && !histories[0].whenInstant.isAfter(after)) shouldBe true
+        }
+
+        it("게시글 생성일이 없으면 현재 시각으로 대체해야 한다") {
+            val proj = Project(
+                id = 904L, name = "PostNoDateProj", owner = "owner", projectScope = ProjectScope.PUBLIC,
+                isCodeEnabled = false, isIssueEnabled = false, isPullRequestEnabled = false
+            )
+            val user2 = User(id = 904L, loginId = "postnodateuser", name = "게시글날짜없는유저")
+            val auth2 = UsernamePasswordAuthenticationToken("postnodateuser", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PostNoDateProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("postnodateuser") } returns Optional.of(user2)
+            every { projectUserRepository.findByProjectId(904L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+            val postingNoDate = Posting(
+                id = 801L, title = "날짜없는게시글", project = proj, number = 1L,
+                createdDate = null, authorLoginId = null, authorName = "작성자"
+            )
+            every { postingRepository.findByProject(proj, any()) } returns PageImpl(listOf(postingNoDate))
+
+            val before = Instant.now()
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "PostNoDateProj", "history", auth2, model)
+            val after = Instant.now()
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 1
+            (!histories[0].whenInstant.isBefore(before) && !histories[0].whenInstant.isAfter(after)) shouldBe true
+        }
+
+        it("PR 생성일이 없으면 현재 시각으로 대체해야 한다") {
+            val proj = Project(
+                id = 905L, name = "PrNoDateProj", owner = "owner", projectScope = ProjectScope.PUBLIC,
+                isCodeEnabled = false, isIssueEnabled = false, isBoardEnabled = false
+            )
+            val user2 = User(id = 905L, loginId = "prnodateuser", name = "PR날짜없는유저")
+            val auth2 = UsernamePasswordAuthenticationToken("prnodateuser", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrNoDateProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("prnodateuser") } returns Optional.of(user2)
+            every { projectUserRepository.findByProjectId(905L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+            val contributor = User(id = 906L, loginId = "prcontrib2", name = "PR기여자2")
+            val pullNoDate = PullRequest(
+                id = 802L, title = "날짜없는PR", toProject = proj, fromProject = proj,
+                contributor = contributor, number = 1L, created = null
+            )
+            every { pullRequestRepository.findByToProject(proj, any()) } returns PageImpl(listOf(pullNoDate))
+
+            val before = Instant.now()
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "PrNoDateProj", "history", auth2, model)
+            val after = Instant.now()
+
+            @Suppress("UNCHECKED_CAST")
+            val histories = model.getAttribute("histories") as List<HistoryDto>
+            histories.size shouldBe 1
+            (!histories[0].whenInstant.isBefore(before) && !histories[0].whenInstant.isAfter(after)) shouldBe true
+        }
+    }
+
+    // sendTransferRequestMail / getServerUrl 잔여 분기 — 조직 관리자 0명, 관리자 이메일 공백,
+    // 표준 포트(80/443)가 아닌 경우의 URL 조합 보강.
+    describe("sendTransferRequestMail / getServerUrl 잔여 분기 보강") {
+        val proj = Project(id = 910L, name = "MailBranchProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+        val manager = User(id = 910L, loginId = "mailbranchmanager", name = "메일분기매니저")
+        val managerAuth = UsernamePasswordAuthenticationToken("mailbranchmanager", "password")
+        val managerProjectUser = ProjectUser(id = 9100L, user = manager, project = proj, role = Role(id = RoleType.MANAGER.roleType))
+
+        fun mailBranchRequest(scheme: String = "https", serverName: String = "yona.io", port: Int = 443): HttpServletRequest {
+            val request = mockk<HttpServletRequest>()
+            every { request.scheme } returns scheme
+            every { request.serverName } returns serverName
+            every { request.serverPort } returns port
+            return request
+        }
+
+        it("이관 대상 조직에 ORG_ADMIN이 한 명도 없으면 메일을 보내지 않아야 한다") {
+            every { userRepository.findByLoginId("mailbranchmanager") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MailBranchProj") } returns Optional.of(proj)
+            every { projectUserRepository.findByProjectIdAndUserId(910L, 910L) } returns Optional.of(managerProjectUser)
+            every { userRepository.findByLoginId("noadminorg") } returns Optional.empty()
+            val destOrg = Organization(id = 911L, name = "noadminorg")
+            every { organizationRepository.findByName("noadminorg") } returns Optional.of(destOrg)
+            every { organizationUserRepository.findByOrganizationId(911L) } returns emptyList()
+            val pt = ProjectTransfer(id = 950L, sender = manager, destination = "noadminorg", project = proj, confirmKey = "key950", newProjectName = "MailBranchProj")
+            every { projectService.requestNewTransfer(910L, 910L, "noadminorg") } returns pt
+            every { messageSource.getMessage(any(), any(), any()) } returns "메시지"
+            every { markdownService.render(any(), true, proj) } returns "<p>html</p>"
+
+            val response = projectViewController.transferProject("owner", "MailBranchProj", "noadminorg", mailBranchRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.NO_CONTENT
+            verify(exactly = 0) { mailService.sendHtmlMail(any(), any(), any(), any()) }
+        }
+
+        it("이관 대상 조직 관리자의 이메일이 비어 있으면 발송을 건너뛰어야 한다") {
+            every { userRepository.findByLoginId("mailbranchmanager") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MailBranchProj") } returns Optional.of(proj)
+            every { projectUserRepository.findByProjectIdAndUserId(910L, 910L) } returns Optional.of(managerProjectUser)
+            every { userRepository.findByLoginId("blankadminorg") } returns Optional.empty()
+            val destOrg = Organization(id = 912L, name = "blankadminorg")
+            every { organizationRepository.findByName("blankadminorg") } returns Optional.of(destOrg)
+            val blankAdmin = User(id = 913L, loginId = "blankemailadmin", name = "이메일공백관리자", email = "")
+            every { organizationUserRepository.findByOrganizationId(912L) } returns listOf(
+                OrganizationUser(id = 1L, user = blankAdmin, organization = destOrg, role = Role(id = RoleType.ORG_ADMIN.roleType))
+            )
+            val pt = ProjectTransfer(id = 951L, sender = manager, destination = "blankadminorg", project = proj, confirmKey = "key951", newProjectName = "MailBranchProj")
+            every { projectService.requestNewTransfer(910L, 910L, "blankadminorg") } returns pt
+            every { messageSource.getMessage(any(), any(), any()) } returns "메시지"
+            every { markdownService.render(any(), true, proj) } returns "<p>html</p>"
+
+            val response = projectViewController.transferProject("owner", "MailBranchProj", "blankadminorg", mailBranchRequest(), managerAuth)
+            response.statusCode shouldBe HttpStatus.NO_CONTENT
+            verify(exactly = 0) { mailService.sendHtmlMail(any(), any(), any(), any()) }
+        }
+
+        it("서버 포트가 80/443이 아니면 URL에 포트 번호를 포함해야 한다") {
+            every { userRepository.findByLoginId("mailbranchmanager") } returns Optional.of(manager)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MailBranchProj") } returns Optional.of(proj)
+            every { projectUserRepository.findByProjectIdAndUserId(910L, 910L) } returns Optional.of(managerProjectUser)
+            val destUser = User(id = 914L, loginId = "portdest", name = "포트대상", email = "portdest@yona.io")
+            every { userRepository.findByLoginId("portdest") } returns Optional.of(destUser)
+            every { organizationRepository.findByName("portdest") } returns Optional.empty()
+            val pt = ProjectTransfer(id = 952L, sender = manager, destination = "portdest", project = proj, confirmKey = "key952", newProjectName = "MailBranchProj")
+            every { projectService.requestNewTransfer(910L, 910L, "portdest") } returns pt
+            every { messageSource.getMessage(any(), any(), any()) } returns "메시지"
+            val markdownSlot = slot<String>()
+            every { markdownService.render(capture(markdownSlot), true, proj) } returns "<p>html</p>"
+            every { mailService.sendHtmlMail("portdest@yona.io", "Yona", any(), "<p>html</p>") } just Runs
+
+            val response = projectViewController.transferProject(
+                "owner", "MailBranchProj", "portdest",
+                mailBranchRequest(scheme = "http", serverName = "dev.yona.io", port = 8080), managerAuth
+            )
+            response.statusCode shouldBe HttpStatus.NO_CONTENT
+            markdownSlot.captured.contains("http://dev.yona.io:8080") shouldBe true
+        }
+    }
+
+    // downloadCode 잔여 분기 — 완전 비로그인(Authentication 자체가 없는) 상태의 멤버 전용 프로젝트
+    // 접근과 isCodeAccessibleMemberOnly=false 프로젝트의 정상 다운로드 성공 분기 보강.
+    describe("downloadCode 잔여 분기 보강") {
+        it("isCodeAccessibleMemberOnly가 true인 프로젝트에 완전히 비로그인 상태로 접근하면 403을 반환해야 한다") {
+            val proj = Project(id = 920L, name = "AnonMemberOnlyProj", owner = "owner", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnonMemberOnlyProj") } returns Optional.of(proj)
+
+            mockMvc.perform(get("/owner/AnonMemberOnlyProj/code/main/download"))
+                .andExpect(status().isForbidden)
+        }
+
+        it("isCodeAccessibleMemberOnly가 false인 공개 프로젝트는 비로그인 상태에서도 다운로드가 성공해야 한다") {
+            val proj = Project(id = 921L, name = "AnonPublicDownloadProj", owner = "owner", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = false, vcs = "GIT")
+            val playRepo = mockk<PlayRepository>()
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnonPublicDownloadProj") } returns Optional.of(proj)
+            every { repositoryService.getRepository(proj) } returns playRepo
+            every { repositoryService.getMetaDataFromAncestorDirectories(playRepo, "main", "") } returns listOf(mockk())
+            every { playRepo.getArchive(any(), "main") } returns Unit
+
+            mockMvc.perform(get("/owner/AnonPublicDownloadProj/code/main/download"))
+                .andExpect(status().isOk)
+        }
+    }
+
+    // getProjectDashboardData 잔여 분기 — 이슈는 있지만 마일스톤/라벨/PR은 전혀 없는 부분-비어있음
+    // 조합 보강(전체가 비어있는 케이스, 전체가 채워진 케이스는 기존 스펙에 있음).
+    describe("getProjectDashboardData 잔여 분기 보강") {
+        it("이슈는 있지만 마일스톤/라벨/PR이 없는 프로젝트에서도 안전하게 계산돼야 한다") {
+            val proj = Project(id = 930L, name = "PartialDashProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val user2 = User(id = 930L, loginId = "partialdashuser", name = "부분대시보드유저")
+            val auth2 = UsernamePasswordAuthenticationToken("partialdashuser", "password")
+            every { userRepository.findByLoginId("partialdashuser") } returns Optional.of(user2)
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+            val issueOnly = Issue(id = 60L, title = "이슈만있음", project = proj, number = 1L, state = State.OPEN)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PartialDashProj") } returns Optional.of(proj)
+            every { projectUserRepository.findByProjectId(930L) } returns emptyList()
+            every { issueRepository.findByProjectAndState(proj, State.OPEN) } returns listOf(issueOnly)
+            every { issueRepository.findByProject(proj) } returns listOf(issueOnly)
+            every { milestoneRepository.findByProjectAndState(proj, State.OPEN) } returns emptyList()
+            every { pullRequestRepository.findByToProjectAndState(proj, State.OPEN, any()) } returns PageImpl(emptyList())
+            every { pullRequestRepository.findByToProjectAndState(proj, State.OPEN) } returns emptyList()
+            every { issueLabelService.getLabels(930L) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "PartialDashProj", "dashboard", auth2, model)
+
+            model.getAttribute("openIssuesCount") shouldBe 1
+            model.getAttribute("notAssignedIssuesCount") shouldBe 1
+            model.getAttribute("notAssignedIssuesPercent") shouldBe 100
+
+            @Suppress("UNCHECKED_CAST")
+            val milestoneList = model.getAttribute("milestoneList") as List<ProjectViewController.MilestoneDashboardDto>
+            milestoneList.size shouldBe 0
+
+            @Suppress("UNCHECKED_CAST")
+            val labelCategories = model.getAttribute("labelCategories") as List<ProjectViewController.LabelCategoryDashboardDto>
+            labelCategories.size shouldBe 0
+        }
+    }
+
+    // newProject 잔여 분기 — 비로그인 리다이렉트와 createProject() 예외 처리(catch) 블록은 기존 스펙에서
+    // 전혀 거치지 않았다(조직 admin 가드 성공/실패 케이스만 있었음).
+    describe("newProject(POST /projectform) 잔여 분기 보강") {
+        it("로그인하지 않았으면 로그인 폼으로 리다이렉트해야 한다") {
+            mockMvc.perform(
+                MockMvcRequestBuilders.post("/projectform")
+                    .param("owner", "anon")
+                    .param("name", "anonproj")
+                    .param("overview", "설명")
+                    .param("projectScope", "PUBLIC")
+                    .param("vcs", "GIT")
+            ).andExpect(redirectedUrl("/users/loginform"))
+        }
+
+        it("프로젝트 생성 중 예외가 발생하면 에러 메시지와 함께 폼을 다시 보여줘야 한다") {
+            val user2 = User(id = 940L, loginId = "newprojexuser", name = "생성예외유저")
+            val auth2 = UsernamePasswordAuthenticationToken("newprojexuser", "password")
+            every { userRepository.findByLoginId("newprojexuser") } returns Optional.of(user2)
+            every { organizationRepository.findByName("newprojexuser") } returns Optional.empty()
+            every { projectService.createProject(any(), user2) } throws RuntimeException("이미 존재하는 프로젝트입니다.")
+            every { organizationUserRepository.findByUserIdAndRoleId(940L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
+
+            mockMvc.perform(
+                MockMvcRequestBuilders.post("/projectform")
+                    .principal(auth2)
+                    .param("owner", "newprojexuser")
+                    .param("name", "dupname")
+                    .param("overview", "설명")
+                    .param("projectScope", "PUBLIC")
+                    .param("vcs", "GIT")
+            ).andExpect(status().isOk)
+                .andExpect(view().name("project/create"))
+                .andExpect(model().attribute("error", "이미 존재하는 프로젝트입니다."))
+        }
+
+        it("createProject 실패 시 예외 메시지가 없으면 기본 에러 메시지를 사용해야 한다") {
+            val user2 = User(id = 941L, loginId = "newprojexuser2", name = "생성예외유저2")
+            val auth2 = UsernamePasswordAuthenticationToken("newprojexuser2", "password")
+            every { userRepository.findByLoginId("newprojexuser2") } returns Optional.of(user2)
+            every { organizationRepository.findByName("newprojexuser2") } returns Optional.empty()
+            every { projectService.createProject(any(), user2) } throws RuntimeException()
+            every { organizationUserRepository.findByUserIdAndRoleId(941L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.newProject(
+                "newprojexuser2", "noname", "설명", "PUBLIC", "GIT",
+                false, false, false, false, false, false, auth2, model
+            )
+            result shouldBe "project/create"
+            model.getAttribute("error") shouldBe "프로젝트 생성 도중 오류가 발생했습니다."
+        }
+
+        it("요청의 projectScope 값이 올바르지 않으면 재구성된 폼의 projectScope는 PUBLIC으로 대체돼야 한다") {
+            val user2 = User(id = 942L, loginId = "newprojbadscope", name = "잘못된스코프유저")
+            val auth2 = UsernamePasswordAuthenticationToken("newprojbadscope", "password")
+            every { userRepository.findByLoginId("newprojbadscope") } returns Optional.of(user2)
+            every { organizationRepository.findByName("newprojbadscope") } returns Optional.empty()
+            every { organizationUserRepository.findByUserIdAndRoleId(942L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.newProject(
+                "newprojbadscope", "noname", "설명", "NOT_A_SCOPE", "GIT",
+                false, false, false, false, false, false, auth2, model
+            )
+            result shouldBe "project/create"
+            val form = model.getAttribute("form") as NewProjectForm
+            form.projectScope shouldBe ProjectScope.PUBLIC
+        }
+    }
+
+    // projectChangeVCSForm 잔여 분기 — 비로그인(Authentication 자체가 없는) 상태로 존재하는 프로젝트에
+    // 접근하는 경우는 "멤버가 아니면" 테스트(인증된 outsider)와 서로 다른 분기라 별도로 보강한다.
+    describe("projectChangeVCSForm 잔여 분기 보강") {
+        it("비로그인 상태로 존재하는 프로젝트의 변경 폼에 접근하면 error/forbidden을 반환해야 한다") {
+            val proj = Project(id = 950L, name = "AnonVCSFormProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnonVCSFormProj") } returns Optional.of(proj)
+
+            mockMvc.perform(get("/owner/AnonVCSFormProj/changeVCS"))
+                .andExpect(view().name("error/forbidden"))
+        }
+    }
+
+    // newFork 잔여 분기 — Authentication은 있지만 그 사용자 레코드를 DB에서 찾을 수 없는 경우
+    // (세션은 유효하나 계정이 삭제된 상황 등)는 완전 비로그인과 별개의 분기다.
+    describe("newFork 잔여 분기 보강") {
+        it("인증 정보는 있지만 사용자 레코드를 찾을 수 없으면 로그인 폼으로 리다이렉트해야 한다") {
+            val original = Project(id = 960L, name = "GhostForkOrigin", owner = "owner")
+            val ghostAuth = UsernamePasswordAuthenticationToken("ghostforkuser", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "GhostForkOrigin") } returns Optional.of(original)
+            every { userRepository.findByLoginId("ghostforkuser") } returns Optional.empty()
+
+            val result = projectViewController.newFork("owner", "GhostForkOrigin", null, ghostAuth, ExtendedModelMap())
+            result shouldBe "redirect:/users/loginform"
+        }
+    }
+
+    // copyLabelsForm 잔여 분기 — 대상(toProject) 미존재(404), 완전 비로그인, 인증은 있으나 사용자
+    // 레코드 없음(둘 다 로그인 폼 리다이렉트이지만 서로 다른 분기 지점) 보강.
+    describe("copyLabelsForm 잔여 분기 보강") {
+        it("대상 프로젝트가 없으면 error/404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchCopyToProj") } returns Optional.empty()
+
+            mockMvc.perform(
+                MockMvcRequestBuilders.post("/owner/NoSuchCopyToProj/copyLabels")
+                    .param("owner", "owner")
+                    .param("projectName", "whatever")
+            ).andExpect(view().name("error/404"))
+        }
+
+        it("비로그인 상태면 로그인 폼으로 리다이렉트해야 한다") {
+            val toProject = Project(id = 970L, name = "AnonCopyToProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnonCopyToProj") } returns Optional.of(toProject)
+
+            mockMvc.perform(
+                MockMvcRequestBuilders.post("/owner/AnonCopyToProj/copyLabels")
+                    .param("owner", "owner")
+                    .param("projectName", "whatever")
+            ).andExpect(redirectedUrl("/users/loginform"))
+        }
+
+        it("인증 정보는 있지만 사용자 레코드를 찾을 수 없으면 로그인 폼으로 리다이렉트해야 한다") {
+            val toProject = Project(id = 971L, name = "GhostCopyToProj", owner = "owner")
+            val ghostAuth = UsernamePasswordAuthenticationToken("ghostcopyuser", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "GhostCopyToProj") } returns Optional.of(toProject)
+            every { userRepository.findByLoginId("ghostcopyuser") } returns Optional.empty()
+
+            mockMvc.perform(
+                MockMvcRequestBuilders.post("/owner/GhostCopyToProj/copyLabels")
+                    .principal(ghostAuth)
+                    .param("owner", "owner")
+                    .param("projectName", "whatever")
+            ).andExpect(redirectedUrl("/users/loginform"))
+        }
+    }
+
+    // projectHome 잔여 분기 — 완전 비로그인 공개 프로젝트 접근(방문 이력 미기록/watch 미조회),
+    // README 본문 조회 실패(getReadmeContent가 null), isMilestoneEnabled=false 보강.
+    describe("projectHome 잔여 분기 보강") {
+        it("비로그인 사용자가 공개 프로젝트에 접근하면 200 OK를 반환하고 방문 이력을 남기지 않아야 한다") {
+            val proj = Project(id = 980L, name = "AnonPublicHomeProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnonPublicHomeProj") } returns Optional.of(proj)
+            every { projectUserRepository.findByProjectId(980L) } returns emptyList()
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+            mockMvc.perform(get("/owner/AnonPublicHomeProj"))
+                .andExpect(status().isOk)
+                .andExpect(view().name("project/home"))
+
+            verify(exactly = 0) { recentProjectRepository.recordVisit(any(), any()) }
+            verify(exactly = 0) { watchService.isWatching(any(), any(), any()) }
+        }
+
+        it("README 파일은 있지만 내용을 읽는 데 실패하면 readmeHtml은 null이어야 한다") {
+            val proj = Project(id = 981L, name = "ReadmeContentFailProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val user2 = User(id = 981L, loginId = "readmefailuser", name = "리드미실패유저")
+            val auth2 = UsernamePasswordAuthenticationToken("readmefailuser", "password")
+            val playRepo = mockk<PlayRepository>()
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "ReadmeContentFailProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("readmefailuser") } returns Optional.of(user2)
+            every { projectUserRepository.findByProjectId(981L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+            every { repositoryService.getRepository(proj) } returns playRepo
+            every { playRepo.isFile("README.md") } returns true
+            every { playRepo.getRawFile("HEAD", "README.md") } throws RuntimeException("파일 조회 실패")
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "ReadmeContentFailProj", "readme", auth2, model)
+            model.getAttribute("readmeHtml") shouldBe null
+            verify(exactly = 0) { markdownService.renderFileInReadme(any(), any()) }
+        }
+
+        it("isMilestoneEnabled가 꺼진 프로젝트는 마일스톤 조회 없이 sidebarMilestone이 null이어야 한다") {
+            val proj = Project(id = 982L, name = "NoMilestoneHomeProj", owner = "owner", projectScope = ProjectScope.PUBLIC, isMilestoneEnabled = false)
+            val user2 = User(id = 982L, loginId = "nomilestoneuser", name = "마일스톤없는유저")
+            val auth2 = UsernamePasswordAuthenticationToken("nomilestoneuser", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoMilestoneHomeProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("nomilestoneuser") } returns Optional.of(user2)
+            every { projectUserRepository.findByProjectId(982L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "NoMilestoneHomeProj", "readme", auth2, model)
+            model.getAttribute("sidebarMilestone") shouldBe null
+            verify(exactly = 0) { milestoneRepository.findByProjectAndState(proj, State.OPEN, any()) }
+        }
+    }
+
+    // projectSetting 잔여 분기 — 완전 비로그인과, 로그인은 했으나 해당 프로젝트 멤버가 아닌 경우(둘 다
+    // error/forbidden이지만 "loginUser == null"과 "!exists(...)"는 서로 다른 분기)를 나눠서 보강한다.
+    describe("projectSetting 잔여 분기 보강") {
+        it("비로그인 상태면 error/forbidden 뷰를 반환해야 한다") {
+            val proj = Project(id = 990L, name = "AnonSettingProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnonSettingProj") } returns Optional.of(proj)
+
+            mockMvc.perform(get("/owner/AnonSettingProj/setting"))
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("로그인 사용자를 찾았지만 프로젝트 멤버가 아니면 error/forbidden 뷰를 반환해야 한다") {
+            val proj = Project(id = 991L, name = "NonMemberSettingProj", owner = "owner")
+            val outsider = User(id = 991L, loginId = "settingoutsider", name = "설정외부인")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("settingoutsider", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NonMemberSettingProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("settingoutsider") } returns Optional.of(outsider)
+            every { projectUserRepository.existsByProjectIdAndUserId(991L, 991L) } returns false
+
+            mockMvc.perform(get("/owner/NonMemberSettingProj/setting").principal(outsiderAuth))
+                .andExpect(view().name("error/forbidden"))
+        }
+    }
+
+    // newLabel 잔여 분기 — 프로젝트 미존재(404), 완전 비로그인, 인증은 있으나 사용자 레코드 없음
+    // (둘 다 403이지만 authentication?.let 안전호출의 서로 다른 분기) 보강.
+    describe("newLabel 잔여 분기 보강") {
+        it("프로젝트가 없으면 404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchNewLabelProj") } returns Optional.empty()
+            val response = projectViewController.newLabel("owner", "NoSuchNewLabelProj", "n", "#fff", "c", false, null)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+
+        it("완전히 비로그인 상태면 403을 반환해야 한다") {
+            val proj = Project(id = 1000L, name = "AnonNewLabelProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnonNewLabelProj") } returns Optional.of(proj)
+            val response = projectViewController.newLabel("owner", "AnonNewLabelProj", "n", "#fff", "c", false, null)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+
+        it("인증 정보는 있지만 사용자 레코드를 찾을 수 없으면 403을 반환해야 한다") {
+            val proj = Project(id = 1001L, name = "GhostNewLabelProj", owner = "owner")
+            val ghostAuth = UsernamePasswordAuthenticationToken("ghostnewlabeluser", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "GhostNewLabelProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("ghostnewlabeluser") } returns Optional.empty()
+            val response = projectViewController.newLabel("owner", "GhostNewLabelProj", "n", "#fff", "c", false, ghostAuth)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+    }
+
+    // deleteLabelForm 잔여 분기 — 프로젝트 미존재(404)와 완전 비로그인(403) 보강.
+    describe("deleteLabelForm 잔여 분기 보강") {
+        it("프로젝트가 없으면 404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchDelLabelProj") } returns Optional.empty()
+            val response = projectViewController.deleteLabelForm("owner", "NoSuchDelLabelProj", 1L, "delete", null)
+            response.statusCode shouldBe HttpStatus.NOT_FOUND
+        }
+
+        it("로그인하지 않았으면 403을 반환해야 한다") {
+            val proj = Project(id = 1010L, name = "AnonDelLabelProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "AnonDelLabelProj") } returns Optional.of(proj)
+            val response = projectViewController.deleteLabelForm("owner", "AnonDelLabelProj", 1L, "delete", null)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+    }
+
+    // getReadmeFileName 잔여 분기 — 대문자/소문자 README가 모두 없는 비-SVN 저장소, SVN 저장소에서
+    // 대문자 /trunk/README.md는 없지만 소문자는 있는 경우 보강.
+    describe("getReadmeFileName 잔여 분기 보강") {
+        it("대문자/소문자 README가 모두 없고 SVN 저장소도 아니면 readmeFileName은 null이어야 한다") {
+            val proj = Project(id = 1020L, name = "NoReadmeProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            val user2 = User(id = 1020L, loginId = "noreadmeuser", name = "README없는유저")
+            val auth2 = UsernamePasswordAuthenticationToken("noreadmeuser", "password")
+            val playRepo = mockk<PlayRepository>()
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoReadmeProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("noreadmeuser") } returns Optional.of(user2)
+            every { projectUserRepository.findByProjectId(1020L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+            every { repositoryService.getRepository(proj) } returns playRepo
+            every { playRepo.isFile("README.md") } returns false
+            every { playRepo.isFile("readme.md") } returns false
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "NoReadmeProj", "readme", auth2, model)
+            model.getAttribute("readmeFileName") shouldBe null
+        }
+
+        it("SVN 저장소에서 대문자 /trunk/README.md는 없지만 소문자는 있으면 소문자 경로를 사용해야 한다") {
+            val proj = Project(id = 1021L, name = "SvnLowerReadmeProj", owner = "owner", projectScope = ProjectScope.PUBLIC, vcs = "SUBVERSION")
+            val user2 = User(id = 1021L, loginId = "svnlowerreadmeuser", name = "SVN소문자README유저")
+            val auth2 = UsernamePasswordAuthenticationToken("svnlowerreadmeuser", "password")
+            val svnRepo = spyk(SvnRepository(ownerName = "owner", projectName = "SvnLowerReadmeProj", baseDir = "/tmp/yuna-test-svn-base2", userResolver = { null }))
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "SvnLowerReadmeProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("svnlowerreadmeuser") } returns Optional.of(user2)
+            every { projectUserRepository.findByProjectId(1021L) } returns emptyList()
+            every { watchService.isWatching(any(), any(), any()) } returns false
+            every { watchService.findWatchers(any(), any()) } returns emptySet()
+            every { repositoryService.getRepository(proj) } returns svnRepo
+            every { svnRepo.isFile("README.md") } returns false
+            every { svnRepo.isFile("readme.md") } returns false
+            every { svnRepo.isFile("/trunk/README.md") } returns false
+            every { svnRepo.isFile("/trunk/readme.md") } returns true
+            every { svnRepo.getRawFile("HEAD", "/trunk/readme.md") } returns "SVN 소문자 리드미".toByteArray(Charsets.UTF_8)
+            every { markdownService.renderFileInReadme("SVN 소문자 리드미", proj) } returns "<p>SVN 소문자 리드미</p>"
+
+            val model = ExtendedModelMap()
+            projectViewController.projectHome("owner", "SvnLowerReadmeProj", "readme", auth2, model)
+            model.getAttribute("readmeFileName") shouldBe "/trunk/readme.md"
+        }
+    }
+
+    // projectMembers 잔여 분기 — 프로젝트 미존재(404), 읽기 권한 없음(403), 비로그인 공개 프로젝트
+    // 접근 허용(200) 보강(기존 스펙에는 멤버 성공 케이스 1건만 있었다).
+    describe("projectMembers 잔여 분기 보강") {
+        it("프로젝트가 없으면 error/404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchMembersProj") } returns Optional.empty()
+            mockMvc.perform(get("/owner/NoSuchMembersProj/members"))
+                .andExpect(view().name("error/404"))
+        }
+
+        it("읽기 권한이 없으면 error/forbidden을 반환해야 한다") {
+            val proj = Project(id = 1030L, name = "PrivateMembersProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
+            val outsider = User(id = 1030L, loginId = "membersoutsider", name = "멤버외부인")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("membersoutsider", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateMembersProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("membersoutsider") } returns Optional.of(outsider)
+
+            mockMvc.perform(get("/owner/PrivateMembersProj/members").principal(outsiderAuth))
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("비로그인 사용자도 공개 프로젝트의 멤버 목록은 볼 수 있어야 한다") {
+            val proj = Project(id = 1031L, name = "PublicMembersProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PublicMembersProj") } returns Optional.of(proj)
+            every { projectUserRepository.findByProjectId(1031L) } returns emptyList()
+
+            mockMvc.perform(get("/owner/PublicMembersProj/members"))
+                .andExpect(status().isOk)
+                .andExpect(view().name("project/members"))
+        }
+    }
+
+    // updateLabelForm / updateCategoryForm 잔여 분기 — 인증은 있으나 프로젝트 멤버가 아니라
+    // accessControl.isAllowed(...)가 false를 반환하는 경우(기존 스펙엔 이 조합이 없었다).
+    describe("updateLabelForm / updateCategoryForm 잔여 분기 보강") {
+        it("updateLabelForm: 프로젝트 멤버가 아니면 403을 반환해야 한다") {
+            val proj = Project(id = 1040L, name = "UpdLabelPermProj", owner = "owner")
+            val outsider = User(id = 1040L, loginId = "updlabeloutsider", name = "라벨수정외부인")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("updlabeloutsider", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "UpdLabelPermProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("updlabeloutsider") } returns Optional.of(outsider)
+
+            val response = projectViewController.updateLabelForm("owner", "UpdLabelPermProj", 1L, "n", "c", 1L, outsiderAuth)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+
+        it("updateCategoryForm: 프로젝트 멤버가 아니면 403을 반환해야 한다") {
+            val proj = Project(id = 1041L, name = "UpdCatPermProj", owner = "owner")
+            val outsider = User(id = 1041L, loginId = "updcatoutsider", name = "카테고리수정외부인")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("updcatoutsider", "password")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "UpdCatPermProj") } returns Optional.of(proj)
+            every { userRepository.findByLoginId("updcatoutsider") } returns Optional.of(outsider)
+
+            val response = projectViewController.updateCategoryForm("owner", "UpdCatPermProj", 1L, "n", false, outsiderAuth)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+    }
+
+    // newProjectForm 잔여 분기 — 기존 스펙엔 GET /projectform 테스트가 전혀 없었다. 비로그인 리다이렉트와
+    // isOwnerOrganization(조직명==loginId) 참/거짓 두 방향을 보강한다.
+    describe("newProjectForm 잔여 분기 보강") {
+        it("비로그인 상태면 로그인 폼으로 리다이렉트해야 한다") {
+            mockMvc.perform(get("/projectform"))
+                .andExpect(redirectedUrl("/users/loginform"))
+        }
+
+        it("사용자가 관리하는 조직 중 자신의 loginId와 같은 이름이 있으면 isOwnerOrganization이 true여야 한다") {
+            val user2 = User(id = 1050L, loginId = "sameasorg", name = "동일이름유저")
+            val auth2 = UsernamePasswordAuthenticationToken("sameasorg", "password")
+            val org = Organization(id = 1051L, name = "sameasorg")
+            every { userRepository.findByLoginId("sameasorg") } returns Optional.of(user2)
+            every { organizationUserRepository.findByUserIdAndRoleId(1050L, RoleType.ORG_ADMIN.roleType) } returns
+                listOf(OrganizationUser(id = 1L, user = user2, organization = org, role = Role(id = RoleType.ORG_ADMIN.roleType)))
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.newProjectForm(auth2, model)
+            result shouldBe "project/create"
+            model.getAttribute("isOwnerOrganization") shouldBe true
+        }
+
+        it("사용자가 관리하는 조직 이름이 자신의 loginId와 다르면 isOwnerOrganization이 false여야 한다") {
+            val user2 = User(id = 1052L, loginId = "diffowner", name = "다른이름유저")
+            val auth2 = UsernamePasswordAuthenticationToken("diffowner", "password")
+            every { userRepository.findByLoginId("diffowner") } returns Optional.of(user2)
+            every { organizationUserRepository.findByUserIdAndRoleId(1052L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            val result = projectViewController.newProjectForm(auth2, model)
+            result shouldBe "project/create"
+            model.getAttribute("isOwnerOrganization") shouldBe false
+        }
+    }
+
+    // changeVCS(POST) 잔여 분기 — projectUserRepository.findByProjectIdAndUserId()가 Optional.empty()가
+    // 아니라 실제 MEMBER 역할의 ProjectUser를 반환할 때 .map{ role==MANAGER }가 false로 평가되는 경로
+    // (기존 "MANAGER 권한이 없으면" 테스트는 Optional.empty()라 이 map 람다 자체가 실행되지 않았다).
+    describe("changeVCS(POST) 잔여 분기 보강") {
+        it("MANAGER가 아닌 일반 멤버 권한으로 요청하면 403을 반환해야 한다") {
+            val proj = Project(id = 1060L, name = "MemberVCSPostProj", owner = "owner")
+            val member = User(id = 1060L, loginId = "vcspostmember", name = "VCS포스트멤버")
+            val memberAuth = UsernamePasswordAuthenticationToken("vcspostmember", "password")
+            every { userRepository.findByLoginId("vcspostmember") } returns Optional.of(member)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MemberVCSPostProj") } returns Optional.of(proj)
+            every { projectUserRepository.findByProjectIdAndUserId(1060L, 1060L) } returns
+                Optional.of(ProjectUser(id = 10600L, user = member, project = proj, role = Role(id = RoleType.MEMBER.roleType)))
+
+            val response = projectViewController.changeVCS("owner", "MemberVCSPostProj", memberAuth)
+            response.statusCode shouldBe HttpStatus.FORBIDDEN
+        }
+    }
 })

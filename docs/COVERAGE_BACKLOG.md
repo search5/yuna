@@ -53,7 +53,15 @@
 - 추가 완료([x]): `AccessControl`(BRANCH 95.3% — 이 저장소 최대 미커버 클래스 완주, 4개 파일 431 tests), `TemplateHelper`(96.2%)
 - 구조적 한계로 최대치 도달([i]): `GitRepository`(BRANCH 88.3%, 실제 JGit 저장소 기반 95 tests)
 - 진행 중([~], 다음 배치 계속): `ProjectViewController`(78.5%), `UserViewController`(87.9%, 근소 미달)
-- 누적 실버그 발견(전부 미수정, 별도 검토 필요): FileDiff.updateRange 중복추가, MigrationService 3건, diff_match_patch 2건(vendored, 도달불가), TemplateHelper.getVotersForName 클램프 오류(미트리거), GitRepository.getParentCommitOf NPE 위험(미트리거), ProjectViewController.projectLogo 하드코딩 개발자 로컬경로(배포결함 추정), IssueShareServiceImpl.findSharableUsers의 type 파라미터 미사용, PullRequest.contributor 관련 죽은 코드 1건
+- 누적 실버그 발견(전부 미수정, 별도 검토 필요): FileDiff.updateRange 중복추가, MigrationService 3건, diff_match_patch 2건(vendored, 도달불가), TemplateHelper.getVotersForName 클램프 오류(미트리거), GitRepository.getParentCommitOf NPE 위험(미트리거), ProjectViewController.projectLogo 하드코딩 개발자 로컬경로(배포결함 추정), IssueShareServiceImpl.findSharableUsers의 type 파라미터 미사용, PullRequest.contributor/title 관련 죽은 코드 2건
+
+## 진행 현황 갱신 (2026-08-24 02:10, 4차 배치 완료 후)
+
+- 전체 클래스: 478개, 95% 미만: **249개**(-11)
+- 라인: 86.0%, 분기: 71.9%, 메서드: 78.5%, 클래스: 94.2%
+- 추가 완료([x]): `CodeViewController`(BRANCH 95.5%), `MilestoneViewController`(95.2%), `UserViewController`(98.7%), `IssueViewController`(96.1%)
+- 진행 중([~], 다음 배치 계속): `ProjectViewController`(BRANCH 87.4%, 아직 미달 — 121 tests에도 불구하고 대형 클래스라 잔여 많음)
+- 이번 배치 신규 실버그/죽은코드 없음(UserViewController의 verifyUserLegacy/confirmEmailLegacy는 죽은 코드가 아니라 테스트 누락이었음을 확인·해결)
 
 
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
@@ -287,12 +295,12 @@
 | `diff_match_patch$Diff` | 36.4 | 0.0 | 25.0 | 7 | 4 | 3 | [ ] | |
 | `diff_match_patch$LinesToCharsResult` | 0.0 | 100.0 | 0.0 | 5 | 0 | 1 | [ ] | |
 | **web** | | | | | | | | |
-| `ProjectViewController` | 50.0 | 32.5 | 74.0 | 327 | 301 | 13 | [~] | 2026-08-24: `ProjectViewControllerSpec.kt`에 80 tests 추가(31→111). 전체 회귀 확정치: LINE 96.0%, BRANCH 78.5%(아직 미달), METHOD 100% — 다음 배치에서 분기 보강 계속. **실버그 2건 발견(미수정, 별도 검토 필요)**: (1) `projectLogo()`의 기본 로고 폴백이 다른 개발자의 로컬 머신 절대경로(`/Users/mzc01-search5/.../project_default_logo.png`)로 하드코딩돼 있어 어떤 실제 배포 환경에서도 해당 분기가 존재할 수 없음 — 진짜 배포 결함으로 추정, (2) `getProjectHistory()`의 PR 섹션 `contributor?.let{} ?: "Unknown"`이 `PullRequest.contributor`가 non-null 타입이라 죽은 코드(nullable→non-null 리팩터 잔재로 추정) |
-| `UserViewController` | 57.0 | 30.7 | 43.3 | 173 | 160 | 17 | [~] | 2026-08-24: `UserViewControllerSpec.kt`에 63 tests 추가(15→78). 전체 회귀 확정치: LINE 98.3%, BRANCH 87.9%(아직 근소 미달), METHOD 93.3% — 다음 배치에서 마무리. 계정 관리(비밀번호 재설정 등) 보안 로직 포함해 검증. 도달 불가능 확정 1건: `userIssues()`의 `mentionService.getMentioningIssueIds(loginUser.id!!)` 강제 언래핑 이후 시점이라 when절 else 분기 도달 불가 |
-| `IssueViewController` | 69.6 | 45.1 | 78.9 | 158 | 167 | 4 | [ ] | |
-| `MilestoneViewController` | 49.0 | 31.7 | 50.0 | 151 | 142 | 7 | [ ] | |
+| `ProjectViewController` | 50.0 | 32.5 | 74.0 | 327 | 301 | 13 | [~] | 2026-08-24: `ProjectViewControllerSpec.kt`에 총 121 tests(80+41, 31→111→152). 전체 회귀 확정치: LINE 99.2%, BRANCH 87.4%(아직 미달), METHOD 100% — 다음 배치에서 마무리. **실버그/죽은코드 3건 발견(미수정, 별도 검토 필요)**: (1) `projectLogo()`의 기본 로고 폴백이 다른 개발자의 로컬 머신 절대경로(`/Users/mzc01-search5/.../project_default_logo.png`)로 하드코딩 — 진짜 배포 결함으로 추정, (2)(3) `getProjectHistory()`의 PR 섹션 `contributor`/`pull.title ?: ""` 둘 다 `PullRequest`의 non-null 타입 필드라 elvis 죽은 코드 |
+| `UserViewController` | 57.0 | 30.7 | 43.3 | 173 | 160 | 17 | [x] | 2026-08-24: `UserViewControllerSpec.kt`에 총 89 tests(63+26, 15→78→104). METHOD 미달 원인 확인·해결: `verifyUserLegacy`/`confirmEmailLegacy`가 실제 도달 가능한 라우트인데 테스트가 한 번도 호출한 적 없었음. 전체 회귀 확정치: LINE 99.5%, BRANCH 98.7%, METHOD 100% — 목표 달성. 도달 불가능 확정 1건: `userIssues()`의 when절 else 분기(`loginUser.id!!` 강제 언래핑 이후 시점이라 구조적으로 불가능) |
+| `IssueViewController` | 69.6 | 45.1 | 78.9 | 158 | 167 | 4 | [x] | 2026-08-24: `IssueViewControllerSpec.kt`에 101 tests 추가(13→114). 전체 회귀 확정치(별도 `IssueEditMoveProjectSpec.kt`의 targetProjectId 이동 테스트와 합산): LINE 99.0%, BRANCH 96.1%, METHOD 100% — 목표 달성 |
+| `MilestoneViewController` | 49.0 | 31.7 | 50.0 | 151 | 142 | 7 | [x] | 2026-08-24: `MilestoneViewControllerSpec.kt`에 62 tests 추가(13→75). 단독 측정 LINE 100%, METHOD 100%, BRANCH 95.2% — 목표 달성. `openMilestone`/`closeMilestone`/`deleteMilestone`/`editMilestoneForm`(완전 미실행이었음) 포함 전체 커버 |
 | `OrganizationViewController` | 66.8 | 46.5 | 72.2 | 96 | 123 | 5 | [ ] | |
-| `CodeViewController` | 62.0 | 34.3 | 69.2 | 89 | 130 | 4 | [ ] | |
+| `CodeViewController` | 62.0 | 34.3 | 69.2 | 89 | 130 | 4 | [x] | 2026-08-24: `CodeViewControllerSpec.kt`에 64 tests 추가(11→75). 단독 측정 LINE 99.1%, BRANCH 95.5%, METHOD 100% — 목표 달성. `showImageFile`/`openFile`/`historyUntilHead`는 실제 라우팅된 엔드포인트인데 기존 테스트가 전혀 호출한 적 없어 METHOD 0%였던 것 확인·해결. 참고(버그 아님, 설계상 특이점): `showRawFile`의 MIME 감지가 임시파일을 항상 `.tmp` 확장자로 만들어 `Files.probeContentType`이 실질적으로 거의 항상 null 반환 |
 | `BoardViewController` | 67.6 | 45.0 | 63.6 | 79 | 122 | 4 | [ ] | |
 | `PullRequestViewController` | 79.0 | 51.9 | 96.0 | 69 | 124 | 1 | [ ] | |
 | `IndexController` | 66.7 | 38.2 | 100.0 | 42 | 84 | 0 | [ ] | |

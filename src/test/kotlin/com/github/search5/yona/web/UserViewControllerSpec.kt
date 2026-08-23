@@ -1119,4 +1119,337 @@ class UserViewControllerSpec : DescribeSpec({
             verify(exactly = 1) { userRepository.save(target) }
         }
     }
+
+    // verifyUserLegacy/confirmEmailLegacy는 verifyUser/confirmEmail로 위임하는 legacy 호환 라우트다.
+    // 실제로 매핑된(@GetMapping) 진입점이라 도달 가능하지만 기존 테스트가 legacy 경로를 전혀
+    // 호출하지 않아 METHOD 커버리지가 누락되어 있었다 — 위임 성공 케이스로 보강한다.
+    describe("GET /verify/{loginId}/{verificationCode} (verifyUserLegacy)") {
+        it("verifyUser와 동일하게 동작해 200 OK와 user/verified 뷰를 반환해야 한다") {
+            every { userService.verifyUser("gildong", "legacy-code") } returns true
+
+            mockMvc.perform(get("/verify/gildong/legacy-code"))
+                .andExpect(status().isOk)
+                .andExpect(view().name("user/verified"))
+                .andExpect(model().attribute("loginId", "gildong"))
+        }
+    }
+
+    describe("GET /user/email/confirm/{emailId}/{token} (confirmEmailLegacy)") {
+        it("confirmEmail과 동일하게 동작해 /user/editform으로 리다이렉트해야 한다") {
+            every { userService.confirmEmail(10L, "legacy-token") } returns true
+
+            mockMvc.perform(get("/user/email/confirm/10/legacy-token"))
+                .andExpect(status().is3xxRedirection)
+                .andExpect(redirectedUrl("/user/editform"))
+        }
+    }
+
+    // userProfile()의 "대상 사용자 없음" 404 분기와, 방문자가 인증되었지만 계정이 삭제된 경우
+    // (findByLoginId가 Optional.empty를 반환) 익명 방문자와 동일하게 취급되는 분기.
+    // openIssuesCount/closedIssuesCount는 이슈가 전부 OPEN 기본값이던 기존 테스트에서는
+    // count{} 술어의 한쪽 결과만 나오므로 OPEN/CLOSED가 섞인 케이스로 양쪽을 모두 검증한다.
+    describe("GET /user/{loginId} - 추가 분기 커버리지") {
+        it("존재하지 않는 loginId면 error/404 뷰를 반환해야 한다") {
+            every { userRepository.findByLoginId("ghost") } returns Optional.empty()
+
+            val view = userViewController.userProfile(
+                loginId = "ghost", daysAgo = 14, selected = "issues",
+                authentication = null, model = ExtendedModelMap()
+            )
+
+            view shouldBe "error/404"
+        }
+
+        it("방문자가 인증되었으나 계정을 찾을 수 없으면 비로그인 방문자와 동일하게 처리해야 한다") {
+            val viewedUser = User(id = 40L, loginId = "viewed2", name = "대상유저")
+            val staleAuth = UsernamePasswordAuthenticationToken("ghostviewer", "password")
+            every { userRepository.findByLoginId("viewed2") } returns Optional.of(viewedUser)
+            every { userRepository.findByLoginId("ghostviewer") } returns Optional.empty()
+            every { projectUserRepository.findByUserId(40L) } returns emptyList()
+            every { issueRepository.findRecentlyByUser(40L, any()) } returns emptyList()
+            every {
+                pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(viewedUser, any())
+            } returns emptyList()
+
+            val model = ExtendedModelMap()
+            userViewController.userProfile(loginId = "viewed2", daysAgo = 14, selected = "issues", authentication = staleAuth, model = model)
+
+            model.getAttribute("currentUser") shouldBe null
+        }
+
+        it("OPEN/CLOSED 이슈가 섞여 있으면 각각의 개수를 올바르게 집계해야 한다") {
+            val viewedUser = User(id = 41L, loginId = "viewed3", name = "대상유저")
+            val project = Project(id = 9L, name = "proj9", owner = "viewed3")
+            val openIssue = Issue(id = 500L, title = "open", project = project, state = State.OPEN)
+            val closedIssue = Issue(id = 501L, title = "closed", project = project, state = State.CLOSED)
+            every { userRepository.findByLoginId("viewed3") } returns Optional.of(viewedUser)
+            every { projectUserRepository.findByUserId(41L) } returns emptyList()
+            every { issueRepository.findRecentlyByUser(41L, any()) } returns listOf(openIssue, closedIssue)
+            every {
+                pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(viewedUser, any())
+            } returns emptyList()
+
+            val model = ExtendedModelMap()
+            userViewController.userProfile(loginId = "viewed3", daysAgo = 14, selected = "issues", authentication = null, model = model)
+
+            model.getAttribute("openIssuesCount") shouldBe 1
+            model.getAttribute("closedIssuesCount") shouldBe 1
+        }
+    }
+
+    // userIssues()의 "인증되었으나 사용자 레코드를 찾을 수 없는" 분기(세션은 살아있지만 계정이
+    // 삭제된 경우) — 미인증(authentication==null) 분기와는 별개의 null 검사 지점이다.
+    describe("GET /user/issues - 인증되었으나 사용자를 찾을 수 없는 경우") {
+        it("로그인 폼으로 리다이렉트되어야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+
+            mockMvc.perform(get("/user/issues").principal(UsernamePasswordAuthenticationToken("ghostuser", "password")))
+                .andExpect(status().is3xxRedirection)
+                .andExpect(redirectedUrl("/users/loginform"))
+        }
+    }
+
+    // userSidebar()의 "인증되었으나 사용자 없음" 분기, watch.resourceId 파싱 실패/미존재 프로젝트
+    // 제외 분기(editUserNotificationsForm/usermenuTabContentList에는 있었지만 userSidebar에는
+    // 없었음), joinmember 필터의 "오너가 아닌 멤버(참여함에 포함)" 분기(기존 테스트는 반대로
+    // "오너 본인(제외)" 케이스만 있었음).
+    describe("GET /user/sidebar - 추가 분기 커버리지") {
+        it("인증되었으나 사용자를 찾을 수 없으면 로그인 폼으로 리다이렉트되어야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+
+            val view = userViewController.userSidebar(
+                path = "/user/issues", hash = "",
+                authentication = UsernamePasswordAuthenticationToken("ghostuser", "password"),
+                model = ExtendedModelMap()
+            )
+
+            view shouldBe "redirect:/users/loginform"
+        }
+
+        it("watch의 resourceId 파싱 실패/미존재 프로젝트는 감시 목록에서 제외해야 한다") {
+            val loginUser = User(id = 50L, loginId = "sidebaruser", name = "사이드바유저")
+            val watchInvalid = Watch(id = 1L, user = loginUser, resourceType = ResourceType.PROJECT, resourceId = "not-a-number")
+            val watchMissing = Watch(id = 2L, user = loginUser, resourceType = ResourceType.PROJECT, resourceId = "9999")
+            val watchValid = Watch(id = 3L, user = loginUser, resourceType = ResourceType.PROJECT, resourceId = "12")
+            val watchedProject = Project(id = 12L, name = "watched", owner = "someone")
+
+            every { userRepository.findByLoginId("sidebaruser") } returns Optional.of(loginUser)
+            every { favoriteProjectRepository.findByUserId(50L) } returns emptyList()
+            every { organizationUserRepository.findByUserId(50L) } returns emptyList()
+            every { favoriteOrganizationRepository.findByUserId(50L) } returns emptyList()
+            every { projectUserRepository.findByUserId(50L) } returns emptyList()
+            every { projectRepository.findByOwner("sidebaruser") } returns emptyList()
+            every { watchRepository.findByUserAndResourceType(loginUser, ResourceType.PROJECT) } returns listOf(watchInvalid, watchMissing, watchValid)
+            every { projectRepository.findById(9999L) } returns Optional.empty()
+            every { projectRepository.findById(12L) } returns Optional.of(watchedProject)
+            every { organizationRepository.findAll() } returns emptyList()
+
+            val model = ExtendedModelMap()
+            userViewController.userSidebar(
+                path = "/user/issues", hash = "",
+                authentication = UsernamePasswordAuthenticationToken("sidebaruser", "password"), model = model
+            )
+
+            model.getAttribute("watching") shouldBe listOf(watchedProject)
+        }
+
+        it("오너가 아닌 멤버로 참여한 프로젝트는 참여함(joinmember) 목록에 포함되어야 한다") {
+            val loginUser = User(id = 51L, loginId = "member1", name = "멤버유저")
+            val memberRole = Role(id = RoleType.MEMBER.roleType)
+            val otherProject = Project(id = 13L, name = "other-proj", owner = "otherowner")
+            val projectUser = ProjectUser(id = 2L, user = loginUser, project = otherProject, role = memberRole)
+
+            every { userRepository.findByLoginId("member1") } returns Optional.of(loginUser)
+            every { favoriteProjectRepository.findByUserId(51L) } returns emptyList()
+            every { organizationUserRepository.findByUserId(51L) } returns emptyList()
+            every { favoriteOrganizationRepository.findByUserId(51L) } returns emptyList()
+            every { projectUserRepository.findByUserId(51L) } returns listOf(projectUser)
+            every { projectRepository.findByOwner("member1") } returns emptyList()
+            every { watchRepository.findByUserAndResourceType(loginUser, ResourceType.PROJECT) } returns emptyList()
+            every { organizationRepository.findAll() } returns emptyList()
+            every { issueRepository.findByProjectIn(listOf(otherProject), any()) } returns PageImpl(emptyList())
+
+            val model = ExtendedModelMap()
+            userViewController.userSidebar(
+                path = "/user/issues", hash = "",
+                authentication = UsernamePasswordAuthenticationToken("member1", "password"), model = model
+            )
+
+            model.getAttribute("joinmember") shouldBe listOf(otherProject)
+        }
+    }
+
+    // editUserNotificationsForm()의 "인증되었으나 사용자 없음" 분기.
+    describe("GET /user/editform/notifications - 인증되었으나 사용자를 찾을 수 없는 경우") {
+        it("error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+
+            userViewController.editUserNotificationsForm(
+                UsernamePasswordAuthenticationToken("ghostuser", "password"), ExtendedModelMap()
+            ) shouldBe "error/403"
+        }
+    }
+
+    // usermenuTabContentList()의 "인증되었으나 사용자 없음" 분기와, joinmember 필터의
+    // "오너 본인(제외)" 분기(기존 테스트는 반대로 "멤버로 참여(포함)" 케이스만 있었음).
+    describe("GET /user/usermenuTabContentList - 추가 분기 커버리지") {
+        it("인증되었으나 사용자를 찾을 수 없으면 모델 세팅 없이 공용 뷰만 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+
+            val model = ExtendedModelMap()
+            val view = userViewController.usermenuTabContentList(
+                UsernamePasswordAuthenticationToken("ghostuser", "password"), model
+            )
+
+            view shouldBe "common/usermenu_tab_content_list"
+            model.getAttribute("currentUser") shouldBe null
+        }
+
+        it("오너 본인이 속한 프로젝트는 참여함(joinmember) 목록에서 제외해야 한다") {
+            val loginUser = User(id = 52L, loginId = "owner1", name = "오너유저")
+            val memberRole = Role(id = RoleType.MEMBER.roleType)
+            val ownProject = Project(id = 14L, name = "own-proj", owner = "owner1")
+            val projectUser = ProjectUser(id = 3L, user = loginUser, project = ownProject, role = memberRole)
+
+            every { userRepository.findByLoginId("owner1") } returns Optional.of(loginUser)
+            every { favoriteProjectRepository.findByUserId(52L) } returns emptyList()
+            every { organizationUserRepository.findByUserId(52L) } returns emptyList()
+            every { favoriteOrganizationRepository.findByUserId(52L) } returns emptyList()
+            every { projectUserRepository.findByUserId(52L) } returns listOf(projectUser)
+            every { projectRepository.findByOwner("owner1") } returns listOf(ownProject)
+            every { watchRepository.findByUserAndResourceType(loginUser, ResourceType.PROJECT) } returns emptyList()
+            every { organizationRepository.findAll() } returns emptyList()
+
+            val model = ExtendedModelMap()
+            userViewController.usermenuTabContentList(UsernamePasswordAuthenticationToken("owner1", "password"), model)
+
+            model.getAttribute("joinmember") shouldBe emptyList<Project>()
+        }
+    }
+
+    // userFiles()의 "인증되었으나 사용자 없음" 분기.
+    describe("GET /user/files - 인증되었으나 사용자를 찾을 수 없는 경우") {
+        it("error/403 뷰를 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+
+            userViewController.userFiles(
+                filter = "", pageNum = 1,
+                authentication = UsernamePasswordAuthenticationToken("ghostuser", "password"),
+                model = ExtendedModelMap()
+            ) shouldBe "error/403"
+        }
+    }
+
+    // resetUserPassword()의 "인증되었으나 사용자 없음" 분기와, passwordSalt가 null인 사용자의
+    // "?: \"\"" 엘비스 분기(기존 테스트는 모두 salt가 설정된 사용자만 사용했음).
+    describe("POST /user/resetPassword - 추가 분기 커버리지") {
+        it("인증되었으나 사용자를 찾을 수 없으면 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            val request = mockk<HttpServletRequest>(relaxed = true)
+
+            userViewController.resetUserPassword(
+                "old", "new1234", "new1234",
+                UsernamePasswordAuthenticationToken("ghostuser", "password"), request
+            ) shouldBe "error/403"
+        }
+
+        it("기존 passwordSalt가 null이면 빈 문자열을 salt로 사용해 비교해야 한다") {
+            val loginUser = User(id = 60L, loginId = "nosaltuser", password = hashPasswordLike("oldpass", ""))
+            every { userRepository.findByLoginId("nosaltuser") } returns Optional.of(loginUser)
+            every { userRepository.save(any()) } returns loginUser
+            val request = mockk<HttpServletRequest>(relaxed = true)
+
+            val view = userViewController.resetUserPassword(
+                "oldpass", "newpass1234", "newpass1234",
+                UsernamePasswordAuthenticationToken("nosaltuser", "password"), request
+            )
+
+            view shouldBe "redirect:/users/loginform"
+            verify(exactly = 1) { request.logout() }
+        }
+    }
+
+    // editUserProfileForm/editUserEmailsForm/editUserPasswordForm/editUserTokenForm의
+    // "인증되었으나 사용자 없음" 분기(미인증/인증-성공 두 케이스만으로는 커버되지 않는, 세션은
+    // 있으나 계정이 삭제된 경우의 별도 null 검사 지점).
+    describe("사용자 편집 화면 - 인증되었으나 사용자를 찾을 수 없는 경우") {
+        it("editUserProfileForm은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.editUserProfileForm(
+                UsernamePasswordAuthenticationToken("ghostuser", "password"), ExtendedModelMap()
+            ) shouldBe "error/403"
+        }
+
+        it("editUserEmailsForm은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.editUserEmailsForm(
+                UsernamePasswordAuthenticationToken("ghostuser", "password"), ExtendedModelMap()
+            ) shouldBe "error/403"
+        }
+
+        it("editUserPasswordForm은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.editUserPasswordForm(
+                UsernamePasswordAuthenticationToken("ghostuser", "password"), ExtendedModelMap()
+            ) shouldBe "error/403"
+        }
+
+        it("editUserTokenForm은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.editUserTokenForm(
+                UsernamePasswordAuthenticationToken("ghostuser", "password"), ExtendedModelMap()
+            ) shouldBe "error/403"
+        }
+
+        // fillAvatarId()의 "첨부파일이 존재함" 분기 — beforeTest의 전역 mock이 항상 빈 목록을
+        // 반환해 attachments.isNotEmpty()가 한 번도 true였던 적이 없었다.
+        it("아바타 첨부파일이 있으면 마지막 첨부파일 id를 avatarId로 채워야 한다") {
+            val loginUser = User(id = 61L, loginId = "avataruser", name = "아바타유저")
+            val avatar1 = Attachment(id = 700L)
+            val avatar2 = Attachment(id = 701L)
+            every { userRepository.findByLoginId("avataruser") } returns Optional.of(loginUser)
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.USER_AVATAR, "61") } returns listOf(avatar1, avatar2)
+
+            userViewController.editUserProfileForm(UsernamePasswordAuthenticationToken("avataruser", "password"), ExtendedModelMap())
+
+            loginUser.avatarId shouldBe 701L
+        }
+    }
+
+    // editUserInfo/addEmail/deleteEmail/setAsMainEmail/sendValidationEmail/resetToken의
+    // "인증되었으나 사용자 없음" 분기.
+    describe("액션 엔드포인트 - 인증되었으나 사용자를 찾을 수 없는 경우") {
+        it("editUserInfo는 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.editUserInfo(
+                "이름", "a@a.com", null, UsernamePasswordAuthenticationToken("ghostuser", "password")
+            ) shouldBe "error/403"
+        }
+
+        it("addEmail은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.addEmail("a@a.com", UsernamePasswordAuthenticationToken("ghostuser", "password")) shouldBe "error/403"
+        }
+
+        it("deleteEmail은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.deleteEmail(1L, UsernamePasswordAuthenticationToken("ghostuser", "password")) shouldBe "error/403"
+        }
+
+        it("setAsMainEmail은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.setAsMainEmail(1L, UsernamePasswordAuthenticationToken("ghostuser", "password")) shouldBe "error/403"
+        }
+
+        it("sendValidationEmail은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            val request = mockk<HttpServletRequest>(relaxed = true)
+            userViewController.sendValidationEmail(1L, request, UsernamePasswordAuthenticationToken("ghostuser", "password")) shouldBe "error/403"
+        }
+
+        it("resetToken은 error/403을 반환해야 한다") {
+            every { userRepository.findByLoginId("ghostuser") } returns Optional.empty()
+            userViewController.resetToken(UsernamePasswordAuthenticationToken("ghostuser", "password")) shouldBe "error/403"
+        }
+    }
 })
