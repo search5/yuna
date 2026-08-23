@@ -162,6 +162,32 @@ class PostingServiceSpec @Autowired constructor(
                 updated.history shouldBe null
             }
 
+            // yona BoardApp.editPost()의 unmarkAnotherReadmePostingIfExists() 대응(#146 재검토,
+            // TASK-0263) — 다른 글을 readme=true로 수정하면 같은 프로젝트에서 기존에 readme였던
+            // 글은 자동으로 해제되어야 한다(프로젝트당 README 글은 항상 최대 1개).
+            it("readme=true로 수정하면 같은 프로젝트의 기존 readme 글은 자동으로 해제되어야 한다(#146)") {
+                val author = userRepository.save(User(loginId = "writer8", name = "작성자8", email = "writer8@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project8", owner = "writer8"))
+                val oldReadme = postingService.createPosting(
+                    project.id!!, Posting(title = "예전 README", body = "예전 내용", readme = true, project = project), author.id!!
+                )
+                val newPost = postingService.createPosting(
+                    project.id!!, Posting(title = "새 글", body = "새 내용", project = project), author.id!!
+                )
+                resetNotifications()
+
+                postingService.updatePosting(
+                    projectId = project.id!!, number = newPost.number!!,
+                    title = "새 글", body = "새 내용", notice = false, readme = true,
+                    authorId = author.id!!, sendNotificationMail = false
+                )
+
+                val refreshedOld = postingService.getPosting(project.id!!, oldReadme.number!!)!!
+                val refreshedNew = postingService.getPosting(project.id!!, newPost.number!!)!!
+                refreshedOld.readme shouldBe false
+                refreshedNew.readme shouldBe true
+            }
+
             it("본인이 작성하지 않은 글을 수정하면 알림 발송 옵션과 무관하게 항상 알림이 발행되어야 한다(P1-44)") {
                 val author = userRepository.save(User(loginId = "writer5", name = "작성자5", email = "writer5@yona.io"))
                 val editor = userRepository.save(User(loginId = "editor1", name = "편집자", email = "editor1@yona.io"))

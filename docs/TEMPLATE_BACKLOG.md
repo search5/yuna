@@ -254,9 +254,9 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 |---|---|---|---|---|
 | 143 | [x] | `board/list.scala.html` | `board/list.html` | 완료(TASK-0240, TDD). #144 조사에서 발견된 2건 수정 |
 | 144 | [i] | `board/partial_list.scala.html` | `board/list.html`에 인라인 | **발견(TASK-0240)**: (1) 제목의 `showHeaderWordsInBracketsIfExist`/`removeHeaderWords`(대괄호 접두어 분리 표시)가 통째로 빠져 있었음 — 복구. (2) **더 중대한 발견**: 공지글이 상단 공지 영역뿐 아니라 일반 페이징 목록 쿼리(`postingRepository.findByProject`)에도 필터링 없이 포함되어 화면에 중복 노출되고 있었음(legacy는 `el.eq("notice", false)`로 명시적 제외) — `PostingRepository`에 `findByProjectAndNotice(project, notice, pageable)` 페이징 버전 신규 추가 + `searchPostingsInProject`/`findByProjectAndLabelIdsIn` 쿼리에도 `notice=false` 조건 추가, `BoardViewController.posts()`가 기본 조회 시 이를 사용하도록 수정 |
-| 145 | [x] | `board/create.scala.html` | `board/create.html` | 확인 완료(TASK-0240). 파일업로더/README 연동/커밋메시지 연동 필드까지 legacy와 정확히 일치. `isProjectResourceCreatable(COMMIT)` 게이트가 걸린 README 체크박스는 그룹10/11의 코드-연동 범위라 이번 배치에서는 미이식(그룹10/11에서 처리 예정) |
-| 146 | [x] | `board/edit.scala.html` | `board/edit.html` | 확인 완료(TASK-0240). #145와 동일하게 README 지정 체크박스(`post.readmefy`)만 그룹10/11 범위로 미이식, 나머지 일치 |
-| 147 | [x] | `board/view.scala.html` | `board/view.html` | 완료(TASK-0240, TDD). 삭제 확인 모달의 예/아니오 버튼이 `#{button.yes}`/`#{button.no}` 메시지 키 대신 하드코딩 한글("네"/"아니요")이었던 것을 복구. `common.noAuthor`(작성자 없는 경우 표시)는 yuna의 Posting이 작성자 정보를 비정규화 저장해 항상 값이 있어 해당 없음. `change.history`(게시글 수정 이력 모달)는 이력 추적 테이블 자체가 없어 순수 템플릿 포팅 범위를 넘어 보류 |
+| 145 | [x] | `board/create.scala.html` | `board/create.html` | 확인 완료(TASK-0240). 파일업로더/README 연동/커밋메시지 연동 필드까지 legacy와 정확히 일치. **2026-08-23 완료(TASK-0263)**: "그룹10/11에서 처리 예정"이라던 README 체크박스(`isProjectResourceCreatable(COMMIT)` 게이트)가 그룹10/11 완료 후에도 실제로는 계속 미이식 상태였음을 재검토로 발견 — hidden input을 legacy와 동일한 실제 체크박스로 교체, `BoardViewController.createPostForm()`에 `canReadmefy` 게이트(Git 프로젝트+COMMIT 권한+readme 쿼리) 추가 |
+| 146 | [x] | `board/edit.scala.html` | `board/edit.html` | 확인 완료(TASK-0240). **2026-08-23 완료(TASK-0263)**: #145와 동일하게 README 지정 체크박스(`post.readmefy`)가 실제로는 계속 없었음을 발견해 추가. 함께 발견한 별개의 실질 버그: `BoardViewController.editPost()`가 제출된 readme 값이 아니라 stale한 기존 `posting.readme`를 써서 체크박스로 readme를 새로 켜도 반영되지 않고 있었음 — `request.readme`를 쓰도록 수정. README.md 실제 git 커밋+같은 프로젝트의 다른 readme 글 자동 해제(legacy `unmarkAnotherReadmePostingIfExists`) 로직은 폼 POST 경로에만 있고 board/edit.html이 실제로 쓰는 REST 경로(`PostingServiceImpl.updatePosting()`)에는 없었던 것도 발견해 서비스 계층으로 이전·통합 |
+| 147 | [x] | `board/view.scala.html` | `board/view.html` | 완료(TASK-0240, TDD). 삭제 확인 모달의 예/아니오 버튼이 `#{button.yes}`/`#{button.no}` 메시지 키 대신 하드코딩 한글("네"/"아니요")이었던 것을 복구. `common.noAuthor`(작성자 없는 경우 표시)는 yuna의 Posting이 작성자 정보를 비정규화 저장해 항상 값이 있어 해당 없음. **정정(2026-08-23)**: "`change.history`(게시글 수정 이력 모달)는 이력 추적 테이블 자체가 없어 보류"라는 위 기록은 stale — #41(TASK-0257)이 이후 세션에서 `Posting.history`/`HistoryUtil`/`common/partial_history.html`을 완성하면서 이 화면에도 이미 배선해뒀다(41행 참고). `PostingHistoryTemplateRenderingSpec.kt`에 실제 렌더링 테스트까지 있음 — 실질적으로 이미 완료 상태였음을 재확인 |
 | 148 | [i] | `board/partial_comments.scala.html` | (view.html에 인라인, P1-106에서 이미 이식) | 확인 완료(TASK-0240). issue와 동일한 댓글+이벤트 타임라인 구조 재사용, 일치 |
 
 ## 그룹 9 — `milestone/*` 마일스톤 (5개, #149~153 중 4개 + 사이 여백)
@@ -295,7 +295,7 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 | # | 상태 | legacy 경로 | yuna 대상 경로 | 비고 |
 |---|---|---|---|---|
 | 167 | [x] | `git/list.scala.html` | `pullrequest/list.html` | 완료(TASK-0243). 얇은 래퍼로 재작성 + partial_search 위임 |
-| 168 | [x] | `git/create.scala.html` | `pullrequest/create.html` | 완료(TASK-0243). legacy DOM(`pull-request-wrap`) 구조로 전면 재작성. cross-fork PR(다른 프로젝트 간)은 yuna에 `getAssociationProjects()` 상당 기능이 없어 동일 프로젝트 내 브랜치→브랜치로 범위 축소(문서화된 보류) |
+| 168 | [x] | `git/create.scala.html` | `pullrequest/create.html` | 완료(TASK-0243). legacy DOM(`pull-request-wrap`) 구조로 전면 재작성. **2026-08-23 완료(TASK-0263)**: 보류해뒀던 cross-fork PR(다른 프로젝트 간)을 실제로 구현 — `Project.associationProjects`(legacy `getAssociationProjects()` 대응) 신규 추가, `PullRequestViewController.createPullRequestForm()`/`mergeResult()`에 fromProjectId/toProjectId 쿼리 처리 추가(백엔드 `PullRequestService.previewMerge()`/`PullRequestController.createPullRequest()`는 이미 fromProject/toProject를 분리해 받고 있었음 — 웹 레이어만 같은 프로젝트로 고정해뒀던 것). 상세는 아래 진행 로그 참고 |
 | 169 | [x] | `git/edit.scala.html` | `pullrequest/edit.html` | 완료(TASK-0243). create.html과 동일한 DOM 정합 |
 | 170 | [x] | `git/view.scala.html` | `pullrequest/view.html` | 완료(TASK-0243, 전면 재작성). "commits" 탭은 legacy에 없는 yuna 자체 확장이었음을 확인해 제거, tab 쿼리파라미터도 제거하고 legacy와 동일하게 단일 overview 페이지로 되돌림 |
 | 171 | [x] | `git/viewChanges.scala.html` | `pullrequest/view.html`(tab=changes) | 완료(TASK-0243). 별도 URL(`/pull/{number}/changes`)은 유지(허용된 아키텍처 차이), 콘텐츠는 legacy viewChanges와 대조해 review-wrap/reviewlist/non-ranged 댓글까지 재현 |
@@ -1892,6 +1892,12 @@ TASK-0252로 그룹10~17 통합 회귀를 green으로 만든 뒤 백로그를 �
 - **검증**: 문서 편집만 진행, 코드 변경 없음(순수 문서 정확성 교정). 참고로 표 행 상태(`[x]`) 자체는
   전부 이미 정확했다 — 문제는 "완료"와 나란히 붙어있던 "범위조정, 아래참고" 라벨이 실제로는 해소된
   과거 결손을 마치 지금도 미해결인 것처럼 읽히게 하는 낡은 표현이었다는 것.
+- **2026-08-23 정정**: 위 "약 6건" 목록도 이후 낡아졌다 — P1-09/41의 UI 배선은 TASK-0261/0262에서
+  `docs/TEMPLATE_BACKLOG.md` TASK-0225가 별도 트랙에서 이미 완료해뒀음을 발견해 정정했고(`PARITY_BACKLOG.md`
+  P1-67 참고), P1-111/135는 재검토 결과 실제로 완료 상태임을 재확인했으며, PullRequestEvent.oldValue도
+  `NotificationMessageResolver`가 이 이벤트 타입에 `oldValue`를 쓰지 않음을 코드로 재확인했다(둘 다
+  변경 불필요, 정확한 기록이었음). 지금 실제로 남은 순수 "영구 축소" 항목은 **P1-03(계정 수동병합 UI)
+  1건뿐**이다.
 
 ### TASK-0260: 그룹7 issue/* 하위이슈+담당자+초안 위젯 완성 (이전 세션 이어받음)
 

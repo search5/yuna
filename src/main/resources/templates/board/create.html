@@ -44,7 +44,12 @@
                             <span th:text="#{post.notice.label}">공지로 등록</span>
                         </label>
 
-                        <input type="hidden" id="readme" name="readme" th:value="${readme}">
+                        <!-- yona board/create.scala.html:100-106 대응 — 이 체크박스가 없으면(권한/VCS/쿼리
+                             조건 불충족) post.readme 필드 자체가 폼에서 빠져 항상 false로 바인딩된다(legacy와 동일). -->
+                        <label class="checkbox" th:if="${canReadmefy}">
+                            <input type="checkbox" id="readme" name="readme" checked="checked">
+                            <span th:text="#{post.readmefy}">README로 지정</span>
+                        </label>
                         <input type="hidden" id="issueTemplate" name="issueTemplate" th:value="${param.issueTemplate}">
                         <input type="hidden" id="branch" name="branch" th:value="${param.branch}">
                         <input type="hidden" id="path" name="path" th:value="${param.path}">

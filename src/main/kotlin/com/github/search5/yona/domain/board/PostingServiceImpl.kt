@@ -19,6 +19,8 @@ import com.github.search5.yona.domain.comment.CommentService
 import com.github.search5.yona.domain.mention.MentionService
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.support.HistoryUtil
+import com.github.search5.yona.domain.vcs.BareCommit
+import org.springframework.beans.factory.annotation.Value
 
 @Service
 @Transactional(readOnly = true)
@@ -34,7 +36,13 @@ class PostingServiceImpl(
     private val titleHeadService: TitleHeadService,
     private val commentService: CommentService,
     // yona AbstractPosting.updateMention() 대응 (P2-41).
-    private val mentionService: MentionService
+    private val mentionService: MentionService,
+    // yona BoardApp.editPost()의 commitReadmeFile()/unmarkAnotherReadmePostingIfExists() 대응(#146
+    // 재검토, TASK-0263) — BoardViewController.editPost()(form POST 경로)에만 있던 로직을 REST 경로
+    // (BoardController.updatePosting(), board/edit.html의 실제 제출 경로)에서도 쓸 수 있도록 서비스
+    // 계층으로 옮겨왔다.
+    @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
+    private val gitBaseDir: String
 ) : PostingService {
 
     // yona NotificationEvent.afterNewPost/afterResourceDeleted 대응 (P1-18)
@@ -167,6 +175,25 @@ class PostingServiceImpl(
         }
 
         val saved = postingRepository.save(posting)
+
+        // yona BoardApp.editPost()의 "if (post.readme) { commitReadmeFile(...);
+        // unmarkAnotherReadmePostingIfExists(...); }" 대응(#146 재검토, TASK-0263) — 제출된(새) readme
+        // 값이 true면 README.md를 실제로 커밋하고, 같은 프로젝트의 다른 readme 글은 해제한다.
+        if (readme && updater != null) {
+            try {
+                val bare = BareCommit(saved.project, updater, gitBaseDir)
+                bare.commitTextFile("README.md", saved.body ?: "", saved.title ?: "")
+            } catch (e: Exception) {
+                // yona commitReadmeFile()과 동일하게 커밋 실패를 게시글 수정 자체의 실패로 보지 않는다.
+            }
+
+            postingRepository.findByProjectAndReadme(saved.project, true)
+                .filter { it.id != saved.id }
+                .forEach {
+                    it.readme = false
+                    postingRepository.save(it)
+                }
+        }
 
         // yona AbstractPosting.update()의 updateMention() 대응 (P2-41).
         mentionService.update(ResourceType.BOARD_POST, saved.id.toString(), commentService.extractMentionedUsers(saved.body ?: ""))

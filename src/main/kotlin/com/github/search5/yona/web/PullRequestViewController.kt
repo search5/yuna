@@ -424,17 +424,16 @@ class PullRequestViewController(
 
     // yona PullRequestApp.newPullRequestForm(...)?fromBranch=...&toBranch=... 대응(그룹11 #167/#168) —
     // git/partial_recently_pushed_branches.scala.html의 "풀 리퀘스트 보내기" 버튼이 이 쿼리 파라미터로
-    // 브랜치를 미리 채워 링크한다. 단, legacy는 fromProjectId/toProjectId도 쿼리로 받아 fork
-    // 프로젝트 간(cross-fork) PR 생성을 지원하지만, yuna Project 엔티티에는 legacy의
-    // getAssociationProjects() 상당 기능(같은 원본을 공유하는 fork들 목록)이 아직 없어 그 부분은
-    // 이번 포팅 범위에서 제외했다(아래 create.html 폼도 동일 프로젝트 내 브랜치→브랜치로만 지원) —
-    // 자세한 사유는 최종 보고 참고.
+    // 브랜치를 미리 채워 링크한다. fromProjectId/toProjectId 쿼리로 fork 프로젝트 간(cross-fork) PR
+    // 생성도 지원한다(Project.associationProjects 대응, TASK-0263에서 완성).
     @GetMapping("/{owner}/{projectName}/pull/new")
     fun createPullRequestForm(
         @PathVariable owner: String,
         @PathVariable projectName: String,
         @RequestParam(required = false) fromBranch: String?,
         @RequestParam(required = false) toBranch: String?,
+        @RequestParam(required = false) fromProjectId: Long?,
+        @RequestParam(required = false) toProjectId: Long?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -454,36 +453,77 @@ class PullRequestViewController(
             return "error/forbidden"
         }
 
-        // 브랜치 목록 획득
-        val repository = repositoryService.getRepository(project)
-        val branches = try {
-            repository.getRefNames().map { it.substringAfter("refs/heads/") }
-        } catch (e: Exception) {
-            emptyList()
+        val associationProjects = project.associationProjects
+        val fromProject = resolveAssociatedProject(project, associationProjects, fromProjectId, isToProject = false)
+        val toProject = resolveAssociatedProject(project, associationProjects, toProjectId, isToProject = true)
+
+        val fromBranches = branchNamesOf(fromProject)
+        val toBranches = branchNamesOf(toProject)
+
+        if (fromBranches.isEmpty()) {
+            model.addAttribute("project", fromProject)
+            model.addAttribute("messageKey", "error.pullRequest.empty.from.repository")
+            return "error/badrequest"
         }
-        val defaultBranch = try {
-            repository.getDefaultBranch().substringAfter("refs/heads/")
-        } catch (e: Exception) {
-            "master"
+        if (toBranches.isEmpty()) {
+            model.addAttribute("project", toProject)
+            model.addAttribute("messageKey", "error.pullRequest.empty.to.repository")
+            return "error/badrequest"
         }
 
         model.addAttribute("project", project)
-        model.addAttribute("branches", branches)
-        model.addAttribute("defaultBranch", defaultBranch)
+        model.addAttribute("associationProjects", associationProjects)
+        model.addAttribute(
+            "memberAssociationProjects",
+            associationProjects.filter { projectUserRepository.existsByProjectIdAndUserId(it.id!!, loginUser.id!!) }
+        )
+        model.addAttribute("fromProject", fromProject)
+        model.addAttribute("toProject", toProject)
+        model.addAttribute("branches", fromBranches)
+        model.addAttribute("fromBranches", fromBranches)
+        model.addAttribute("toBranches", toBranches)
+        model.addAttribute("defaultBranch", toBranches.firstOrNull() ?: "master")
         model.addAttribute("currentUser", loginUser)
-        model.addAttribute("prefillFromBranch", fromBranch ?: "")
-        model.addAttribute("prefillToBranch", toBranch ?: defaultBranch)
+        model.addAttribute("prefillFromBranch", fromBranch?.takeIf { it.isNotBlank() } ?: fromBranches.first())
+        model.addAttribute("prefillToBranch", toBranch?.takeIf { it.isNotBlank() } ?: toBranches.first())
 
         return "pullrequest/create"
+    }
+
+    // yona PullRequestApp.getSelectedProject() 대응(그룹11 #168). toProject는 fork인 프로젝트에서
+    // 별도 지정이 없으면 원본 프로젝트(코드/PR 메뉴가 모두 켜져 있을 때만)로 기본 설정된다(자신의
+    // 포크에서 PR 화면을 열면 "원본으로 보내기"가 기본값이 되는 legacy UX) — fromProject는 이런 기본
+    // 전환이 없다. projectId 쿼리가 있으면 association 목록 안에서만 찾는다(범위 밖 프로젝트로 임의
+    // 지정 방지).
+    private fun resolveAssociatedProject(project: Project, associationProjects: List<Project>, projectId: Long?, isToProject: Boolean): Project {
+        var selected = project
+        if (isToProject && project.isForkedFromOrigin) {
+            val origin = project.originalProject
+            if (origin != null && origin.isCodeEnabled && origin.isPullRequestEnabled) {
+                selected = origin
+            }
+        }
+
+        if (projectId != null) {
+            associationProjects.find { it.id == projectId }?.let { selected = it }
+        }
+
+        return selected
+    }
+
+    private fun branchNamesOf(project: Project): List<String> {
+        return try {
+            repositoryService.getRepository(project).getRefNames().map { it.substringAfter("refs/heads/") }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     // yona PullRequestApp.mergeResult() 대응 (#178, TASK-0257). legacy 라우트
     // "GET /:ownerName/:project/newPullRequest/mergeResult"의 대응 경로. PR 생성/수정 화면에서
     // from/to 브랜치를 바꿀 때마다 AJAX(GET, query string)로 호출해 커밋 프리뷰 + 충돌 여부 조각을
-    // 돌려받는다. legacy는 fromProjectId/toProjectId로 연관 프로젝트(fork) 간 PR도 지원하지만,
-    // yuna는 createPullRequestForm()/PullRequestController.CreatePullRequestRequest와 동일하게
-    // "연관 프로젝트 조회" 서브시스템이 아직 없어 from/to 프로젝트를 항상 이 프로젝트 자신으로
-    // 고정한다(그룹11 #168에서 이미 문서화된 동일 스코프 축소, create.html 상단 주석 참고).
+    // 돌려받는다. fromProjectId/toProjectId로 연관 프로젝트(fork) 간 PR도 지원한다
+    // (createPullRequestForm()과 동일한 Project.associationProjects 기반 해석, TASK-0263에서 완성).
     // legacy validateBeforePullRequest()(ProjectUser.isGuest 체크) 대응은 createPullRequestForm()과
     // 동일한 멤버/그룹 접근 체크를 재사용한다.
     @GetMapping("/{owner}/{projectName}/pull/mergeResult")
@@ -492,6 +532,8 @@ class PullRequestViewController(
         @PathVariable projectName: String,
         @RequestParam(required = false) fromBranch: String?,
         @RequestParam(required = false) toBranch: String?,
+        @RequestParam(required = false) fromProjectId: Long?,
+        @RequestParam(required = false) toProjectId: Long?,
         authentication: Authentication?,
         model: Model
     ): String {
@@ -505,20 +547,20 @@ class PullRequestViewController(
             return "error/forbidden"
         }
 
-        val repository = repositoryService.getRepository(project)
-        val branches = try {
-            repository.getRefNames().map { it.substringAfter("refs/heads/") }
-        } catch (e: Exception) {
-            emptyList()
-        }
+        val associationProjects = project.associationProjects
+        val fromProject = resolveAssociatedProject(project, associationProjects, fromProjectId, isToProject = false)
+        val toProject = resolveAssociatedProject(project, associationProjects, toProjectId, isToProject = true)
+
+        val fromBranches = branchNamesOf(fromProject)
+        val toBranches = branchNamesOf(toProject)
 
         // legacy "StringUtils.defaultIfBlank(request().getQueryString("fromBranch"),
         // fromBranches.get(0).getName())" 대응 — 브랜치가 지정되지 않으면 첫 번째 브랜치를 기본값으로 쓴다.
-        val resolvedFromBranch = fromBranch?.takeIf { it.isNotBlank() } ?: branches.firstOrNull()
-        val resolvedToBranch = toBranch?.takeIf { it.isNotBlank() } ?: branches.firstOrNull()
+        val resolvedFromBranch = fromBranch?.takeIf { it.isNotBlank() } ?: fromBranches.firstOrNull()
+        val resolvedToBranch = toBranch?.takeIf { it.isNotBlank() } ?: toBranches.firstOrNull()
 
         if (resolvedFromBranch == null || resolvedToBranch == null) {
-            model.addAttribute("fromProject", project)
+            model.addAttribute("fromProject", fromProject)
             model.addAttribute("pullRequestTitle", null)
             model.addAttribute("pullRequestBody", null)
             model.addAttribute("commits", emptyList<Any>())
@@ -530,12 +572,12 @@ class PullRequestViewController(
         // 다른 attemptMerge() 호출부(PR 상세/수정 화면 렌더링, line 274/566)와 동일하게 화면을 깨뜨리지
         // 않도록 실패 시 "변경 사항 없음"으로 완화한다.
         val preview = try {
-            pullRequestService.previewMerge(project, project, resolvedFromBranch, resolvedToBranch)
+            pullRequestService.previewMerge(fromProject, toProject, resolvedFromBranch, resolvedToBranch)
         } catch (e: Exception) {
             null
         }
 
-        model.addAttribute("fromProject", project)
+        model.addAttribute("fromProject", fromProject)
         model.addAttribute("pullRequestTitle", preview?.suggestedTitle)
         model.addAttribute("pullRequestBody", preview?.suggestedBody)
         model.addAttribute("commits", preview?.commits ?: emptyList<Any>())

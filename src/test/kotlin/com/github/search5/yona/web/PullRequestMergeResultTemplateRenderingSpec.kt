@@ -12,9 +12,11 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.YonaUserDetails
 import com.github.search5.yona.domain.vcs.RepositoryService
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.eclipse.jgit.api.Git
+import org.jsoup.Jsoup
 import org.eclipse.jgit.transport.RefSpec
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.security.core.authority.AuthorityUtils
@@ -191,6 +193,72 @@ class PullRequestMergeResultTemplateRenderingSpec @Autowired constructor(
                         .param("toBranch", "refs/heads/master")
                         .with(authOf(outsider))
                 ).andExpect(view().name("error/forbidden"))
+            }
+
+            // yona Project.getAssociationProjects()/PullRequestApp.getSelectedProject() 대응
+            // (그룹11 #168, TASK-0263) — fork인 프로젝트에서 PR 생성 화면을 열면 원본 프로젝트가
+            // toProject 기본값이 되고, fromProjectId/toProjectId 쿼리로 서로 다른 fork 저장소 간
+            // 커밋을 실제로 병합 미리보기할 수 있어야 한다.
+            describe("fork 프로젝트 간(cross-fork) PR — Project.associationProjects") {
+                it("fork 프로젝트에서 PR 생성 화면을 열면 원본이 toProject 기본값이고, association 목록에 둘 다 포함되어야 한다") {
+                    val uniqueSuffix = System.currentTimeMillis().toString() + "-" + UUID.randomUUID().toString().take(6)
+                    val (originProject, owner) = setUpProjectWithMember(uniqueSuffix)
+                    createCommit(repositoryService.getRepository(originProject).getDirectory(), "master", "base.txt", "base", "origin base commit")
+
+                    val forkProject = projectRepository.save(
+                        Project(
+                            name = "mr-fork-$uniqueSuffix", owner = "mr-fork-org-$uniqueSuffix", vcs = "GIT",
+                            projectScope = ProjectScope.PUBLIC, originalProject = originProject
+                        )
+                    )
+                    projectUserRepository.save(ProjectUser(user = owner, project = forkProject, role = Role(id = RoleType.MANAGER.roleType)))
+                    repositoryService.getRepository(forkProject).create()
+                    createCommit(repositoryService.getRepository(forkProject).getDirectory(), "master", "base.txt", "base", "fork base commit")
+
+                    val body = mockMvc.perform(
+                        get("/${forkProject.owner}/${forkProject.name}/pull/new").with(authOf(owner))
+                    ).andExpect(status().isOk).andReturn().response.contentAsString
+
+                    body shouldContain "value=\"${forkProject.id}\""
+                    body shouldContain "value=\"${originProject.id}\""
+                    // toProjectId select에서 origin이 selected 상태여야 한다(기본값 전환)
+                    val doc = Jsoup.parse(body)
+                    doc.select("#toProjectId option[value='${originProject.id}']").hasAttr("selected") shouldBe true
+                }
+
+                it("fromProjectId/toProjectId를 서로 다른 fork로 지정하면 그 두 저장소 간 커밋 미리보기가 실제로 계산되어야 한다") {
+                    val uniqueSuffix = System.currentTimeMillis().toString() + "-" + UUID.randomUUID().toString().take(6)
+                    val (originProject, owner) = setUpProjectWithMember(uniqueSuffix)
+                    createCommit(repositoryService.getRepository(originProject).getDirectory(), "master", "base.txt", "base", "origin base commit")
+
+                    val forkProject = projectRepository.save(
+                        Project(
+                            name = "mr-fork2-$uniqueSuffix", owner = "mr-fork2-org-$uniqueSuffix", vcs = "GIT",
+                            projectScope = ProjectScope.PUBLIC, originalProject = originProject
+                        )
+                    )
+                    projectUserRepository.save(ProjectUser(user = owner, project = forkProject, role = Role(id = RoleType.MANAGER.roleType)))
+                    repositoryService.getRepository(forkProject).create()
+                    createCommit(repositoryService.getRepository(forkProject).getDirectory(), "master", "base.txt", "base", "fork base commit")
+                    createCommit(repositoryService.getRepository(forkProject).getDirectory(), "feature", "feature.txt", "feature", "fork feature commit")
+
+                    val body = mockMvc.perform(
+                        get("/${forkProject.owner}/${forkProject.name}/pull/mergeResult")
+                            .param("fromProjectId", forkProject.id.toString())
+                            .param("toProjectId", originProject.id.toString())
+                            .param("fromBranch", "refs/heads/feature")
+                            .param("toBranch", "refs/heads/master")
+                            .with(authOf(owner))
+                    ).andExpect(status().isOk).andReturn().response.contentAsString
+
+                    // fork 저장소가 origin에서 실제로 clone된 게 아니라 이 테스트에서 독립적으로 만든
+                    // 별도 bare repo라 fork의 커밋 2개(base+feature) 전부가 origin에는 없는 커밋으로
+                    // 계산된다 — 서로 다른 물리 저장소 간 diff가 실제로 계산됐음을 확인하는 게 핵심.
+                    body shouldContain "id=\"mergeResult\""
+                    body shouldContain "data-commits=\"2\""
+                    body shouldContain "fork feature commit"
+                    body shouldContain "fork base commit"
+                }
             }
         }
     }

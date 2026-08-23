@@ -246,6 +246,34 @@ class BoardViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("board/create"))
                     .andExpect(model().attributeExists("project"))
             }
+
+            // yona board/create.scala.html:100-106 대응(#145 재검토, TASK-0263) — readme 체크박스는
+            // Git 프로젝트+커밋 생성 권한+?readme= 쿼리가 전부 갖춰졌을 때만 canReadmefy=true여야 한다.
+            it("Git 프로젝트 멤버가 ?readme=true로 접근하면 canReadmefy가 true여야 한다(#145)") {
+                val gitProject = Project(id = 2L, name = "GitProj", owner = "owner", vcs = "GIT", projectScope = ProjectScope.PRIVATE)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 951L, user = memberUser, project = gitProject, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "GitProj") } returns Optional.of(gitProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 10L) } returns true
+
+                mockMvc.perform(get("/owner/GitProj/post/new").param("readme", "true").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("canReadmefy", true))
+            }
+
+            it("readme 쿼리 없이 접근하면 canReadmefy가 false여야 한다(#145)") {
+                val gitProject = Project(id = 3L, name = "GitProj2", owner = "owner", vcs = "GIT", projectScope = ProjectScope.PRIVATE)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 952L, user = memberUser, project = gitProject, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "GitProj2") } returns Optional.of(gitProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(3L, 10L) } returns true
+
+                mockMvc.perform(get("/owner/GitProj2/post/new").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("canReadmefy", false))
+            }
         }
 
         describe("POST /{owner}/{projectName}/post/{number}/edit (P1-44)") {
@@ -284,6 +312,29 @@ class BoardViewControllerSpec : DescribeSpec({
                     .andExpect(status().is3xxRedirection)
 
                 verify(exactly = 1) { postingService.updatePosting(1L, 1L, "수정 제목", "수정 본문", false, false, 10L, false) }
+            }
+
+            // yona BoardApp.editPost()의 "if (post.readme)"는 제출된 값을 쓰는데, yuna는 그동안
+            // stale한 기존 posting.readme(항상 false인 이 테스트 fixture 기준)를 써서 체크박스로
+            // readme를 새로 켜는 게 반영되지 않는 버그가 있었다(#146 재검토, TASK-0263에서 발견·수정).
+            it("readme 체크박스를 선택해 제출하면 제출된 값(true)이 updatePosting에 전달되어야 한다(#146)") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { postingService.updatePosting(1L, 1L, "수정 제목", "수정 본문", false, true, 10L, false) } returns posting
+
+                mockMvc.perform(
+                    post("/owner/TestProj/post/1/edit")
+                        .param("title", "수정 제목")
+                        .param("body", "수정 본문")
+                        .param("readme", "true")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/owner/TestProj"))
+
+                verify(exactly = 1) { postingService.updatePosting(1L, 1L, "수정 제목", "수정 본문", false, true, 10L, false) }
             }
         }
 

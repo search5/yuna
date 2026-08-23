@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.project
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.user.User
 import jakarta.persistence.*
@@ -95,4 +96,21 @@ class Project(
 
     val hasForks: Boolean
         get() = forkingProjects.isNotEmpty()
+
+
+    // yona Project.java:850 getAssociationProjects() 대응(그룹11 #168) — 이 프로젝트 자신 + 자신에서
+    // 포크해간 프로젝트들 + (자신이 포크라면) 원본 프로젝트(코드/PR 메뉴가 둘 다 켜져 있을 때만)를
+    // cross-fork PR의 from/to 프로젝트 후보로 반환한다. 자기 자신을 포함하는 리스트라 Jackson이
+    // JSON 직렬화 시 무한 재귀에 빠지지 않도록 @JsonIgnore(뷰 모델 전용, REST 응답에는 노출 안 함).
+    @get:JsonIgnore
+    val associationProjects: List<Project>
+        get() {
+            val projects = mutableListOf(this)
+            projects.addAll(forkingProjects)
+            val origin = originalProject
+            if (isForkedFromOrigin && origin != null && origin.isCodeEnabled && origin.isPullRequestEnabled) {
+                projects.add(origin)
+            }
+            return projects
+        }
 }

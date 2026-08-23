@@ -6,15 +6,16 @@
   .gnb-wrap GNB, 인라인 <style>, code.jquery.com 중복 jQuery 로드, legacy와 무관한 부트스트랩 폼을
   하드코딩하고 있어(버그 패턴 a/b) 전면 재작성한다.
 
-  legacy는 fromProjectId/toProjectId를 project.getAssociationProjects()(같은 원본을 공유하는 fork들)
-  기준의 실렉트로 제공해 서로 다른 fork 간에도 PR을 보낼 수 있지만, yuna Project 엔티티에는 아직
-  이 기능(연관 프로젝트 조회)이 없다 — PullRequestController.CreatePullRequestRequest도
-  fromProjectId 하나만 받고 fromBranch/toBranch는 같은 저장소의 브랜치 이름으로 취급한다. 이
-  포팅에서는 이 백엔드 공백을 "이번 범위에서 새 서브시스템(연관 프로젝트 조회)까지 만들기엔 과도함"
-  으로 판단해 명시적으로 남겨두고(final report 참고), from/to 프로젝트는 항상 이 프로젝트 자신으로
-  고정한 채 브랜치→브랜치 PR만 지원한다 — 단, DOM 구조/id(pull-request-wrap/pull-left/pull-right/
-  arrow/#pullRequestState/#status/#title/#__commits)는 legacy와 동일하게 유지해 향후 연관 프로젝트
-  지원이 추가될 때 이 마크업을 그대로 재사용할 수 있게 했다.
+  legacy는 fromProjectId/toProjectId를 project.getAssociationProjects()(이 프로젝트 자신 + 이
+  프로젝트에서 포크해간 프로젝트들 + 이 프로젝트가 포크라면 원본) 기준의 실렉트로 제공해 서로 다른
+  fork 간에도 PR을 보낼 수 있다 — TASK-0263에서 Project.associationProjects(신규)로 완성했다.
+  fromProjectId 실렉트는 legacy와 동일하게 "현재 로그인 사용자가 멤버인" 연관 프로젝트만 후보로
+  좁힌다(memberAssociationProjects). toProjectId는 이 프로젝트가 포크이고 원본의 코드/PR 메뉴가
+  둘 다 켜져 있으면 기본값이 원본으로 전환된다(PullRequestViewController#resolveAssociatedProject,
+  legacy getSelectedProject() 대응). 프로젝트 선택이 바뀌면 legacy yobi.git.Write.js의
+  _onChangeProject()와 동일하게 새 fromProjectId/toProjectId 쿼리스트링으로 페이지 전체를
+  다시 로드한다(서버가 그 프로젝트 기준 브랜치 목록을 다시 계산). DOM 구조/id(pull-request-wrap/
+  pull-left/pull-right/arrow/#pullRequestState/#status/#title/#__commits)는 legacy와 동일하게 유지.
 
   legacy는 $yobi.loadModule("git.Write", {...})(public/javascripts/service/yobi.git.Write.js)로
   브랜치 select가 바뀔 때마다 PullRequestApp.mergeResult()를 GET AJAX로 호출해 커밋 탭(#__commits)을
@@ -51,12 +52,12 @@
                             <dl class="pull-request-project">
                                 <dt th:text="#{pullRequest.from}">코드 보내는 곳</dt>
                                 <dd>
-                                    <select id="fromProjectId" name="fromProjectId" data-toggle="select2" disabled="disabled">
-                                        <option th:value="${project.id}" th:text="${project.owner} + '/' + ${project.name}">owner/project</option>
+                                    <select id="fromProjectId" name="fromProjectId" data-toggle="select2">
+                                        <option th:each="repo : ${memberAssociationProjects}" th:value="${repo.id}"
+                                                th:text="${repo.owner} + '/' + ${repo.name}" th:selected="${repo.id == fromProject.id}">owner/project</option>
                                     </select>
-                                    <input type="hidden" name="fromProjectId" th:value="${project.id}">
                                     <select id="fromBranch" name="fromBranch" data-toggle="select2">
-                                        <option th:each="br : ${branches}" th:value="${br}" th:text="${br}" th:selected="${br == prefillFromBranch}"></option>
+                                        <option th:each="br : ${fromBranches}" th:value="${br}" th:text="${br}" th:selected="${br == prefillFromBranch}"></option>
                                     </select>
                                 </dd>
                             </dl>
@@ -68,11 +69,13 @@
                             <dl class="pull-request-project">
                                 <dt th:text="#{pullRequest.to}">코드 받을 곳</dt>
                                 <dd>
-                                    <select id="toProjectId" name="toProjectId" data-toggle="select2" disabled="disabled">
-                                        <option th:value="${project.id}" th:text="${project.owner} + '/' + ${project.name}">owner/project</option>
+                                    <select id="toProjectId" name="toProjectId" data-toggle="select2">
+                                        <option th:each="repo : ${associationProjects}" th:value="${repo.id}"
+                                                th:data-owner="${repo.owner}" th:data-name="${repo.name}"
+                                                th:text="${repo.owner} + '/' + ${repo.name}" th:selected="${repo.id == toProject.id}">owner/project</option>
                                     </select>
                                     <select id="toBranch" name="toBranch" data-toggle="select2">
-                                        <option th:each="br : ${branches}" th:value="${br}" th:text="${br}" th:selected="${br == prefillToBranch}"></option>
+                                        <option th:each="br : ${toBranches}" th:value="${br}" th:text="${br}" th:selected="${br == prefillToBranch}"></option>
                                     </select>
                                 </dd>
                             </dl>
@@ -155,7 +158,12 @@
             $("#status").attr("class", "alert alert-info").text([[#{pullRequest.is.merging}]]).show();
             $.ajax({
                 url: mergeResultURL,
-                data: { fromBranch: fromBranch, toBranch: toBranch }
+                data: {
+                    fromBranch: fromBranch,
+                    toBranch: toBranch,
+                    fromProjectId: $("#fromProjectId").val(),
+                    toProjectId: $("#toProjectId").val()
+                }
             }).done(function(resultHTML) {
                 $("#__commits").html(resultHTML);
                 var $result = $("#mergeResult");
@@ -183,28 +191,36 @@
 
         $("#fromBranch, #toBranch").on("change", checkMergeResult);
 
+        // legacy yobi.git.Write.js _onChangeProject() 대응 — from/to 프로젝트 선택이 바뀌면 새
+        // fromProjectId/toProjectId 쿼리스트링으로 페이지 전체를 새로고침한다(서버가 그 프로젝트
+        // 기준으로 연관 프로젝트 목록·브랜치 목록을 다시 계산).
+        $("#fromProjectId, #toProjectId").on("change", function() {
+            location.search = "?fromProjectId=" + $("#fromProjectId").val() + "&toProjectId=" + $("#toProjectId").val();
+        });
+
         $("#pull-request-form").submit(function(e) {
             e.preventDefault();
 
-            var projectId = [[${project.id}]];
-            var owner = [[${project.owner}]];
-            var projectName = [[${project.name}]];
+            var toProjectId = $("#toProjectId").val();
+            var $toSelected = $("#toProjectId option:selected");
+            var toOwner = $toSelected.data("owner");
+            var toName = $toSelected.data("name");
 
             var requestData = {
                 title: $("#title").val(),
                 body: $('textarea[data-editor-mode="content-body"]').val(),
-                fromProjectId: projectId,
+                fromProjectId: $("#fromProjectId").val(),
                 fromBranch: $("#fromBranch").val(),
                 toBranch: $("#toBranch").val()
             };
 
             $.ajax({
-                url: '/api/projects/' + projectId + '/pullrequests',
+                url: '/api/projects/' + toProjectId + '/pullrequests',
                 type: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify(requestData),
                 success: function(result) {
-                    window.location.href = '/' + owner + '/' + projectName + '/pulls';
+                    window.location.href = '/' + toOwner + '/' + toName + '/pulls';
                 },
                 error: function(xhr, status, error) {
                     $("#status").text("생성 실패: " + xhr.responseText).show();

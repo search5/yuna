@@ -46,6 +46,11 @@
                             <input type="checkbox" id="notice" name="notice" th:checked="${post.notice}"/>
                             <span th:text="#{post.notice.label}">공지로 등록</span>
                         </label>
+
+                        <label class="checkbox" th:if="${canReadmefy}">
+                            <input type="checkbox" id="readme" name="readme" th:checked="${post.readme}"/>
+                            <span th:text="#{post.readmefy}">README로 지정</span>
+                        </label>
                     </div>
 
                     <div class="actions">
@@ -94,12 +99,15 @@
             var body = $("#body").val();
             var notice = $("#notice").is(":checked");
             var sendNotificationMail = $("#sendNotificationMail").length ? $("#sendNotificationMail").is(":checked") : false;
+            // legacy board/edit.scala.html:59-64 대응 — readme 체크박스가 없으면(권한/VCS 조건
+            // 불충족) legacy도 posting.readme가 항상 false로 바인딩된다(폼에 필드 자체가 없으므로).
+            var readme = $("#readme").length ? $("#readme").is(":checked") : false;
 
             var requestData = {
                 title: title,
                 body: body,
                 notice: notice,
-                readme: false,
+                readme: readme,
                 sendNotificationMail: sendNotificationMail
             };
             

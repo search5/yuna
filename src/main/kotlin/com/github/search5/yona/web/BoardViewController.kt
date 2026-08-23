@@ -242,10 +242,19 @@ class BoardViewController(
             } catch (e: Exception) {}
         }
 
+        // yona board/create.scala.html:100-106 대응(#145 재검토, TASK-0263) — readme 체크박스는
+        // 커밋 생성 권한이 있고, Git 프로젝트이고, ?readme= 쿼리로 열렸을 때만 보인다(보이면 항상
+        // 체크된 상태). yuna는 그동안 이 checkbox를 hidden input으로 값만 전달하고 있었을 뿐
+        // 사용자에게 보여주지 않았음 — 실제 체크박스로 복구.
+        val canReadmefy = readme == true &&
+            project.vcs?.uppercase() == "GIT" &&
+            accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.COMMIT)
+
         model.addAttribute("project", project)
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("isAllowedToNotice", isAllowedToNotice)
         model.addAttribute("readme", readme ?: false)
+        model.addAttribute("canReadmefy", canReadmefy)
         model.addAttribute("preparedPostBody", preparedPostBody)
 
         return "board/create"
@@ -281,6 +290,12 @@ class BoardViewController(
 
         val isAllowedToNotice = loginUser != null && (projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) || accessControl.isAllowedIfGroupMember(project, loginUser))
 
+        // yona board/edit.scala.html:59 대응(#146 재검토, TASK-0263) — readme 체크박스는 커밋 생성
+        // 권한이 있고 Git 프로젝트일 때만 보이며(생성 화면과 달리 쿼리파라미터 조건은 없음), 현재
+        // posting.readme 값을 그대로 반영해 토글 가능해야 한다.
+        val canReadmefy = project.vcs?.uppercase() == "GIT" &&
+            accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.COMMIT)
+
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.BOARD_POST, posting.id.toString())
         val attachmentsList = attachments.map { attach ->
             mapOf(
@@ -297,6 +312,7 @@ class BoardViewController(
         model.addAttribute("post", posting)
         model.addAttribute("currentUser", loginUser)
         model.addAttribute("isAllowedToNotice", isAllowedToNotice)
+        model.addAttribute("canReadmefy", canReadmefy)
         model.addAttribute("attachmentsJson", attachmentsJson)
 
         return "board/edit"
@@ -339,23 +355,13 @@ class BoardViewController(
             return "error/forbidden"
         }
 
-        val isReadme = posting.readme ?: false
-        if (isReadme) {
-            try {
-                val bare = BareCommit(project, loginUser, gitBaseDir)
-                bare.commitTextFile("README.md", request.body ?: "", request.title)
-
-                val readmes = postingRepository.findByProjectAndReadme(project, true)
-                for (other in readmes) {
-                    if (other.id != posting.id) {
-                        other.readme = false
-                        postingRepository.save(other)
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
+        // yona BoardApp.editPost()의 "if (post.readme) { ... }"는 제출된(새) readme 값을 쓴다(기존
+        // posting.readme가 아니다) — README.md 실제 git 커밋 + 다른 readme 글 해제는
+        // PostingServiceImpl.updatePosting()으로 옮겨(#146 재검토, TASK-0263) 이 경로와 REST 경로
+        // (board/edit.html)가 항상 같은 결과를 내도록 통일했다. 이전에는 여기서 stale한
+        // posting.readme(기존 DB 값)를 써서 체크박스로 readme를 새로 켜는 게 반영되지 않는
+        // 버그가 있었음.
+        val isReadme = request.readme ?: false
 
         // yona BoardApp.editPost의 isSelectedToSendNotificationMail() 대응 (P1-44) — 서비스 계층에 위임.
         postingService.updatePosting(
