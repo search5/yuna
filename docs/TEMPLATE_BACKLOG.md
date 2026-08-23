@@ -280,7 +280,7 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 158 | [x] | `code/partial_branchrow.scala.html` | `code/branches.html`(인라인) | 완료 — branches.html에 인라인, PR 링크/상태뱃지 포함 |
 | 159 | [x] | `code/history.scala.html` | `code/history.html` | 완료(TASK-0243). 전면 재작성 — 상세는 하단 진행 로그 |
 | 160 | [x] | `code/diff.scala.html` | `code/diff.html` | 완료(TASK-0243). GNB/프로젝트헤더/메뉴 프래그먼트 복구, commitMsg fragment 적용, #166 스레드 fragment 연결, 리뷰 사이드바(open/closed 탭) 추가 — 상세는 하단 진행 로그 |
-| 161 | [x] | `code/svnDiff.scala.html` | `code/svnDiff.html` | 완료(TASK-0243). GNB/프로젝트헤더/메뉴, site/layout::scripts 누락 복구, 브랜치 드롭다운(#39) 추가 |
+| 161 | [x] | `code/svnDiff.scala.html` | `code/svnDiff.html` | 완료(TASK-0243). GNB/프로젝트헤더/메뉴, site/layout::scripts 누락 복구, 브랜치 드롭다운(#39) 추가. **2026-08-23 추가 완료**: 감시(watch) 버튼 URL 배선(`sWatchUrl`/`sUnwatchUrl`이 빈 문자열이었음)과 "목록" 링크 복구 — 그룹10 진행 로그 참고 |
 | 162 | [x] | `code/compare.scala.html` | `code/compare.html` | 완료(TASK-0243). **가짜 GNB(하드코딩 로그인/로그아웃 마크업) 발견·제거** — 알려진 버그 패턴(e) 실사례. 실제 site/layout::gnb/project/header/menu/scripts로 교체, `th:with` 내 중첩 따옴표 구문 오류 수정 |
 | 163 | [x] | `code/compare_svn.scala.html` | `code/compare_svn.html` | 완료(TASK-0243). 위와 동일한 가짜 GNB 버그, 동일하게 수정 |
 | 164 | [x] | `code/nohead.scala.html` | `code/nohead.html` | 완료(TASK-0243). project/header·menu 프래그먼트 누락 복구, UPDATE 권한 게이트 복구, 메시지 키 적용 |
@@ -1297,10 +1297,26 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
      `isBinary=true`로 뭉뚱그려 판정하고 있어(다른 기존 테스트들이 이 표현에 의존) 별도 3번째 분기를 새로
      만들지 않고 기존 binary-비-이미지 케이스(파일명+크기+다운로드 링크)로 렌더링되도록 둠 — 시각적으로는
      legacy와 다른 안내 문구지만 "파일을 볼 수 없다"는 결과는 동일.
-  3. "감시(watch)" 버튼(`code/diff.html`/`code/svnDiff.html`): `WatchController`의 범용 `/watch` 엔드포인트가
+  3. ~~"감시(watch)" 버튼(`code/diff.html`/`code/svnDiff.html`): `WatchController`의 범용 `/watch` 엔드포인트가
      `ResourceType.COMMIT`을 지원하지 않고(커밋은 숫자 PK가 아니라 SHA 문자열이라 기존 `resourceId.
      toLongOrNull()` 파싱 자체가 안 맞음) 이를 지원하려면 Watch 리소스 추상화 자체를 확장해야 하는 별도
-     범위의 작업이라 판단, 이번 배치에서는 보류 — `docs/PARITY_BACKLOG.md`에 등록 필요(다음 세션 확인).
+     범위의 작업이라 판단, 이번 배치에서는 보류 — `docs/PARITY_BACKLOG.md`에 등록 필요(다음 세션 확인).~~
+     **2026-08-23 완료**: 백로그 재감사 중 `docs/PARITY_BACKLOG.md` P1-50 완료 로그가 "`WatchController`의
+     범용 `/watch`·`/unwatch` 엔드포인트가 임의의 `resource.type`/`resource.id`를 받으므로 백엔드
+     메커니즘 자체는 legacy와 동일하게 완전히 동작한다"고 적어뒀는데 실제로는 `checkWatchPermission()`의
+     `when`에 `ResourceType.COMMIT` 케이스가 없어 항상 400을 반환하는 과장된 기록임을 발견 — 실제로
+     이식했다. `WatchController.checkWatchPermission()`에 COMMIT 케이스 추가(합성 키
+     `"{project.id}:{commitId}"`에서 project.id만 파싱해 프로젝트를 찾고 동일한 `Operation.WATCH` 권한
+     체크 재사용 — `getCommitWatchers()`가 이미 쓰던 것과 동일한 키 포맷). `CodeViewController.showCommit()`에
+     `commitResourceId`/`isWatching` 모델 속성 추가. `code/diff.html`은 legacy와 동일한 `active
+     ybtn-watching` 토글 버튼을 자체 fetch 기반 스크립트로(이 파일은 애초에 `code.Diff` 정적 JS 모듈을
+     안 쓰고 커스텀 vanilla JS로 구현돼 있어 그 스타일을 그대로 따름), `code/svnDiff.html`은 이미
+     `$yobi.loadModule("code.SvnDiff", {sWatchUrl:"", sUnwatchUrl:""})`로 실제 legacy 대응 정적 모듈
+     (`yobi.code.SvnDiff.js`)을 로드해두고도 URL을 빈 문자열로 방치해뒀던 것을 발견해 실제 URL로
+     채워 넣어 완성(모듈이 기대하는 `#watch-button`+`active` 클래스 토글 규약 그대로 재사용). 함께
+     빠져 있던 `code/svnDiff.html`의 "목록" 링크(`button.list`)도 legacy 위치 그대로 복구. 테스트:
+     `WatchControllerSpec`(COMMIT 리소스 정상 등록/합성 키의 프로젝트 없음 404, +2), `CodeViewControllerSpec`
+     (`commitResourceId`/`isWatching` 모델 속성 검증, +1) — 전부 GREEN.
   4. select2 방식 브랜치 드롭다운(`data-toggle="select2"`)은 `code/view.html`/`code/history.html`에서
      기존에 이미 일반 `<select>`+`onchange` 방식으로 단순화돼 있던 것을 그대로 유지(이번 배치 범위 아님,
      구조는 legacy와 동일하고 위젯 라이브러리만 다름).

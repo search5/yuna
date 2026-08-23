@@ -84,6 +84,10 @@
           </div>
         </div>
 
+        <button th:if="${currentUser != null}" id="watch-button" type="button" class="ybtn" th:classappend="${isWatching} ? 'active' : ''"
+                data-toggle="button" th:text="#{notification.watch}">지켜보기</button>
+        <a th:href="@{/{owner}/{name}/commits/{branch}/{path}(owner=${project.owner}, name=${project.name}, branch=${selectedBranch}, path=${path})}" class="ybtn pull-right" th:text="#{button.list}">목록</a>
+
       </div>
     </div>
   </div>
@@ -99,13 +103,17 @@
         var parentCommitId = /*[[${parentCommit != null ? parentCommit.id : ''}]]*/ '';
         var commitId = /*[[${commit.id}]]*/ '';
         var codeUrl = /*[[@{/{owner}/{name}/code(owner=${project.owner}, name=${project.name})}]]*/ '';
+        // yona commit.asResource(project) 대응 — WatchController 범용 /watch,/unwatch 엔드포인트가
+        // 기대하는 resource.type=COMMIT + resource.id="{project.id}:{commitId}" 합성 키.
+        var sWatchUrl = /*[[${'/watch?resource.type=COMMIT&resource.id=' + commitResourceId}]]*/ '';
+        var sUnwatchUrl = /*[[${'/unwatch?resource.type=COMMIT&resource.id=' + commitResourceId}]]*/ '';
         /*]]>*/
 
         if (typeof $yobi !== 'undefined' && $yobi.loadModule) {
             $yobi.loadModule("code.SvnDiff", {
                 "bCommentable"   : /*[[${currentUser != null}]]*/ false,
-                "sWatchUrl"      : "",
-                "sUnwatchUrl"    : "",
+                "sWatchUrl"      : sWatchUrl,
+                "sUnwatchUrl"    : sUnwatchUrl,
                 "sParentCommitId": parentCommitId,
                 "sCommitId"      : commitId,
                 "sCodeURL"       : codeUrl

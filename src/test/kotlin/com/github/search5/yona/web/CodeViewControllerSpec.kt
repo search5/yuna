@@ -27,6 +27,8 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.support.MarkdownService
+import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.enumeration.ResourceType
 import io.mockk.clearMocks
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.user.User
@@ -44,6 +46,7 @@ class CodeViewControllerSpec : DescribeSpec({
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val commitCommentRepository = mockk<CommitCommentRepository>()
     val markdownService = mockk<MarkdownService>()
+    val watchService = mockk<WatchService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -70,6 +73,7 @@ class CodeViewControllerSpec : DescribeSpec({
         commitCommentRepository,
         accessControl,
         markdownService,
+        watchService,
         "Yona"
     )
 
@@ -82,7 +86,8 @@ class CodeViewControllerSpec : DescribeSpec({
             userRepository,
             repositoryService,
             commentThreadRepository,
-            commitCommentRepository
+            commitCommentRepository,
+            watchService
         )
     }
 
@@ -239,6 +244,31 @@ class CodeViewControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(view().name("code/nohead"))
                     .andExpect(model().attribute("project", project))
+            }
+        }
+
+        describe("GET /{owner}/{projectName}/commit/{commitId} — 커밋 감시(watch) 버튼 배선 (P-템플릿 그룹10 #161 재검토)") {
+            it("로그인 사용자에게 commitResourceId와 isWatching 모델 속성을 전달해야 한다") {
+                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                every { commit.getId() } returns "abcdef1234"
+                val watcherAuth = UsernamePasswordAuthenticationToken("watcher", "password")
+                val watcher = User(id = 10L, loginId = "watcher", name = "감시자")
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
+                every { userRepository.findByLoginId("watcher") } returns Optional.of(watcher)
+                every { repositoryService.getRepository(project) } returns playRepo
+                every { playRepo.getCommit("abcdef1234") } returns commit
+                every { playRepo.getParentCommitOf("abcdef1234") } returns null
+                every { playRepo.getRefNames() } returns emptyList()
+                every { playRepo.getDiff("abcdef1234") } returns emptyList()
+                every { commentThreadRepository.findByProjectAndCommitIdAndPullRequestIsNullOrderByCreatedDateDesc(project, "abcdef1234") } returns emptyList()
+                every { watchService.isWatching(watcher, ResourceType.COMMIT, "1:abcdef1234") } returns true
+
+                mockMvc.perform(get("/testowner/testproject/commit/abcdef1234").principal(watcherAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/diff"))
+                    .andExpect(model().attribute("commitResourceId", "1:abcdef1234"))
+                    .andExpect(model().attribute("isWatching", true))
             }
         }
 

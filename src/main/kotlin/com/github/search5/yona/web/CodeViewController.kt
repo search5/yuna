@@ -11,6 +11,8 @@ import com.github.search5.yona.domain.support.MarkdownService
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
+import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.enumeration.ResourceType
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -40,6 +42,7 @@ class CodeViewController(
     private val commitCommentRepository: CommitCommentRepository,
     private val accessControl: AccessControl,
     private val markdownService: MarkdownService,
+    private val watchService: WatchService,
     // yona utils.Config.getSiteName() 대응 — code/nohead(_svn).html의 안내 문구 {0} 자리에 채워 넣는다.
     @Value("\${yuna.site-name:Yona}")
     private val siteName: String
@@ -504,6 +507,13 @@ class CodeViewController(
 
         model.addAttribute("commentThreads", commentThreads)
         model.addAttribute("commitB", commit)
+
+        // yona commit.getWatchers(project, false).contains(UserApp.currentUser()) 대응 —
+        // Commit.asResource(project)의 합성 리소스 키("{project.id}:{commitId}")를 그대로 재사용
+        // (CodeReviewServiceImpl.getCommitWatchers()가 알림 수신자 계산에 이미 쓰는 것과 동일한 포맷).
+        val commitResourceId = "${project.id}:$commitId"
+        model.addAttribute("commitResourceId", commitResourceId)
+        model.addAttribute("isWatching", loginUser?.let { watchService.isWatching(it, ResourceType.COMMIT, commitResourceId) } ?: false)
 
         return if (isSvn) {
             val patch = try {

@@ -196,6 +196,8 @@
         </div>
       </div>
 
+      <button th:if="${currentUser != null}" id="watch-button" type="button" class="pull-left ybtn" th:classappend="${isWatching} ? 'active ybtn-watching' : ''"
+              data-toggle="button" th:data-watching="${isWatching}" th:text="#{notification.watch}">지켜보기</button>
       <a th:href="@{/{owner}/{name}/commits/{branch}/{path}(owner=${project.owner}, name=${project.name}, branch=${selectedBranch}, path=${path})}" class="ybtn pull-right" th:text="#{button.list}">목록</a>
       </div>
     </div>
@@ -210,6 +212,20 @@
 document.addEventListener("DOMContentLoaded", function() {
   const currentUser = [[${currentUser != null}]];
   const postUrl = [[@{/{owner}/{projectName}/commit/{commitId}/comments(owner=${project.owner}, projectName=${project.name}, commitId=${commit.id})}]];
+
+  // legacy code/diff.scala.html $yobi.loadModule("code.Diff", {sWatchUrl/sUnwatchUrl}) 대응
+  const watchBtn = document.getElementById("watch-button");
+  if (watchBtn) {
+    watchBtn.addEventListener("click", function() {
+      const watching = watchBtn.getAttribute("data-watching") === "true";
+      const url = watching ? "/unwatch" : "/watch";
+      const body = new URLSearchParams();
+      body.set("resource.type", "COMMIT");
+      body.set("resource.id", [[${commitResourceId}]]);
+      fetch(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body.toString() })
+        .then(() => window.location.reload());
+    });
+  }
 
   // hover effect for add-comment button
   document.querySelectorAll(".diff-line-tr").forEach(tr => {

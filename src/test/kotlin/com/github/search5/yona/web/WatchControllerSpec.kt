@@ -130,6 +130,37 @@ class WatchControllerSpec : DescribeSpec({
                 verify(exactly = 1) { watchService.unwatch(user1, ResourceType.ISSUE_POST, "100") }
             }
 
+            // yona commit.asResource(project) 대응(P-템플릿 그룹10 #161 재검토) — resource.id는
+            // "{project.id}:{commitId}" 합성 키. 이전에는 checkWatchPermission()에 COMMIT 케이스가
+            // 없어 항상 400을 반환했다(TEMPLATE_BACKLOG.md 재감사로 발견).
+            it("/watch에 resource.type=COMMIT을 넘기면 합성 키에서 프로젝트를 찾아 정상 감시 등록해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
+                every { watchService.watch(user1, ResourceType.COMMIT, "1:abcdef1234") } just Runs
+
+                mockMvc.perform(post("/watch")
+                    .principal(auth)
+                    .param("resource.type", "COMMIT")
+                    .param("resource.id", "1:abcdef1234"))
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { watchService.watch(user1, ResourceType.COMMIT, "1:abcdef1234") }
+            }
+
+            it("/watch에 resource.type=COMMIT이지만 합성 키의 프로젝트가 없으면 404를 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/watch")
+                    .principal(auth)
+                    .param("resource.type", "COMMIT")
+                    .param("resource.id", "999:abcdef1234"))
+                    .andExpect(status().isNotFound)
+            }
+
             it("/{owner}/{projectName}/watch 호출 시 해당 프로젝트를 감시 등록해야 한다") {
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)

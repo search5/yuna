@@ -230,6 +230,7 @@
 
                                     <!-- 라벨별 오픈 이슈 -->
                                     <div class="span6" th:if="${project.isIssueEnabled}">
+                                        <link rel="stylesheet" type="text/css" th:href="@{/{owner}/{projectName}/issue/labels.css(owner=${project.owner}, projectName=${project.name})}" />
                                         <h5 th:text="#{project.dashboard.openIssuesByLabel}">Open issues by label</h5>
                                         <dl class="dl-horizontal overview-label" th:each="cat : ${labelCategories}">
                                             <dt th:text="${cat.name}">Category</dt>

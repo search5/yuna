@@ -886,6 +886,17 @@ class TemplateEquivalenceSpec @Autowired constructor(
                         ).andExpect(status().isOk).andReturn().response.contentAsString
                     )
                     boardListDoc.select("link[href*='/owner/public-proj/issue/labels.css']").size shouldBe 1
+
+                    // legacy project/partial_dashboard_issuesbylabel.scala.html:26도 동일한 링크를 갖고 있고,
+                    // yuna는 이 파샬을 project/home.html의 대시보드 탭에 인라인했으므로(#95, TASK-0237) 거기도
+                    // 같이 링크돼야 한다 — 이전엔 빠져 있었음(#37 재검토로 발견).
+                    val projectHomeDashboardDoc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/public-proj").param("tabId", "dashboard")
+                                .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andExpect(status().isOk).andReturn().response.contentAsString
+                    )
+                    projectHomeDashboardDoc.select("link[href*='/owner/public-proj/issue/labels.css']").size shouldBe 1
                 }
             }
 

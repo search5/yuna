@@ -66,6 +66,14 @@ class WatchController(
                     .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "Pull Request를 찾을 수 없습니다.") }
                 pullRequest.toProject
             }
+            ResourceType.COMMIT -> {
+                // yona Commit.asResource(project) 대응 — resourceId는 "{project.id}:{commitId}" 합성 키
+                // (CodeReviewServiceImpl.getCommitWatchers()가 알림 수신자 계산에 이미 쓰는 것과 동일한 포맷).
+                val projectId = resourceId.substringBefore(':', missingDelimiterValue = "").toLongOrNull()
+                    ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 리소스 ID입니다.")
+                projectRepository.findById(projectId)
+                    .orElseThrow { ResponseStatusException(HttpStatus.NOT_FOUND, "프로젝트를 찾을 수 없습니다.") }
+            }
             else -> {
                 throw ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 리소스 타입입니다.")
             }
