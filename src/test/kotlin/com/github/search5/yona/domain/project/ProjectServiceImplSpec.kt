@@ -29,6 +29,7 @@ import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.user.FavoriteProject
 import com.github.search5.yona.domain.user.FavoriteProjectRepository
 import com.github.search5.yona.domain.vcs.PlayRepository
@@ -45,6 +46,7 @@ import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.io.File
 import java.time.Instant
 import java.util.Optional
 
@@ -347,6 +349,475 @@ class ProjectServiceImplSpec : DescribeSpec({
                 projectService.acceptTransfer(50L, "wrong-key", 2L)
             }
         }
+
+        // 아래부터는 각 it마다 독립된 고유 id의 project/sender/pt를 사용한다 — 이 describe 상단의
+        // 공유 `project`/`sender`는 여러 it에 걸쳐 실제로 상태가 누적 변이되므로(SingleInstance),
+        // 새 테스트가 기존 테스트의 실행 순서/상태에 영향을 주거나 받지 않도록 격리한다.
+
+        it("송신자가 MANAGER였다면 이관 후 MEMBER로 강등되어야 한다") {
+            val sender2 = User(id = 301L, loginId = "sender-301", name = "보내는사람301")
+            val proj = Project(id = 501L, name = "demote-proj", owner = "sender-301", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 601L, project = proj, sender = sender2, destination = "dest-401",
+                confirmKey = "key", newProjectName = "demote-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 401L, loginId = "dest-401", name = "받는사람401")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            val memberRole = Role(id = RoleType.MEMBER.roleType)
+            val senderProjectUser = ProjectUser(id = 801L, user = sender2, project = proj, role = managerRole)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(601L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(401L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-401") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(501L, 301L) } returns Optional.of(senderProjectUser)
+            every { roleRepository.findById(RoleType.MEMBER.roleType) } returns Optional.of(memberRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { userRepository.findByLoginId("dest-401") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(501L, 401L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(601L, "key", 401L)
+
+            senderProjectUser.role shouldBe memberRole
+            verify(exactly = 1) { projectUserRepository.save(senderProjectUser) }
+        }
+
+        it("강등에 필요한 MEMBER 역할을 찾을 수 없으면 예외가 발생해야 한다") {
+            val sender2 = User(id = 302L, loginId = "sender-302", name = "보내는사람302")
+            val proj = Project(id = 502L, name = "demote-fail-proj", owner = "sender-302", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 602L, project = proj, sender = sender2, destination = "dest-402",
+                confirmKey = "key", newProjectName = "demote-fail-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 402L, loginId = "dest-402", name = "받는사람402")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            val senderProjectUser = ProjectUser(id = 802L, user = sender2, project = proj, role = managerRole)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(602L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(402L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-402") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(502L, 302L) } returns Optional.of(senderProjectUser)
+            every { roleRepository.findById(RoleType.MEMBER.roleType) } returns Optional.empty()
+
+            shouldThrow<IllegalStateException> {
+                projectService.acceptTransfer(602L, "key", 402L)
+            }
+        }
+
+        it("송신자가 MANAGER가 아니었다면 강등 처리를 하지 않아야 한다") {
+            val sender2 = User(id = 303L, loginId = "sender-303", name = "보내는사람303")
+            val proj = Project(id = 503L, name = "no-demote-proj", owner = "sender-303", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 603L, project = proj, sender = sender2, destination = "dest-403",
+                confirmKey = "key", newProjectName = "no-demote-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 403L, loginId = "dest-403", name = "받는사람403")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            val memberRole = Role(id = RoleType.MEMBER.roleType)
+            val senderProjectUser = ProjectUser(id = 803L, user = sender2, project = proj, role = memberRole)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(603L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(403L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-403") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(503L, 303L) } returns Optional.of(senderProjectUser)
+            every { userRepository.findByLoginId("dest-403") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(503L, 403L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+            // roleRepository는 스펙 전역에서 공유되는 mock이라 이전 it들의 호출 이력이 누적돼 있다.
+            // exactly=0 단언이 오염되지 않도록 스텁(answers)은 남기고 호출 이력만 초기화한다.
+            clearMocks(roleRepository, answers = false)
+
+            projectService.acceptTransfer(603L, "key", 403L)
+
+            senderProjectUser.role shouldBe memberRole
+            verify(exactly = 0) { roleRepository.findById(RoleType.MEMBER.roleType) }
+        }
+
+        it("이관 목적지 사용자가 이미 프로젝트 멤버라면 새로 만들지 않고 기존 멤버의 역할만 MANAGER로 갱신해야 한다") {
+            val sender2 = User(id = 304L, loginId = "sender-304", name = "보내는사람304")
+            val proj = Project(id = 504L, name = "existing-member-proj", owner = "sender-304", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 604L, project = proj, sender = sender2, destination = "dest-404",
+                confirmKey = "key", newProjectName = "existing-member-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 404L, loginId = "dest-404", name = "받는사람404")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            val existingMemberRole = Role(id = RoleType.MEMBER.roleType)
+            val existingProjectUser = ProjectUser(id = 804L, user = destUser, project = proj, role = existingMemberRole)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(604L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(404L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-404") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(504L, 304L) } returns Optional.empty()
+            every { userRepository.findByLoginId("dest-404") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(504L, 404L) } returns Optional.of(existingProjectUser)
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(604L, "key", 404L)
+
+            existingProjectUser.role shouldBe managerRole
+            verify(exactly = 1) { projectUserRepository.save(existingProjectUser) }
+        }
+
+        it("이관 목적지 사용자에게 부여할 MANAGER 역할을 찾을 수 없으면 예외가 발생해야 한다") {
+            val sender2 = User(id = 305L, loginId = "sender-305", name = "보내는사람305")
+            val proj = Project(id = 505L, name = "no-manager-role-proj", owner = "sender-305", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 605L, project = proj, sender = sender2, destination = "dest-405",
+                confirmKey = "key", newProjectName = "no-manager-role-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 405L, loginId = "dest-405", name = "받는사람405")
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(605L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(405L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-405") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(505L, 305L) } returns Optional.empty()
+            every { userRepository.findByLoginId("dest-405") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(505L, 405L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.empty()
+
+            shouldThrow<IllegalStateException> {
+                projectService.acceptTransfer(605L, "key", 405L)
+            }
+        }
+
+        // yona 물리 저장소 폴더 이동 대응 — 실제 파일시스템에 GIT bare 저장소 디렉터리를 만들어
+        // sourceDir.exists()==true 분기(File.renameTo 실행 경로)를 검증한다.
+        it("GIT 저장소 폴더가 실재하면 이관 시 물리적으로 이동돼야 한다") {
+            val owner = "phys-git-owner"
+            val name = "phys-git-repo"
+            val destOwner = "phys-git-dest-owner"
+            val sender2 = User(id = 306L, loginId = owner, name = "물리깃")
+            val proj = Project(id = 506L, name = name, owner = owner, vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 606L, project = proj, sender = sender2, destination = destOwner,
+                confirmKey = "key", newProjectName = name, requested = Instant.now()
+            )
+            val destUser = User(id = 406L, loginId = destOwner, name = "물리깃수신")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            val sourceDir = File("/tmp/yuna/git/$owner/$name.git")
+            val targetDir = File("/tmp/yuna/git/$destOwner/$name.git")
+            sourceDir.deleteRecursively()
+            targetDir.deleteRecursively()
+            try {
+                sourceDir.mkdirs()
+                File(sourceDir, "HEAD").writeText("ref: refs/heads/main")
+
+                every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(606L, false, any()) } returns Optional.of(pt)
+                every { userRepository.findById(406L) } returns Optional.of(destUser)
+                every { organizationRepository.findByName(destOwner) } returns Optional.empty()
+                every { projectRepository.save(any()) } returns proj
+                every { projectUserRepository.findByProjectIdAndUserId(506L, 306L) } returns Optional.empty()
+                every { userRepository.findByLoginId(destOwner) } returns Optional.of(destUser)
+                every { projectUserRepository.findByProjectIdAndUserId(506L, 406L) } returns Optional.empty()
+                every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+                every { projectUserRepository.save(any()) } returns mockk()
+                every { projectTransferRepository.delete(any()) } returns Unit
+
+                projectService.acceptTransfer(606L, "key", 406L)
+
+                sourceDir.exists() shouldBe false
+                targetDir.exists() shouldBe true
+                File(targetDir, "HEAD").exists() shouldBe true
+            } finally {
+                sourceDir.deleteRecursively()
+                targetDir.deleteRecursively()
+            }
+        }
+
+        it("SVN(SUBVERSION) 저장소 폴더가 실재하면 이관 시 svn 기본 경로에서 이동돼야 한다") {
+            val owner = "phys-svn-owner"
+            val name = "phys-svn-repo"
+            val destOwner = "phys-svn-dest-owner"
+            val sender2 = User(id = 307L, loginId = owner, name = "물리svn")
+            val proj = Project(id = 507L, name = name, owner = owner, vcs = "SUBVERSION")
+            val pt = ProjectTransfer(
+                id = 607L, project = proj, sender = sender2, destination = destOwner,
+                confirmKey = "key", newProjectName = name, requested = Instant.now()
+            )
+            val destUser = User(id = 407L, loginId = destOwner, name = "물리svn수신")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            val sourceDir = File("/tmp/yuna/svn/$owner/$name.git")
+            val targetDir = File("/tmp/yuna/svn/$destOwner/$name.git")
+            sourceDir.deleteRecursively()
+            targetDir.deleteRecursively()
+            try {
+                sourceDir.mkdirs()
+
+                every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(607L, false, any()) } returns Optional.of(pt)
+                every { userRepository.findById(407L) } returns Optional.of(destUser)
+                every { organizationRepository.findByName(destOwner) } returns Optional.empty()
+                every { projectRepository.save(any()) } returns proj
+                every { projectUserRepository.findByProjectIdAndUserId(507L, 307L) } returns Optional.empty()
+                every { userRepository.findByLoginId(destOwner) } returns Optional.of(destUser)
+                every { projectUserRepository.findByProjectIdAndUserId(507L, 407L) } returns Optional.empty()
+                every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+                every { projectUserRepository.save(any()) } returns mockk()
+                every { projectTransferRepository.delete(any()) } returns Unit
+
+                projectService.acceptTransfer(607L, "key", 407L)
+
+                sourceDir.exists() shouldBe false
+                targetDir.exists() shouldBe true
+            } finally {
+                sourceDir.deleteRecursively()
+                targetDir.deleteRecursively()
+            }
+        }
+
+        // yona isAuthorizedToAcceptTransfer()의 "조직 소속이 아예 아닌 사용자" 분기(orgUser==null) 대응.
+        it("이관 목적지가 조직이고 수락자가 그 조직의 소속원이 전혀 아니면 권한 없음 예외가 발생해야 한다") {
+            val sender2 = User(id = 308L, loginId = "sender-308", name = "보내는사람308")
+            val proj = Project(id = 508L, name = "org-no-member-proj", owner = "sender-308", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 608L, project = proj, sender = sender2, destination = "org-no-member",
+                confirmKey = "key", newProjectName = "org-no-member-proj", requested = Instant.now()
+            )
+            val outsider = User(id = 408L, loginId = "outsider", name = "외부인")
+            val org = Organization(id = 708L, name = "org-no-member")
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(608L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(408L) } returns Optional.of(outsider)
+            every { organizationRepository.findByName("org-no-member") } returns Optional.of(org)
+            every { organizationUserRepository.findByOrganizationIdAndUserId(708L, 408L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.acceptTransfer(608L, "key", 408L)
+            }
+        }
+
+        // yona recordRenameOrTransferHistoryIfLastChangePassed24HoursFrom()의 "24시간 초과 -> 재기록"
+        // 분기(lastChanged.isBefore(now-24h)==true) 대응 — 기존 테스트는 null(최초)과 24시간 이내
+        // 두 경우만 다뤄, 24시간을 실제로 넘긴 경우의 재기록 분기는 아직 검증되지 않았었다.
+        it("previousNameChangedTime이 24시간을 초과했으면 예전 위치가 다시 갱신돼야 한다") {
+            val oldChange = Instant.now().minusSeconds(25 * 3600) // 25시간 전
+            val sender2 = User(id = 309L, loginId = "sender-309", name = "보내는사람309")
+            val proj = Project(
+                id = 509L, name = "old-history-proj", owner = "sender-309", vcs = "GIT",
+                previousOwnerLoginId = "ancient-owner", previousName = "ancient-name",
+                previousNameChangedTime = oldChange
+            )
+            val pt = ProjectTransfer(
+                id = 609L, project = proj, sender = sender2, destination = "dest-409",
+                confirmKey = "key", newProjectName = "old-history-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 409L, loginId = "dest-409", name = "받는사람409")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(609L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(409L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-409") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(509L, 309L) } returns Optional.empty()
+            every { userRepository.findByLoginId("dest-409") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(509L, 409L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(609L, "key", 409L)
+
+            proj.previousOwnerLoginId shouldBe "sender-309"
+            proj.previousName shouldBe "old-history-proj"
+            proj.previousNameChangedTime shouldNotBe oldChange
+        }
+
+        it("존재하지 않거나 만료된 이관 요청이면 예외가 발생해야 한다") {
+            every {
+                projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(777001L, false, any())
+            } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.acceptTransfer(777001L, "any-key", 1L)
+            }
+        }
+
+        it("수락자(acceptor) 사용자를 찾을 수 없으면 예외가 발생해야 한다") {
+            val sender2 = User(id = 310L, loginId = "sender-310", name = "보내는사람310")
+            val proj = Project(id = 510L, name = "no-acceptor-proj", owner = "sender-310", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 610L, project = proj, sender = sender2, destination = "dest-410",
+                confirmKey = "key", newProjectName = "no-acceptor-proj", requested = Instant.now()
+            )
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(610L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(410L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.acceptTransfer(610L, "key", 410L)
+            }
+        }
+
+        // val originalOwner = project.owner ?: "" — 이관 전 프로젝트의 owner가 null인 경우(엘비스 분기).
+        it("이관 전 프로젝트의 owner가 null이었으면 예전 위치가 빈 문자열로 기록돼야 한다") {
+            val sender2 = User(id = 311L, loginId = "sender-311", name = "보내는사람311")
+            val proj = Project(id = 511L, name = "null-owner-proj", owner = null, vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 611L, project = proj, sender = sender2, destination = "dest-411",
+                confirmKey = "key", newProjectName = "null-owner-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 411L, loginId = "dest-411", name = "받는사람411")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(611L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(411L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-411") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(511L, 311L) } returns Optional.empty()
+            every { userRepository.findByLoginId("dest-411") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(511L, 411L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(611L, "key", 411L)
+
+            proj.owner shouldBe "dest-411"
+            proj.previousOwnerLoginId shouldBe ""
+        }
+
+        // baseDir 판정용 vcs?.uppercase() 체인 — vcs가 null(엘비스 분기)인 경우 기본 GIT 경로로 처리돼야 한다.
+        it("vcs가 null인 프로젝트를 이관해도 기본 GIT 경로 기준으로 정상 처리돼야 한다") {
+            val sender2 = User(id = 312L, loginId = "sender-312", name = "보내는사람312")
+            val proj = Project(id = 512L, name = "vcs-null-proj", owner = "sender-312", vcs = null)
+            val pt = ProjectTransfer(
+                id = 612L, project = proj, sender = sender2, destination = "dest-412",
+                confirmKey = "key", newProjectName = "vcs-null-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 412L, loginId = "dest-412", name = "받는사람412")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(612L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(412L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-412") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(512L, 312L) } returns Optional.empty()
+            every { userRepository.findByLoginId("dest-412") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(512L, 412L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(612L, "key", 412L)
+
+            proj.owner shouldBe "dest-412"
+        }
+
+        // vcs가 축약형 "SVN"인 경우도 svn 기본 경로로 판정돼야 한다(OR의 두 번째 항이 true).
+        it("vcs가 SVN(축약형)인 프로젝트를 이관하면 svn 기본 경로 기준으로 판단돼야 한다") {
+            val sender2 = User(id = 313L, loginId = "sender-313", name = "보내는사람313")
+            val proj = Project(id = 513L, name = "vcs-svn-abbrev-proj", owner = "sender-313", vcs = "SVN")
+            val pt = ProjectTransfer(
+                id = 613L, project = proj, sender = sender2, destination = "dest-413",
+                confirmKey = "key", newProjectName = "vcs-svn-abbrev-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 413L, loginId = "dest-413", name = "받는사람413")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(613L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(413L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-413") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(513L, 313L) } returns Optional.empty()
+            every { userRepository.findByLoginId("dest-413") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(513L, 413L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(613L, "key", 413L)
+
+            proj.owner shouldBe "dest-413"
+        }
+
+        // senderProjectUser.role.id는 Role.id: Long?(nullable)라, id가 null인 방어적 케이스도
+        // 강등 판정(role.id == MANAGER.roleType)에서 false로 안전하게 처리돼야 한다.
+        it("송신자의 역할 id가 null이면 강등 판정에서 false로 처리돼 강등되지 않아야 한다") {
+            val sender2 = User(id = 314L, loginId = "sender-314", name = "보내는사람314")
+            val proj = Project(id = 514L, name = "role-id-null-proj", owner = "sender-314", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 614L, project = proj, sender = sender2, destination = "dest-414",
+                confirmKey = "key", newProjectName = "role-id-null-proj", requested = Instant.now()
+            )
+            val destUser = User(id = 414L, loginId = "dest-414", name = "받는사람414")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            val roleWithNullId = Role(id = null)
+            val senderProjectUser = ProjectUser(id = 805L, user = sender2, project = proj, role = roleWithNullId)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(614L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(414L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName("dest-414") } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(514L, 314L) } returns Optional.of(senderProjectUser)
+            every { userRepository.findByLoginId("dest-414") } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(514L, 414L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            projectService.acceptTransfer(614L, "key", 414L)
+
+            senderProjectUser.role shouldBe roleWithNullId
+        }
+
+        // isAuthorizedToAcceptTransfer()의 orgUser.role.id == ORG_ADMIN.roleType — id가 null인
+        // 방어적 케이스도 권한 없음(false)으로 안전하게 처리돼야 한다.
+        it("조직 이관 수락자의 역할 id가 null이면 권한 없음으로 처리돼야 한다") {
+            val sender2 = User(id = 315L, loginId = "sender-315", name = "보내는사람315")
+            val proj = Project(id = 515L, name = "org-role-id-null-proj", owner = "sender-315", vcs = "GIT")
+            val pt = ProjectTransfer(
+                id = 615L, project = proj, sender = sender2, destination = "org-role-id-null",
+                confirmKey = "key", newProjectName = "org-role-id-null-proj", requested = Instant.now()
+            )
+            val member = User(id = 415L, loginId = "org-member-null-role", name = "조직원")
+            val org = Organization(id = 709L, name = "org-role-id-null")
+            val roleWithNullId = Role(id = null)
+            val orgUser = OrganizationUser(id = 900L, user = member, organization = org, role = roleWithNullId)
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(615L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(415L) } returns Optional.of(member)
+            every { organizationRepository.findByName("org-role-id-null") } returns Optional.of(org)
+            every { organizationUserRepository.findByOrganizationIdAndUserId(709L, 415L) } returns Optional.of(orgUser)
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.acceptTransfer(615L, "key", 415L)
+            }
+        }
+    }
+
+    // yona Project.findByOwnerAndProjectName()/findProjectsByOwner() 대응 — 단순 위임 메서드지만
+    // 메서드 커버리지(95%) 목표를 위해 이 스펙에서도 최소 한 번씩은 실행돼야 한다.
+    describe("ProjectServiceImpl.findByOwnerAndName / findProjectsByOwner") {
+        it("findByOwnerAndName: 프로젝트가 있으면 그 프로젝트를 반환해야 한다") {
+            val project = Project(id = 9960L, name = "p", owner = "owner-a")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner-a", "p") } returns Optional.of(project)
+
+            projectService.findByOwnerAndName("owner-a", "p") shouldBe project
+        }
+
+        it("findByOwnerAndName: 프로젝트가 없으면 null을 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner-b", "none") } returns Optional.empty()
+
+            projectService.findByOwnerAndName("owner-b", "none") shouldBe null
+        }
+
+        it("findProjectsByOwner: owner가 소유한 프로젝트 목록을 그대로 반환해야 한다") {
+            val projects = listOf(Project(id = 9961L, name = "p1", owner = "owner-c"))
+            every { projectRepository.findByOwner("owner-c") } returns projects
+
+            projectService.findProjectsByOwner("owner-c") shouldBe projects
+        }
     }
 
     // yona Project.newProjectName(loginId, projectName) 대응 (P1-72).
@@ -388,6 +859,48 @@ class ProjectServiceImplSpec : DescribeSpec({
             val pt = projectService.requestNewTransfer(10L, 1L, "new-owner")
 
             pt.newProjectName shouldBe "yona-project-2"
+        }
+
+        it("프로젝트를 찾을 수 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(9980L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.requestNewTransfer(9980L, 1L, "new-owner")
+            }
+        }
+
+        it("보내는 사람(sender)을 찾을 수 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(10L) } returns Optional.of(project)
+            every { userRepository.findById(9981L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.requestNewTransfer(10L, 9981L, "new-owner")
+            }
+        }
+
+        // 동일한 (project, sender, destination) 조합의 이관 요청이 이미 존재하면 새로 만들지 않고
+        // 기존 요청의 requested/confirmKey만 갱신해야 한다(existing.isPresent==true 분기).
+        it("동일 목적지로의 이관 요청이 이미 존재하면 새로 만들지 않고 기존 요청을 갱신해야 한다") {
+            val existingPt = ProjectTransfer(
+                id = 700L, project = project, sender = sender, destination = "new-owner",
+                confirmKey = "old-key", newProjectName = "yona-project",
+                requested = Instant.now().minusSeconds(3600)
+            )
+            every { projectRepository.findById(10L) } returns Optional.of(project)
+            every { userRepository.findById(1L) } returns Optional.of(sender)
+            every { userRepository.findByLoginId("new-owner") } returns Optional.empty()
+            every { projectRepository.findByOwner("new-owner") } returns emptyList()
+            every { projectRepository.findByOwnerAndName("new-owner", "yona-project") } returns Optional.empty()
+            every {
+                projectTransferRepository.findByProjectAndSenderAndDestination(project, sender, "new-owner")
+            } returns Optional.of(existingPt)
+            every { projectTransferRepository.save(any()) } answers { firstArg() }
+
+            val result = projectService.requestNewTransfer(10L, 1L, "new-owner")
+
+            result shouldBe existingPt
+            existingPt.confirmKey shouldNotBe "old-key"
+            verify(exactly = 1) { projectTransferRepository.save(existingPt) }
         }
     }
 
@@ -484,6 +997,44 @@ class ProjectServiceImplSpec : DescribeSpec({
 
             result shouldBe true
             verify(exactly = 0) { labelRepository.delete(label) }
+        }
+
+        it("attachLabel: 프로젝트를 찾을 수 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(9970L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.attachLabel(9970L, "os", "linux")
+            }
+        }
+
+        it("detachLabel: 프로젝트를 찾을 수 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(9971L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.detachLabel(9971L, 1L)
+            }
+        }
+    }
+
+    // yona Project.getLabels() 대응 — 존재하지 않는 프로젝트 조회 시 예외, 정상 조회 시 라벨 집합 반환.
+    describe("ProjectServiceImpl.getProjectLabels") {
+        it("프로젝트를 찾을 수 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(9972L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.getProjectLabels(9972L)
+            }
+        }
+
+        it("프로젝트가 존재하면 그 프로젝트에 붙은 라벨 집합을 반환해야 한다") {
+            val label = Label(id = 300L, category = "os", name = "linux")
+            val project = Project(id = 9973L, name = "p", owner = "owner")
+            project.labels.add(label)
+            every { projectRepository.findById(9973L) } returns Optional.of(project)
+
+            val result = projectService.getProjectLabels(9973L)
+
+            result shouldBe setOf(label)
         }
     }
 
@@ -603,6 +1154,92 @@ class ProjectServiceImplSpec : DescribeSpec({
             // 그대로 보존해 사용자가 "가장 먼저" 있었던 위치로 계속 폴백 조회할 수 있게 한다.
             project.previousName shouldBe "very-old-name"
             project.previousNameChangedTime shouldBe recentChange
+        }
+
+        it("프로젝트를 찾을 수 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(25L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.updateProject(25L, baseParam(name = "whatever"))
+            }
+        }
+
+        // param.name이 아예 null(변경 요청 없음)이면 "param.name != null" 분기 자체가 false가 되어
+        // 개명 관련 로직 전체(중복검사/rename/이력기록/즐겨찾기 갱신)를 건너뛰어야 한다.
+        it("param.name이 null이면 개명 로직 전체를 건너뛰어야 한다") {
+            val project = Project(id = 26L, name = "keep-name", owner = "owner1", vcs = "GIT")
+            every { projectRepository.findById(26L) } returns Optional.of(project)
+            every { projectRepository.save(any()) } returns project
+            // projectRepository/repositoryService는 스펙 전역 공유 mock이라 이전 it들의 호출 이력이
+            // 누적돼 있다. exactly=0 단언이 오염되지 않도록 스텁(answers)은 남기고 호출 이력만 초기화한다.
+            clearMocks(projectRepository, repositoryService, answers = false)
+
+            projectService.updateProject(26L, baseParam(name = null))
+
+            project.name shouldBe "keep-name"
+            verify(exactly = 0) { projectRepository.existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot(any(), any(), any()) }
+            verify(exactly = 0) { repositoryService.getRepository(any()) }
+        }
+
+        // project.owner ?: "" 엘비스 분기 — owner가 null인 프로젝트의 개명 시도.
+        it("프로젝트 owner가 null이어도 이름 변경 시 빈 문자열 owner로 중복 검사가 수행돼야 한다") {
+            val project = Project(id = 27L, name = "old-name", owner = null, vcs = "GIT")
+            // 즐겨찾기 동기화 루프(project.owner ?: "")의 owner==null 분기까지 실제로 태우기 위해
+            // 빈 리스트가 아니라 실제 즐겨찾기 1건을 포함시킨다.
+            val favorite = FavoriteProject(id = 901L, user = mockk(relaxed = true), project = project, owner = "old-name-owner", projectName = "old-name")
+            every { projectRepository.findById(27L) } returns Optional.of(project)
+            every {
+                projectRepository.existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot("", "new-name", 27L)
+            } returns false
+            every { repositoryService.getRepository(project) } returns playRepository
+            every { playRepository.renameTo("new-name") } returns true
+            every { projectRepository.save(any()) } returns project
+            every { favoriteProjectRepository.findByProjectId(27L) } returns listOf(favorite)
+            every { favoriteProjectRepository.save(any()) } returns favorite
+
+            projectService.updateProject(27L, baseParam(name = "new-name"))
+
+            project.name shouldBe "new-name"
+            favorite.owner shouldBe "" // project.owner가 null이라 빈 문자열로 채워져야 한다
+            verify(exactly = 1) { projectRepository.existsByOwnerIgnoreCaseAndNameIgnoreCaseAndIdNot("", "new-name", 27L) }
+        }
+
+        it("defaultBranch가 지정되면 저장소의 기본 브랜치를 설정해야 한다") {
+            val project = Project(id = 28L, name = "same-name", owner = "owner1", vcs = "GIT")
+            every { projectRepository.findById(28L) } returns Optional.of(project)
+            every { repositoryService.getRepository(project) } returns playRepository
+            every { playRepository.setDefaultBranch("refs/heads/develop") } returns Unit
+            every { projectRepository.save(any()) } returns project
+
+            projectService.updateProject(28L, baseParam(name = "same-name").copy(defaultBranch = "develop"))
+
+            verify(exactly = 1) { playRepository.setDefaultBranch("refs/heads/develop") }
+        }
+
+        it("기본 브랜치 설정 중 예외가 발생해도 무시하고 저장은 계속돼야 한다") {
+            val project = Project(id = 29L, name = "same-name2", owner = "owner1", vcs = "GIT")
+            every { projectRepository.findById(29L) } returns Optional.of(project)
+            every { repositoryService.getRepository(project) } returns playRepository
+            every { playRepository.setDefaultBranch("refs/heads/broken") } throws RuntimeException("boom")
+            every { projectRepository.save(any()) } returns project
+
+            val result = projectService.updateProject(29L, baseParam(name = "same-name2").copy(defaultBranch = "broken"))
+
+            result shouldBe project
+            verify(exactly = 1) { projectRepository.save(project) }
+        }
+
+        it("defaultBranch가 공백 문자열이면 기본 브랜치 설정을 건너뛰어야 한다") {
+            val project = Project(id = 30L, name = "same-name3", owner = "owner1", vcs = "GIT")
+            every { projectRepository.findById(30L) } returns Optional.of(project)
+            every { projectRepository.save(any()) } returns project
+            // repositoryService는 스펙 전역 공유 mock이라 이전 it들의 호출 이력이 누적돼 있다.
+            // exactly=0 단언이 오염되지 않도록 스텁(answers)은 남기고 호출 이력만 초기화한다.
+            clearMocks(repositoryService, answers = false)
+
+            projectService.updateProject(30L, baseParam(name = "same-name3").copy(defaultBranch = "   "))
+
+            verify(exactly = 0) { repositoryService.getRepository(any()) }
         }
     }
 
@@ -742,6 +1379,411 @@ class ProjectServiceImplSpec : DescribeSpec({
             fork.originalProject shouldBe null
             verify(exactly = 0) { projectRepository.delete(fork) }
             verify(exactly = 1) { projectRepository.delete(project) }
+        }
+
+        it("프로젝트를 찾을 수 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(9999L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.deleteProject(9999L)
+            }
+        }
+    }
+
+    // yona Project.create() 대응 — 이름 중복 검사, 생성일/사이트URL 세팅, MANAGER 멤버 자동 등록.
+    describe("ProjectServiceImpl.createProject") {
+        it("이미 동일한 owner/name의 프로젝트가 있으면 예외가 발생해야 한다") {
+            val creator = User(id = 900L, loginId = "creator", name = "생성자")
+            val newProject = Project(name = "dup-project", owner = "creator")
+            every { projectRepository.findByOwnerAndName("creator", "dup-project") } returns
+                Optional.of(Project(id = 1000L, name = "dup-project", owner = "creator"))
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.createProject(newProject, creator)
+            }
+
+            verify(exactly = 0) { projectRepository.save(any()) }
+        }
+
+        it("새 프로젝트를 생성하면 생성일/사이트URL이 채워지고 생성자가 MANAGER로 등록돼야 한다") {
+            val creator = User(id = 901L, loginId = "creator2", name = "생성자2")
+            val newProject = Project(name = "new-project", owner = "creator2")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            every { projectRepository.findByOwnerAndName("creator2", "new-project") } returns Optional.empty()
+            every { projectRepository.save(newProject) } returns newProject
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+
+            val result = projectService.createProject(newProject, creator)
+
+            result shouldBe newProject
+            result.createdDate shouldNotBe null
+            result.siteurl shouldBe "http://localhost:9000/new-project"
+            result.projectUsers.size shouldBe 1
+            result.projectUsers.first().role shouldBe managerRole
+            result.projectUsers.first().user shouldBe creator
+            verify(exactly = 1) { projectUserRepository.save(any()) }
+        }
+
+        // roleRepository.findById(MANAGER).ifPresent {} — MANAGER 역할이 없으면 람다 자체가
+        // 실행되지 않아 멤버 등록 없이 프로젝트만 만들어져야 한다(ifPresent의 absent 분기).
+        it("MANAGER 역할을 찾지 못하면 멤버 등록 없이 프로젝트만 생성돼야 한다") {
+            val creator = User(id = 902L, loginId = "creator3", name = "생성자3")
+            val newProject = Project(name = "no-manager-role-project", owner = "creator3")
+            every { projectRepository.findByOwnerAndName("creator3", "no-manager-role-project") } returns Optional.empty()
+            every { projectRepository.save(newProject) } returns newProject
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.empty()
+            // projectUserRepository는 스펙 전역 공유 mock이라 이전 it들의 호출 이력이 누적돼 있다.
+            // exactly=0 단언이 오염되지 않도록 스텁(answers)은 남기고 호출 이력만 초기화한다.
+            clearMocks(projectUserRepository, answers = false)
+
+            val result = projectService.createProject(newProject, creator)
+
+            result shouldBe newProject
+            result.projectUsers.size shouldBe 0
+            verify(exactly = 0) { projectUserRepository.save(any()) }
+        }
+
+        // exists(project.owner ?: "", project.name) — owner가 null인 프로젝트 생성 시도(엘비스 분기).
+        it("owner가 null인 프로젝트를 생성하면 빈 문자열 owner로 중복 검사가 수행돼야 한다") {
+            val creator = User(id = 903L, loginId = "creator4", name = "생성자4")
+            val newProject = Project(name = "no-owner-project", owner = null)
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            every { projectRepository.findByOwnerAndName("", "no-owner-project") } returns Optional.empty()
+            every { projectRepository.save(newProject) } returns newProject
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+
+            val result = projectService.createProject(newProject, creator)
+
+            result shouldBe newProject
+            verify(exactly = 1) { projectRepository.findByOwnerAndName("", "no-owner-project") }
+        }
+    }
+
+    // yona Project.isMember() 대응 — 사이트 관리자/프로젝트 owner/일반 멤버 세 갈래 판정 경로.
+    describe("ProjectServiceImpl.isMember") {
+        it("프로젝트가 존재하지 않으면 false를 반환해야 한다") {
+            every { projectRepository.findById(9990L) } returns Optional.empty()
+
+            projectService.isMember(9990L, "someone") shouldBe false
+        }
+
+        it("사이트 관리자(SITE_ADMIN)이면 프로젝트 멤버가 아니어도 true를 반환해야 한다") {
+            val project = Project(id = 9991L, name = "p", owner = "owner-x")
+            val siteAdmin = User(id = 950L, loginId = "admin", name = "관리자", state = UserState.SITE_ADMIN)
+            every { projectRepository.findById(9991L) } returns Optional.of(project)
+            every { userRepository.findByLoginId("admin") } returns Optional.of(siteAdmin)
+
+            projectService.isMember(9991L, "admin") shouldBe true
+        }
+
+        it("사이트 관리자가 아닌 일반 유저라도 프로젝트 owner와 loginId가 같으면 true를 반환해야 한다") {
+            val project = Project(id = 9992L, name = "p", owner = "owner-y")
+            val normalUser = User(id = 951L, loginId = "owner-y", name = "일반유저")
+            every { projectRepository.findById(9992L) } returns Optional.of(project)
+            every { userRepository.findByLoginId("owner-y") } returns Optional.of(normalUser)
+
+            projectService.isMember(9992L, "owner-y") shouldBe true
+        }
+
+        it("사용자를 찾지 못했더라도 프로젝트 owner와 loginId가 일치하면 true를 반환해야 한다") {
+            val project = Project(id = 9993L, name = "p", owner = "owner-z")
+            every { projectRepository.findById(9993L) } returns Optional.of(project)
+            every { userRepository.findByLoginId("owner-z") } returns Optional.empty()
+
+            projectService.isMember(9993L, "owner-z") shouldBe true
+        }
+
+        it("owner도 아니고 사이트관리자도 아니면 프로젝트 멤버 여부(existsBy...)로 최종 판정해야 한다") {
+            val project = Project(id = 9994L, name = "p", owner = "owner-w")
+            val memberUser = User(id = 952L, loginId = "member-user", name = "멤버")
+            every { projectRepository.findById(9994L) } returns Optional.of(project)
+            every { userRepository.findByLoginId("member-user") } returns Optional.of(memberUser)
+            every { projectUserRepository.existsByProjectIdAndUserLoginId(9994L, "member-user") } returns true
+
+            projectService.isMember(9994L, "member-user") shouldBe true
+        }
+
+        it("owner도 멤버도 아니면 false를 반환해야 한다") {
+            val project = Project(id = 9995L, name = "p", owner = "owner-v")
+            every { projectRepository.findById(9995L) } returns Optional.of(project)
+            every { userRepository.findByLoginId("stranger") } returns Optional.empty()
+            every { projectUserRepository.existsByProjectIdAndUserLoginId(9995L, "stranger") } returns false
+
+            projectService.isMember(9995L, "stranger") shouldBe false
+        }
+    }
+
+    // yona Project.fork() 대응 — 자식 프로젝트 엔티티 생성/멤버 등록과, 물리 Bare 저장소의
+    // 하드링크(Hard Link) 기반 무복사 복제(cloneHardLinkedRepository)까지 실제 파일시스템으로 검증한다.
+    describe("ProjectServiceImpl.forkProject / cloneHardLinkedRepository (실제 파일시스템)") {
+        val gitBase = File("/tmp/yuna/git")
+        val svnBase = File("/tmp/yuna/svn")
+
+        it("원본 프로젝트가 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(9001L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.forkProject(9001L, 1L, "", "")
+            }
+        }
+
+        it("포크할 사용자가 없으면 예외가 발생해야 한다") {
+            val original = Project(id = 9002L, name = "orig", owner = "owner1", vcs = "GIT")
+            every { projectRepository.findById(9002L) } returns Optional.of(original)
+            every { userRepository.findById(77L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.forkProject(9002L, 77L, "", "")
+            }
+        }
+
+        it("destinationOwner/destinationName이 빈 값이면 forker의 loginId와 원본 프로젝트명으로 대체돼야 한다 (소스 저장소 없음)") {
+            val original = Project(id = 9003L, name = "orig-noexist", owner = "owner-noexist-abcxyz", vcs = "GIT")
+            val forker = User(id = 5L, loginId = "forker-login")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            every { projectRepository.findById(9003L) } returns Optional.of(original)
+            every { userRepository.findById(5L) } returns Optional.of(forker)
+            every { projectRepository.save(any()) } answers { firstArg() }
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+
+            val result = projectService.forkProject(9003L, 5L, "", "")
+
+            result.owner shouldBe "forker-login"
+            result.name shouldBe "orig-noexist"
+            result.originalProject shouldBe original
+            // 원본 소스 저장소가 실재하지 않으므로 하드링크 복제는 수행되지 않아야 한다.
+            File(gitBase, "forker-login/orig-noexist.git").exists() shouldBe false
+        }
+
+        it("MANAGER 역할을 찾지 못하면 예외가 발생해야 한다") {
+            val original = Project(id = 9004L, name = "orig2", owner = "owner2", vcs = "SVN")
+            val forker = User(id = 6L, loginId = "forker2")
+            every { projectRepository.findById(9004L) } returns Optional.of(original)
+            every { userRepository.findById(6L) } returns Optional.of(forker)
+            every { projectRepository.save(any()) } answers { firstArg() }
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.empty()
+
+            shouldThrow<IllegalStateException> {
+                projectService.forkProject(9004L, 6L, "dest-owner2", "dest-name2")
+            }
+        }
+
+        it("원본 저장소가 실재하면 하드링크 방식으로 무복사 복제해야 한다 (GIT, 중첩 디렉터리 포함)") {
+            val owner = "fork-src-owner"
+            val name = "fork-src-repo"
+            val destOwner = "fork-dst-owner"
+            val destName = "fork-dst-repo"
+            val sourceDir = File(gitBase, "$owner/$name.git")
+            val targetDir = File(gitBase, "$destOwner/$destName.git")
+            sourceDir.deleteRecursively()
+            targetDir.deleteRecursively()
+            try {
+                // 중첩 디렉터리 + 파일 구조로 cloneHardLinkedRepository의 isDirectory 참/거짓 분기를 모두 태운다.
+                File(sourceDir, "objects/pack").mkdirs()
+                File(sourceDir, "HEAD").writeText("ref: refs/heads/main")
+                File(sourceDir, "objects/info.txt").writeText("info")
+
+                val original = Project(id = 9005L, name = name, owner = owner, vcs = "GIT")
+                val forker = User(id = 7L, loginId = "forker3")
+                val managerRole = Role(id = RoleType.MANAGER.roleType)
+                every { projectRepository.findById(9005L) } returns Optional.of(original)
+                every { userRepository.findById(7L) } returns Optional.of(forker)
+                every { projectRepository.save(any()) } answers { firstArg() }
+                every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+                every { projectUserRepository.save(any()) } returns mockk()
+
+                projectService.forkProject(9005L, 7L, destOwner, destName)
+
+                targetDir.exists() shouldBe true
+                File(targetDir, "HEAD").exists() shouldBe true
+                File(targetDir, "objects/info.txt").exists() shouldBe true
+                File(targetDir, "objects/pack").isDirectory shouldBe true
+            } finally {
+                sourceDir.deleteRecursively()
+                targetDir.deleteRecursively()
+            }
+        }
+
+        it("대상 디렉터리가 이미 존재하면 다시 만들지 않고 그 안에 하드링크를 생성해야 한다 (SVN 경로)") {
+            val owner = "fork-src-owner2"
+            val name = "fork-src-repo2"
+            val destOwner = "fork-dst-owner2"
+            val destName = "fork-dst-repo2"
+            val sourceDir = File(svnBase, "$owner/$name.git")
+            val targetDir = File(svnBase, "$destOwner/$destName.git")
+            sourceDir.deleteRecursively()
+            targetDir.deleteRecursively()
+            try {
+                sourceDir.mkdirs()
+                File(sourceDir, "config").writeText("config-content")
+                targetDir.mkdirs() // target.exists()==true 분기를 태우기 위해 미리 생성
+
+                val original = Project(id = 9006L, name = name, owner = owner, vcs = "SUBVERSION")
+                val forker = User(id = 8L, loginId = "forker4")
+                val managerRole = Role(id = RoleType.MANAGER.roleType)
+                every { projectRepository.findById(9006L) } returns Optional.of(original)
+                every { userRepository.findById(8L) } returns Optional.of(forker)
+                every { projectRepository.save(any()) } answers { firstArg() }
+                every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+                every { projectUserRepository.save(any()) } returns mockk()
+
+                projectService.forkProject(9006L, 8L, destOwner, destName)
+
+                File(targetDir, "config").exists() shouldBe true
+            } finally {
+                sourceDir.deleteRecursively()
+                targetDir.deleteRecursively()
+            }
+        }
+
+        it("원본 저장소 경로가 디렉터리가 아니라 일반 파일이면 listFiles()가 null이라 아무 것도 복제하지 않아야 한다") {
+            val owner = "fork-src-owner3"
+            val name = "fork-src-file3"
+            val destOwner = "fork-dst-owner3"
+            val destName = "fork-dst-repo3"
+            val sourceDir = File(gitBase, "$owner/$name.git") // 일부러 디렉터리가 아닌 일반 파일로 생성
+            val targetDir = File(gitBase, "$destOwner/$destName.git")
+            sourceDir.deleteRecursively()
+            targetDir.deleteRecursively()
+            try {
+                sourceDir.parentFile.mkdirs()
+                sourceDir.writeText("this-is-a-plain-file-not-a-directory")
+
+                val original = Project(id = 9007L, name = name, owner = owner, vcs = "GIT")
+                val forker = User(id = 9L, loginId = "forker5")
+                val managerRole = Role(id = RoleType.MANAGER.roleType)
+                every { projectRepository.findById(9007L) } returns Optional.of(original)
+                every { userRepository.findById(9L) } returns Optional.of(forker)
+                every { projectRepository.save(any()) } answers { firstArg() }
+                every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+                every { projectUserRepository.save(any()) } returns mockk()
+
+                projectService.forkProject(9007L, 9L, destOwner, destName)
+
+                targetDir.exists() shouldBe true // mkdirs는 호출됨
+                (targetDir.listFiles()?.size ?: -1) shouldBe 0 // listFiles()==null이라 복제된 파일이 없어야 함
+            } finally {
+                sourceDir.deleteRecursively()
+                targetDir.deleteRecursively()
+            }
+        }
+
+        // baseDir 판정용 vcs?.uppercase() 체인 — vcs가 null(엘비스 분기)이면 기본 GIT 경로로 처리돼야 한다.
+        it("원본 프로젝트의 vcs가 null이어도 기본 GIT 경로 기준으로 정상 처리돼야 한다") {
+            val original = Project(id = 9008L, name = "vcs-null-fork-src", owner = "vcs-null-owner", vcs = null)
+            val forker = User(id = 10L, loginId = "forker6")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            every { projectRepository.findById(9008L) } returns Optional.of(original)
+            every { userRepository.findById(10L) } returns Optional.of(forker)
+            every { projectRepository.save(any()) } answers { firstArg() }
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+
+            val result = projectService.forkProject(9008L, 10L, "vcs-null-fork-dest", "vcs-null-fork-dest-repo")
+
+            result.owner shouldBe "vcs-null-fork-dest"
+        }
+
+        // vcs가 축약형 "SVN"인 경우도 svn 기본 경로로 판정돼야 한다(OR의 두 번째 항이 true).
+        it("원본 프로젝트의 vcs가 SVN(축약형)이면 svn 기본 경로 기준으로 판단돼야 한다") {
+            val original = Project(id = 9009L, name = "vcs-svn-abbrev-fork-src", owner = "vcs-svn-abbrev-owner", vcs = "SVN")
+            val forker = User(id = 11L, loginId = "forker7")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            every { projectRepository.findById(9009L) } returns Optional.of(original)
+            every { userRepository.findById(11L) } returns Optional.of(forker)
+            every { projectRepository.save(any()) } answers { firstArg() }
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+
+            val result = projectService.forkProject(9009L, 11L, "vcs-svn-abbrev-fork-dest", "vcs-svn-abbrev-fork-dest-repo")
+
+            result.owner shouldBe "vcs-svn-abbrev-fork-dest"
+        }
+    }
+
+    // yona Project.java의 VCS 전환(Git<->SVN) 기능 대응 — 기존 저장소 삭제 후 반대 VCS로 재생성,
+    // fork 자식과의 연결은 모두 끊는다.
+    describe("ProjectServiceImpl.changeVCS") {
+        it("프로젝트를 찾을 수 없으면 예외가 발생해야 한다") {
+            every { projectRepository.findById(9500L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                projectService.changeVCS(9500L)
+            }
+        }
+
+        it("GIT 프로젝트는 SUBVERSION으로 전환되고, fork 자식들의 원본 연결이 모두 끊어져야 한다") {
+            val fork1 = Project(id = 9561L, name = "fork1", owner = "forker1")
+            val fork2 = Project(id = 9562L, name = "fork2", owner = "forker2")
+            val project = Project(
+                id = 9560L, name = "vcs-switch", owner = "owner", vcs = "GIT",
+                forkingProjects = mutableListOf(fork1, fork2)
+            )
+            val vcsPlayRepository = mockk<PlayRepository>()
+            every { projectRepository.findById(9560L) } returns Optional.of(project)
+            every { projectRepository.save(fork1) } returns fork1
+            every { projectRepository.save(fork2) } returns fork2
+            every { projectRepository.save(project) } returns project
+            every { repositoryService.getRepository(project) } returns vcsPlayRepository
+            every { vcsPlayRepository.delete() } returns Unit
+            every { vcsPlayRepository.create() } returns Unit
+
+            val result = projectService.changeVCS(9560L)
+
+            result.vcs shouldBe "SUBVERSION"
+            fork1.originalProject shouldBe null
+            fork2.originalProject shouldBe null
+            project.forkingProjects.size shouldBe 0
+            verify(exactly = 1) { vcsPlayRepository.delete() }
+            verify(exactly = 1) { vcsPlayRepository.create() }
+            verify(exactly = 1) { projectRepository.save(fork1) }
+            verify(exactly = 1) { projectRepository.save(fork2) }
+        }
+
+        it("vcs가 null이면 기본값 GIT으로 취급해 SUBVERSION으로 전환돼야 한다") {
+            val project = Project(id = 9563L, name = "vcs-null", owner = "owner", vcs = null)
+            val vcsPlayRepository = mockk<PlayRepository>()
+            every { projectRepository.findById(9563L) } returns Optional.of(project)
+            every { repositoryService.getRepository(project) } returns vcsPlayRepository
+            every { vcsPlayRepository.delete() } returns Unit
+            every { vcsPlayRepository.create() } returns Unit
+            every { projectRepository.save(project) } returns project
+
+            val result = projectService.changeVCS(9563L)
+
+            result.vcs shouldBe "SUBVERSION"
+        }
+
+        it("SUBVERSION 프로젝트는 GIT으로 전환돼야 한다") {
+            val project = Project(id = 9564L, name = "vcs-svn", owner = "owner", vcs = "SUBVERSION")
+            val vcsPlayRepository = mockk<PlayRepository>()
+            every { projectRepository.findById(9564L) } returns Optional.of(project)
+            every { repositoryService.getRepository(project) } returns vcsPlayRepository
+            every { vcsPlayRepository.delete() } returns Unit
+            every { vcsPlayRepository.create() } returns Unit
+            every { projectRepository.save(project) } returns project
+
+            val result = projectService.changeVCS(9564L)
+
+            result.vcs shouldBe "GIT"
+        }
+
+        it("기존 저장소 삭제 중 예외가 발생해도 무시하고 새 VCS로 저장소를 생성해야 한다") {
+            val project = Project(id = 9565L, name = "vcs-delete-fail", owner = "owner", vcs = "GIT")
+            val vcsPlayRepository = mockk<PlayRepository>()
+            every { projectRepository.findById(9565L) } returns Optional.of(project)
+            every { repositoryService.getRepository(project) } returns vcsPlayRepository
+            every { vcsPlayRepository.delete() } throws RuntimeException("delete failed")
+            every { vcsPlayRepository.create() } returns Unit
+            every { projectRepository.save(project) } returns project
+
+            val result = projectService.changeVCS(9565L)
+
+            result.vcs shouldBe "SUBVERSION"
+            verify(exactly = 1) { vcsPlayRepository.create() }
         }
     }
 })

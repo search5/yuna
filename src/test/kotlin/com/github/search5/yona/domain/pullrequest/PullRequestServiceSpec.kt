@@ -22,6 +22,7 @@ import com.github.search5.yona.domain.issue.IssueEventRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldContain
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.transport.RefSpec
 import org.springframework.beans.factory.annotation.Autowired
@@ -101,7 +102,11 @@ class PullRequestServiceSpec @Autowired constructor(
                 branch: String,
                 filePath: String,
                 content: String,
-                commitMsg: String
+                commitMsg: String,
+                // updatePullRequestCommits()의 "이전 커밋이 새 diff에 없으면 PRIOR로 전환" 분기(#10)
+                // 검증용 - branch와 다른 baseBranch를 지정하면 해당 브랜치를 base로 강제 리셋(=amend/rebase
+                // 시뮬레이션)하여 branch의 기존 커밋을 완전히 대체한다.
+                baseBranch: String = branch
             ) {
                 val tempWorkingDir = Files.createTempDirectory("yuna-test-work").toFile()
                 try {
@@ -113,12 +118,12 @@ class PullRequestServiceSpec @Autowired constructor(
 
                     try {
                         git.fetch().setRemote("origin").call()
-                        val ref = git.repository.resolve("refs/remotes/origin/$branch")
+                        val ref = git.repository.resolve("refs/remotes/origin/$baseBranch")
                         if (ref != null) {
                             git.checkout()
                                 .setCreateBranch(true)
                                 .setName(branch)
-                                .setStartPoint("origin/$branch")
+                                .setStartPoint("origin/$baseBranch")
                                 .call()
                         } else {
                             val originMaster = git.repository.resolve("refs/remotes/origin/master")
@@ -1097,6 +1102,601 @@ class PullRequestServiceSpec @Autowired constructor(
                 preview.conflict shouldBe false
                 preview.suggestedTitle shouldBe null
                 preview.suggestedBody shouldBe null
+            }
+
+            it("previewMerge - 커밋이 1개이고 메시지가 한 줄뿐이면 body는 빈 문자열이어야 한다") {
+                // suggestTitleAndBody()의 messages.size > 1 분기가 false인 경로 - 커밋 메시지에
+                // 개행이 전혀 없는 단일 줄 메시지인 경우를 검증한다.
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "preview-single-line", "test2.txt", "change", "Single line message")
+
+                val preview = pullRequestService.previewMerge(
+                    fromProject = fromProject,
+                    toProject = toProject,
+                    fromBranch = "refs/heads/preview-single-line",
+                    toBranch = "refs/heads/master"
+                )
+
+                preview.commits.size shouldBe 1
+                preview.suggestedTitle shouldBe "Single line message"
+                preview.suggestedBody shouldBe ""
+            }
+
+            it("getPullRequests - state를 지정하지 않으면 대상 프로젝트의 모든 PR을, 지정하면 해당 상태의 PR만 반환해야 한다") {
+                pullRequestRepository.save(
+                    PullRequest(
+                        title = "OPEN PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-open-list",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+                pullRequestRepository.save(
+                    PullRequest(
+                        title = "CLOSED PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-closed-list",
+                        contributor = contributor, state = State.CLOSED
+                    )
+                )
+
+                val all = pullRequestService.getPullRequests(toProject.id!!, null)
+                all.size shouldBe 2
+
+                val onlyOpen = pullRequestService.getPullRequests(toProject.id!!, State.OPEN)
+                onlyOpen.size shouldBe 1
+                onlyOpen.first().state shouldBe State.OPEN
+            }
+
+            // 참고: rightParent(fetch된 source ref) null 체크("Fetched source branch not found" /
+            // "Source branch not found" 예외) 분기는 실제로는 도달 불가능함을 실험적으로 확인했다 -
+            // JGit FetchCommand가 RefSpec의 source로 원격에 존재하지 않는 ref를 지정하면 fetch 자체가
+            // TransportException을 던지며 즉시 실패하고, 그 이후의 repo.resolve(tempBranch) null 체크
+            // 지점까지 도달하지 않는다(attemptMerge/previewMerge/merge/updateMerge 네 메서드 모두 동일한
+            // fetch 흐름을 공유). 따라서 leftParent(대상 브랜치, 로컬 저장소에서 fetch 없이 바로
+            // resolve)의 null 체크만 테스트 가능하다.
+            it("attemptMerge - 대상 브랜치가 존재하지 않으면 IllegalArgumentException을 던져야 한다") {
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(fromBareDir, "feature", "test.txt", "hello", "Source commit")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "대상 브랜치 없음 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/no-such-branch", fromBranch = "refs/heads/feature",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                val ex = shouldThrow<IllegalArgumentException> {
+                    pullRequestService.attemptMerge(pr.id!!)
+                }
+                ex.message shouldBe "Target branch 'refs/heads/no-such-branch' not found"
+            }
+
+            it("previewMerge - 대상 브랜치가 존재하지 않으면 IllegalArgumentException을 던져야 한다") {
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(fromBareDir, "feature", "test.txt", "hello", "Source commit")
+
+                val exTarget = shouldThrow<IllegalArgumentException> {
+                    pullRequestService.previewMerge(
+                        fromProject = fromProject,
+                        toProject = toProject,
+                        fromBranch = "refs/heads/feature",
+                        toBranch = "refs/heads/no-such-target"
+                    )
+                }
+                exTarget.message shouldBe "Target branch 'refs/heads/no-such-target' not found"
+            }
+
+            it("merge - 대상 브랜치가 존재하지 않으면 IllegalArgumentException을 던져야 한다") {
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(fromBareDir, "feature", "test.txt", "hello", "Source commit")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "머지 대상 브랜치 없음 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/no-such-merge-target", fromBranch = "refs/heads/feature",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+
+                val ex = shouldThrow<IllegalArgumentException> {
+                    pullRequestService.merge(pr.id!!, receiver)
+                }
+                ex.message shouldBe "Target branch 'refs/heads/no-such-merge-target' not found"
+            }
+
+            // yona PullRequest.Merger.Success 대응 - 병합 미리보기 트리(getMergedTreeIfReusable)와
+            // 그 재사용 여부를 검증한다. processMergeCheck를 새 커밋 없이 두 번째로 호출하면 diff 자체는
+            // 여전히 존재하지만(hasDiffCommits=true) 이전 재검사에서 이미 저장된 커밋뿐이라 newCommits는
+            // 빈 리스트가 되고, leftParent/rightParent가 첫 호출과 동일하므로 refs/yobi/pull/{id}/merged의
+            // 트리를 그대로 재사용해야 한다.
+            it("processMergeCheck를 새 커밋 없이 재호출하면 newCommits는 비어있고 이전 병합 트리를 재사용해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature-reuse", "test2.txt", "change", "Only change")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "재사용 트리 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-reuse",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+
+                val first = pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+                first.hasDiffCommits() shouldBe true
+                first.newCommits.size shouldBe 1
+                val afterFirst = pullRequestRepository.findById(pr.id!!).orElse(null)
+                val firstMergedCommitIdTo = afterFirst.mergedCommitIdTo
+                firstMergedCommitIdTo shouldNotBe null
+
+                // Git 커밋 타임스탬프는 초 단위 정밀도라 동일 초 내에 동일한 트리/부모로 병합 커밋을
+                // 다시 만들면 완전히 동일한 커밋 해시가 나와 RefUpdate 결과가 NO_CHANGE가 되고
+                // createMergeCommitAndUpdateRef()가 이를 실패로 간주해 IOException을 던진다. 두 번째
+                // 호출은 재사용 분기(leftParent/rightParent가 동일해 getMergedTreeIfReusable가 트리를
+                // 재사용)를 검증하려는 것이므로, 초 경계를 넘겨 새 커밋 해시가 나오도록 한다.
+                Thread.sleep(1100)
+                val second = pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+                second.hasDiffCommits() shouldBe true
+                second.newCommits.size shouldBe 0
+
+                // 새 PullRequestEvent(PULL_REQUEST_COMMIT_CHANGED)가 추가로 기록되지 않아야 한다
+                // (newCommits가 비어 recordCommitChangedEvent 자체가 호출되지 않음).
+                pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
+                    .count { it.eventType == EventType.PULL_REQUEST_COMMIT_CHANGED } shouldBe 1
+            }
+
+            it("이미 MERGED 상태인 PR을 diff 없이 재검사해도 상태 전환이 다시 발생하지 않아야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "이미 병합된 PR 재검사 테스트", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/master",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+
+                pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+                val afterFirst = pullRequestRepository.findById(pr.id!!).orElse(null)
+                afterFirst.state shouldBe State.MERGED
+
+                val eventsAfterFirst = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr).size
+
+                // 동일 초 내 동일한 병합 커밋 재생성으로 인한 NO_CHANGE 충돌을 피하기 위해 초 경계를
+                // 넘긴다(위 재사용 트리 테스트와 동일한 이유).
+                Thread.sleep(1100)
+                // 이미 MERGED인 상태에서 diff 없는 재검사를 한 번 더 수행 - state != MERGED 분기가
+                // false가 되어 changeState()가 다시 호출되지 않아야 한다(추가 이벤트 없음).
+                pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+                val afterSecond = pullRequestRepository.findById(pr.id!!).orElse(null)
+                afterSecond.state shouldBe State.MERGED
+
+                pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr).size shouldBe eventsAfterFirst
+            }
+
+            it("processMergeCheck - 존재하지 않는 pullRequestId로 호출하면 IllegalArgumentException을 던져야 한다") {
+                shouldThrow<IllegalArgumentException> {
+                    pullRequestService.processMergeCheck(-999999L, contributor, isNewPullRequest = false)
+                }
+            }
+
+            // yona PullRequestMergeResult.updatePriorCommits() 대응 - 소스 브랜치가 강제로 재작성(amend/
+            // rebase)되어 이전에 CURRENT였던 커밋이 새 diff 범위에서 완전히 사라지면 PRIOR로 전환되어야
+            // 한다.
+            it("소스 브랜치가 강제로 재작성되면 이전 CURRENT 커밋이 PRIOR로 전환되고 새 커밋이 CURRENT로 저장되어야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature-amend", "a.txt", "v1", "Original commit")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "강제 재작성 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-amend",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+
+                pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+                val currentAfterFirst = pullRequestCommitRepository.findByPullRequestAndState(pr, PullRequestCommit.State.CURRENT)
+                currentAfterFirst.size shouldBe 1
+                currentAfterFirst.first().commitMessage.trim() shouldBe "Original commit"
+
+                // master를 base로 다시 체크아웃해 feature-amend를 완전히 대체(force-push) - 기존
+                // "Original commit"은 더 이상 diff 범위에 존재하지 않게 된다.
+                createCommit(fromBareDir, "feature-amend", "b.txt", "v2", "Amended commit", baseBranch = "master")
+                pullRequestService.processMergeCheck(pr.id!!, contributor, isNewPullRequest = false)
+
+                val priorCommits = pullRequestCommitRepository.findByPullRequestAndState(pr, PullRequestCommit.State.PRIOR)
+                priorCommits.size shouldBe 1
+                priorCommits.first().commitMessage.trim() shouldBe "Original commit"
+
+                val currentAfterSecond = pullRequestCommitRepository.findByPullRequestAndState(pr, PullRequestCommit.State.CURRENT)
+                currentAfterSecond.size shouldBe 1
+                currentAfterSecond.first().commitMessage.trim() shouldBe "Amended commit"
+            }
+
+            // yona PullRequest.mergeMessage() 대응 - 대상 브랜치가 master가 아니면 " into '<브랜치>'"
+            // 절이 커밋 메시지에 포함되어야 한다.
+            it("merge - 대상 브랜치가 master가 아니면 병합 커밋 메시지에 into 절이 포함되어야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "develop", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "develop")
+                createCommit(toBareDir, "develop", "test2.txt", "target change", "Target change on develop")
+                createCommit(fromBareDir, "feature-develop", "test3.txt", "source change", "Source change", baseBranch = "develop")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "master가 아닌 대상 브랜치 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/develop", fromBranch = "refs/heads/feature-develop",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+
+                pullRequestService.attemptMerge(pr.id!!)
+                val mergeResult = pullRequestService.merge(pr.id!!, receiver)
+                mergeResult.conflicts() shouldBe false
+
+                val mergedPr = pullRequestRepository.findById(pr.id!!).get()
+                mergedPr.mergedCommitIdTo shouldNotBe null
+
+                val repo = org.eclipse.jgit.storage.file.FileRepositoryBuilder()
+                    .setGitDir(toBareDir).build()
+                val revWalk = org.eclipse.jgit.revwalk.RevWalk(repo)
+                val commit = revWalk.parseCommit(repo.resolve(mergedPr.mergedCommitIdTo))
+                commit.fullMessage shouldContain "into 'develop'"
+                revWalk.close()
+                repo.close()
+            }
+
+            // yona PullRequest.mergeMessage()의 "fromProject != toProject일 때만 owner/name 절 추가"
+            // 대응 - 동일 프로젝트 내부 브랜치 간 PR은 그 절이 생략되어야 한다.
+            it("merge - fromProject와 toProject가 동일하면 병합 커밋 메시지에 프로젝트 소유자 절이 없어야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                createCommit(toBareDir, "feature-same-project", "test2.txt", "change", "Same project change", baseBranch = "master")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "동일 프로젝트 PR", body = "...",
+                        toProject = toProject, fromProject = toProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-same-project",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+
+                pullRequestService.attemptMerge(pr.id!!)
+                val mergeResult = pullRequestService.merge(pr.id!!, receiver)
+                mergeResult.conflicts() shouldBe false
+
+                val mergedPr = pullRequestRepository.findById(pr.id!!).get()
+                val repo = org.eclipse.jgit.storage.file.FileRepositoryBuilder()
+                    .setGitDir(toBareDir).build()
+                val revWalk = org.eclipse.jgit.revwalk.RevWalk(repo)
+                val commit = revWalk.parseCommit(repo.resolve(mergedPr.mergedCommitIdTo))
+                commit.fullMessage shouldContain "Merge branch 'feature-same-project'\n\n"
+                (commit.fullMessage.contains(" of ")) shouldBe false
+                revWalk.close()
+                repo.close()
+            }
+
+            it("createPullRequest - 동일 대상 프로젝트에 두 번째 PR을 생성하면 번호가 순차 증가해야 한다") {
+                val first = pullRequestService.createPullRequest(
+                    title = "첫 번째 PR", body = "본문",
+                    fromProjectId = fromProject.id!!, toProjectId = toProject.id!!,
+                    fromBranch = "refs/heads/feature-1", toBranch = "refs/heads/master",
+                    contributor = contributor
+                )
+                val second = pullRequestService.createPullRequest(
+                    title = "두 번째 PR", body = "본문",
+                    fromProjectId = fromProject.id!!, toProjectId = toProject.id!!,
+                    fromBranch = "refs/heads/feature-2", toBranch = "refs/heads/master",
+                    contributor = contributor
+                )
+
+                first.number shouldBe 1L
+                second.number shouldBe 2L
+            }
+
+            it("createPullRequest - 병합 재검사 중 예외가 발생해도 PR 생성 자체는 성공해야 한다") {
+                // fromBranch가 실제로 존재하지 않아 processMergeCheck 내부(updateMerge)에서
+                // IllegalArgumentException이 던져지지만, createPullRequest의 try/catch가 이를 흡수하고
+                // PR 저장 자체는 그대로 유지되어야 한다.
+                val created = pullRequestService.createPullRequest(
+                    title = "예외 발생해도 생성되는 PR", body = "본문",
+                    fromProjectId = fromProject.id!!, toProjectId = toProject.id!!,
+                    fromBranch = "refs/heads/no-such-branch-at-all", toBranch = "refs/heads/no-such-target-either",
+                    contributor = contributor
+                )
+
+                created.id shouldNotBe null
+                val saved = pullRequestRepository.findById(created.id!!).orElse(null)
+                saved shouldNotBe null
+                saved.title shouldBe "예외 발생해도 생성되는 PR"
+            }
+
+            it("createPullRequest - body가 null이면 멘션 추출도 정상적으로 빈 결과를 반환해야 한다") {
+                val created = pullRequestService.createPullRequest(
+                    title = "본문 없는 PR", body = null,
+                    fromProjectId = fromProject.id!!, toProjectId = toProject.id!!,
+                    fromBranch = "refs/heads/feature-null-body", toBranch = "refs/heads/master",
+                    contributor = contributor
+                )
+
+                created.body shouldBe null
+                // 감시자/멘션 대상이 전혀 없어 NotificationEvent 자체가 기록되지 않아야 한다
+                // (notificationEventRecorder.record()가 null을 반환하는 분기).
+                notificationEventRepository.findAll().size shouldBe 0
+            }
+
+            it("changeState - 존재하지 않는 updaterLoginId로 호출하면 알림 발신자 없이도 상태가 변경되어야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "알 수 없는 갱신자 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-unknown-updater",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+                watchRepository.save(Watch(user = receiver, resourceType = ResourceType.PROJECT, resourceId = toProject.id.toString()))
+
+                val updated = pullRequestService.changeState(pr.id!!, State.CLOSED, "no-such-updater-login-id")
+
+                updated.state shouldBe State.CLOSED
+                val notiEvents = notificationEventRepository.findAll()
+                notiEvents.size shouldBe 1
+                notiEvents.first().senderId shouldBe null
+
+                val prEvents = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
+                prEvents.first().senderLoginId shouldBe "no-such-updater-login-id"
+            }
+
+            it("updatePullRequest - body가 null이면 이슈 참조 이벤트가 재동기화되지 않아야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "본문 없는 수정 테스트 PR", body = "관련 이슈 없음",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-null-update-body",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                val updated = pullRequestService.updatePullRequest(
+                    pullRequestId = pr.id!!,
+                    title = "본문 없는 수정 테스트 PR",
+                    body = null,
+                    fromBranch = pr.fromBranch,
+                    toBranch = pr.toBranch
+                )
+
+                updated.body shouldBe null
+                issueEventRepository.findAll().size shouldBe 0
+            }
+
+            it("updatePullRequest - 존재하지 않는 이슈 번호를 참조하면 이슈 이벤트가 생성되지 않아야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "존재하지 않는 이슈 참조 PR", body = "본문",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-missing-issue",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                pullRequestService.updatePullRequest(
+                    pullRequestId = pr.id!!,
+                    title = "존재하지 않는 이슈 참조 PR",
+                    body = "관련 이슈 #9999",
+                    fromBranch = pr.fromBranch,
+                    toBranch = pr.toBranch
+                )
+
+                issueEventRepository.findAll().size shouldBe 0
+            }
+
+            it("restoreFromBranch - lastCommitId가 없으면 InvalidBranchOperationException을 던져야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "lastCommitId 없는 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-no-last-commit",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                shouldThrow<InvalidBranchOperationException> {
+                    pullRequestService.restoreFromBranch(pr.id!!)
+                }
+            }
+
+            it("restoreFromBranch - 브랜치가 이미 존재하면 InvalidBranchOperationException을 던져야 한다") {
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(fromBareDir, "feature-already-exists", "f.txt", "content", "이미 존재 테스트용 커밋")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "이미 존재하는 브랜치 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-already-exists",
+                        contributor = contributor, state = State.MERGED,
+                        lastCommitId = "0000000000000000000000000000000000000000"
+                    )
+                )
+
+                shouldThrow<InvalidBranchOperationException> {
+                    pullRequestService.restoreFromBranch(pr.id!!)
+                }
+            }
+
+            it("getDiff - mergedCommitIdFrom/To가 모두 설정된 병합 완료 PR은 그 값으로 바로 diff를 계산해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature-merged-diff", "test2.txt", "change", "Merged diff change")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "병합 완료 diff 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-merged-diff",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+                pullRequestService.attemptMerge(pr.id!!)
+                val mergeResult = pullRequestService.merge(pr.id!!, receiver)
+                mergeResult.conflicts() shouldBe false
+
+                val mergedPr = pullRequestRepository.findById(pr.id!!).get()
+                mergedPr.mergedCommitIdFrom shouldNotBe null
+                mergedPr.mergedCommitIdTo shouldNotBe null
+
+                val diffs = pullRequestService.getDiff(mergedPr)
+                diffs.any { it.pathB == "test2.txt" } shouldBe true
+            }
+
+            it("getDiff - lastCommitId가 없는 새 PR은 fromBranch를 그대로 비교 대상으로 사용해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature-fresh-diff", "test2.txt", "change", "Fresh diff change")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "미검사 PR diff 테스트", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature-fresh-diff",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+                // attemptMerge/processMergeCheck를 한 번도 호출하지 않아 lastCommitId가 null인 상태.
+                pr.lastCommitId shouldBe null
+
+                val diffs = pullRequestService.getDiff(pr)
+                diffs.any { it.pathB == "test2.txt" } shouldBe true
+            }
+
+            it("getDiff - toProject가 SVN이면 GitRepository가 아니므로 revA/revB를 필드 값으로 계산 후 위임하며 예외가 전파되어야 한다") {
+                // SvnRepository.getDiff()는 미구현으로 항상 UnsupportedOperationException을 던진다.
+                // 이 테스트의 목적은 실제 SVN diff 결과가 아니라, PullRequestServiceImpl.getDiff()의
+                // "playRepoA is GitRepository && playRepoB is GitRepository"가 false인 분기 및 그 이후
+                // revA/revB 계산용 엘비스 체인(모두 null인 경우 - toBranch/fromBranch로 폴백)이 실제로
+                // 실행되는지 검증하는 것이다.
+                toProject.vcs = "SVN"
+                projectRepository.save(toProject)
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "SVN 대상 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                shouldThrow<UnsupportedOperationException> {
+                    pullRequestService.getDiff(pr)
+                }
+            }
+
+            it("getDiff - mergedCommitIdFrom만 설정되고 SVN이면 revA/revB 엘비스 체인의 non-null 경로를 타야 한다") {
+                toProject.vcs = "SVN"
+                projectRepository.save(toProject)
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "부분 병합 정보 SVN PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                        contributor = contributor, state = State.OPEN,
+                        // mergedCommitIdTo는 비워두어 "모두 설정됨" 첫 분기를 피하고, mergedCommitIdFrom/
+                        // lastCommitId는 채워 revA/revB 엘비스 체인의 non-null 분기를 태운다.
+                        lastCommitId = "1111111111111111111111111111111111111111"
+                    )
+                )
+                pr.mergedCommitIdFrom = "2222222222222222222222222222222222222222"
+                pullRequestRepository.save(pr)
+
+                shouldThrow<UnsupportedOperationException> {
+                    pullRequestService.getDiff(pr)
+                }
+            }
+
+            it("getDiff - fromProject만 SVN이면 playRepoB is GitRepository가 false가 되어 fallback 경로로 위임해야 한다") {
+                fromProject.vcs = "SVN"
+                projectRepository.save(fromProject)
+
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "소스만 SVN인 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                        contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                // playRepoA(toProject, GIT)는 GitRepository이지만 playRepoB(fromProject, SVN)는
+                // 아니므로 "playRepoA is GitRepository && playRepoB is GitRepository"가 false가 되고,
+                // fallback으로 playRepoA(GitRepository).getDiff(revA, revB) 2-인자 오버로드(단일 저장소
+                // 내 비교)가 호출된다. revB가 fromBranch("refs/heads/feature")로 폴백되는데 toProject
+                // 저장소에는 그 브랜치가 없어 idB가 null이 되고, GitRepository.getFileDiffs()는 null
+                // 커밋을 빈 트리로 취급하므로 master의 모든 파일이 DELETE 타입 diff로 나타난다
+                // (예외 없이 정상 완료됨을 확인).
+                val diffs = pullRequestService.getDiff(pr)
+                diffs.any { it.pathA == "test.txt" } shouldBe true
+            }
+
+            it("getDiff(pullRequest, commitId) - state가 MERGED면 toProject 저장소에서 diff를 조회해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                createCommit(toBareDir, "master", "test2.txt", "second", "Second commit on target")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "MERGED 상태 diff(commitId) 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                        contributor = contributor, receiver = receiver, state = State.MERGED
+                    )
+                )
+
+                val repo = org.eclipse.jgit.storage.file.FileRepositoryBuilder()
+                    .setGitDir(toBareDir).build()
+                val headCommitId = repo.resolve("refs/heads/master")!!.name
+                repo.close()
+
+                val diffs = pullRequestService.getDiff(pr, headCommitId)
+                diffs.any { it.pathB == "test2.txt" } shouldBe true
             }
         }
     }

@@ -73,6 +73,18 @@
 - **실버그 수정 완료(2건)**: `ProjectViewController.projectLogo()`/`OrganizationViewController.organizationLogo()` 둘 다 기본 이미지 폴백이 특정 개발자의 로컬 macOS 절대경로(`/Users/mzc01-search5/...`)로 하드코딩돼 있어 어떤 배포 환경에서도 동작하지 않던 실제 결함 확인·수정(`ClassPathResource`로 교체, 전체 재검색으로 이 2곳 외에는 없음을 확인).
 - **중대 발견(수정 보류, 사용자 판단 필요)**: `PullRequestViewController.closePattern`(PR/커밋 메시지 "fixes #123"으로 이슈 자동 닫기)이 legacy-yona에 전혀 없는 yuna 독자 구현이었음을 확인 — 정규식 버그(fix/fixes/fixed 매치 안 됨)도 함께 발견했으나 "독자구현 금지" 원칙 위배 사안이라 임의로 고치지 않고 사용자에게 보고
 
+## 사용자 판단(2026-08-24 03:04): closePattern은 "유지하고 정규식만 수정"
+
+TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로 수정, 회귀 테스트 추가 완료.
+
+## 진행 현황 갱신 (2026-08-24 03:35, 6차 배치 완료 후)
+
+- 전체 클래스: 478개, 95% 미만: **240개**(-3)
+- 라인: 89.5%, 분기: 79.5%, 메서드: 80.3%, 클래스: 94.7%
+- 추가 완료([x]): `IndexController`(전부 100%), `ProjectServiceImpl`(BRANCH 96.9%), `MentionController`(96.4%)
+- 진행 중([~], 다음 배치 계속): `AttachmentController`(BRANCH 89.7%), `PullRequestServiceImpl`(BRANCH 85.5%, METHOD 75.4% — 둘 다 미달, 우선순위 높음)
+- **잠재적 운영 이슈 발견(미수정, 별도 검토 필요)**: `PullRequestServiceImpl.createMergeCommitAndUpdateRef`가 동일 초 내 diff 없이 연속 병합체크 시 `RefUpdate.Result.NO_CHANGE`로 인한 `IOException` 실제 재현됨
+
 
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
@@ -185,7 +197,7 @@
 | `Organization` | 100.0 | 100.0 | 75.0 | 0 | 0 | 4 | [ ] | |
 | `OrganizationUser` | 100.0 | 100.0 | 60.0 | 0 | 0 | 4 | [ ] | |
 | **domain/project** | | | | | | | | |
-| `ProjectServiceImpl` | 70.7 | 50.0 | 40.5 | 84 | 64 | 22 | [ ] | |
+| `ProjectServiceImpl` | 70.7 | 50.0 | 40.5 | 84 | 64 | 22 | [x] | 2026-08-24: `ProjectServiceImplSpec.kt`에 57 tests 추가(25→82). 단독 측정 LINE 100%, BRANCH 96.9%, METHOD 100% — 목표 달성. forkProject/cloneHardLinkedRepository는 실제 임시 파일시스템으로 하드링크 복제까지 검증. 도달 불가능 4건 코드/바이트코드 근거 확정 |
 | `ProjectUserServiceImpl` | 72.9 | 72.7 | 25.0 | 39 | 6 | 21 | [ ] | |
 | `GitServiceImpl` | 48.4 | 9.1 | 80.0 | 16 | 20 | 1 | [ ] | |
 | `Project` | 100.0 | 77.8 | 93.9 | 0 | 4 | 4 | [ ] | |
@@ -201,7 +213,7 @@
 | `ProjectTransfer` | 100.0 | 100.0 | 61.1 | 0 | 0 | 7 | [ ] | |
 | `Label` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
 | **domain/pullrequest** | | | | | | | | |
-| `PullRequestServiceImpl` | 95.2 | 64.5 | 72.1 | 25 | 66 | 17 | [ ] | |
+| `PullRequestServiceImpl` | 95.2 | 64.5 | 72.1 | 25 | 66 | 17 | [~] | 2026-08-24: `PullRequestServiceSpec.kt`에 25 tests 추가(27→52). 전체 회귀 확정치: LINE 98.5%, BRANCH 85.5%(아직 미달), METHOD 75.4%(아직 미달) — 다음 배치에서 마무리. **잠재적 운영 이슈 발견(미수정, 별도 검토 필요)**: `createMergeCommitAndUpdateRef`가 동일 초 내에 diff 없이 `processMergeCheck`를 연속 호출하면 동일한 병합 커밋 해시가 재생성돼(Git 커밋 타임스탬프 초 단위) `RefUpdate.Result.NO_CHANGE`→`IOException` 발생을 테스트 중 실제 재현(Thread.sleep으로 우회) — 운영에서도 짧은 간격 재검사 시 동일 예외 가능성 |
 | `CodeReviewServiceImpl` | 93.5 | 56.0 | 79.3 | 16 | 51 | 6 | [ ] | |
 | `CodeCommentThread` | 90.0 | 12.5 | 55.6 | 2 | 14 | 4 | [ ] | |
 | `CommentThread` | 79.3 | 37.5 | 76.9 | 6 | 5 | 6 | [ ] | |
@@ -313,10 +325,10 @@
 | `CodeViewController` | 62.0 | 34.3 | 69.2 | 89 | 130 | 4 | [x] | 2026-08-24: `CodeViewControllerSpec.kt`에 64 tests 추가(11→75). 단독 측정 LINE 99.1%, BRANCH 95.5%, METHOD 100% — 목표 달성. `showImageFile`/`openFile`/`historyUntilHead`는 실제 라우팅된 엔드포인트인데 기존 테스트가 전혀 호출한 적 없어 METHOD 0%였던 것 확인·해결. 참고(버그 아님, 설계상 특이점): `showRawFile`의 MIME 감지가 임시파일을 항상 `.tmp` 확장자로 만들어 `Files.probeContentType`이 실질적으로 거의 항상 null 반환 |
 | `BoardViewController` | 67.6 | 45.0 | 63.6 | 79 | 122 | 4 | [i] | 2026-08-24: `BoardViewControllerSpec.kt`에 65 tests 추가(18→83). 단독 측정 LINE 100%, METHOD 100%, BRANCH 94.1%(209/222) — 도달 불가능 13건 전부 코드/바이트코드 근거로 확정(non-null 타입 필드, 상위 권한 게이트로 인한 논리적 도달 불가, Kotlin 컴파일러의 중복 null 체크). 구조적 최대치로 인정 |
 | `PullRequestViewController` | 79.0 | 51.9 | 96.0 | 69 | 124 | 1 | [~] | 2026-08-24: `PullRequestViewControllerSpec.kt`에 66 tests(65+1, 17→82→83). 전체 회귀 확정치는 다음 배치에서 재확인. **closePattern 처리 결론**: `closePattern`(PR/커밋 메시지 "fixes #123"으로 이슈 자동 닫기)이 legacy-yona에 없는 yuna 독자 구현임을 확인·사용자에게 보고 — 사용자 결정: "유지하고 정규식만 수정". `fix[e[s|d]]?`(중첩 대괄호 오사용으로 fix/fixes/fixed 미매치)를 `fix(?:es|ed)?`로 수정 완료, 회귀 테스트 추가("fix/fixes/fixed 키워드도 close/resolve와 동일하게 이슈 번호를 인식해야 한다") |
-| `IndexController` | 66.7 | 38.2 | 100.0 | 42 | 84 | 0 | [ ] | |
+| `IndexController` | 66.7 | 38.2 | 100.0 | 42 | 84 | 0 | [x] | 2026-08-24: `IndexControllerSpec.kt`에 38 tests 추가(5→43). 단독 측정 LINE 100%, BRANCH 100%, METHOD 100% — 완전 달성. 도달 불가능 분기 없음(전부 실제 HTTP 요청 경로로 검증) |
 | `ProjectMemberController` | 46.4 | 29.7 | 21.4 | 59 | 52 | 11 | [ ] | |
-| `MentionController` | 86.4 | 52.4 | 100.0 | 30 | 80 | 0 | [ ] | |
-| `AttachmentController` | 73.8 | 40.5 | 100.0 | 33 | 75 | 0 | [ ] | |
+| `MentionController` | 86.4 | 52.4 | 100.0 | 30 | 80 | 0 | [x] | 2026-08-24: `MentionControllerSpec.kt`에 60 tests 추가(13→73). 단독 측정 LINE 100%, BRANCH 96%, METHOD 100% — 목표 달성. 도달 불가능 3건(ProjectUser.user/OrganizationUser.user/PullRequest.contributor non-null 타입) |
+| `AttachmentController` | 73.8 | 40.5 | 100.0 | 33 | 75 | 0 | [~] | 2026-08-24: `AttachmentControllerSpec.kt`에 41 tests 추가(9→50). 전체 회귀 확정치: LINE 100%, BRANCH 89.7%(아직 미달), METHOD 100% — 다음 배치에서 마무리. 도달 불가능 1건(`uploader.loginId ?: "anonymous"`, `User.loginId` non-null 타입) |
 | `IssueController` | 80.1 | 59.9 | 95.2 | 36 | 61 | 1 | [ ] | |
 | `UserController` | 77.7 | 49.0 | 70.4 | 45 | 50 | 8 | [ ] | |
 | `PullRequestController` | 71.0 | 48.1 | 83.3 | 36 | 54 | 3 | [ ] | |
