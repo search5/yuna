@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.webhook
 
 import com.github.search5.yona.domain.board.Posting
+import com.github.search5.yona.domain.board.PostingComment
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.enumeration.WebhookType
@@ -11,12 +12,14 @@ import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.notification.NotificationUrlResolver
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.pullrequest.CodeCommentThread
 import com.github.search5.yona.domain.pullrequest.CommitComment
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserState
+import com.sun.net.httpserver.HttpServer
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.clearMocks
@@ -33,9 +36,13 @@ import org.eclipse.jgit.lib.TreeFormatter
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
 import tools.jackson.databind.ObjectMapper
+import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Optional
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 private fun testCommit(message: String, authorName: String = "tester", authorEmail: String = "tester@yona.io"): RevCommit {
     val repo = InMemoryRepository(DfsRepositoryDescription())
@@ -53,6 +60,36 @@ private fun testCommit(message: String, authorName: String = "tester", authorEma
     val commitId = inserter.insert(commitBuilder)
     inserter.flush()
     return RevWalk(repo).use { it.parseCommit(commitId) }
+}
+
+// sendRequestAsync()의 실제 HTTP 왕복(비동기 콜백/헤더/상태코드 분기)을 검증하기 위한 실제 로컬
+// HTTP 서버. mockk로는 WebhookServiceImpl 내부에서 직접 new한 HttpClient를 가로챌 수 없어
+// (외부에서 주입되는 의존성이 아님) 실제 소켓 통신으로 검증한다.
+private data class CapturedRequest(val authorizationHeader: String?, val body: String)
+
+private fun startCapturingHttpServer(statusCode: Int, responseBody: String): Triple<HttpServer, CountDownLatch, MutableList<CapturedRequest>> {
+    val received = mutableListOf<CapturedRequest>()
+    val latch = CountDownLatch(1)
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/hook") { exchange ->
+        exchange.use {
+            val body = it.requestBody.readBytes().toString(Charsets.UTF_8)
+            synchronized(received) {
+                received.add(CapturedRequest(it.requestHeaders.getFirst("Authorization"), body))
+            }
+            val responseBytes = responseBody.toByteArray(Charsets.UTF_8)
+            it.sendResponseHeaders(statusCode, responseBytes.size.toLong())
+            it.responseBody.write(responseBytes)
+        }
+        latch.countDown()
+    }
+    server.start()
+    return Triple(server, latch, received)
+}
+
+// 아무도 듣고 있지 않은(연결 거부되는) 포트를 얻기 위해 잠깐 열었다 바로 닫는다.
+private fun findUnusedPort(): Int {
+    ServerSocket(0).use { return it.localPort }
 }
 
 class WebhookServiceSpec : DescribeSpec({
@@ -590,6 +627,552 @@ class WebhookServiceSpec : DescribeSpec({
                 verify(exactly = 1) {
                     webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(70L, ResourceType.COMMIT_COMMENT, "600")
                 }
+            }
+        }
+
+        // 커버리지 보강: sendWebhook()의 조기 종료/빈 목록/필터링 분기.
+        describe("sendWebhook 추가 분기 처리") {
+            it("project.id가 null이면 웹훅 조회 자체를 하지 않고 종료해야 한다") {
+                val projectWithoutId = Project(id = null, name = "no-id-project", owner = "owner")
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = Issue(id = 100L, title = "이슈", body = "내용", project = projectWithoutId, number = 1)
+
+                webhookService.sendWebhook(projectWithoutId, EventType.NEW_ISSUE, sender, issue)
+
+                verify(exactly = 0) { webhookRepository.findByProjectId(any()) }
+            }
+
+            it("등록된 웹훅이 없으면 조회만 하고 이후 처리는 하지 않아야 한다") {
+                every { webhookRepository.findByProjectId(1L) } returns emptyList()
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = Issue(id = 100L, title = "이슈", body = "내용", project = project, number = 1)
+
+                webhookService.sendWebhook(project, EventType.NEW_ISSUE, sender, issue)
+
+                verify(exactly = 1) { webhookRepository.findByProjectId(1L) }
+            }
+
+            it("gitPush=false 웹훅은 건너뛰고, 전송 대상 웹훅에만 실제 HTTP 요청을 보내야 한다") {
+                val (server, latch, received) = startCapturingHttpServer(200, "{}")
+                try {
+                    val deliveredWebhook = Webhook(
+                        id = 80L, project = project,
+                        payloadUrl = "http://127.0.0.1:${server.address.port}/hook",
+                        gitPush = true, webhookType = WebhookType.SIMPLE
+                    )
+                    val skippedWebhook = Webhook(
+                        id = 81L, project = project,
+                        payloadUrl = "http://127.0.0.1:${server.address.port}/hook",
+                        gitPush = false, webhookType = WebhookType.SIMPLE
+                    )
+                    every { webhookRepository.findByProjectId(1L) } returns listOf(skippedWebhook, deliveredWebhook)
+                    val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                    val commit = testCommit("push commit")
+                    val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                    webhookService.sendWebhook(project, EventType.NEW_COMMIT, sender, pushed)
+
+                    latch.await(5, TimeUnit.SECONDS) shouldBe true
+                    // 필터링된 웹훅이 요청을 보냈다면 2건 이상 수신되므로, 잠깐 더 대기해 추가 요청이
+                    // 없는지 확인한다.
+                    Thread.sleep(300)
+                    synchronized(received) { received.size } shouldBe 1
+                } finally {
+                    server.stop(0)
+                }
+            }
+        }
+
+        // 커버리지 보강: deleteWebhook()이 존재하지 않는 ID를 받았을 때의 분기.
+        describe("deleteWebhook 추가 분기 처리") {
+            it("존재하지 않는 ID면 삭제를 호출하지 않아야 한다") {
+                every { webhookRepository.findById(999L) } returns Optional.empty()
+
+                webhookService.deleteWebhook(999L)
+
+                verify(exactly = 0) { webhookRepository.delete(any()) }
+            }
+        }
+
+        // 커버리지 보강: buildPayload()의 DETAIL_HANGOUT_CHAT 스레드 조회 가드 분기들.
+        describe("buildPayload - DETAIL_HANGOUT_CHAT 스레드 조회 추가 분기") {
+            val hangoutWebhook = Webhook(
+                id = 90L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+            )
+            val sender = User(id = 2L, loginId = "sender", name = "송신자")
+
+            it("알 수 없는 타입(NOT_A_RESOURCE)의 리소스면 스레드 저장소를 조회하지 않아야 한다") {
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_COMMENT, sender, "정체불명의 리소스")
+
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(any(), any(), any())
+                }
+            }
+
+            it("리소스 ID가 비어있으면(id가 null) 스레드 저장소를 조회하지 않아야 한다") {
+                val issueWithoutId = Issue(id = null, title = "ID 없는 이슈", body = "내용", project = project, number = 21)
+
+                webhookService.buildPayload(hangoutWebhook, EventType.NEW_ISSUE, sender, issueWithoutId)
+
+                verify(exactly = 0) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(any(), any(), any())
+                }
+            }
+
+            it("webhook.id가 null이면 스레드 저장소를 0L 기준으로 조회해야 한다") {
+                val hangoutWebhookWithoutId = Webhook(
+                    id = null, project = project, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+                )
+                val issue = Issue(id = 110L, title = "이슈", body = "내용", project = project, number = 22)
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(0L, ResourceType.ISSUE_POST, "110")
+                } returns null
+
+                webhookService.buildPayload(hangoutWebhookWithoutId, EventType.NEW_ISSUE, sender, issue)
+
+                verify(exactly = 1) {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(0L, ResourceType.ISSUE_POST, "110")
+                }
+            }
+
+            it("기존에 저장된 스레드가 있으면 응답 JSON의 thread.name에 담아야 한다") {
+                val issue = Issue(id = 111L, title = "이슈", body = "내용", project = project, number = 23)
+                val existingThread = WebhookThread(
+                    id = 1000L, webhook = hangoutWebhook, resourceType = ResourceType.ISSUE_POST,
+                    resourceId = "111", threadId = "spaces/EXIST/threads/ABC"
+                )
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(90L, ResourceType.ISSUE_POST, "111")
+                } returns existingThread
+
+                val payload = webhookService.buildPayload(hangoutWebhook, EventType.NEW_ISSUE, sender, issue)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("thread").get("name").asText() shouldBe "spaces/EXIST/threads/ABC"
+            }
+        }
+
+        // 커버리지 보강: buildPayload()의 JSON 포맷 중 PushedCommits가 아닌 리소스(raw JSON) 분기.
+        describe("buildPayload - JSON 포맷 raw JSON (push 아닌 리소스)") {
+            it("PushedCommits가 아닌 리소스는 event/sender/project/resourceId/resourceType을 담은 raw JSON을 반환해야 한다") {
+                val jsonWebhook = Webhook(
+                    id = 91L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.JSON
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = Issue(id = 112L, title = "raw json 이슈", body = "내용", project = project, number = 24)
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_ISSUE, sender, issue)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("event").asText() shouldBe "NEW_ISSUE"
+                json.get("sender").asText() shouldBe "송신자"
+                json.get("project").asText() shouldBe "test-project"
+                json.get("resourceId").asText() shouldBe "112"
+                json.get("resourceType").asText() shouldBe "ISSUE_POST"
+            }
+
+            it("webhook.project가 null이면 project 필드는 빈 문자열이어야 한다") {
+                val jsonWebhookNoProject = Webhook(
+                    id = 92L, project = null, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.JSON
+                )
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = Issue(id = 113L, title = "이슈", body = "내용", project = project, number = 25)
+
+                val payload = webhookService.buildPayload(jsonWebhookNoProject, EventType.NEW_ISSUE, sender, issue)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("project").asText() shouldBe ""
+            }
+        }
+
+        // 커버리지 보강: buildAttachmentJSON()의 IssueComment/PostingComment/ReviewComment 분기
+        // (DETAIL_SLACK 웹훅에서만 buildAttachmentJSON이 호출된다).
+        describe("buildAttachmentJSON - 댓글/리뷰댓글 DETAIL_SLACK 분기") {
+            val slackWebhook = Webhook(
+                id = 93L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.DETAIL_SLACK
+            )
+            val sender = User(id = 2L, loginId = "sender", name = "송신자")
+
+            it("IssueComment는 attachment text에 댓글 내용을 담아야 한다") {
+                val parentIssue = Issue(id = 210L, title = "부모 이슈", body = "내용", project = project, number = 26)
+                val comment = IssueComment(id = 310L, contents = "이슈 댓글 내용", issue = parentIssue)
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_COMMENT, sender, comment)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("attachments").get(0).get("text").asText() shouldBe "이슈 댓글 내용"
+                json.get("attachments").get(0).get("fields").size() shouldBe 0
+            }
+
+            it("PostingComment는 attachment text에 댓글 내용을 담아야 한다") {
+                val parentPosting = Posting(id = 220L, title = "부모 게시글", body = "내용", project = project, number = 27)
+                val comment = PostingComment(id = 320L, contents = "게시글 댓글 내용", posting = parentPosting)
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_COMMENT, sender, comment)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("attachments").get(0).get("text").asText() shouldBe "게시글 댓글 내용"
+                json.get("attachments").get(0).get("fields").size() shouldBe 0
+            }
+
+            it("ReviewComment는 부모 풀 리퀘스트가 있으면 본문과 보낸사람/브랜치 필드를 포함해야 한다") {
+                val contributor = User(id = 9L, loginId = "contributor", name = "기여자")
+                val pullRequest = PullRequest(
+                    id = 61L, title = "PR", body = "PR 본문2",
+                    toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature/y",
+                    contributor = contributor, number = 5
+                )
+                val thread = CodeCommentThread(id = 401L, pullRequest = pullRequest, project = project)
+                val reviewComment = ReviewComment(id = 501L, contents = "리뷰 댓글", thread = thread)
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewComment)
+                val json = ObjectMapper().readTree(payload)
+                val attachment = json.get("attachments").get(0)
+                val fields = attachment.get("fields")
+
+                attachment.get("text").asText() shouldBe "PR 본문2"
+                fields.get(0).get("title").asText() shouldBe "보낸 사람"
+                fields.get(0).get("value").asText() shouldBe "기여자"
+                fields.get(1).get("value").asText() shouldBe "feature/y"
+                fields.get(2).get("value").asText() shouldBe "master"
+            }
+
+            it("ReviewComment는 부모 스레드가 없으면(thread null) 본문/필드 없이 빈 텍스트여야 한다") {
+                val reviewComment = ReviewComment(id = 502L, contents = "리뷰 댓글", thread = null)
+
+                val payload = webhookService.buildPayload(slackWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewComment)
+                val json = ObjectMapper().readTree(payload)
+                val attachment = json.get("attachments").get(0)
+
+                attachment.get("text").asText() shouldBe ""
+                attachment.get("fields").size() shouldBe 0
+            }
+        }
+
+        // 커버리지 보강: buildResourceLink()의 PostingComment/ReviewComment(부모 없음) 분기.
+        describe("buildResourceLink - PostingComment/ReviewComment 추가 분기") {
+            val simpleWebhook = Webhook(
+                id = 94L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.SIMPLE
+            )
+            val sender = User(id = 2L, loginId = "sender", name = "송신자")
+
+            it("게시글 댓글은 댓글 자신이 아니라 부모 게시글의 #번호: 제목을 링크 텍스트로 써야 한다") {
+                val parentPosting = Posting(id = 230L, title = "부모 게시글", body = "내용", project = project, number = 28)
+                val comment = PostingComment(id = 330L, contents = "댓글", posting = parentPosting)
+                every {
+                    notificationUrlResolver.getUrl(ResourceType.NONISSUE_COMMENT, "330")
+                } returns "https://yona.example.com/owner/test-project/posting/28#comment-330"
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_COMMENT, sender, comment)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe
+                    "[test-project] 송신자님이 새 댓글을 등록했습니다. <https://yona.example.com/owner/test-project/posting/28#comment-330|#28: 부모 게시글>"
+            }
+
+            it("리뷰 댓글의 부모 스레드가 없으면 링크 없이 본문 텍스트만 반환해야 한다") {
+                val reviewComment = ReviewComment(id = 503L, contents = "리뷰 댓글", thread = null)
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_REVIEW_COMMENT, sender, reviewComment)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe "[test-project] 송신자님이 새 리뷰 댓글을 등록했습니다."
+            }
+        }
+
+        // 커버리지 보강: buildTextMessage()의 EventType when절 나머지 분기들.
+        describe("buildTextMessage - 나머지 EventType 분기") {
+            val simpleWebhook = Webhook(
+                id = 95L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.SIMPLE
+            )
+            val sender = User(id = 2L, loginId = "sender", name = "송신자")
+            val issue = Issue(id = 114L, title = "이벤트 테스트 이슈", body = "내용", project = project, number = 29)
+
+            val expectedActionMessages = mapOf(
+                EventType.ISSUE_STATE_CHANGED to "이슈 상태를 변경했습니다",
+                EventType.PULL_REQUEST_MERGED to "풀 리퀘스트를 병합했습니다",
+                EventType.PULL_REQUEST_STATE_CHANGED to "풀 리퀘스트 상태를 변경했습니다",
+                EventType.PULL_REQUEST_COMMIT_CHANGED to "풀 리퀘스트에 커밋을 추가했습니다",
+                EventType.PULL_REQUEST_REVIEW_STATE_CHANGED to "풀 리퀘스트 리뷰 상태를 변경했습니다"
+            )
+
+            expectedActionMessages.forEach { (eventType, expectedMessage) ->
+                it("$eventType 이벤트는 '$expectedMessage' 액션 메시지를 사용해야 한다") {
+                    // relaxed mock의 기본값(빈 문자열)이 아니라 "링크 없음(null)"을 명시적으로 고정해,
+                    // 액션 메시지 문구만 검증할 수 있도록 한다.
+                    every { notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "114") } returns null
+
+                    val payload = webhookService.buildPayload(simpleWebhook, eventType, sender, issue)
+                    val json = ObjectMapper().readTree(payload)
+
+                    json.get("text").asText() shouldBe "[test-project] 송신자님이 $expectedMessage."
+                }
+            }
+
+            it("when절에 정의되지 않은 EventType은 기본 메시지('이벤트를 트리거했습니다')를 사용해야 한다") {
+                every { notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "114") } returns null
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.MEMBER_ENROLL_REQUEST, sender, issue)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe "[test-project] 송신자님이 이벤트를 트리거했습니다."
+            }
+        }
+
+        // 커버리지 보강: buildPushPayload()의 빈 커밋 목록 / null author·committer / project null 분기,
+        // 그리고 buildTextMessage()의 refNames 빈 목록 분기.
+        describe("buildPushPayload 추가 분기") {
+            val jsonWebhook = Webhook(
+                id = 96L, project = project, payloadUrl = "http://localhost:8080/hook",
+                webhookType = WebhookType.JSON
+            )
+            val sender = User(id = 5L, loginId = "gildong", name = "홍길동", email = "gildong@yona.io")
+
+            it("커밋이 없는 push면 head_commit 필드를 만들지 않아야 한다") {
+                val pushed = PushedCommits(emptyList(), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("commits").size() shouldBe 0
+                json.has("head_commit") shouldBe false
+            }
+
+            it("커밋 작성자/커미터 정보가 없으면 빈 문자열로 채워야 한다") {
+                val commitWithoutIdent = mockk<RevCommit>(relaxed = true)
+                every { commitWithoutIdent.name } returns "deadbeef"
+                every { commitWithoutIdent.fullMessage } returns "메시지 없음 커밋"
+                every { commitWithoutIdent.authorIdent } returns null
+                every { commitWithoutIdent.committerIdent } returns null
+                val pushed = PushedCommits(listOf(commitWithoutIdent), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+                val commitNode = json.get("commits").get(0)
+
+                commitNode.get("timestamp").asText() shouldBe ""
+                commitNode.get("author").get("name").asText() shouldBe ""
+                commitNode.get("author").get("email").asText() shouldBe ""
+                commitNode.get("committer").get("name").asText() shouldBe ""
+                commitNode.get("committer").get("email").asText() shouldBe ""
+            }
+
+            it("webhook.project가 null이면 repository 필드가 기본값이어야 한다") {
+                val jsonWebhookNoProject = Webhook(
+                    id = 97L, project = null, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.JSON
+                )
+                val commit = testCommit("no project commit")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhookNoProject, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+                val repositoryNode = json.get("repository")
+
+                repositoryNode.get("id").asLong() shouldBe 0L
+                repositoryNode.get("name").asText() shouldBe ""
+                repositoryNode.get("owner").asText() shouldBe ""
+                repositoryNode.get("overview").asText() shouldBe ""
+                repositoryNode.get("html_url").asText() shouldBe "https://yona.example.com"
+                repositoryNode.get("private").asBoolean() shouldBe true
+            }
+
+            it("refNames가 비어있으면 텍스트 메시지에 브랜치명 없이 표시해야 한다") {
+                val simpleWebhook = Webhook(
+                    id = 98L, project = project, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.SIMPLE
+                )
+                val commit = testCommit("no ref commit")
+                val pushed = PushedCommits(listOf(commit), emptyList())
+
+                val payload = webhookService.buildPayload(simpleWebhook, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("text").asText() shouldBe "[test-project] 홍길동님이 커밋을 푸시했습니다. 1개의 커밋을  브랜치로 푸시했습니다"
+            }
+        }
+
+        // 커버리지 보강: Project.projectScope == PUBLIC이면 repository.private가 false여야 하는 분기.
+        describe("buildPushPayload - ProjectScope PUBLIC 분기") {
+            it("공개(PUBLIC) 프로젝트는 repository.private가 false여야 한다") {
+                val publicProject = Project(
+                    id = 2L, name = "public-project", owner = "owner", projectScope = ProjectScope.PUBLIC
+                )
+                val jsonWebhook = Webhook(
+                    id = 99L, project = publicProject, payloadUrl = "http://localhost:8080/hook",
+                    webhookType = WebhookType.JSON
+                )
+                val sender = User(id = 5L, loginId = "gildong", name = "홍길동")
+                val commit = testCommit("public project commit")
+                val pushed = PushedCommits(listOf(commit), listOf("refs/heads/master"))
+
+                val payload = webhookService.buildPayload(jsonWebhook, EventType.NEW_COMMIT, sender, pushed)
+                val json = ObjectMapper().readTree(payload)
+
+                json.get("repository").get("private").asBoolean() shouldBe false
+            }
+        }
+
+        // 커버리지 보강: recordHangoutThreadIfNeeded()의 webhook.id null 분기.
+        describe("recordHangoutThreadIfNeeded 추가 분기") {
+            it("webhook.id가 null이면 스레드 저장을 요청하지 않아야 한다") {
+                val hangoutWebhookWithoutId = Webhook(
+                    id = null, project = project, webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+                )
+                val issue = Issue(id = 115L, title = "이슈", body = "내용", project = project, number = 30)
+                val responseBody = """{"thread":{"name":"spaces/AAA/threads/BBB"}}"""
+
+                webhookService.recordHangoutThreadIfNeeded(hangoutWebhookWithoutId, issue, responseBody)
+
+                verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
+            }
+        }
+
+        // 커버리지 보강: sendRequestAsync()의 실제 HTTP 왕복(헤더/상태코드/예외) 분기들.
+        // WebhookServiceImpl이 HttpClient를 직접 new하므로 목킹 대신 실제 로컬 HTTP 서버로 검증한다.
+        describe("sendRequestAsync - 실제 HTTP 통신 분기") {
+            it("secret이 있으면 Authorization 헤더를 담아 전송해야 한다") {
+                val (server, latch, received) = startCapturingHttpServer(200, "{}")
+                try {
+                    val secretWebhook = Webhook(
+                        id = 100L, project = project,
+                        payloadUrl = "http://127.0.0.1:${server.address.port}/hook",
+                        secret = "supersecret", gitPush = true, webhookType = WebhookType.SIMPLE
+                    )
+                    every { webhookRepository.findByProjectId(1L) } returns listOf(secretWebhook)
+                    val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                    val issue = Issue(id = 116L, title = "이슈", body = "내용", project = project, number = 31)
+
+                    webhookService.sendWebhook(project, EventType.NEW_ISSUE, sender, issue)
+
+                    latch.await(5, TimeUnit.SECONDS) shouldBe true
+                    synchronized(received) { received[0].authorizationHeader } shouldBe "token supersecret"
+                } finally {
+                    server.stop(0)
+                }
+            }
+
+            it("secret이 없으면 Authorization 헤더를 담지 않아야 한다") {
+                val (server, latch, received) = startCapturingHttpServer(200, "{}")
+                try {
+                    val noSecretWebhook = Webhook(
+                        id = 101L, project = project,
+                        payloadUrl = "http://127.0.0.1:${server.address.port}/hook",
+                        secret = null, gitPush = true, webhookType = WebhookType.SIMPLE
+                    )
+                    every { webhookRepository.findByProjectId(1L) } returns listOf(noSecretWebhook)
+                    val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                    val issue = Issue(id = 117L, title = "이슈", body = "내용", project = project, number = 32)
+
+                    webhookService.sendWebhook(project, EventType.NEW_ISSUE, sender, issue)
+
+                    latch.await(5, TimeUnit.SECONDS) shouldBe true
+                    synchronized(received) { received[0].authorizationHeader } shouldBe null
+                } finally {
+                    server.stop(0)
+                }
+            }
+
+            it("HTTP 응답이 2xx가 아니면 스레드 저장을 호출하지 않아야 한다") {
+                val (server, latch, _) = startCapturingHttpServer(500, """{"thread":{"name":"spaces/X/threads/Y"}}""")
+                try {
+                    val hangoutWebhook = Webhook(
+                        id = 102L, project = project,
+                        payloadUrl = "http://127.0.0.1:${server.address.port}/hook",
+                        gitPush = true, webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+                    )
+                    every { webhookRepository.findByProjectId(1L) } returns listOf(hangoutWebhook)
+                    every {
+                        webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(102L, ResourceType.ISSUE_POST, "118")
+                    } returns null
+                    val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                    val issue = Issue(id = 118L, title = "이슈", body = "내용", project = project, number = 33)
+
+                    webhookService.sendWebhook(project, EventType.NEW_ISSUE, sender, issue)
+
+                    latch.await(5, TimeUnit.SECONDS) shouldBe true
+                    // 실패 응답 처리(println 분기)가 끝날 시간을 잠깐 더 준 뒤에도 저장 요청이 없어야 한다.
+                    Thread.sleep(300)
+                    verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
+                } finally {
+                    server.stop(0)
+                }
+            }
+
+            it("2xx 응답이고 DETAIL_HANGOUT_CHAT이면 스레드 저장 콜백이 호출되어야 한다") {
+                val (server, _, _) = startCapturingHttpServer(200, """{"thread":{"name":"spaces/REAL/threads/HTTP"}}""")
+                try {
+                    val hangoutWebhook = Webhook(
+                        id = 103L, project = project,
+                        payloadUrl = "http://127.0.0.1:${server.address.port}/hook",
+                        gitPush = true, webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+                    )
+                    every { webhookRepository.findByProjectId(1L) } returns listOf(hangoutWebhook)
+                    every {
+                        webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(103L, ResourceType.ISSUE_POST, "119")
+                    } returns null
+                    val recorderLatch = CountDownLatch(1)
+                    every {
+                        webhookThreadRecorder.recordThreadIfAbsent(103L, ResourceType.ISSUE_POST, "119", "spaces/REAL/threads/HTTP")
+                    } answers { recorderLatch.countDown() }
+                    val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                    val issue = Issue(id = 119L, title = "이슈", body = "내용", project = project, number = 34)
+
+                    webhookService.sendWebhook(project, EventType.NEW_ISSUE, sender, issue)
+
+                    recorderLatch.await(5, TimeUnit.SECONDS) shouldBe true
+                    verify(exactly = 1) {
+                        webhookThreadRecorder.recordThreadIfAbsent(103L, ResourceType.ISSUE_POST, "119", "spaces/REAL/threads/HTTP")
+                    }
+                } finally {
+                    server.stop(0)
+                }
+            }
+
+            it("연결할 수 없는 URL이면 예외 없이 처리되어야 한다 (exceptionally 분기)") {
+                val unusedPort = findUnusedPort()
+                val unreachableWebhook = Webhook(
+                    id = 104L, project = project,
+                    payloadUrl = "http://127.0.0.1:$unusedPort/hook",
+                    gitPush = true, webhookType = WebhookType.DETAIL_HANGOUT_CHAT
+                )
+                every { webhookRepository.findByProjectId(1L) } returns listOf(unreachableWebhook)
+                every {
+                    webhookThreadRepository.findByWebhookIdAndResourceTypeAndResourceId(104L, ResourceType.ISSUE_POST, "120")
+                } returns null
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = Issue(id = 120L, title = "이슈", body = "내용", project = project, number = 35)
+
+                // 연결 실패는 비동기 콜백(exceptionally)에서 로그만 남기고 삼켜야 하므로, 호출 자체는
+                // 예외 없이 즉시 반환되어야 한다.
+                webhookService.sendWebhook(project, EventType.NEW_ISSUE, sender, issue)
+
+                Thread.sleep(1000)
+                verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
+            }
+
+            it("payloadUrl이 잘못된 URI 형식이면 동기적으로 예외를 삼키고 처리되어야 한다") {
+                val malformedWebhook = Webhook(
+                    id = 105L, project = project,
+                    payloadUrl = "http://exa mple .com/hook",
+                    gitPush = true, webhookType = WebhookType.SIMPLE
+                )
+                every { webhookRepository.findByProjectId(1L) } returns listOf(malformedWebhook)
+                val sender = User(id = 2L, loginId = "sender", name = "송신자")
+                val issue = Issue(id = 121L, title = "이슈", body = "내용", project = project, number = 36)
+
+                webhookService.sendWebhook(project, EventType.NEW_ISSUE, sender, issue)
+
+                verify(exactly = 1) { webhookRepository.findByProjectId(1L) }
+                verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
             }
         }
     }

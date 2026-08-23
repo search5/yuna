@@ -498,4 +498,77 @@ class AccessControlSpec : DescribeSpec({
             accessControl.isPostingCommentCreatable(stranger, publicProject, postingOnPublic) shouldBe true
         }
     }
+
+    // yona AccessControl.java의 게시글 수정 권한 대응. AttachmentController.deleteAttachment()의
+    // BOARD_POST 컨테이너 분기가 이 메서드로 위임하는데(P1-130), 커버리지 감사(JaCoCo)에서 분기·라인
+    // 0%로 나와 이 메서드 자체를 직접 호출하는 테스트가 하나도 없었음이 드러나 신설(테스트 커버리지
+    // 백로그, docs/COVERAGE_BACKLOG.md). 5개 OR항(siteManager/orgAdmin/managerOf/memberOf/작성자일치)과
+    // 앞단 가드(null/guest/loginId=="") 전부 true/false 양쪽 분기를 실제로 태운다.
+    describe("isAllowedToUpdatePosting(user, project, authorLoginId)") {
+        val emptyLoginIdUser = User(id = 300L, loginId = "", name = "emptyLoginId")
+
+        it("user가 null이면 거부") {
+            accessControl.isAllowedToUpdatePosting(null, privateProject, null) shouldBe false
+        }
+        it("게스트 사용자는 거부") {
+            accessControl.isAllowedToUpdatePosting(guest, privateProject, guest.loginId) shouldBe false
+        }
+        it("loginId가 빈 문자열이면 거부") {
+            accessControl.isAllowedToUpdatePosting(emptyLoginIdUser, privateProject, null) shouldBe false
+        }
+        it("사이트 매니저는 허용") {
+            accessControl.isAllowedToUpdatePosting(siteManager, privateProject, null) shouldBe true
+        }
+        it("조직 관리자는 소속 프로젝트에서 허용") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isAllowedToUpdatePosting(orgAdminUser, protectedProject, null) shouldBe true
+        }
+        it("프로젝트 매니저는 허용") {
+            accessControl.isAllowedToUpdatePosting(managerUser, privateProject, null) shouldBe true
+        }
+        it("일반 멤버는 작성자가 아니어도 허용") {
+            accessControl.isAllowedToUpdatePosting(member, privateProject, stranger.loginId) shouldBe true
+        }
+        it("멤버가 아니어도 게시글 작성자 본인이면 허용") {
+            accessControl.isAllowedToUpdatePosting(stranger, privateProject, stranger.loginId) shouldBe true
+        }
+        it("authorLoginId가 null이면 작성자 일치로 인정되지 않는다") {
+            accessControl.isAllowedToUpdatePosting(stranger, privateProject, null) shouldBe false
+        }
+        it("사이트매니저/조직관리자/매니저/멤버/작성자 전부 아니면 거부") {
+            accessControl.isAllowedToUpdatePosting(stranger, privateProject, "someone-else") shouldBe false
+        }
+    }
+
+    // isAllowedToUpdateMilestone도 동일한 사유(AttachmentController의 MILESTONE 컨테이너 분기,
+    // JaCoCo 0% 발견)로 신설. 작성자 개념이 없어 4개 OR항만 검증한다.
+    describe("isAllowedToUpdateMilestone(user, project)") {
+        val emptyLoginIdUser = User(id = 301L, loginId = "", name = "emptyLoginId2")
+
+        it("user가 null이면 거부") {
+            accessControl.isAllowedToUpdateMilestone(null, privateProject) shouldBe false
+        }
+        it("게스트 사용자는 거부") {
+            accessControl.isAllowedToUpdateMilestone(guest, privateProject) shouldBe false
+        }
+        it("loginId가 빈 문자열이면 거부") {
+            accessControl.isAllowedToUpdateMilestone(emptyLoginIdUser, privateProject) shouldBe false
+        }
+        it("사이트 매니저는 허용") {
+            accessControl.isAllowedToUpdateMilestone(siteManager, privateProject) shouldBe true
+        }
+        it("조직 관리자는 소속 프로젝트에서 허용") {
+            stubOrgRole(org, orgAdminUser, RoleType.ORG_ADMIN)
+            accessControl.isAllowedToUpdateMilestone(orgAdminUser, protectedProject) shouldBe true
+        }
+        it("프로젝트 매니저는 허용") {
+            accessControl.isAllowedToUpdateMilestone(managerUser, privateProject) shouldBe true
+        }
+        it("일반 멤버는 허용") {
+            accessControl.isAllowedToUpdateMilestone(member, privateProject) shouldBe true
+        }
+        it("사이트매니저/조직관리자/매니저/멤버 전부 아니면 거부") {
+            accessControl.isAllowedToUpdateMilestone(stranger, privateProject) shouldBe false
+        }
+    }
 })

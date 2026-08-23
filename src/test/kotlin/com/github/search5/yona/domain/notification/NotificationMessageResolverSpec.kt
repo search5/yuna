@@ -2,15 +2,26 @@ package com.github.search5.yona.domain.notification
 
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.pullrequest.CodeCommentThread
+import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
+import com.github.search5.yona.domain.pullrequest.SimpleCommentThread
+import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.support.DiffUtil
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.vcs.FileDiff
+import com.github.search5.yona.domain.vcs.PlayRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
+import org.eclipse.jgit.diff.Edit
+import org.eclipse.jgit.diff.EditList
+import org.eclipse.jgit.diff.RawText
 import org.springframework.context.MessageSource
 import java.time.Instant
 import java.util.Locale
@@ -64,6 +75,10 @@ class NotificationMessageResolverSpec : DescribeSpec({
             resolver.getMessage(event(EventType.ISSUE_ASSIGNEE_CHANGED, newValue = "홍길동"), locale) shouldBe "notification.issue.assigned(홍길동)"
         }
 
+        it("ISSUE_ASSIGNEE_CHANGED: newValue가 빈 문자열이어도 unassigned로 처리한다(isNullOrBlank)") {
+            resolver.getMessage(event(EventType.ISSUE_ASSIGNEE_CHANGED, newValue = ""), locale) shouldBe "notification.issue.unassigned()"
+        }
+
         it("ISSUE_MILESTONE_CHANGED: newValue가 비어있으면 noMilestone을 인자로 담는다") {
             every { messageSource.getMessage("issue.noMilestone", any(), any<String>(), Locale.getDefault()) } returns "마일스톤 없음"
             resolver.getMessage(event(EventType.ISSUE_MILESTONE_CHANGED, newValue = ""), locale) shouldBe "notification.milestone.changed(마일스톤 없음)"
@@ -75,7 +90,14 @@ class NotificationMessageResolverSpec : DescribeSpec({
 
         it("NEW_ISSUE/NEW_POSTING/NEW_PULL_REQUEST/NEW_COMMIT/COMMENT_UPDATED는 newValue를 그대로 반환한다") {
             resolver.getMessage(event(EventType.NEW_ISSUE, newValue = "이슈 본문"), locale) shouldBe "이슈 본문"
+            resolver.getMessage(event(EventType.NEW_POSTING, newValue = "게시글 본문"), locale) shouldBe "게시글 본문"
+            resolver.getMessage(event(EventType.NEW_PULL_REQUEST, newValue = "PR 본문"), locale) shouldBe "PR 본문"
+            resolver.getMessage(event(EventType.NEW_COMMIT, newValue = "커밋 메시지"), locale) shouldBe "커밋 메시지"
             resolver.getMessage(event(EventType.COMMENT_UPDATED, newValue = "수정된 댓글"), locale) shouldBe "수정된 댓글"
+        }
+
+        it("PULL_REQUEST_COMMIT_CHANGED는 newValue를 그대로 반환한다") {
+            resolver.getMessage(event(EventType.PULL_REQUEST_COMMIT_CHANGED, newValue = "커밋 변경"), locale) shouldBe "커밋 변경"
         }
 
         it("NEW_COMMENT: oldValue가 null이어도 'null' 문자열을 붙이지 않는다") {
@@ -85,6 +107,10 @@ class NotificationMessageResolverSpec : DescribeSpec({
         it("ISSUE_BODY_CHANGED/POSTING_BODY_CHANGED는 DiffUtil로 렌더링한다") {
             val message = resolver.getMessage(event(EventType.ISSUE_BODY_CHANGED, oldValue = "old", newValue = "new"), locale)
             message shouldBe DiffUtil.getDiffText("old", "new")
+
+            // POSTING_BODY_CHANGED도 같은 when 분기 값이지만 별도 case label이라 개별적으로 태운다.
+            val postingMessage = resolver.getMessage(event(EventType.POSTING_BODY_CHANGED, oldValue = "old2", newValue = "new2"), locale)
+            postingMessage shouldBe DiffUtil.getDiffText("old2", "new2")
         }
 
         it("PULL_REQUEST_STATE_CHANGED: newValue가 OPEN이면 reopened를 반환한다") {
@@ -105,6 +131,19 @@ class NotificationMessageResolverSpec : DescribeSpec({
             resolver.getMessage(event(EventType.MEMBER_ENROLL_REQUEST, newValue = "CANCEL"), locale) shouldBe "notification.member.enroll.cancel()"
         }
 
+        it("MEMBER_ENROLL_REQUEST: 실제 데이터에서는 쓰이지 않지만 ACCEPT 값도 방어적으로 처리한다") {
+            resolver.getMessage(event(EventType.MEMBER_ENROLL_REQUEST, newValue = "ACCEPT"), locale) shouldBe "notification.member.enroll.accept()"
+        }
+
+        it("ORGANIZATION_MEMBER_ENROLL_REQUEST: REQUEST/ACCEPT/CANCEL 값에 따라 분기한다") {
+            resolver.getMessage(event(EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST, newValue = "REQUEST"), locale) shouldBe
+                "notification.organization.member.enroll.request()"
+            resolver.getMessage(event(EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST, newValue = "ACCEPT"), locale) shouldBe
+                "notification.organization.member.enroll.accept()"
+            resolver.getMessage(event(EventType.ORGANIZATION_MEMBER_ENROLL_REQUEST, newValue = "CANCEL"), locale) shouldBe
+                "notification.organization.member.enroll.cancel()"
+        }
+
         it("MEMBER_ENROLL_ACCEPT: legacy의 default 분기(요청 locale과 무관하게 항상 기본 로케일)를 재현한다") {
             every { messageSource.getMessage("notification.member.enroll.accept", any(), any<String>(), Locale.getDefault()) } returns "수락됨"
             resolver.getMessage(event(EventType.MEMBER_ENROLL_ACCEPT), locale) shouldBe "수락됨"
@@ -116,9 +155,25 @@ class NotificationMessageResolverSpec : DescribeSpec({
                 "notification.pullrequest.reviewed(reviewer1)"
         }
 
+        it("PULL_REQUEST_REVIEW_STATE_CHANGED: DONE이 아니면 unreviewed를 반환한다") {
+            every { userRepository.findById(5L) } returns Optional.of(User(id = 5L, loginId = "reviewer1", name = "리뷰어"))
+            resolver.getMessage(event(EventType.PULL_REQUEST_REVIEW_STATE_CHANGED, newValue = "PENDING", senderId = 5L), locale) shouldBe
+                "notification.pullrequest.unreviewed(reviewer1)"
+        }
+
+        it("PULL_REQUEST_REVIEW_STATE_CHANGED: senderId가 없으면 빈 loginId를 인자로 담는다") {
+            resolver.getMessage(event(EventType.PULL_REQUEST_REVIEW_STATE_CHANGED, newValue = "DONE", senderId = null), locale) shouldBe
+                "notification.pullrequest.reviewed()"
+        }
+
         it("REVIEW_THREAD_STATE_CHANGED: CLOSED 여부로 분기한다") {
             resolver.getMessage(event(EventType.REVIEW_THREAD_STATE_CHANGED, newValue = "CLOSED"), locale) shouldBe "notification.reviewthread.closed()"
             resolver.getMessage(event(EventType.REVIEW_THREAD_STATE_CHANGED, newValue = "OPEN"), locale) shouldBe "notification.reviewthread.reopened()"
+        }
+
+        it("ISSUE_MOVED: oldValue/newValue를 함께 인자로 담는다") {
+            resolver.getMessage(event(EventType.ISSUE_MOVED, oldValue = "구프로젝트", newValue = "신프로젝트"), locale) shouldBe
+                "notification.type.issue.moved(구프로젝트,신프로젝트)"
         }
 
         it("ISSUE_SHARER_CHANGED: newValue(loginId)가 있으면 해당 사용자 이름으로 added 메시지를 만든다") {
@@ -130,13 +185,42 @@ class NotificationMessageResolverSpec : DescribeSpec({
             resolver.getMessage(event(EventType.ISSUE_SHARER_CHANGED, oldValue = "sharer1", newValue = ""), locale) shouldBe "notification.issue.sharer.deleted()"
         }
 
+        it("ISSUE_SHARER_CHANGED: newValue/oldValue가 모두 없으면 빈 문자열을 반환한다") {
+            resolver.getMessage(event(EventType.ISSUE_SHARER_CHANGED, oldValue = null, newValue = null), locale) shouldBe ""
+        }
+
         it("ISSUE_LABEL_CHANGED: yuna는 loginId가 아니라 라벨 이름 목록을 저장하므로 그대로 인자로 쓴다") {
             resolver.getMessage(event(EventType.ISSUE_LABEL_CHANGED, newValue = "bug, urgent"), locale) shouldBe "notification.issue.label.added(bug, urgent)"
+        }
+
+        it("ISSUE_LABEL_CHANGED: newValue가 없고 oldValue만 있으면 deleted 메시지를 반환한다") {
+            resolver.getMessage(event(EventType.ISSUE_LABEL_CHANGED, oldValue = "bug", newValue = ""), locale) shouldBe "notification.issue.label.deleted()"
+        }
+
+        it("ISSUE_LABEL_CHANGED: newValue/oldValue가 모두 없으면 빈 문자열을 반환한다") {
+            resolver.getMessage(event(EventType.ISSUE_LABEL_CHANGED, oldValue = null, newValue = null), locale) shouldBe ""
         }
 
         it("RESOURCE_DELETED: yuna는 삭제된 리소스의 표시 제목을 저장하므로 loginId로 못 찾으면 원본 값을 그대로 보여준다") {
             every { userRepository.findByLoginId("삭제된 글 제목") } returns Optional.empty()
             resolver.getMessage(event(EventType.RESOURCE_DELETED, newValue = "삭제된 글 제목"), locale) shouldBe "notification.resource.deleted(삭제된 글 제목)"
+        }
+
+        it("RESOURCE_DELETED: newValue로 사용자를 찾으면 그 사용자 이름을 인자로 쓴다") {
+            every { userRepository.findByLoginId("deleter1") } returns Optional.of(User(loginId = "deleter1", name = "삭제자"))
+            resolver.getMessage(event(EventType.RESOURCE_DELETED, newValue = "deleter1"), locale) shouldBe "notification.resource.deleted(삭제자)"
+        }
+
+        it("정의되지 않은 이벤트 타입은 warn 로그를 남기고 eventType.messageKey를 기본 로케일로 반환한다") {
+            resolver.getMessage(event(EventType.ISSUE_REFERRED_FROM_COMMIT), locale) shouldBe
+                "notification.type.issue.referred.from.commit()"
+            resolver.getMessage(event(EventType.ISSUE_REFERRED_FROM_PULL_REQUEST), locale) shouldBe
+                "notification.type.issue.referred.from.pullrequest()"
+        }
+
+        it("msg(): MessageSource가 null을 반환하면 키를 그대로 사용한다") {
+            every { messageSource.getMessage("notification.issue.closed", any(), any<String>(), any()) } returns null
+            resolver.getMessage(event(EventType.ISSUE_STATE_CHANGED, newValue = "CLOSED"), locale) shouldBe "notification.issue.closed"
         }
     }
 
@@ -158,6 +242,168 @@ class NotificationMessageResolverSpec : DescribeSpec({
             val merged = MergedNotificationEvent(e1, listOf(e1, e2))
 
             resolver.getMessage(merged, locale) shouldBe "첫 번째\n\n---\n\n두 번째"
+        }
+
+        it("getPlainMessage(merged)도 각 messageSources의 getPlainMessage를 join한다") {
+            val e1 = event(EventType.NEW_ISSUE, newValue = "본문1\n\n<br />\n이어짐1")
+            val e2 = event(EventType.NEW_ISSUE, newValue = "본문2")
+            val merged = MergedNotificationEvent(e1, listOf(e1, e2))
+
+            resolver.getPlainMessage(merged, locale) shouldBe "본문1\n\n이어짐1\n\n---\n\n본문2"
+        }
+    }
+
+    // yona NotificationEvent.buildCommentedCodeMessage() 대응 - resolveReviewCommentMessage/buildCommentedCodeMessage의
+    // 모든 분기(리소스ID 파싱 실패, 댓글/스레드/프로젝트/커밋 부재, 리포지토리 예외, diff 매칭, hunk 유무, 라인 종류)를 태운다.
+    describe("NEW_REVIEW_COMMENT (resolveReviewCommentMessage/buildCommentedCodeMessage)") {
+        it("resourceId가 숫자가 아니면 newValue를 그대로 반환한다") {
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "폴백", resourceId = "abc"), locale) shouldBe "폴백"
+        }
+
+        it("리뷰 댓글을 찾을 수 없으면 newValue를 그대로 반환한다") {
+            every { reviewCommentRepository.findById(900L) } returns Optional.empty()
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "폴백2", resourceId = "900"), locale) shouldBe "폴백2"
+        }
+
+        it("thread가 없으면 댓글 내용을 그대로 반환한다") {
+            val comment = ReviewComment(id = 901L, contents = "쓰레드 없는 댓글", thread = null)
+            every { reviewCommentRepository.findById(901L) } returns Optional.of(comment)
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "901"), locale) shouldBe "쓰레드 없는 댓글"
+        }
+
+        it("스레드의 첫 댓글이 아니면 댓글 내용을 그대로 반환한다") {
+            val thread = CodeCommentThread(id = 910L)
+            val firstComment = ReviewComment(id = 902L, contents = "첫 댓글", createdDate = Instant.parse("2020-01-01T00:00:00Z"))
+            val secondComment = ReviewComment(id = 903L, contents = "두번째 댓글", createdDate = Instant.parse("2020-01-02T00:00:00Z"))
+            thread.addComment(firstComment)
+            thread.addComment(secondComment)
+            every { reviewCommentRepository.findById(903L) } returns Optional.of(secondComment)
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "903"), locale) shouldBe "두번째 댓글"
+        }
+
+        it("스레드에 댓글이 하나도 등록돼 있지 않아 getFirstReviewComment()가 예외를 던지면 바깥 catch에서 newValue로 폴백한다") {
+            val thread = CodeCommentThread(id = 911L)
+            // addComment()를 쓰지 않고 thread만 직접 연결해 reviewComments가 비어있는 상태를 재현한다.
+            val orphanComment = ReviewComment(id = 904L, contents = "고아", thread = thread)
+            every { reviewCommentRepository.findById(904L) } returns Optional.of(orphanComment)
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "예외 폴백", resourceId = "904"), locale) shouldBe "예외 폴백"
+        }
+
+        it("스레드가 CodeCommentThread가 아니면(SimpleCommentThread) 댓글 내용을 그대로 반환한다") {
+            val thread = SimpleCommentThread(id = 912L)
+            val comment = ReviewComment(id = 905L, contents = "단순 스레드 댓글")
+            thread.addComment(comment)
+            every { reviewCommentRepository.findById(905L) } returns Optional.of(comment)
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "905"), locale) shouldBe "단순 스레드 댓글"
+        }
+
+        it("스레드에 project가 없으면 댓글 내용을 그대로 반환한다") {
+            val thread = CodeCommentThread(id = 913L, project = null)
+            val comment = ReviewComment(id = 906L, contents = "프로젝트 없는 댓글")
+            thread.addComment(comment)
+            every { reviewCommentRepository.findById(906L) } returns Optional.of(comment)
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "906"), locale) shouldBe "프로젝트 없는 댓글"
+        }
+
+        it("리포지토리 조회 중 예외가 발생하면 댓글 내용을 그대로 반환한다") {
+            val project = Project(id = 50L, name = "repoproj", owner = "own")
+            val thread = CodeCommentThread(id = 914L, project = project)
+            val comment = ReviewComment(id = 907L, contents = "리포 예외 댓글")
+            thread.addComment(comment)
+            every { reviewCommentRepository.findById(907L) } returns Optional.of(comment)
+            every { repositoryService.getRepository(project) } throws RuntimeException("리포 접근 실패")
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "907"), locale) shouldBe "리포 예외 댓글"
+        }
+
+        it("commitId가 없으면 댓글 내용을 그대로 반환한다") {
+            val project = Project(id = 51L, name = "nocommitproj", owner = "own")
+            val thread = CodeCommentThread(id = 915L, project = project, commitId = null)
+            val comment = ReviewComment(id = 908L, contents = "커밋 없는 댓글")
+            thread.addComment(comment)
+            every { reviewCommentRepository.findById(908L) } returns Optional.of(comment)
+            every { repositoryService.getRepository(project) } returns mockk<PlayRepository>()
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "908"), locale) shouldBe "커밋 없는 댓글"
+        }
+
+        it("prevCommitId가 없으면(isBlank) commitId 하나만으로 diff를 조회하고, path가 일치하는 diff가 없으면 댓글 내용을 그대로 반환한다") {
+            val project = Project(id = 52L, name = "diffproj", owner = "own")
+            val thread = CodeCommentThread(
+                id = 916L, project = project, commitId = "abc123", prevCommitId = "",
+                codeRange = CodeRange(path = "src/Target.kt", endSide = CodeRange.Side.B, endLine = 5)
+            )
+            val comment = ReviewComment(id = 909L, contents = "매칭 안되는 댓글")
+            thread.addComment(comment)
+            every { reviewCommentRepository.findById(909L) } returns Optional.of(comment)
+
+            val repo = mockk<PlayRepository>()
+            every { repositoryService.getRepository(project) } returns repo
+            val unrelatedDiff = FileDiff().apply { pathB = "src/Other.kt" }
+            every { repo.getDiff("abc123") } returns listOf(unrelatedDiff)
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "909"), locale) shouldBe "매칭 안되는 댓글"
+        }
+
+        it("prevCommitId가 있으면 두 커밋 사이 diff를 조회하고, path가 일치하는 diff를 찾으면 안내 문구+댓글을 반환한다(hunks 없음)") {
+            val project = Project(id = 53L, name = "diffproj2", owner = "own")
+            val thread = CodeCommentThread(
+                id = 917L, project = project, commitId = "def456", prevCommitId = "abc123",
+                codeRange = CodeRange(path = "src/Target.kt", endSide = CodeRange.Side.B, endLine = 5)
+            )
+            val comment = ReviewComment(id = 910L, contents = "hunks 없는 댓글")
+            thread.addComment(comment)
+            every { reviewCommentRepository.findById(910L) } returns Optional.of(comment)
+
+            val repo = mockk<PlayRepository>()
+            every { repositoryService.getRepository(project) } returns repo
+            val unrelatedDiff = FileDiff().apply { pathB = "src/Other.kt" }
+            // editList/a/b를 설정하지 않아 getHunks()가 null을 반환하는 diff.
+            val matchedDiff = FileDiff().apply { pathB = "src/Target.kt" }
+            every { repo.getDiff("abc123", "def456") } returns listOf(unrelatedDiff, matchedDiff)
+
+            resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "910"), locale) shouldBe
+                "notification.reviewthread.inTheFile(src/Target.kt)\nhunks 없는 댓글"
+        }
+
+        it("hunks가 있으면 diff 코드블록을 만들고 codeRange가 가리키는 줄에 댓글을 삽입한다") {
+            val project = Project(id = 54L, name = "diffproj3", owner = "own")
+            val thread = CodeCommentThread(
+                id = 918L, project = project, commitId = "def789", prevCommitId = "",
+                codeRange = CodeRange(path = "src/Target.kt", endSide = CodeRange.Side.B, endLine = 5)
+            )
+            val comment = ReviewComment(id = 911L, contents = "인라인 삽입 댓글")
+            thread.addComment(comment)
+            every { reviewCommentRepository.findById(911L) } returns Optional.of(comment)
+
+            val repo = mockk<PlayRepository>()
+            every { repositoryService.getRepository(project) } returns repo
+
+            // FileDiffSpec에서 이미 검증된, 10줄 파일의 5번째 줄만 바뀌는 단일 edit + context=3 조합을 그대로 사용한다.
+            val matchedDiff = FileDiff().apply {
+                pathA = "src/Target.kt"
+                pathB = "src/Target.kt"
+                a = RawText(((0..9).joinToString("\n") { "line$it" } + "\n").toByteArray())
+                b = RawText(((0..9).joinToString("\n") { if (it == 5) "CHANGED" else "line$it" } + "\n").toByteArray())
+                editList = EditList().apply { add(Edit(5, 6, 5, 6)) }
+                context = 3
+            }
+            every { repo.getDiff("def789") } returns listOf(matchedDiff)
+
+            val message = resolver.getMessage(event(EventType.NEW_REVIEW_COMMENT, newValue = "무시됨", resourceId = "911"), locale)
+
+            message shouldContain "notification.reviewthread.inTheFile(src/Target.kt)"
+            message shouldContain "```diff"
+            message shouldContain ">  line4" // CONTEXT: "> " + " " + content
+            message shouldContain "> -line5" // REMOVE: "> " + "-" + content
+            message shouldContain "> +CHANGED" // ADD: "> " + "+" + content, endLine(5)과 일치해 댓글이 삽입되는 지점
+            message shouldContain "인라인 삽입 댓글"
+            message shouldContain ">  line6" // trailing CONTEXT
         }
     }
 })

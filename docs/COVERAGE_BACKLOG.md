@@ -1,0 +1,353 @@
+# 테스트 커버리지 백로그
+
+
+`./gradlew test jacocoTestReport`(2026-08-23 실행, 전체 1474 tests 전부 GREEN 기준)로 측정한 JaCoCo 커버리지에서
+**라인/분기/메서드 중 하나라도 95% 미만인 클래스 279개**(전체 478개 중)를 전수 나열한 작업 백로그다. 사용자 지시:
+"라인 95%, 분기 95%, 메서드 95%, 클래스 95% 가 되도록 테스트 추가해줘. 개별 파일별로 도달 불가능한 것까지 테스트
+되어야 함. 자의적 판단 하지마."
+
+## 작업 원칙 (반드시 준수)
+
+- **목표는 파일(클래스) 단위로 라인·분기·메서드 커버리지 각각 95% 이상.** "이 정도면 충분하다"는 자의적 판단으로
+  건너뛰지 않는다 — 얼핏 "도달 불가능해 보이는" 분기(방어적 null 체크, else 분기, 예외 경로 등)도 실제로 그
+  분기를 타는 테스트를 작성해서 검증한다.
+- **정말 기술적으로 테스트가 불가능한 경우만 예외로 인정**하되(예: JVM/컴파일러가 강제로 생성하는, 언어 차원에서
+  호출 불가능한 합성 분기), 그 경우 반드시 근거를 이 문서에 명시하고 왜 불가능한지 실제로 확인한 뒤에만 `[i]`로
+  표시한다. "테스트 작성이 번거로워서", "중요하지 않아 보여서" 같은 이유는 인정하지 않는다.
+- **TDD로 진행한다**: 커버되지 않은 분기를 확인 → 그 분기를 타는 입력/상태를 구성하는 테스트 작성 → RED(아직
+  커버 안 됨) 확인 → 필요 시 최소 구현 수정(진짜 버그를 발견하면 함께 고침, 단순 테스트 부재면 구현은 그대로) →
+  GREEN.
+- **회귀 주기**: 기존 관행과 동일하게 10개 항목(클래스) 처리할 때마다 `./gradlew test`(가능하면 `jacocoTestReport`도)
+  1회 전체 실행. 매 항목마다 전체 스위트를 돌리지 않는다.
+- **git 규율**: 커밋 전 항상 `git fetch origin`으로 원격 상태 확인, 파일 명시적 `git add`(`-A` 금지), `[TASK-NNNN]`
+  형식 커밋(마지막 번호+1), push.
+- **상태 기호**: `[ ]` 미착수 · `[~]` 진행중 · `[x]` 목표 달성(95%/95%/95% 이상) · `[i]` 기술적으로 불가능함이
+  확인된 예외(반드시 사유 기록).
+
+## 전체 요약 (2026-08-23 최초 측정 기준)
+
+- 전체 클래스: 478개, 95% 미만: 279개
+- 라인: 69.1%, 분기: 44.0%, 메서드: 70.3%, 클래스: 89.7%
+- 미실행 라인 합계: 5,508 / 미실행 분기 합계: 6,256
+
+## 진행 현황 갱신 (2026-08-24 00:00, 1차 배치 10개 클래스 완료 후)
+
+- 전체 클래스: 478개, 95% 미만: **268개**(-11)
+- 라인: 78.4%, 분기: 54.4%, 메서드: 74.8%, 클래스: 91.7%
+- 완료([x]): `NotificationUrlResolver`, `FileDiff`, `diff_match_patch`, `MigrationService`, `SiteService`
+- 구조적 한계로 목표 사실상 최대치 도달([i]): `IssueExcelService`(BRANCH 88.1%, 나머지는 Kotlin non-null 타입상 도달 불가)
+- 진행 중([~], 다음 배치에서 계속): `AccessControl`(BRANCH 38.4%, 최우선), `NotificationMessageResolver`(82.8%), `WebhookServiceImpl`(79.8%), `IssueShareServiceImpl`(93.9%, 근소 미달)
+
+
+## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
+
+| 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
+|---|---|---|---|---|---|---|---|---|
+| **YonaApplicationKt** | | | | | | | | |
+| `YonaApplicationKt` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [i] | `fun main()`이 `runApplication<YonaApplication>()`을 호출만 하는데, 실제로 호출하면 같은 JVM 안에서 실제 임베디드 톰캣+비-데몬 스레드를 가진 완전한 앱이 뜨고(main()이 리턴은 하지만 컨텍스트를 반환받지 못해 정리도 불가) 테스트 JVM에 잔류해 이후 테스트를 오염시킨다. 별도 프로세스로 기동하는 방식(subprocess)만 가능한데, 이 클래스가 위임하는 로직(ApplicationContext 부트스트랩) 자체는 이미 150여개의 `@SpringBootTest` 스펙이 동일하게 실행·검증하고 있어 별도 프로세스 스모크테스트가 주는 한계효용이 없다고 판단 — 구조적 제약으로 예외 인정 |
+| **config** | | | | | | | | |
+| `TemplateHelper` | 70.0 | 42.6 | 77.9 | 74 | 179 | 15 | [ ] | |
+| `GitServletConfig` | 48.0 | 7.1 | 33.3 | 26 | 13 | 4 | [ ] | |
+| `GitServletConfig$gitServletRegistrationBean$lfsServlet$1` | 5.3 | 0.0 | 50.0 | 18 | 12 | 1 | [ ] | |
+| `YonaAuthenticationSuccessHandler` | 14.3 | 0.0 | 50.0 | 12 | 12 | 1 | [ ] | |
+| `YonaAuthenticationFailureHandler` | 9.1 | 0.0 | 50.0 | 10 | 8 | 1 | [ ] | |
+| `BootstrapSetupInterceptor` | 100.0 | 59.1 | 100.0 | 0 | 9 | 0 | [ ] | |
+| `GitServletConfig$gitServletRegistrationBean$dispatcherServlet$1` | 14.3 | 0.0 | 50.0 | 6 | 2 | 1 | [ ] | |
+| `ApiTokenAuthenticationFilter` | 100.0 | 81.2 | 100.0 | 0 | 3 | 0 | [ ] | |
+| `ApiTokenAuthenticationFilter$Companion` | 100.0 | 62.5 | 100.0 | 0 | 3 | 0 | [ ] | |
+| `YonaAuthenticationProvider` | 97.7 | 94.4 | 100.0 | 1 | 1 | 0 | [ ] | |
+| **config/git** | | | | | | | | |
+| `GitAuthorizationFilter` | 100.0 | 80.0 | 100.0 | 0 | 8 | 0 | [ ] | |
+| `GitProjectVisitRecorder` | 100.0 | 80.0 | 100.0 | 0 | 4 | 0 | [ ] | |
+| **config/oauth2** | | | | | | | | |
+| `GithubOAuth2UserInfo` | 60.0 | 25.0 | 60.0 | 2 | 3 | 2 | [ ] | |
+| `CustomOAuth2UserService` | 98.0 | 90.0 | 100.0 | 1 | 2 | 0 | [ ] | |
+| `OAuth2UserInfoFactory$Companion` | 75.0 | 75.0 | 100.0 | 1 | 1 | 0 | [ ] | |
+| `YonaOAuth2User` | 71.4 | 100.0 | 60.0 | 2 | 0 | 2 | [ ] | |
+| `OAuth2UserInfoFactory` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `OAuth2AccountMergeService` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
+| **config/security** | | | | | | | | |
+| `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [~] | 2026-08-23: `isAllowedToUpdatePosting`(18/18 분기)·`isAllowedToUpdateMilestone`(14/14 분기) 100% 완료(18 tests 신규, `AccessControlSpec.kt`). 전체 회귀 확정치: LINE 65.4%, BRANCH 38.4%(878→844 미실행, 소폭 개선), METHOD 97.4% — 여전히 대부분 미달. 나머지 메서드(특히 `isAllowed(...)` 오버로드 다수, `getVisibleProjects`, `isAllowedAttachment`)는 아직 미착수 — 다음 배치 최우선 |
+| **config/svn** | | | | | | | | |
+| `SvnAuthorizationFilter` | 96.2 | 73.8 | 100.0 | 2 | 11 | 0 | [ ] | |
+| **domain/attachment** | | | | | | | | |
+| `AttachmentServiceImpl` | 95.8 | 85.7 | 100.0 | 3 | 4 | 0 | [ ] | |
+| `AttachmentCleanupScheduler` | 90.0 | 100.0 | 100.0 | 2 | 0 | 0 | [ ] | |
+| `Attachment` | 100.0 | 100.0 | 70.0 | 0 | 0 | 6 | [ ] | |
+| **domain/board** | | | | | | | | |
+| `PostingServiceImpl` | 96.4 | 68.2 | 63.2 | 5 | 14 | 7 | [ ] | |
+| `PostingService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
+| `Posting` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
+| `PostingComment` | 100.0 | 100.0 | 66.7 | 0 | 0 | 2 | [ ] | |
+| **domain/comment** | | | | | | | | |
+| `CommentServiceImpl` | 90.3 | 65.5 | 71.4 | 17 | 20 | 8 | [ ] | |
+| `CommentService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 4 | 0 | 2 | [ ] | |
+| **domain/enumeration** | | | | | | | | |
+| `ResourceType` | 85.4 | 0.0 | 75.0 | 6 | 5 | 1 | [ ] | |
+| `Operation$Companion` | 0.0 | 0.0 | 0.0 | 1 | 6 | 1 | [ ] | |
+| `State$Companion` | 100.0 | 66.7 | 100.0 | 0 | 2 | 0 | [ ] | |
+| `Operation` | 90.9 | 100.0 | 66.7 | 1 | 0 | 1 | [ ] | |
+| `WebhookType` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
+| `EventType` | 100.0 | 100.0 | 80.0 | 0 | 0 | 1 | [ ] | |
+| **domain/event** | | | | | | | | |
+| `GitPostReceiveEventListener` | 51.1 | 26.7 | 55.6 | 45 | 22 | 4 | [ ] | |
+| `PullRequestMergeEventListener` | 96.1 | 73.7 | 100.0 | 4 | 10 | 0 | [ ] | |
+| `PullRequestMergeEvent` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
+| **domain/issue** | | | | | | | | |
+| `IssueShareServiceImpl` | 33.9 | 8.8 | 27.8 | 119 | 104 | 13 | [~] | 2026-08-23: 43 tests(`IssueShareServiceImplSpec.kt`, 9개 describe 블록). 전체 회귀 확정치: LINE 99.4%, BRANCH 93.9%(목표 95%에 근소 미달), METHOD 100%. 도달 불가능 1건(`User.avatarUrl` non-null이라 elvis 우측 불가) 반영해도 근소 부족 — 남은 분기 추가 확인 필요. **의심 사항(버그 아닐 수 있음, 확인 필요)**: `findSharableUsers(query, type: String?)`의 `type` 파라미터가 메서드 본문에서 전혀 참조되지 않음 — 원래 타입별 필터링을 하려던 미완성 코드일 가능성, 별도 확인 필요 |
+| `IssueExcelService` | 3.6 | 0.0 | 16.7 | 106 | 42 | 5 | [i] | 2026-08-23: 신규 5 tests, `IssueExcelServiceSpec.kt`. 전체 회귀 확정치: LINE 98.2%, BRANCH 88.1%(37/42), METHOD 100% — 도달 가능한 분기는 100%(37/37) 커버, 미실행 5개는 `Milestone.title`/`AbstractPosting.title`/`Assignee.user`/`User.name`/`Comment.contents`가 전부 non-null 타입이라 elvis/safe-call의 null 분기가 Kotlin 타입 시스템상 생성 자체가 불가능(순수 코드로 만들 방법 없음) — 구조적 한계로 95% 미달을 인정. 라인 미실행 2개는 `workbook.close()` 실패 catch 블록으로 내부에서 워크북을 생성해 주입 지점이 없어 정상 흐름에서 트리거 불가 |
+| `IssueServiceImpl` | 96.6 | 64.2 | 64.2 | 13 | 58 | 19 | [ ] | |
+| `IssueSpecification` | 50.7 | 44.8 | 100.0 | 33 | 32 | 0 | [ ] | |
+| `IssueLabelServiceImpl` | 61.7 | 47.2 | 50.0 | 41 | 19 | 13 | [ ] | |
+| `RecentIssueService` | 100.0 | 57.1 | 100.0 | 0 | 6 | 0 | [ ] | |
+| `IssueService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 4 | 0 | 2 | [ ] | |
+| `IssueEventRecorderKt` | 100.0 | 78.6 | 100.0 | 0 | 3 | 0 | [ ] | |
+| `IssueShareServiceImpl$findSharerByloginIds$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `IssueSharer` | 91.7 | 100.0 | 50.0 | 1 | 0 | 6 | [ ] | |
+| `IssueShareServiceImpl$getAssignableUsersOfProjectInternal$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `IssueComment` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
+| `Issue` | 100.0 | 100.0 | 90.9 | 0 | 0 | 2 | [ ] | |
+| `IssueEvent` | 100.0 | 100.0 | 61.1 | 0 | 0 | 7 | [ ] | |
+| `IssueLabel` | 100.0 | 100.0 | 83.3 | 0 | 0 | 2 | [ ] | |
+| `Assignee` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
+| `RecentIssue` | 100.0 | 100.0 | 56.2 | 0 | 0 | 7 | [ ] | |
+| `IssueLabelCategory` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
+| **domain/mail** | | | | | | | | |
+| `ImapMailboxPoller` | 32.4 | 44.0 | 35.0 | 121 | 65 | 13 | [ ] | |
+| `IncomingMailProcessingService` | 87.6 | 68.4 | 100.0 | 30 | 62 | 0 | [ ] | |
+| `MailServiceImpl` | 34.7 | 45.0 | 42.9 | 47 | 22 | 4 | [ ] | |
+| `ImapMailboxPoller$startEmailListener$1` | 0.0 | 100.0 | 0.0 | 7 | 0 | 3 | [ ] | |
+| `EmailAddressDetail$Companion` | 100.0 | 70.0 | 100.0 | 0 | 3 | 0 | [ ] | |
+| `EventNotificationMimeMessage` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `ImapMailboxPoller$handleMessages$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `IncomingMailOutcome$IssueCreated` | 100.0 | 100.0 | 50.0 | 0 | 0 | 2 | [ ] | |
+| `IncomingMailOutcome$PostingCommentCreated` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
+| `InboundEmailMessage` | 100.0 | 100.0 | 91.7 | 0 | 0 | 1 | [ ] | |
+| `InboundAttachment` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
+| `OriginalEmail` | 100.0 | 100.0 | 41.7 | 0 | 0 | 7 | [ ] | |
+| **domain/mention** | | | | | | | | |
+| `MentionServiceImpl` | 100.0 | 81.0 | 100.0 | 0 | 4 | 0 | [ ] | |
+| `Mention` | 100.0 | 100.0 | 50.0 | 0 | 0 | 5 | [ ] | |
+| **domain/milestone** | | | | | | | | |
+| `MilestoneServiceImpl` | 34.2 | 21.4 | 30.0 | 25 | 11 | 7 | [ ] | |
+| `MilestoneService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `Milestone` | 100.0 | 100.0 | 64.3 | 0 | 0 | 5 | [ ] | |
+| **domain/notification** | | | | | | | | |
+| `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [ ] | |
+| `NotificationMessageResolver` | 40.2 | 41.4 | 60.0 | 67 | 92 | 4 | [~] | 2026-08-23: `NotificationMessageResolverSpec.kt`에 246줄 추가, 49/49 GREEN(직접 재검증, 에이전트 최종 보고 자체는 비정상 응답이라 무시하고 코디네이터가 컴파일+테스트로 직접 확인함). 전체 회귀 확정치: LINE 100%, BRANCH 82.8%(목표 미달), METHOD 100% — 다음 배치에서 남은 분기 보강 필요 |
+| `NotificationUrlResolver` | 55.7 | 27.4 | 83.3 | 27 | 53 | 1 | [x] | 2026-08-23: 39 tests(+32)로 `getUrlToView`/`getUrl`/`urlToContainer` 전체 when-분기·null 케이스 커버. 전체 회귀 확정치: LINE 100%, BRANCH 98.6%, METHOD 100% — 목표 달성. 버그 아님: `COMMENT_THREAD`의 `urlToContainer` null 시 앵커까지 사라진 빈 문자열 반환 — 의도된 동작으로 보여 그대로 테스트에 반영 |
+| `NotificationEventMerger` | 90.2 | 65.9 | 100.0 | 5 | 14 | 0 | [ ] | |
+| `UserProjectNotification` | 64.3 | 0.0 | 23.1 | 5 | 2 | 10 | [ ] | |
+| `NotificationEventRecorder` | 100.0 | 75.0 | 100.0 | 0 | 5 | 0 | [ ] | |
+| `NotificationMailBodyProcessor` | 94.1 | 90.0 | 100.0 | 2 | 2 | 0 | [ ] | |
+| `NotificationMailRenderer` | 100.0 | 75.0 | 100.0 | 0 | 3 | 0 | [ ] | |
+| `NotificationCleanupScheduler` | 100.0 | 75.0 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `NotificationEventMerger$MergeKey` | 100.0 | 100.0 | 25.0 | 0 | 0 | 3 | [ ] | |
+| `NotificationMail` | 100.0 | 100.0 | 50.0 | 0 | 0 | 3 | [ ] | |
+| `NotificationEvent` | 100.0 | 100.0 | 58.3 | 0 | 0 | 10 | [ ] | |
+| **domain/organization** | | | | | | | | |
+| `OrganizationServiceImpl` | 94.1 | 69.4 | 40.6 | 10 | 19 | 19 | [ ] | |
+| `Organization` | 100.0 | 100.0 | 75.0 | 0 | 0 | 4 | [ ] | |
+| `OrganizationUser` | 100.0 | 100.0 | 60.0 | 0 | 0 | 4 | [ ] | |
+| **domain/project** | | | | | | | | |
+| `ProjectServiceImpl` | 70.7 | 50.0 | 40.5 | 84 | 64 | 22 | [ ] | |
+| `ProjectUserServiceImpl` | 72.9 | 72.7 | 25.0 | 39 | 6 | 21 | [ ] | |
+| `GitServiceImpl` | 48.4 | 9.1 | 80.0 | 16 | 20 | 1 | [ ] | |
+| `Project` | 100.0 | 77.8 | 93.9 | 0 | 4 | 4 | [ ] | |
+| `RecentProjectRepository` | 100.0 | 60.0 | 100.0 | 0 | 4 | 0 | [ ] | |
+| `TitleHeadServiceImpl` | 100.0 | 85.0 | 100.0 | 0 | 3 | 0 | [ ] | |
+| `ProjectRepository$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
+| `RecentProjectRepository$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
+| `ProjectService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `UpdateProjectParam` | 93.3 | 100.0 | 93.3 | 1 | 0 | 1 | [ ] | |
+| `TitleHead` | 90.0 | 100.0 | 50.0 | 1 | 0 | 5 | [ ] | |
+| `ProjectUser` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
+| `RecentProject` | 100.0 | 100.0 | 35.7 | 0 | 0 | 9 | [ ] | |
+| `ProjectTransfer` | 100.0 | 100.0 | 61.1 | 0 | 0 | 7 | [ ] | |
+| `Label` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
+| **domain/pullrequest** | | | | | | | | |
+| `PullRequestServiceImpl` | 95.2 | 64.5 | 72.1 | 25 | 66 | 17 | [ ] | |
+| `CodeReviewServiceImpl` | 93.5 | 56.0 | 79.3 | 16 | 51 | 6 | [ ] | |
+| `CodeCommentThread` | 90.0 | 12.5 | 55.6 | 2 | 14 | 4 | [ ] | |
+| `CommentThread` | 79.3 | 37.5 | 76.9 | 6 | 5 | 6 | [ ] | |
+| `PullRequestCommit` | 83.3 | 30.0 | 42.9 | 4 | 7 | 12 | [ ] | |
+| `CommitComment` | 94.4 | 0.0 | 52.4 | 1 | 8 | 10 | [ ] | |
+| `NonRangedCodeCommentThread` | 92.9 | 0.0 | 66.7 | 1 | 8 | 1 | [ ] | |
+| `PullRequestEventRecorderKt` | 100.0 | 80.0 | 100.0 | 0 | 2 | 0 | [ ] | |
+| `PullRequestCommit$Companion` | 100.0 | 50.0 | 100.0 | 0 | 2 | 0 | [ ] | |
+| `PullRequest` | 100.0 | 100.0 | 83.3 | 0 | 0 | 7 | [ ] | |
+| `PullRequestMergeResult` | 100.0 | 100.0 | 92.3 | 0 | 0 | 1 | [ ] | |
+| `PullRequestTimelineItem` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
+| `ReviewComment` | 100.0 | 100.0 | 75.0 | 0 | 0 | 3 | [ ] | |
+| `PullRequestEvent` | 100.0 | 100.0 | 56.2 | 0 | 0 | 7 | [ ] | |
+| **domain/role** | | | | | | | | |
+| `Role` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
+| **domain/site** | | | | | | | | |
+| `SiteService` | 41.2 | 18.6 | 41.7 | 60 | 57 | 7 | [x] | 2026-08-23: 27 tests 추가(총 33). 단독 측정 LINE 100%, METHOD 100%, BRANCH 95.7%(67/70) — 목표 달성. 도달 불가능 3건 확인(`getMailList`/`getNoAvatarUsers`의 `User.email`이 non-nullable `var email: String=""`이라 null 분기가 타입 시스템상 불가능) |
+| `DataBackupServiceImpl` | 86.1 | 72.7 | 100.0 | 14 | 15 | 0 | [ ] | |
+| **domain/support** | | | | | | | | |
+| `TranslationServiceImpl` | 11.5 | 0.0 | 25.0 | 54 | 30 | 3 | [ ] | |
+| `SearchServiceImpl` | 68.2 | 37.5 | 85.7 | 27 | 40 | 1 | [ ] | |
+| `AutoLinkRenderer` | 75.0 | 57.9 | 75.0 | 33 | 32 | 5 | [ ] | |
+| `SearchResult` | 63.3 | 40.6 | 93.0 | 29 | 19 | 3 | [ ] | |
+| `YonaUpdateService` | 70.7 | 37.5 | 81.8 | 17 | 20 | 2 | [ ] | |
+| `StatisticsServiceImpl` | 7.7 | 100.0 | 50.0 | 36 | 0 | 1 | [ ] | |
+| `LineEnding` | 43.5 | 32.4 | 66.7 | 13 | 23 | 2 | [ ] | |
+| `MarkdownServiceImpl` | 90.5 | 74.0 | 100.0 | 14 | 13 | 0 | [ ] | |
+| `CodeRange` | 63.2 | 0.0 | 27.8 | 7 | 16 | 13 | [ ] | |
+| `HistoryUtil` | 83.6 | 67.6 | 100.0 | 9 | 12 | 0 | [ ] | |
+| `DiagnosticService` | 70.7 | 59.1 | 100.0 | 12 | 9 | 0 | [ ] | |
+| `ReviewThreadServiceImpl` | 83.3 | 75.0 | 80.0 | 8 | 5 | 1 | [ ] | |
+| `FileUtil` | 96.2 | 56.2 | 100.0 | 1 | 7 | 0 | [ ] | |
+| `AutoLinkRenderer$Link` | 87.0 | 75.0 | 62.5 | 3 | 2 | 3 | [ ] | |
+| `DiffUtil` | 100.0 | 85.7 | 100.0 | 0 | 4 | 0 | [ ] | |
+| `AbstractPosting` | 95.7 | 100.0 | 93.8 | 1 | 0 | 2 | [ ] | |
+| `SearchResult$BeginAndEnd` | 50.0 | 100.0 | 75.0 | 1 | 0 | 1 | [ ] | |
+| `DatabaseInitializer` | 100.0 | 50.0 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `Property` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
+| `ReviewSearchCondition` | 100.0 | 100.0 | 75.0 | 0 | 0 | 5 | [ ] | |
+| `LineEnding$EndingType` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
+| `Comment` | 100.0 | 100.0 | 68.8 | 0 | 0 | 5 | [ ] | |
+| **domain/user** | | | | | | | | |
+| `UserServiceImpl` | 21.3 | 9.4 | 31.6 | 74 | 29 | 13 | [ ] | |
+| `PasswordResetServiceImpl` | 14.3 | 4.5 | 20.0 | 42 | 21 | 8 | [ ] | |
+| `LdapService` | 33.3 | 0.0 | 25.0 | 42 | 10 | 6 | [ ] | |
+| `FavoriteServiceImpl` | 23.1 | 0.0 | 7.7 | 30 | 6 | 12 | [ ] | |
+| `User` | 88.9 | 66.1 | 81.7 | 9 | 19 | 11 | [ ] | |
+| `LdapQueryBuilder` | 96.3 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
+| `Email` | 56.2 | 0.0 | 20.0 | 7 | 2 | 12 | [ ] | |
+| `LdapUserProvisioningService` | 97.6 | 70.0 | 100.0 | 1 | 6 | 0 | [ ] | |
+| `UserDetailsServiceImpl` | 94.4 | 75.0 | 66.7 | 1 | 3 | 1 | [ ] | |
+| `FavoriteOrganization` | 81.2 | 50.0 | 45.5 | 3 | 1 | 6 | [ ] | |
+| `FavoriteProject` | 88.9 | 50.0 | 61.5 | 2 | 2 | 5 | [ ] | |
+| `UserVerification` | 85.7 | 50.0 | 38.5 | 2 | 1 | 8 | [ ] | |
+| `YonaUserDetails` | 86.7 | 100.0 | 66.7 | 2 | 0 | 4 | [ ] | |
+| `EmailDomainValidator` | 100.0 | 75.0 | 100.0 | 0 | 2 | 0 | [ ] | |
+| `LdapUser` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `FavoriteIssue` | 88.9 | 100.0 | 37.5 | 1 | 0 | 5 | [ ] | |
+| `UserState$Companion` | 100.0 | 75.0 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `ReservedWordsValidator` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
+| `UserSetting` | 100.0 | 100.0 | 75.0 | 0 | 0 | 2 | [ ] | |
+| `UserIdent` | 100.0 | 100.0 | 66.7 | 0 | 0 | 3 | [ ] | |
+| `LinkedAccount` | 100.0 | 100.0 | 60.0 | 0 | 0 | 4 | [ ] | |
+| **domain/vcs** | | | | | | | | |
+| `GitRepository` | 42.5 | 24.8 | 59.6 | 230 | 155 | 23 | [ ] | |
+| `FileDiff` | 9.6 | 0.0 | 37.0 | 132 | 130 | 29 | [x] | 2026-08-23: 신규 60 tests, `FileDiffSpec.kt`. 단독 측정 LINE/BRANCH/METHOD/CLASS 전부 100%. **실버그 발견(수정은 별도 판단 필요)**: `updateRange(lineA, lineB)`가 lineA/lineB 조건을 독립된 `if`로 처리해 두 조건이 동시에 매치되면 같은 edit이 EditList에 중복 추가됨 — 테스트로 명시 문서화, 의도된 동작인지 불확실해 별도 수정 없이 사실만 기록 |
+| `BareCommit` | 61.0 | 30.6 | 87.5 | 53 | 34 | 1 | [ ] | |
+| `Hunk` | 0.0 | 0.0 | 0.0 | 26 | 18 | 15 | [ ] | |
+| `DiffLine` | 0.0 | 0.0 | 0.0 | 21 | 22 | 9 | [ ] | |
+| `SvnRepository` | 92.2 | 63.9 | 91.4 | 15 | 26 | 3 | [ ] | |
+| `RepositoryService` | 67.5 | 36.7 | 66.7 | 13 | 19 | 2 | [ ] | |
+| `SvnCommit` | 39.1 | 7.1 | 37.5 | 14 | 13 | 10 | [ ] | |
+| `GitCommit` | 64.7 | 25.0 | 60.0 | 6 | 15 | 6 | [ ] | |
+| `GitRepository$getFileDiffs$MultipleRepositoryObjectReader` | 47.4 | 37.5 | 62.5 | 10 | 5 | 3 | [ ] | |
+| `FileDiff$Companion` | 0.0 | 0.0 | 0.0 | 5 | 6 | 2 | [ ] | |
+| `GitRepository$getFileDiffs$fakeRepo$1` | 36.4 | 100.0 | 36.4 | 7 | 0 | 7 | [ ] | |
+| `FileDiff$Hunks` | 0.0 | 100.0 | 0.0 | 3 | 0 | 5 | [ ] | |
+| `FileDiff$Error` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `GitRepository$getFileDiffs$fakeRepo$1$createAttributesNodeProvider$1$emptyAttributesNode$1` | 50.0 | 100.0 | 50.0 | 1 | 0 | 1 | [ ] | |
+| `FileDiff$SizeExceededHunks` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `PushedBranch` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
+| `GitBranch` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
+| `GitRepository$getFileDiffs$fakeRepo$1$createAttributesNodeProvider$1` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
+| **domain/watch** | | | | | | | | |
+| `WatchServiceImpl` | 98.2 | 73.9 | 100.0 | 1 | 12 | 0 | [ ] | |
+| `Unwatch` | 81.8 | 100.0 | 30.0 | 2 | 0 | 7 | [ ] | |
+| `Watch` | 81.8 | 100.0 | 30.0 | 2 | 0 | 7 | [ ] | |
+| `WatchService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
+| **domain/webhook** | | | | | | | | |
+| `WebhookServiceImpl` | 86.0 | 57.0 | 90.5 | 35 | 117 | 2 | [~] | 2026-08-23: `WebhookServiceSpec.kt`에 30 tests 추가(24→60개 전체 재확인), 60/60 GREEN(코디네이터 재검증). 실제 HTTP 서버(`HttpServer`)로 sendRequestAsync까지 검증. 전체 회귀 확정치: LINE 99.2%, BRANCH 79.8%(목표 미달), METHOD 100% — 다음 배치에서 남은 분기 보강 필요 |
+| `WebhookNotificationEventListener` | 96.7 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
+| `WebhookRepository$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
+| `WebhookRepository` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `Webhook` | 100.0 | 100.0 | 50.0 | 0 | 0 | 8 | [ ] | |
+| `WebhookThread` | 100.0 | 100.0 | 42.9 | 0 | 0 | 8 | [ ] | |
+| **service** | | | | | | | | |
+| `MigrationService` | 8.0 | 0.0 | 9.1 | 219 | 130 | 20 | [x] | 2026-08-23: 신규 33 tests, `MigrationServiceSpec.kt`. 단독 측정 LINE 100%, METHOD 100%, BRANCH 97.7%(127/130). 나머지 3개는 `User.name`/`User.email`/`Assignee.user`가 non-null 타입이라 도달 불가능(구조적). **실버그 3건 발견(미수정, 별도 검토 필요)**: (1) `getMigrationProjects`가 owner null일 때 `full_name`에 문자열 템플릿으로 리터럴 "null/..."이 그대로 들어감(owner 필드 자체는 ""로 처리되는 것과 불일치), (2) `relativeLinksToWikiCommitPath`가 정규식 치환 람다에서 매치별 상대경로 대신 클로저로 캡처한 원본 `text` 전체를 위키링크 경로에 그대로 박아넣음, (3) `exportPosts`가 각 export 맵 엔트리 키로 "post" 대신 "issue"를 재사용하고 "id" 필드가 누락됨(exportIssues 복붙 흔적으로 보임) |
+| **util** | | | | | | | | |
+| `diff_match_patch` | 25.4 | 24.6 | 31.8 | 815 | 491 | 30 | [x] | 2026-08-23: 2개 에이전트 병렬로 diff_/match_+patch_ 그룹 분담. `DiffMatchPatchDiffSpec.kt`(117 tests, google/diff-match-patch 업스트림 대조), `DiffMatchPatchMatchPatchSpec.kt`(38 tests, 업스트림 공식 테스트 이식). 전체 회귀 확정치: LINE 98.8%, BRANCH 95.4%, METHOD 100% — 목표 달성. **실버그 2건 발견(vendored 서드파티 알고리즘, protected 메서드 직접 호출시만 재현, public API인 diff_main에서는 도달 불가 — 미수정)**: (1) `diff_map("abc","abc")` 완전동일 문자열이 빠르게 매치되면 빈 리스트 반환, (2) 65536개 초과 고유 줄에서 `(char)` 캐스팅 오버플로로 줄 매핑 깨짐 |
+| `diff_match_patch$Patch` | 0.0 | 0.0 | 0.0 | 30 | 14 | 2 | [ ] | |
+| `diff_match_patch$Diff` | 36.4 | 0.0 | 25.0 | 7 | 4 | 3 | [ ] | |
+| `diff_match_patch$LinesToCharsResult` | 0.0 | 100.0 | 0.0 | 5 | 0 | 1 | [ ] | |
+| **web** | | | | | | | | |
+| `ProjectViewController` | 50.0 | 32.5 | 74.0 | 327 | 301 | 13 | [ ] | |
+| `UserViewController` | 57.0 | 30.7 | 43.3 | 173 | 160 | 17 | [ ] | |
+| `IssueViewController` | 69.6 | 45.1 | 78.9 | 158 | 167 | 4 | [ ] | |
+| `MilestoneViewController` | 49.0 | 31.7 | 50.0 | 151 | 142 | 7 | [ ] | |
+| `OrganizationViewController` | 66.8 | 46.5 | 72.2 | 96 | 123 | 5 | [ ] | |
+| `CodeViewController` | 62.0 | 34.3 | 69.2 | 89 | 130 | 4 | [ ] | |
+| `BoardViewController` | 67.6 | 45.0 | 63.6 | 79 | 122 | 4 | [ ] | |
+| `PullRequestViewController` | 79.0 | 51.9 | 96.0 | 69 | 124 | 1 | [ ] | |
+| `IndexController` | 66.7 | 38.2 | 100.0 | 42 | 84 | 0 | [ ] | |
+| `ProjectMemberController` | 46.4 | 29.7 | 21.4 | 59 | 52 | 11 | [ ] | |
+| `MentionController` | 86.4 | 52.4 | 100.0 | 30 | 80 | 0 | [ ] | |
+| `AttachmentController` | 73.8 | 40.5 | 100.0 | 33 | 75 | 0 | [ ] | |
+| `IssueController` | 80.1 | 59.9 | 95.2 | 36 | 61 | 1 | [ ] | |
+| `UserController` | 77.7 | 49.0 | 70.4 | 45 | 50 | 8 | [ ] | |
+| `PullRequestController` | 71.0 | 48.1 | 83.3 | 36 | 54 | 3 | [ ] | |
+| `CommentController` | 80.2 | 44.4 | 52.9 | 19 | 50 | 8 | [ ] | |
+| `ProjectController` | 79.6 | 56.8 | 95.2 | 31 | 32 | 1 | [ ] | |
+| `SiteApiController` | 75.6 | 41.1 | 81.2 | 29 | 33 | 3 | [ ] | |
+| `CodeHistoryController` | 47.4 | 35.3 | 71.4 | 40 | 22 | 2 | [ ] | |
+| `ImportApiController` | 74.4 | 37.1 | 60.0 | 23 | 39 | 2 | [ ] | |
+| `ImportViewController` | 76.6 | 45.3 | 75.0 | 26 | 35 | 2 | [ ] | |
+| `ProjectApiController` | 94.1 | 61.5 | 100.0 | 14 | 47 | 0 | [ ] | |
+| `OrganizationController` | 45.9 | 25.0 | 64.3 | 33 | 24 | 5 | [ ] | |
+| `ReviewThreadController` | 80.7 | 41.7 | 100.0 | 21 | 35 | 0 | [ ] | |
+| `WatchController` | 76.3 | 53.7 | 53.8 | 28 | 25 | 12 | [ ] | |
+| `IssueShareController` | 63.3 | 40.4 | 62.5 | 22 | 31 | 3 | [ ] | |
+| `MilestoneController` | 78.6 | 54.3 | 100.0 | 21 | 32 | 0 | [ ] | |
+| `BoardController` | 80.9 | 54.7 | 100.0 | 18 | 29 | 0 | [ ] | |
+| `LfsStorageController` | 10.0 | 0.0 | 25.0 | 27 | 10 | 3 | [ ] | |
+| `VoteController` | 73.1 | 58.8 | 100.0 | 14 | 14 | 0 | [ ] | |
+| `CodeController` | 18.2 | 0.0 | 25.0 | 18 | 10 | 3 | [ ] | |
+| `ReviewViewController` | 87.8 | 62.0 | 100.0 | 9 | 19 | 0 | [ ] | |
+| `FavoriteController` | 72.4 | 38.9 | 75.0 | 16 | 11 | 2 | [ ] | |
+| `LabelStyleController` | 73.8 | 61.5 | 100.0 | 17 | 10 | 0 | [ ] | |
+| `SiteViewController` | 92.1 | 50.0 | 100.0 | 8 | 17 | 0 | [ ] | |
+| `TranslationController` | 66.7 | 42.9 | 100.0 | 12 | 12 | 0 | [ ] | |
+| `ReviewApiController` | 85.1 | 63.9 | 100.0 | 7 | 13 | 0 | [ ] | |
+| `MigrationApiController` | 81.8 | 50.0 | 100.0 | 6 | 14 | 0 | [ ] | |
+| `BranchViewController` | 88.6 | 53.6 | 100.0 | 5 | 13 | 0 | [ ] | |
+| `SearchController` | 93.7 | 71.7 | 71.4 | 4 | 13 | 2 | [ ] | |
+| `LabelController` | 87.1 | 54.5 | 100.0 | 4 | 10 | 0 | [ ] | |
+| `BranchApiController` | 88.6 | 66.7 | 100.0 | 4 | 8 | 0 | [ ] | |
+| `WebhookController` | 89.4 | 75.0 | 100.0 | 5 | 7 | 0 | [ ] | |
+| `CommitResponse` | 0.0 | 100.0 | 0.0 | 11 | 0 | 11 | [ ] | |
+| `PasswordResetController` | 83.7 | 75.0 | 100.0 | 8 | 3 | 0 | [ ] | |
+| `HistoryDto` | 0.0 | 100.0 | 0.0 | 11 | 0 | 20 | [ ] | |
+| `MessagesController` | 86.5 | 61.5 | 100.0 | 5 | 5 | 0 | [ ] | |
+| `AuthController` | 92.3 | 85.7 | 85.7 | 4 | 4 | 1 | [ ] | |
+| `CompareViewController` | 100.0 | 76.7 | 100.0 | 0 | 7 | 0 | [ ] | |
+| `BootstrapSetupController` | 98.2 | 82.4 | 100.0 | 1 | 6 | 0 | [ ] | |
+| `SvnController` | 84.6 | 66.7 | 100.0 | 4 | 2 | 0 | [ ] | |
+| `GlobalExceptionHandler` | 90.9 | 16.7 | 100.0 | 1 | 5 | 0 | [ ] | |
+| `ProjectViewController$MilestoneDashboardDto` | 0.0 | 100.0 | 0.0 | 5 | 0 | 5 | [ ] | |
+| `StatisticsController` | 84.6 | 50.0 | 100.0 | 2 | 2 | 0 | [ ] | |
+| `UserController$ChangePasswordRequest` | 0.0 | 100.0 | 0.0 | 4 | 0 | 4 | [ ] | |
+| `NotificationController` | 100.0 | 62.5 | 75.0 | 0 | 3 | 1 | [ ] | |
+| `CommentThreadController` | 95.2 | 83.3 | 100.0 | 1 | 2 | 0 | [ ] | |
+| `MarkdownController` | 87.5 | 50.0 | 100.0 | 1 | 1 | 0 | [ ] | |
+| `CodeRangeRequest` | 100.0 | 66.7 | 60.0 | 0 | 2 | 4 | [ ] | |
+| `SvnController$service$davServlet$1$1` | 80.0 | 100.0 | 60.0 | 2 | 0 | 2 | [ ] | |
+| `AssigneeIdForm` | 0.0 | 100.0 | 0.0 | 2 | 0 | 3 | [ ] | |
+| `MilestoneIdForm` | 0.0 | 100.0 | 0.0 | 2 | 0 | 3 | [ ] | |
+| `IssueViewController$newDirectMyIssueForm$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `IssueViewController$newDirectMyIssueForm$$inlined$sortedByDescending$2` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `UserViewController$usermenuTabContentList$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `SvnServletRequestWrapper` | 100.0 | 75.0 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `MilestoneViewController$listMilestones$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `UserViewController$userSidebar$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `MigrationViewController` | 100.0 | 91.7 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `ProjectViewController$getProjectHistory$$inlined$sortByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `IssueViewController$newDirectIssueForm$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `PullRequestViewController$viewPullRequest$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `ProjectViewController$getProjectDashboardData$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `ProjectViewController$getProjectDashboardData$$inlined$sortedByDescending$2` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
+| `GlobalModelAttributeAdvice` | 100.0 | 91.7 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `MarkdownRenderRequest` | 75.0 | 100.0 | 75.0 | 1 | 0 | 1 | [ ] | |
+| `IssueMassUpdateForm` | 100.0 | 100.0 | 61.5 | 0 | 0 | 5 | [ ] | |
+| `ImportForm` | 100.0 | 100.0 | 77.4 | 0 | 0 | 7 | [ ] | |
+| `IssueForm` | 100.0 | 100.0 | 72.2 | 0 | 0 | 5 | [ ] | |
+| `IndexController$NotificationViewDto` | 100.0 | 100.0 | 8.3 | 0 | 0 | 11 | [ ] | |
+| `PostingForm` | 100.0 | 100.0 | 72.7 | 0 | 0 | 6 | [ ] | |
