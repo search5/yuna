@@ -2023,3 +2023,23 @@ add/add·content 충돌을 일으켜 수작업으로 합쳤다), 마지막으로
   `view().name("error/403")` 류 단언도 전부 `error/forbidden`/`error/notfound`로 갱신.
 - **검증**: `./gradlew compileKotlin compileTestKotlin` 클린, 영향받은 타겟 스펙 전부 GREEN(전체
   `./gradlew test`는 다음 로그에 기록).
+
+- **2026-08-23 — TASK-0259 후속: "아직 감사하지 못한 컨트롤러" 6곳 실제 전수 검증(사용자 "정말
+  다 했어?" 재검증 요청 대응)**: 위 목록의 6개 컨트롤러를 실제로 하나씩 지점별 확인.
+  - `MigrationViewController`/`SiteApiController`/`SiteViewController`/`StatisticsController`:
+    확인 결과 전부 에러 반환 지점에 project(혹은 다른 하위 리소스) 컨텍스트가 없음 — 제네릭 유지가
+    legacy와 일치. 변경 없음.
+  - `UserViewController`(17개 지점 전수 확인): 전부 `authentication == null`(비로그인) 가드이고
+    project 컨텍스트가 전혀 없는 사용자 계정/프로필 화면 — 제네릭 유지가 legacy와 일치. 변경 없음.
+  - `StatisticsViewController.statistics()`: **실제 미전환 지점 발견 및 수정**. `project.projectScope
+    != PUBLIC`이고 비로그인/비멤버일 때 반환하던 `error/403`이 project가 이미 resolve된 이후
+    지점인데도 제네릭으로 남아있었다. P1-138 완료 로그(`PARITY_BACKLOG.md` 2026-08-21)를 재확인해
+    이 멤버십 체크 자체는 legacy `DefaultProjectCheckAction`(PUBLIC이 아니면 접근 차단)에 대응하는
+    의도된 로직임을 재확인한 뒤, 뷰 이름만 다른 그룹3 전환과 동일한 규칙으로
+    `error/forbidden` + `model.addAttribute("project", project)`로 교체.
+  - 테스트: `StatisticsViewControllerSpec.kt`의 stale `view().name("error/403")` 단언 2건(비공개+
+    익명, 비공개+비멤버)을 `error/forbidden` + `model().attributeExists("project")`로 갱신. 대상
+    스펙 GREEN.
+  - 결론: "아직 감사하지 못한" 6곳 중 5곳은 제네릭 유지가 정확했고, 1곳(`StatisticsViewController`)
+    에서 실제 누락을 발견해 수정 완료 — 이로써 그룹3(#45,47,49,50,53) 전환 작업이 명실상부하게
+    전수 완료됨.

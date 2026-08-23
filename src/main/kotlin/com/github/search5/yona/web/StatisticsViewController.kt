@@ -37,7 +37,8 @@ class StatisticsViewController(
         // 반환하던 것을 제거.
         if (project.projectScope != ProjectScope.PUBLIC) {
             if (loginUser == null || (!projectUserRepository.existsByProjectIdAndUserId(project.id!!, loginUser.id!!) && !accessControl.isAllowedIfGroupMember(project, loginUser))) {
-                return "error/403"
+                model.addAttribute("project", project)
+                return "error/forbidden"
             }
         }
 

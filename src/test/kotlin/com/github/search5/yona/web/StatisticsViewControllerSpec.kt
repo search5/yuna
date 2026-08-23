@@ -100,20 +100,22 @@ class StatisticsViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("project/statistics"))
             }
 
-            it("비공개 프로젝트는 로그인하지 않은 익명 사용자면 403 Forbidden 뷰를 반환해야 한다") {
+            it("비공개 프로젝트는 로그인하지 않은 익명 사용자면 forbidden 뷰를 반환해야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProj") } returns Optional.of(privateProject)
 
                 mockMvc.perform(get("/owner/PrivateProj/statistics"))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
+                    .andExpect(model().attributeExists("project"))
             }
 
-            it("비공개 프로젝트이고 로그인한 사용자이지만 멤버가 아닐 때 403 Forbidden 뷰를 반환해야 한다") {
+            it("비공개 프로젝트이고 로그인한 사용자이지만 멤버가 아닐 때 forbidden 뷰를 반환해야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProj") } returns Optional.of(privateProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
 
                 mockMvc.perform(get("/owner/PrivateProj/statistics").principal(userAuth))
-                    .andExpect(view().name("error/403"))
+                    .andExpect(view().name("error/forbidden"))
+                    .andExpect(model().attributeExists("project"))
             }
 
             // yona AccessControl.isAllowedIfGroupMember() 대응 (P1-57)
