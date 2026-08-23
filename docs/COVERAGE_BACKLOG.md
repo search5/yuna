@@ -63,6 +63,16 @@
 - 진행 중([~], 다음 배치 계속): `ProjectViewController`(BRANCH 87.4%, 아직 미달 — 121 tests에도 불구하고 대형 클래스라 잔여 많음)
 - 이번 배치 신규 실버그/죽은코드 없음(UserViewController의 verifyUserLegacy/confirmEmailLegacy는 죽은 코드가 아니라 테스트 누락이었음을 확인·해결)
 
+## 진행 현황 갱신 (2026-08-24 02:55, 5차 배치 완료 후)
+
+- 전체 클래스: 478개, 95% 미만: **243개**(-6)
+- 라인: 88.3%, 분기: 76.7%, 메서드: 79.3%, 클래스: 94.7%
+- 추가 완료([x]): `ProjectViewController`(BRANCH 95.3% — 3개 배치 걸쳐 완주), `NotificationMailDigestScheduler`(98.3%)
+- 구조적 한계로 최대치 도달([i]): `BoardViewController`(94.1%), `ImapMailboxPoller`(LINE 94.4%, BRANCH 100%)
+- 진행 중([~], 다음 배치 계속): `OrganizationViewController`(88.3%), `PullRequestViewController`(93.8%, 근소 미달)
+- **실버그 수정 완료(2건)**: `ProjectViewController.projectLogo()`/`OrganizationViewController.organizationLogo()` 둘 다 기본 이미지 폴백이 특정 개발자의 로컬 macOS 절대경로(`/Users/mzc01-search5/...`)로 하드코딩돼 있어 어떤 배포 환경에서도 동작하지 않던 실제 결함 확인·수정(`ClassPathResource`로 교체, 전체 재검색으로 이 2곳 외에는 없음을 확인).
+- **중대 발견(수정 보류, 사용자 판단 필요)**: `PullRequestViewController.closePattern`(PR/커밋 메시지 "fixes #123"으로 이슈 자동 닫기)이 legacy-yona에 전혀 없는 yuna 독자 구현이었음을 확인 — 정규식 버그(fix/fixes/fixed 매치 안 됨)도 함께 발견했으나 "독자구현 금지" 원칙 위배 사안이라 임의로 고치지 않고 사용자에게 보고
+
 
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
@@ -138,7 +148,7 @@
 | `RecentIssue` | 100.0 | 100.0 | 56.2 | 0 | 0 | 7 | [ ] | |
 | `IssueLabelCategory` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
 | **domain/mail** | | | | | | | | |
-| `ImapMailboxPoller` | 32.4 | 44.0 | 35.0 | 121 | 65 | 13 | [ ] | |
+| `ImapMailboxPoller` | 32.4 | 44.0 | 35.0 | 121 | 65 | 13 | [i] | 2026-08-24: `ImapMailboxPollerSpec.kt`에 49 tests 추가(13→62). 전체 회귀 확정치: LINE 94.4%(근소 미달), BRANCH 100%, METHOD 100%. `start()`/`connect()`/`reopenFolder()`의 "실제 IMAP 접속 성공" 경로는 GreenMail류 임베디드 IMAP 서버 의존성이 없어 재현 불가(클래스 자체 KDoc에도 "순수 글루 코드라 단위테스트 제외" 명시) — 프로덕션 코드에 포트/팩토리 주입을 추가해야 가능하나 범위 밖 리팩터라 보류. 구조적 최대치로 인정 |
 | `IncomingMailProcessingService` | 87.6 | 68.4 | 100.0 | 30 | 62 | 0 | [ ] | |
 | `MailServiceImpl` | 34.7 | 45.0 | 42.9 | 47 | 22 | 4 | [ ] | |
 | `ImapMailboxPoller$startEmailListener$1` | 0.0 | 100.0 | 0.0 | 7 | 0 | 3 | [ ] | |
@@ -158,7 +168,7 @@
 | `MilestoneService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `Milestone` | 100.0 | 100.0 | 64.3 | 0 | 0 | 5 | [ ] | |
 | **domain/notification** | | | | | | | | |
-| `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [ ] | |
+| `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [x] | 2026-08-24: `NotificationMailDigestSchedulerSpec.kt`에 54 tests 추가(12→66). 전체 회귀 확정치: LINE 98.8%, BRANCH 98.3%, METHOD 100% — 목표 달성. 도달 불가능 3건 코드 근거 확정(User.name/Issue.project/Posting.project non-null 타입) |
 | `NotificationMessageResolver` | 40.2 | 41.4 | 60.0 | 67 | 92 | 4 | [x] | 2026-08-23: `NotificationMessageResolverSpec.kt`에 총 64 tests(246줄+잔여 15건). 단독 측정 LINE 100%, BRANCH 96.8%(152/157), METHOD 100% — 목표 달성. 도달 불가능 5건 확정(`ReviewComment.contents`/`User.name` non-null이라 elvis null분기 불가) |
 | `NotificationUrlResolver` | 55.7 | 27.4 | 83.3 | 27 | 53 | 1 | [x] | 2026-08-23: 39 tests(+32)로 `getUrlToView`/`getUrl`/`urlToContainer` 전체 when-분기·null 케이스 커버. 전체 회귀 확정치: LINE 100%, BRANCH 98.6%, METHOD 100% — 목표 달성. 버그 아님: `COMMENT_THREAD`의 `urlToContainer` null 시 앵커까지 사라진 빈 문자열 반환 — 의도된 동작으로 보여 그대로 테스트에 반영 |
 | `NotificationEventMerger` | 90.2 | 65.9 | 100.0 | 5 | 14 | 0 | [ ] | |
@@ -295,14 +305,14 @@
 | `diff_match_patch$Diff` | 36.4 | 0.0 | 25.0 | 7 | 4 | 3 | [ ] | |
 | `diff_match_patch$LinesToCharsResult` | 0.0 | 100.0 | 0.0 | 5 | 0 | 1 | [ ] | |
 | **web** | | | | | | | | |
-| `ProjectViewController` | 50.0 | 32.5 | 74.0 | 327 | 301 | 13 | [~] | 2026-08-24: `ProjectViewControllerSpec.kt`에 총 121 tests(80+41, 31→111→152). 전체 회귀 확정치: LINE 99.2%, BRANCH 87.4%(아직 미달), METHOD 100% — 다음 배치에서 마무리. **실버그/죽은코드 3건 발견(미수정, 별도 검토 필요)**: (1) `projectLogo()`의 기본 로고 폴백이 다른 개발자의 로컬 머신 절대경로(`/Users/mzc01-search5/.../project_default_logo.png`)로 하드코딩 — 진짜 배포 결함으로 추정, (2)(3) `getProjectHistory()`의 PR 섹션 `contributor`/`pull.title ?: ""` 둘 다 `PullRequest`의 non-null 타입 필드라 elvis 죽은 코드 |
+| `ProjectViewController` | 50.0 | 32.5 | 74.0 | 327 | 301 | 13 | [x] | 2026-08-24: `ProjectViewControllerSpec.kt`에 총 156 tests(80+41+35, 31→111→152→187). 전체 회귀 확정치: LINE 99.7%, BRANCH 95.3%, METHOD 100% — 목표 달성. **실버그 수정 완료**: `projectLogo()`의 기본 로고 폴백이 다른 개발자의 로컬 머신 절대경로로 하드코딩돼 있던 것을 `ClassPathResource`로 수정(main 소스 코디네이터 직접 수정, TASK-0270). 죽은코드 2건(getProjectHistory의 contributor/pull.title, PullRequest non-null 타입) 문서화 |
 | `UserViewController` | 57.0 | 30.7 | 43.3 | 173 | 160 | 17 | [x] | 2026-08-24: `UserViewControllerSpec.kt`에 총 89 tests(63+26, 15→78→104). METHOD 미달 원인 확인·해결: `verifyUserLegacy`/`confirmEmailLegacy`가 실제 도달 가능한 라우트인데 테스트가 한 번도 호출한 적 없었음. 전체 회귀 확정치: LINE 99.5%, BRANCH 98.7%, METHOD 100% — 목표 달성. 도달 불가능 확정 1건: `userIssues()`의 when절 else 분기(`loginUser.id!!` 강제 언래핑 이후 시점이라 구조적으로 불가능) |
 | `IssueViewController` | 69.6 | 45.1 | 78.9 | 158 | 167 | 4 | [x] | 2026-08-24: `IssueViewControllerSpec.kt`에 101 tests 추가(13→114). 전체 회귀 확정치(별도 `IssueEditMoveProjectSpec.kt`의 targetProjectId 이동 테스트와 합산): LINE 99.0%, BRANCH 96.1%, METHOD 100% — 목표 달성 |
 | `MilestoneViewController` | 49.0 | 31.7 | 50.0 | 151 | 142 | 7 | [x] | 2026-08-24: `MilestoneViewControllerSpec.kt`에 62 tests 추가(13→75). 단독 측정 LINE 100%, METHOD 100%, BRANCH 95.2% — 목표 달성. `openMilestone`/`closeMilestone`/`deleteMilestone`/`editMilestoneForm`(완전 미실행이었음) 포함 전체 커버 |
-| `OrganizationViewController` | 66.8 | 46.5 | 72.2 | 96 | 123 | 5 | [ ] | |
+| `OrganizationViewController` | 66.8 | 46.5 | 72.2 | 96 | 123 | 5 | [~] | 2026-08-24: `OrganizationViewControllerSpec.kt`에 71 tests 추가(16→87). 전체 회귀 확정치: LINE 97.9%, BRANCH 88.3%(아직 미달), METHOD 100% — 다음 배치에서 마무리. **실버그 수정 완료**: `organizationLogo()`의 기본 이미지 폴백이 `projectLogo()`와 동일한 하드코딩된 개발자 로컬 절대경로 버그였음(같은 패턴이 2곳에서 발견돼 전체 재검색으로 확인, 다른 곳은 없음) — `ClassPathResource`로 수정(TASK-0270) |
 | `CodeViewController` | 62.0 | 34.3 | 69.2 | 89 | 130 | 4 | [x] | 2026-08-24: `CodeViewControllerSpec.kt`에 64 tests 추가(11→75). 단독 측정 LINE 99.1%, BRANCH 95.5%, METHOD 100% — 목표 달성. `showImageFile`/`openFile`/`historyUntilHead`는 실제 라우팅된 엔드포인트인데 기존 테스트가 전혀 호출한 적 없어 METHOD 0%였던 것 확인·해결. 참고(버그 아님, 설계상 특이점): `showRawFile`의 MIME 감지가 임시파일을 항상 `.tmp` 확장자로 만들어 `Files.probeContentType`이 실질적으로 거의 항상 null 반환 |
-| `BoardViewController` | 67.6 | 45.0 | 63.6 | 79 | 122 | 4 | [ ] | |
-| `PullRequestViewController` | 79.0 | 51.9 | 96.0 | 69 | 124 | 1 | [ ] | |
+| `BoardViewController` | 67.6 | 45.0 | 63.6 | 79 | 122 | 4 | [i] | 2026-08-24: `BoardViewControllerSpec.kt`에 65 tests 추가(18→83). 단독 측정 LINE 100%, METHOD 100%, BRANCH 94.1%(209/222) — 도달 불가능 13건 전부 코드/바이트코드 근거로 확정(non-null 타입 필드, 상위 권한 게이트로 인한 논리적 도달 불가, Kotlin 컴파일러의 중복 null 체크). 구조적 최대치로 인정 |
+| `PullRequestViewController` | 79.0 | 51.9 | 96.0 | 69 | 124 | 1 | [~] | 2026-08-24: `PullRequestViewControllerSpec.kt`에 65 tests 추가(17→82). 전체 회귀 확정치: LINE 99.4%, BRANCH 93.8%(근소 미달), METHOD 100% — 다음 배치에서 마무리. **중대 발견 — closePattern이 legacy-yona에 없는 yuna 독자 구현**: `closePattern`(PR/커밋 메시지 "fixes #123" 등으로 이슈를 자동 닫는 GitHub식 기능)을 검증하며 정규식 버그(`fix[e[s|d]]?`가 중첩 대괄호 문자클래스 오사용으로 fix/fixes/fixed를 실제로 매치 못함)를 발견했으나, legacy-yona 전체(`app/**/*.java`)를 재검색한 결과 이 기능 자체가 legacy에 전혀 존재하지 않음을 확인(PullRequestApp.java의 `close()`는 명시적 API 호출로만 트리거되지, 커밋/PR 메시지 파싱 기반 자동닫기 기능은 없음). "절대 yuna 식으로 독자구현하지 말 것" 원칙에 위배되는 사안이라, 정규식을 고쳐 기능을 "완성"시키는 수정은 보류하고 사용자에게 직접 보고 후 판단을 구함(제거할지/legacy에 없어도 유지+버그만 고칠지는 사용자 결정 필요) — 테스트는 현재의 버그 있는 실제 동작을 그대로 캡처 |
 | `IndexController` | 66.7 | 38.2 | 100.0 | 42 | 84 | 0 | [ ] | |
 | `ProjectMemberController` | 46.4 | 29.7 | 21.4 | 59 | 52 | 11 | [ ] | |
 | `MentionController` | 86.4 | 52.4 | 100.0 | 30 | 80 | 0 | [ ] | |

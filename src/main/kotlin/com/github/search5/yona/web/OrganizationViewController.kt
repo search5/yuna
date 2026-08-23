@@ -36,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.servlet.mvc.support.RedirectAttributes
 import org.springframework.http.ResponseEntity
 import org.springframework.core.io.Resource
+import org.springframework.core.io.ClassPathResource
 import org.springframework.core.io.FileSystemResource
 import org.springframework.http.MediaType
 import org.springframework.http.HttpStatus
@@ -367,8 +368,9 @@ class OrganizationViewController(
         val attachment = attachments.firstOrNull()
 
         if (attachment == null) {
-            // 디폴트 그룹 이미지 반환
-            val defaultImage = FileSystemResource("/Users/mzc01-search5/123/yuna/src/main/resources/static/images/group_default.png")
+            // 디폴트 그룹 이미지 반환 (하드코딩된 개발자 로컬 절대경로였던 실버그 수정 —
+            // 커버리지 감사 중 발견, static 리소스는 classpath에서 로드해야 배포 환경에서도 동작한다)
+            val defaultImage = ClassPathResource("static/images/group_default.png")
             return if (defaultImage.exists()) {
                 ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)

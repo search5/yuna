@@ -28,6 +28,7 @@ import com.github.search5.yona.domain.attachment.AttachmentRepository
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.enumeration.ResourceType
 import org.springframework.core.io.Resource
+import org.springframework.core.io.ClassPathResource
 import org.springframework.core.io.FileSystemResource
 import org.springframework.http.MediaType
 import org.springframework.context.MessageSource
@@ -660,8 +661,9 @@ class ProjectViewController(
         val attachment = attachments.firstOrNull()
 
         if (attachment == null) {
-            // 디폴트 프로젝트 이미지 반환
-            val defaultImage = FileSystemResource("/Users/mzc01-search5/123/yuna/src/main/resources/static/images/project_default_logo.png")
+            // 디폴트 프로젝트 이미지 반환 (하드코딩된 개발자 로컬 절대경로였던 실버그 수정 —
+            // 커버리지 감사 중 발견, static 리소스는 classpath에서 로드해야 배포 환경에서도 동작한다)
+            val defaultImage = ClassPathResource("static/images/project_default_logo.png")
             return if (defaultImage.exists()) {
                 ResponseEntity.ok()
                     .contentType(MediaType.IMAGE_PNG)
