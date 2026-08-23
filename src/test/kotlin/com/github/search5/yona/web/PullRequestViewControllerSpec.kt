@@ -1139,6 +1139,40 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 ids shouldBe setOf(5L, 7L)
             }
 
+            // closePattern의 "fix[e[s|d]]?" 부분이 대괄호 중첩 오사용으로 fix/fixes/fixed를 전혀
+            // 매치하지 못하던 실버그를 커버리지 감사 중 발견해 "fix(?:es|ed)?"로 수정(TASK-0270,
+            // 사용자 지시로 기능은 유지). 이 회귀 테스트가 없으면 다시 깨져도 알아챌 수 없다.
+            it("fix/fixes/fixed 키워드도 close/resolve와 동일하게 이슈 번호를 인식해야 한다") {
+                val pr = PullRequest(
+                    id = 79L, title = "fix #20", body = "이 PR은 fixes #21 문제를 해결합니다", toProject = project, fromProject = project,
+                    toBranch = "master", fromBranch = "feature", contributor = user, state = State.OPEN, number = 14L
+                )
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 974L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { pullRequestService.getPullRequest(1L, 14L) } returns pr
+                every { pullRequestService.attemptMerge(79L) } returns PullRequestMergeResult(pullRequest = pr)
+                every { commentThreadRepository.findByPullRequest(pr) } returns emptyList()
+                val commit = PullRequestCommit(id = 2L, pullRequest = pr, commitId = "def", commitMessage = "fixed #22")
+                every { pullRequestCommitRepository.findByPullRequest(pr) } returns listOf(commit)
+
+                val issue20 = Issue(id = 20L, title = "이슈20", project = project, number = 20L)
+                val issue21 = Issue(id = 21L, title = "이슈21", project = project, number = 21L)
+                val issue22 = Issue(id = 22L, title = "이슈22", project = project, number = 22L)
+                every { issueRepository.findByProjectAndNumber(project, 20L) } returns issue20
+                every { issueRepository.findByProjectAndNumber(project, 21L) } returns issue21
+                every { issueRepository.findByProjectAndNumber(project, 22L) } returns issue22
+
+                val result = mockMvc.perform(get("/owner/TestProj/pull/14").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andReturn()
+
+                val referred = result.modelAndView!!.model["referredIssues"] as List<*>
+                val ids = referred.map { (it as Issue).id }.toSet()
+                ids shouldBe setOf(20L, 21L, 22L)
+            }
+
             it("본문이 null이고 이슈 참조가 전혀 없으면 referredIssues는 빈 리스트이고 issueRepository는 호출되지 않아야 한다") {
                 val pr = PullRequest(
                     id = 78L, title = "그냥 제목", body = null, toProject = project, fromProject = project,

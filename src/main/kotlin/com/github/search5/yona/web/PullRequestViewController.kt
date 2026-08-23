@@ -63,8 +63,11 @@ class PullRequestViewController(
     private val messageSource: MessageSource,
     private val attachmentRepository: AttachmentRepository
 ) {
-    // 이슈 자동 닫기 정규식 패턴 (대소문자 구분 없이 close(s/d), fix(es/ed), resolve(s/d) #숫자)
-    private val closePattern = "(?i)(?:close[s|d]?|fix[e[s|d]]?|resolve[s|d]?)\\s+#(\\d+)".toRegex()
+    // 이슈 자동 닫기 정규식 패턴 (대소문자 구분 없이 close(s/d), fix(es/ed), resolve(s/d) #숫자).
+    // "fix[e[s|d]]?" 부분이 대괄호를 중첩해 문자클래스로 잘못 해석되는 바람에(정규식은 [] 안에서
+    // []를 중첩 지원하지 않음) fix/fixes/fixed 중 어느 것도 실제로 매치하지 못하던 실버그를
+    // 커버리지 감사 중 발견해 수정(TASK-0270, 사용자 지시로 기능은 유지하고 정규식만 고침).
+    private val closePattern = "(?i)(?:close[s|d]?|fix(?:es|ed)?|resolve[s|d]?)\\s+#(\\d+)".toRegex()
 
 
     @GetMapping("/{owner}/{projectName}/pulls")
