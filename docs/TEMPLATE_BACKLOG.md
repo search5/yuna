@@ -2116,3 +2116,88 @@ yuna에만 있는 자체 구현은 모두 제거해줘")로 남아있던 마지�
 - **범위에서 제외한 것**: `issue/create.html`의 라벨 선택 UI 자체를 `partial_select_label` 프래그먼트
   재사용으로 리팩터하는 것은 이번 지시("독자 구현 제거")의 핵심(실제 라벨 CRUD 기능 격차)이 아니라
   순수 DRY 리팩터라 범위를 넘는다고 판단해 보류 — 필요 시 별도 항목화.
+
+### TASK-0263: 사용자 지시("#147,#168,#P1-03, P1-111/P1-135, PullRequestEvent.oldValue, 재스캔
+관련 내용을 TDD로 처리해")로 미구현/재검토 표시 항목 일괄 해소
+
+- **#147**(`board/view.html`의 게시글 수정이력) — "이력추적 테이블이 없어 보류"라던 기존 메모가
+  stale임을 확인: TASK-0257(#41)에서 이미 `common/partial_history.html`을 `board/view.html`에
+  배선 완료한 상태였고, `PostingHistoryTemplateRenderingSpec.kt`에 이미 통과 중인 회귀 테스트도
+  있었다. 실제 작업 없이 백로그 표기만 정정.
+- **#145/#146**(`board/create.html`/`edit.html`의 README 지정 체크박스) — 재검토 중 "그룹10/11에서
+  처리 예정"이라던 게 실제로는 계속 미이식 상태였음을 재발견. hidden input을 legacy와 동일한 실제
+  체크박스(`post.readmefy`)로 교체하고 `BoardViewController`에 `canReadmefy` 게이트(Git 프로젝트+
+  `COMMIT` 리소스 권한, create는 추가로 `?readme=` 쿼리) 추가. 함께 발견한 별개 실질 버그:
+  `BoardViewController.editPost()`가 제출된 readme 값이 아니라 stale한 `posting.readme`를 읽고
+  있어 체크박스를 새로 켜도 반영되지 않던 것을 `request.readme` 참조로 수정, README.md 실 커밋+
+  같은 프로젝트의 기존 readme 글 자동 해제(legacy `unmarkAnotherReadmePostingIfExists()` 대응)
+  로직이 폼 POST 경로에만 있고 실제 사용 경로인 REST(`PostingServiceImpl.updatePosting()`)엔
+  없던 것도 `PostingServiceImpl`로 이전·통합.
+- **#168**(cross-fork PR, `pullrequest/create.html`) — 백엔드(`PullRequestService.previewMerge()`,
+  `PullRequestController.createPullRequest()`)는 이미 fromProject/toProject를 분리해 받고 있었지만
+  웹 레이어(`PullRequestViewController`)가 같은 프로젝트로 고정해뒀던 것을 발견. legacy
+  `Project.getAssociationProjects()` 대응 `Project.associationProjects`(자기 자신+fork들+
+  `isCodeEnabled && isPullRequestEnabled`인 origin) 신규 추가, `createPullRequestForm()`/
+  `mergeResult()`에 `fromProjectId`/`toProjectId` 쿼리 처리와 `resolveAssociatedProject()`(legacy
+  `PullRequestApp.getSelectedProject()` 대응, toProject는 fork일 때 origin으로 기본 전환) 추가.
+  `pullrequest/create.html`의 select 2종을 실제로 활성화하고 legacy `_onChangeProject()`와 동일하게
+  프로젝트 변경 시 전체 페이지 리로드(`?fromProjectId=&toProjectId=`)하도록 JS 갱신.
+- **P1-03**(OAuth 계정 병합 UI) — legacy-yona 전체(`UserApp.java`/`conf/routes`/`app/views/`)를
+  재검색해 병합 UI 자체가 legacy-yona 저장소 안에 **0건**임을 재확인(서드파티 `play-authenticate`
+  라이브러리가 자체 SPI로 처리 — 이 프로젝트에서 유일하게 "포팅할 legacy 원본이 아예 없는" 사례).
+  미이식 유지가 맞는 판단임을 재확인, `docs/PARITY_BACKLOG.md`에 근거 기록.
+- **P1-111/P1-135, `PullRequestEvent.oldValue`** — 재검토 결과 P1-09/41은 이미 완료(UI 배선까지
+  확인), P1-111/P1-135와 `PullRequestEvent.oldValue`는 애초에 현재 구현이 legacy와 이미 동일하게
+  정확했음을 재확인(재검토 전 "약 6건 축소"라던 서술이 stale) — `docs/PARITY_BACKLOG.md`/
+  `TEMPLATE_BACKLOG.md`의 관련 서술 정정.
+
+### TASK-0264: 사용자 지시("테스트 커버리지를 권한 필터만 넣지 말고 DavServlet, SvnRepository 에 대한
+전체 검증이 이뤄져야 할것 같아. TDD로 확인해줘")로 SVN 저장소/WebDAV 서빙 계층 테스트 커버리지 신설
+
+- **배경**: 기존엔 `SvnAuthorizationFilterSpec.kt`(권한 필터)만 있었고, 실제 VCS 계층(`SvnRepository`)과
+  WebDAV 프로토콜 서빙 계층(`SvnController`가 위임하는 SVNKit `DAVServlet`)엔 테스트가 전무했다.
+- **신규 테스트**: 로컬 파일시스템에 실제 SVNKit 저장소를 만들어 검증하는 방식으로(mock 없이) 3개
+  스펙 신설.
+  - `SvnRepositorySpec.kt`(29 tests): create/isEmpty/delete, getHistory/getCommit/
+    getParentCommitOf, getMetaDataFromPath, getRawFile, getPatch/getDiff, isFile, move/renameTo,
+    Git 개념 대응 no-op(getRefNames==["HEAD"] 등) 전부 실 커밋 기반으로 검증.
+  - `SvnServletRequestWrapperSpec.kt`(6 tests): `SvnController`가 DAVServlet에 넘기기 전 서블릿
+    경로/pathInfo를 재작성하는 로직 단위 검증.
+  - `SvnControllerSpec.kt`(6 tests, `MockMvcBuilders.standaloneSetup`): 경로 형식 검증(legacy
+    `SvnApp.service():94-96` 대응)과 PROPFIND 기반 실제 DAVServlet 서빙(207+multistatus, owner별
+    DAVServlet 캐시 격리, 실 커밋 파일명 응답 확인) 검증. OPTIONS는 standalone MockMvc의
+    `dispatchOptions` 기본값 특성이 섞여 판정이 흐려져 별도 실통합 스펙으로 분리.
+  - `SvnControllerOptionsIntegrationSpec.kt`(1 test, `@SpringBootTest`+`webAppContextSetup`):
+    운영과 동일한 실제 Spring Boot DispatcherServlet으로 OPTIONS 요청이 진짜 DAVServlet까지
+    도달하는지 검증.
+- **발견해 고친 실제 구현 버그 3건**(전부 legacy 원본과 직접 대조로 확인):
+  1. `SvnController`의 매핑이 `/svn/{ownerName}/{projectName}/**`로 두 세그먼트가 모두 있어야만
+     핸들러에 도달했음 — legacy `conf/routes`의 `/svn/*path` catch-all(Play 와일드카드,
+     `SvnApp.serviceWithPath()`)과 달리, 짧은 경로(`/svn/onlyowner` 등)는 Spring MVC 자체가 (핸들러
+     진입도 못 한 채) 404를 반환해 legacy의 403(`SvnApp.service():94-96`의 세그먼트 수 검사)과
+     달랐다. 매핑을 `/svn/**`로 넓혀 항상 핸들러에 도달하게 하고 세그먼트 검증은 그대로 내부에서
+     담당하게 수정.
+  2. `SvnController.service()`가 `davServlet.service(...)` 호출부에 예외 처리가 전혀 없었음 —
+     legacy `SvnApp.startDavService()`는 `catch (Exception e) { response.setStatus(500); ...;
+     play.Logger.error(...) }`로 명시적으로 잡아 로깅한다. 동일하게 SLF4J 로거+try/catch 추가(관측
+     가능한 HTTP 상태 코드 자체는 이전에도 500이라 응답은 안 바뀌지만, 스택트레이스가 그대로
+     노출되지 않고 로그가 남게 됨).
+  3. **OPTIONS 요청이 DAVServlet까지 전혀 도달하지 않고 있었음** — Spring MVC는 `method`를 지정하지
+     않은 `@RequestMapping`에 대해 OPTIONS 요청을 자동으로 가로채 자체 합성 Allow 헤더만 응답하고
+     (`RequestMappingInfoHandlerMapping`의 내장 `HttpOptionsHandler`) 실제 핸들러엔 절대 도달시키지
+     않는다(`dispatchOptionsRequest` 여부와 무관한 별개 메커니즘). WebDAV 커스텀 메서드(PROPFIND 등)는
+     Spring `RequestMethod` enum에 없어 `method=`를 명시할 수 없으므로, OPTIONS만 별도로
+     `@RequestMapping("/svn/**", method=[RequestMethod.OPTIONS])`로 명시 매핑해 같은 핸들러로
+     우회시켜 해결(더 구체적인 method 조건의 매핑이 우선한다는 Spring 규칙 활용). 실제 svn 클라이언트는
+     checkout 시작 시 이 OPTIONS 응답으로 WebDAV/DeltaV 지원 여부를 판단하므로, 고치지 않았다면 실
+     checkout 자체가 실패했을 것.
+  - 조사 중 한 가지는 버그가 아님을 확인: `SvnControllerOptionsIntegrationSpec`이 처음엔
+    `/bootstrap-setup`로 302 리다이렉트되는 것처럼 보였는데, 이는 `BootstrapSetupInterceptor`(회원
+    0명이면 정적 자산 등 화이트리스트를 제외한 모든 요청을 설정 마법사로 리다이렉트)가 테스트가
+    단독 실행되며 DB에 회원이 전혀 없어 걸린 것 — legacy엔 이런 리다이렉트 게이트 자체가 없고(회원
+    0명이면 `Global.java`가 `initial-data.yml` 기반 admin 계정을 자동 시딩할 뿐) yuna가 새로 도입한
+    설정 마법사 방식이며, 실운영에서는 최초 admin 생성 이후 영구히 비활성화되고 SVN 프로젝트도
+    소유자(회원)가 있어야 존재하므로 도달 불가능한 경로다. 다른 통합 스펙들과 동일하게 테스트에서
+    회원을 하나 미리 만들어주는 것으로 해결(코드 수정 아님).
+- **결과**: `SvnRepositorySpec` 29/29, `SvnServletRequestWrapperSpec` 6/6, `SvnControllerSpec` 6/6,
+  `SvnControllerOptionsIntegrationSpec` 1/1 전부 GREEN.
