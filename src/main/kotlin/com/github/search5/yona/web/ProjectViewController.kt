@@ -13,6 +13,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.issue.IssueLabelService
+import com.github.search5.yona.domain.issue.DuplicateLabelCategoryNameException
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -939,11 +940,157 @@ class ProjectViewController(
         }
 
         val labels = issueLabelService.getLabels(project.id!!)
+        // yona partial_issuelabels_list.scala.html의 labels.groupBy(_.category) 대응.
+        val labelsByCategory = labels.groupBy { it.category }
 
         model.addAttribute("project", project)
         model.addAttribute("labels", labels)
+        model.addAttribute("labelsByCategory", labelsByCategory)
         model.addAttribute("currentUser", loginUser)
         return "project/issuelabels"
+    }
+
+
+    // yona IssueLabelApp.newLabel() 대응 (POST /{owner}/{projectName}/issue/labels) — 신규 라벨 추가.
+    // categoryName으로 카테고리를 찾거나 새로 만든다. ISSUE_LABEL 생성 권한은 프로젝트 멤버 전원에게
+    // 있다(매니저 전용 아님, P1-94 — 기존 IssueLabelController.createLabel()과 동일한 게이트).
+    @PostMapping("/{owner}/{projectName}/issue/labels")
+    @ResponseBody
+    fun newLabel(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam labelName: String,
+        @RequestParam labelColor: String,
+        @RequestParam categoryName: String,
+        @RequestParam(defaultValue = "false") categoryIsExclusive: Boolean,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.ISSUE_LABEL)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val label = issueLabelService.newLabelByCategoryName(project.id!!, categoryName, categoryIsExclusive, labelName, labelColor)
+            ?: return ResponseEntity.noContent().build()
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+            mapOf(
+                "id" to label.id,
+                "name" to label.name,
+                "color" to label.color,
+                "category" to label.category.name,
+                "categoryId" to label.category.id
+            )
+        )
+    }
+
+    // yona IssueLabelApp.delete() 대응 (POST /{owner}/{projectName}/issue/label/{id}/delete) — 라벨 삭제.
+    // HTML Form이 DELETE 메소드를 못 써서 _method=delete 파라미터로 오버라이드하는 legacy 관례를 그대로
+    // 재현(AttachmentController의 기존 _method 처리 패턴과 동일).
+    @PostMapping("/{owner}/{projectName}/issue/label/{id}/delete")
+    @ResponseBody
+    fun deleteLabelForm(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable id: Long,
+        @RequestParam("_method") method: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        if (!method.equals("delete", ignoreCase = true)) {
+            return ResponseEntity.badRequest().body("_method must be 'delete'.")
+        }
+
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        if (!accessControl.isAllowed(loginUser, project, ResourceType.ISSUE_LABEL, Operation.DELETE)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        issueLabelService.deleteLabel(id)
+        return ResponseEntity.ok().build()
+    }
+
+    // yona IssueLabelApp.update() 대응 (PUT /{owner}/{projectName}/issue/label/{id}) — 라벨 수정.
+    @PutMapping("/{owner}/{projectName}/issue/label/{id}")
+    @ResponseBody
+    fun updateLabelForm(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable id: Long,
+        @RequestParam name: String,
+        @RequestParam color: String,
+        @RequestParam("category.id") categoryId: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        if (!accessControl.isAllowed(loginUser, project, ResourceType.ISSUE_LABEL, Operation.UPDATE)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        issueLabelService.updateLabel(id, name, color, categoryId)
+        return ResponseEntity.ok().build()
+    }
+
+    // yona IssueLabelApp.updateCategory() 대응 (PUT /{owner}/{projectName}/issue/label/category/{id}).
+    @PutMapping("/{owner}/{projectName}/issue/label/category/{id}")
+    @ResponseBody
+    fun updateCategoryForm(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable id: Long,
+        @RequestParam name: String,
+        @RequestParam(defaultValue = "false") isExclusive: Boolean,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        if (!accessControl.isAllowed(loginUser, project, ResourceType.ISSUE_LABEL_CATEGORY, Operation.UPDATE)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        return try {
+            issueLabelService.updateCategory(id, name, isExclusive)
+            ResponseEntity.ok().build()
+        } catch (e: DuplicateLabelCategoryNameException) {
+            ResponseEntity.badRequest().build()
+        }
+    }
+
+    // yona IssueLabelApp.copyLabels() 대응 (POST /{owner}/{projectName}/copyLabels) — 다른 프로젝트의
+    // 라벨을 복사. 순수 HTML form 제출(AJAX 아님)이라 legacy와 동일하게 실패를 조용히 무시하고 항상
+    // labelsForm으로 리다이렉트한다.
+    @PostMapping("/{owner}/{projectName}/copyLabels")
+    fun copyLabelsForm(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @RequestParam("owner") fromOwner: String,
+        @RequestParam("projectName") fromProjectName: String,
+        authentication: Authentication?
+    ): String {
+        val toProject = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return "error/404"
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return "redirect:/users/loginform"
+
+        val fromProject = projectRepository.findByOwnerAndNameOrPreviousPlace(fromOwner, fromProjectName).orElse(null)
+        if (fromProject != null &&
+            accessControl.isAllowed(loginUser, fromProject, Operation.READ) &&
+            accessControl.isProjectResourceCreatable(loginUser, toProject, ResourceType.ISSUE_LABEL)
+        ) {
+            issueLabelService.copyLabels(fromProject.id!!, toProject.id!!)
+        }
+
+        return "redirect:/$owner/$projectName/issue/labelsform"
     }
 
     // 11. 프로젝트 포크 화면 (GET /{ownerName}/{projectName}/newFork)

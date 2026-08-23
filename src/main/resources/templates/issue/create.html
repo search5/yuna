@@ -115,7 +115,8 @@
                                 <dl class="issue-option" th:if="${labels != null && !labels.isEmpty()}">
                                     <dt>
                                         <span th:text="#{label}">라벨</span>
-                                        <a th:href="@{/{owner}/{projectName}/labels(owner=${project.owner}, projectName=${project.name})}" target="_blank" class="label-edit">
+                                        <a th:if="${@templateHelper.isManager(project, currentUser)}"
+                                           th:href="@{/{owner}/{projectName}/issue/labelsform(owner=${project.owner}, projectName=${project.name})}" target="_blank" class="label-edit">
                                             [<span th:text="#{button.edit}">편집</span>]
                                         </a>
                                     </dt>

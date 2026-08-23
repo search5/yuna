@@ -458,6 +458,180 @@ class ProjectViewControllerSpec : DescribeSpec({
                 verify(exactly = 0) { playRepo.getArchive(any(), any()) }
             }
         }
+
+        // yona IssueLabelApp.newLabel/delete/update/updateCategory/copyLabels() 대응 (P-템플릿 #108
+        // 재검토, TASK-0262) — project/issuelabels.html이 REST JSON 커스텀 구현 대신 legacy와 동일한
+        // 폼 제출 라우트를 쓰도록 교체하며 신설.
+        describe("이슈 라벨/카테고리 CRUD 폼 라우트") {
+            val labelProject = Project(id = 5L, name = "LabelProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
+            val labelManager = User(id = 50L, loginId = "labelmanager", name = "라벨매니저")
+            labelManager.projectUsers.add(ProjectUser(id = 500L, user = labelManager, project = labelProject, role = managerRole))
+            val labelManagerAuth = UsernamePasswordAuthenticationToken("labelmanager", "password")
+
+            val outsider = User(id = 60L, loginId = "labeloutsider", name = "외부인")
+            val outsiderAuth = UsernamePasswordAuthenticationToken("labeloutsider", "password")
+
+            beforeTest {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "LabelProj") } returns Optional.of(labelProject)
+                every { userRepository.findByLoginId("labelmanager") } returns Optional.of(labelManager)
+                every { userRepository.findByLoginId("labeloutsider") } returns Optional.of(outsider)
+            }
+
+            describe("POST /{owner}/{projectName}/issue/labels") {
+                it("생성 권한이 있으면 201 Created와 새 라벨 JSON을 반환해야 한다") {
+                    val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "새카테고리", project = labelProject)
+                    val newLabel = com.github.search5.yona.domain.issue.IssueLabel(id = 10L, name = "새라벨", color = "#2196f3", category = category, project = labelProject)
+                    every {
+                        issueLabelService.newLabelByCategoryName(5L, "새카테고리", false, "새라벨", "#2196f3")
+                    } returns newLabel
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/issue/labels")
+                            .principal(labelManagerAuth)
+                            .param("labelName", "새라벨")
+                            .param("labelColor", "#2196f3")
+                            .param("categoryName", "새카테고리")
+                    ).andExpect(status().isCreated)
+                        .andExpect(jsonPath("$.name").value("새라벨"))
+                        .andExpect(jsonPath("$.category").value("새카테고리"))
+                }
+
+                it("이미 같은 카테고리+이름의 라벨이 있으면 204 No Content를 반환해야 한다") {
+                    every {
+                        issueLabelService.newLabelByCategoryName(5L, "기존카테고리", false, "중복라벨", "#000000")
+                    } returns null
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/issue/labels")
+                            .principal(labelManagerAuth)
+                            .param("labelName", "중복라벨")
+                            .param("labelColor", "#000000")
+                            .param("categoryName", "기존카테고리")
+                    ).andExpect(status().isNoContent)
+                }
+
+                it("프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/issue/labels")
+                            .principal(outsiderAuth)
+                            .param("labelName", "x")
+                            .param("labelColor", "#000000")
+                            .param("categoryName", "y")
+                    ).andExpect(status().isForbidden)
+
+                    verify(exactly = 0) { issueLabelService.newLabelByCategoryName(any(), any(), any(), any(), any()) }
+                }
+            }
+
+            describe("POST /{owner}/{projectName}/issue/label/{id}/delete") {
+                it("_method=delete와 함께 요청하면 라벨을 삭제하고 200 OK를 반환해야 한다") {
+                    every { issueLabelService.deleteLabel(10L) } just Runs
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/issue/label/10/delete")
+                            .principal(labelManagerAuth)
+                            .param("_method", "delete")
+                    ).andExpect(status().isOk)
+
+                    verify(exactly = 1) { issueLabelService.deleteLabel(10L) }
+                }
+
+                it("_method가 delete가 아니면 400 Bad Request를 반환해야 한다") {
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/issue/label/10/delete")
+                            .principal(labelManagerAuth)
+                            .param("_method", "put")
+                    ).andExpect(status().isBadRequest)
+
+                    verify(exactly = 0) { issueLabelService.deleteLabel(any()) }
+                }
+
+                it("프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/issue/label/10/delete")
+                            .principal(outsiderAuth)
+                            .param("_method", "delete")
+                    ).andExpect(status().isForbidden)
+                }
+            }
+
+            describe("PUT /{owner}/{projectName}/issue/label/{id}") {
+                it("수정 권한이 있으면 라벨을 수정하고 200 OK를 반환해야 한다") {
+                    val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "카테고리", project = labelProject)
+                    every {
+                        issueLabelService.updateLabel(10L, "수정된이름", "#ff0000", 1L)
+                    } returns com.github.search5.yona.domain.issue.IssueLabel(id = 10L, name = "수정된이름", color = "#ff0000", category = category, project = labelProject)
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.put("/owner/LabelProj/issue/label/10")
+                            .principal(labelManagerAuth)
+                            .param("name", "수정된이름")
+                            .param("color", "#ff0000")
+                            .param("category.id", "1")
+                    ).andExpect(status().isOk)
+
+                    verify(exactly = 1) { issueLabelService.updateLabel(10L, "수정된이름", "#ff0000", 1L) }
+                }
+            }
+
+            describe("PUT /{owner}/{projectName}/issue/label/category/{id}") {
+                it("수정 권한이 있으면 카테고리를 수정하고 200 OK를 반환해야 한다") {
+                    val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "수정된카테고리", project = labelProject)
+                    every { issueLabelService.updateCategory(1L, "수정된카테고리", true) } returns category
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.put("/owner/LabelProj/issue/label/category/1")
+                            .principal(labelManagerAuth)
+                            .param("name", "수정된카테고리")
+                            .param("isExclusive", "true")
+                    ).andExpect(status().isOk)
+                }
+
+                it("같은 프로젝트 내 다른 카테고리와 이름이 중복되면 400 Bad Request를 반환해야 한다") {
+                    every {
+                        issueLabelService.updateCategory(1L, "중복이름", false)
+                    } throws com.github.search5.yona.domain.issue.DuplicateLabelCategoryNameException("dup")
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.put("/owner/LabelProj/issue/label/category/1")
+                            .principal(labelManagerAuth)
+                            .param("name", "중복이름")
+                    ).andExpect(status().isBadRequest)
+                }
+            }
+
+            describe("POST /{owner}/{projectName}/copyLabels") {
+                it("원본 프로젝트를 읽을 수 있으면 라벨을 복사하고 labelsform으로 리다이렉트해야 한다") {
+                    val fromProject = Project(id = 6L, name = "FromProj", owner = "owner", projectScope = ProjectScope.PUBLIC)
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "FromProj") } returns Optional.of(fromProject)
+                    every { issueLabelService.copyLabels(6L, 5L) } returns emptyList()
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/copyLabels")
+                            .principal(labelManagerAuth)
+                            .param("owner", "owner")
+                            .param("projectName", "FromProj")
+                    ).andExpect(status().is3xxRedirection)
+                        .andExpect(redirectedUrl("/owner/LabelProj/issue/labelsform"))
+
+                    verify(exactly = 1) { issueLabelService.copyLabels(6L, 5L) }
+                }
+
+                it("원본 프로젝트가 존재하지 않으면 조용히 무시하고 labelsform으로 리다이렉트해야 한다") {
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuchProj") } returns Optional.empty()
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/copyLabels")
+                            .principal(labelManagerAuth)
+                            .param("owner", "owner")
+                            .param("projectName", "NoSuchProj")
+                    ).andExpect(status().is3xxRedirection)
+                        .andExpect(redirectedUrl("/owner/LabelProj/issue/labelsform"))
+
+                    verify(exactly = 0) { issueLabelService.copyLabels(any(), any()) }
+                }
+            }
+        }
     }
 
     // yona ProjectApp.java:1055-1058 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있으면 사이트매니저를

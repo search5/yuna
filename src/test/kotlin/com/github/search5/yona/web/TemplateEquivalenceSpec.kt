@@ -1116,7 +1116,16 @@ class TemplateEquivalenceSpec @Autowired constructor(
             }
 
             describe("[Test-19-23] 이슈 라벨 설정 화면(project/issuelabels.scala.html) 동치성 검증") {
-                it("이슈 라벨 설정 화면은 site/layout 기반 전체 GNB/footer와 project/header, setting_menu 조각, 17개 프리셋 색상을 포함해야 한다") {
+                // 2026-08-23 재감사: #108이 "보류(현행 커스텀 구현 유지)"로 남겨뒀던 라벨/카테고리 CRUD를
+                // legacy 실제 정적 모듈(yobi.issue.LabelEditor.js) + 서버렌더 파샬(partial_issuelabels_list/
+                // editcategory/editlabel) 기반으로 교체(TASK-0262) — JSON REST(/api/projects/{id}/labels)
+                // 커스텀 구현을 걷어내고 legacy와 동일한 폼 제출/모달 구조로 재작성했다.
+                val settingCategory = issueLabelCategoryRepository.findAll().find { it.project.id == settingProj.id && it.name == "설정테스트카테고리" }
+                    ?: issueLabelCategoryRepository.save(IssueLabelCategory(name = "설정테스트카테고리", project = settingProj))
+                val settingLabel = issueLabelRepository.findAll().find { it.category.id == settingCategory.id }
+                    ?: issueLabelRepository.save(IssueLabel(name = "설정테스트라벨", color = "#2196f3", category = settingCategory, project = settingProj))
+
+                it("이슈 라벨 설정 화면은 site/layout 기반 전체 GNB/footer와 project/header, setting_menu 조각, 새 라벨/편집 폼의 프리셋 색상 29개(신규 17 + 수정모달 12)를 포함해야 한다") {
                     val result = mockMvc.perform(
                         get("/owner/${settingProj.name}/issue/labelsform")
                             .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
@@ -1127,8 +1136,35 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     doc.select("footer.page-footer-outer").size shouldBe 1
                     doc.select(".project-header-outer").size shouldBe 1
                     doc.select("#subMenuIssueLabel.active").size shouldBe 1
-                    doc.select("button.issue-label.btn-preset-color").size shouldBe 17
+                    doc.select("button.issue-label.btn-preset-color").size shouldBe 29
                     doc.select("script[src*='code.jquery.com']").size shouldBe 0
+                }
+
+                it("legacy partial_issuelabels_list.scala.html과 동일하게 카테고리별 라벨 목록·수정/삭제 버튼의 data-uri, 라벨 복사 폼, 수정 모달 2종을 렌더링해야 한다") {
+                    val doc = Jsoup.parse(
+                        mockMvc.perform(
+                            get("/owner/${settingProj.name}/issue/labelsform")
+                                .with(SecurityMockMvcRequestPostProcessors.user(memberDetails))
+                        ).andReturn().response.contentAsString
+                    )
+
+                    // legacy가 실제로 로드하는 정적 모듈(REST JSON 커스텀 구현이 아님)
+                    doc.select("script[src='/javascripts/service/yobi.issue.LabelEditor.js']").size shouldBe 1
+
+                    val categoryWrap = doc.select("div.category-wrap[data-category-name='설정테스트카테고리']")
+                    categoryWrap.size shouldBe 1
+                    categoryWrap.select("span.issue-label[data-label-id='${settingLabel.id}']").text() shouldBe "설정테스트라벨"
+                    categoryWrap.select("button[data-delete-uri]").attr("data-delete-uri") shouldBe
+                        "/owner/${settingProj.name}/issue/label/${settingLabel.id}/delete"
+                    categoryWrap.select("button[data-update-uri]").attr("data-update-uri") shouldBe
+                        "/owner/${settingProj.name}/issue/label/${settingLabel.id}"
+                    categoryWrap.select("button[data-category-update-uri]").attr("data-category-update-uri") shouldBe
+                        "/owner/${settingProj.name}/issue/label/category/${settingCategory.id}"
+
+                    doc.select("form#copyLabel[action='/owner/${settingProj.name}/copyLabels']").size shouldBe 1
+                    doc.select("form#frmNewLabel[action='/owner/${settingProj.name}/issue/labels']").size shouldBe 1
+                    doc.select("#editCategory.yobiDialog").size shouldBe 1
+                    doc.select("#editLabel.yobiDialog select[name='category.id'] option").size shouldBe 1
                 }
             }
 

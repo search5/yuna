@@ -65,6 +65,26 @@ class IssueLabelServiceImpl(
         return issueLabelCategoryRepository.save(category)
     }
 
+
+    override fun newLabelByCategoryName(projectId: Long, categoryName: String, categoryIsExclusive: Boolean, labelName: String, labelColor: String): IssueLabel? {
+        val project = projectRepository.findById(projectId)
+            .orElseThrow { IllegalArgumentException("Project not found: $projectId") }
+        val category = createCategory(projectId, categoryName, categoryIsExclusive)
+
+        // yona IssueLabel.exists()(project+category+name 복합 유일성, P1-54) 대응 — 이미 있으면 null.
+        if (issueLabelRepository.findByProjectAndCategoryAndName(project, category, labelName) != null) {
+            return null
+        }
+
+        val label = IssueLabel(
+            category = category,
+            color = labelColor,
+            name = labelName,
+            project = project
+        )
+        return issueLabelRepository.save(label)
+    }
+
     // yona IssueLabelApp.update() 대응. newLabel()과 달리 이름/색상 중복 검사는 하지 않고 그대로 덮어쓴다.
     override fun updateLabel(labelId: Long, name: String, color: String, categoryId: Long): IssueLabel {
         val label = issueLabelRepository.findById(labelId)
@@ -158,23 +178,34 @@ class IssueLabelServiceImpl(
             )
     }
 
+    // yona IssueLabelApp.delete() 대응 — 라벨 삭제 후 해당 카테고리에 남은 라벨이 없으면 카테고리도 함께 삭제한다.
     override fun deleteLabel(labelId: Long) {
+        val category = issueLabelRepository.findById(labelId).orElse(null)?.category
+
         issueLabelRepository.deleteIssueMappings(labelId)
         issueLabelRepository.deletePostingMappings(labelId)
         issueLabelRepository.deleteById(labelId)
+
+        if (category != null && issueLabelRepository.findByCategory(category).isEmpty()) {
+            issueLabelCategoryRepository.delete(category)
+        }
     }
 
     override fun deleteCategory(categoryId: Long) {
         val category = issueLabelCategoryRepository.findById(categoryId)
             .orElseThrow { IllegalArgumentException("Category not found: $categoryId") }
-        
+
         val labels = issueLabelRepository.findByProject(category.project)
             .filter { it.category.id == categoryId }
-        
+
         labels.forEach { label ->
             label.id?.let { deleteLabel(it) }
         }
-        
-        issueLabelCategoryRepository.delete(category)
+
+        // deleteLabel()이 마지막 라벨 삭제 시 빈 카테고리를 이미 지웠을 수 있다(위 위임 로직) — 남아있을
+        // 때만 지운다.
+        if (issueLabelCategoryRepository.existsById(categoryId)) {
+            issueLabelCategoryRepository.delete(category)
+        }
     }
 }

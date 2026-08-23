@@ -7,6 +7,9 @@ interface IssueLabelService {
     fun getCategories(projectId: Long): List<IssueLabelCategory>
     fun createLabel(projectId: Long, categoryId: Long, name: String, color: String): IssueLabel
     fun createCategory(projectId: Long, name: String, isExclusive: Boolean): IssueLabelCategory
+    // yona IssueLabelApp.newLabel() 대응 — categoryName으로 카테고리를 찾거나(없으면 새로 만들어) 라벨을
+    // 추가한다. 같은 카테고리+이름의 라벨이 이미 있으면 null을 반환한다(legacy noContent() 대응).
+    fun newLabelByCategoryName(projectId: Long, categoryName: String, categoryIsExclusive: Boolean, labelName: String, labelColor: String): IssueLabel?
     fun updateLabel(labelId: Long, name: String, color: String, categoryId: Long): IssueLabel
     fun updateCategory(categoryId: Long, name: String, isExclusive: Boolean): IssueLabelCategory
     fun copyLabels(fromProjectId: Long, toProjectId: Long): List<IssueLabel>

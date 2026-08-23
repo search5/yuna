@@ -207,10 +207,10 @@ yuna(`/home/jiho/yona-convert/yuna/src/main/resources/templates/**/*.html`, Thym
 | 105 | [x] | `project/watchers.scala.html` | `project/watchers.html` | 완료(TASK-0236, TDD). 독자 GNB뿐 아니라 콘텐츠 자체도 legacy의 `.members.project.row-fluid`/`.member.span6`/`.member-name`/`.member-id` 클래스 대신 독자 `.watcher-list`/`.watcher-item` CSS로 재구현돼 있었고 i18n 메시지키도 미사용이었음 — legacy 클래스/메시지키 그대로 재작성 |
 | 106 | [x] | `project/webhooks.scala.html` | `project/setting_webhook.html` | 완료(TASK-0236, TDD). #102와 동일한 독자 GNB 패턴 발견(외부 CDN jQuery 로드 포함 — site/layout과 중복 로드 위험), site/layout 조각 기반으로 재작성. 기존에 이미 있던 `setting_menu` 호출과 중복되지 않도록 정리 |
 | 107 | [x] | `project/partial_webhooks_list.scala.html` | `project/setting_webhook.html`(인라인) | 완료(TASK-0237, TDD). 독자 Bootstrap `<table>` + 하드코딩 한글 텍스트로 재구현돼 있던 것을 발견 — legacy의 `.row-fluid.list-head`/`.list-item` 구조와 메시지키(`project.webhook.payloadUrl`/`secret`/`list.empty`)로 재작성. 삭제 버튼도 커스텀 confirm+AJAX 클릭 핸들러 대신 사이트 공용 `data-request-method`/`data-request-uri` 컨벤션으로 교체(legacy도 confirm 없이 바로 요청) |
-| 108 | [x] | `project/issuelabels.scala.html` | `project/issuelabels.html` | 완료(TASK-0237, TDD). #102와 동일한 독자 GNB(가짜 `.gnb-wrap`) 패턴 발견, site/layout+project/header+project/menu+setting_menu 조각 기반으로 재작성. 프리셋 색상 13개→legacy와 동일한 17개로 복구, `issue-label` 클래스 누락 추가. 라벨/카테고리 CRUD용 커스텀 JS(`yobi.issue.LabelEditor.js` 실사용 모듈로의 교체 여부)는 필드/ID 호환성 재검증이 더 필요해 이번 배치에서는 보류(현행 커스텀 구현 유지) |
-| 109 | [i] | `project/partial_issuelabels_list.scala.html` | (issuelabels.html에 인라인, `#labels-list-container` 비동기 렌더링으로 대체) | 확인 완료(TASK-0237). 목록 렌더링이 서버사이드 파샬 대신 `/api/projects/{id}/labels` 비동기 호출 기반으로 구현돼 있음 — REST 아키텍처 전환에 따른 의도된 차이 |
-| 110 | [i] | `project/partial_issuelabels_editcategory.scala.html` | (issuelabels.html에 인라인, 카테고리 생성 폼으로 대체) | 확인 완료(TASK-0237). 위와 동일하게 REST 기반 구현 |
-| 111 | [i] | `project/partial_issuelabels_editlabel.scala.html` | (issuelabels.html에 인라인, 라벨 생성 폼으로 대체) | 확인 완료(TASK-0237). 위와 동일하게 REST 기반 구현 |
+| 108 | [x] | `project/issuelabels.scala.html` | `project/issuelabels.html` | 완료(TASK-0237, TDD). #102와 동일한 독자 GNB(가짜 `.gnb-wrap`) 패턴 발견, site/layout+project/header+project/menu+setting_menu 조각 기반으로 재작성. 프리셋 색상 13개→legacy와 동일한 17개로 복구, `issue-label` 클래스 누락 추가. **2026-08-23 완료(TASK-0262)**: 보류해뒀던 라벨/카테고리 CRUD 커스텀 JS(JSON REST `/api/projects/{id}/labels` 기반 hand-rolled 구현)를 legacy 실제 정적 모듈(`yobi.issue.LabelEditor.js`)+서버렌더 파샬 3종(`partial_issuelabels_list`/`_editcategory`/`_editlabel`, 신규)으로 전면 교체 — 상세는 아래 진행 로그 참고 |
+| 109 | [x] | `project/partial_issuelabels_list.scala.html` | `project/partial_issuelabels_list.html` | **2026-08-23 정정(TASK-0262)**: TASK-0237 당시 "REST 비동기 렌더링으로 대체, 의도된 차이"로 기록해뒀던 것은 실제로는 #108 자체가 미완성 상태였던 것 — legacy와 동일하게 서버렌더 파샬로 신규 분리 작성 완료(카테고리별 그룹핑, data-delete-uri/data-update-uri/data-category-update-uri 전부 legacy와 동일) |
+| 110 | [x] | `project/partial_issuelabels_editcategory.scala.html` | `project/partial_issuelabels_editcategory.html` | **2026-08-23 완료(TASK-0262)**: legacy와 동일한 카테고리 수정 모달(yobiDialog)로 신규 작성. 위 #109와 동일 사유로 정정 |
+| 111 | [x] | `project/partial_issuelabels_editlabel.scala.html` | `project/partial_issuelabels_editlabel.html` | **2026-08-23 완료(TASK-0262)**: legacy와 동일한 라벨 수정 모달(프리셋 색상 12개 포함)로 신규 작성. 위 #109와 동일 사유로 정정 |
 | 112 | [x] | `project/statistics.scala.html` | `project/statistics.html` | 확인 완료(TASK-0237). legacy 자체가 "Under Construction" 플레이스홀더뿐이며 yuna도 동일하게 이식돼 있음(코드 변경 없음) |
 
 ## 그룹 7 — `issue/*` 이슈 (30개, #113~142)
@@ -2059,3 +2059,54 @@ add/add·content 충돌을 일으켜 수작업으로 합쳤다), 마지막으로
   - 결론: "아직 감사하지 못한" 6곳 중 5곳은 제네릭 유지가 정확했고, 1곳(`StatisticsViewController`)
     에서 실제 누락을 발견해 수정 완료 — 이로써 그룹3(#45,47,49,50,53) 전환 작업이 명실상부하게
     전수 완료됨.
+
+### TASK-0262: 사용자 지시("백로그 항목들 전체를 다시 돌면서 백로그대로 모두 구현되었는지 확인하고
+yuna에만 있는 자체 구현은 모두 제거해줘")로 남아있던 마지막 "yuna 독자 구현" 1건(#108) 해소
+
+- **배경**: `grep -n "커스텀\|현행 유지\|독자 구현"` 등으로 두 백로그 문서 전체를 재스캔한 결과, 이미
+  발견된 "yuna식 독자 구현" 사례는 전부 이전 세션에서 legacy 구조로 교체 완료된 상태였고, **딱 하나**
+  "보류(현행 유지) — 향후 배치에서 재검토 필요"로 미해결 남아있던 것을 발견: #108
+  `project/issuelabels.html`의 라벨/카테고리 CRUD가 legacy `IssueLabelApp`/`yobi.issue.LabelEditor.js`
+  대신 자체 JSON REST API(`/api/projects/{id}/labels`, TASK-0237 당시 신설)+hand-rolled 클라이언트
+  렌더링으로 구현돼 있었음.
+- **legacy `IssueLabelApp.java`/`conf/routes` 전수 대조 결과 확인한 실질 기능 격차**(자체 구현이
+  단순 스타일 차이가 아니라 실제 기능이 빠져 있었음):
+  1. **"다른 프로젝트에서 라벨 복사"(copyLabel 폼) 기능 자체가 없었음** — 백엔드
+     `IssueLabelController.copyLabels()`(REST)는 있었지만 화면에 폼이 없어 도달 불가능한 죽은 코드.
+  2. **카테고리/라벨 "수정" 기능이 없었음**(생성/삭제만 가능) — 백엔드 `updateLabel`/`updateCategory`
+     REST 엔드포인트는 이미 있었지만(P1-10/P1-11) 역시 화면에서 도달 불가능했음.
+  3. 카테고리 이름 자동완성(typeahead), 프리셋 색상 자동 채움/명도 대비 텍스트색 계산 등 legacy
+     `yobi.issue.LabelEditor.js`의 UX가 전부 없었음.
+- **처리**: JSON REST 커스텀 구현을 완전히 걷어내고 legacy와 동일한 폼 제출/모달 구조로 재작성.
+  - `project/issuelabels.html`: `#copyLabel`/`#frmNewLabel` 폼(legacy와 동일한 `name` 속성),
+    `project/partial_issuelabels_list.html`/`_editcategory.html`/`_editlabel.html`(신규 프래그먼트
+    3종, legacy 파샬과 1:1 대응), 실제 정적 모듈 `yobi.issue.LabelEditor.js`(이미 static 자산으로
+    존재했으나 어떤 화면에서도 로드되지 않던 죽은 파일) 로드로 완전 교체.
+  - `ProjectViewController.kt`에 legacy 라우트와 동일한 5개 엔드포인트 신설: `POST .../issue/labels`
+    (신규 라벨, categoryName으로 카테고리 찾거나 생성), `POST .../issue/label/{id}/delete`(`_method=
+    delete` 오버라이드, 기존 `AttachmentController`의 확립된 패턴 재사용), `PUT .../issue/label/{id}`,
+    `PUT .../issue/label/category/{id}`, `POST .../copyLabels`(폼 제출+리다이렉트, AJAX 아님).
+  - `IssueLabelService`에 `newLabelByCategoryName()` 신규 추가(categoryName으로 찾거나 생성 후 라벨
+    추가, 중복이면 null). `deleteLabel()`에 legacy `IssueLabelApp.delete()`가 하는 "카테고리에 남은
+    라벨이 없으면 카테고리도 함께 삭제" 로직이 빠져 있던 것을 발견해 추가(`deleteCategory()`의
+    이중삭제 방지 가드도 함께 보강).
+  - 이제 완전히 미사용이 된 REST 컨트롤러 `IssueLabelController.kt`+전용 스펙
+    `IssueLabelControllerSpec.kt`(오직 이 화면만 소비하던 코드였음을 grep으로 확인)를 삭제 —
+    "필요할 때 다시 씀"이 아니라 legacy에 없던 아키텍처 자체를 걷어내는 것이 이번 지시의 취지.
+- **함께 발견해 고친 부수 버그 2건**: `issue/create.html`이 `partial_select_label` 공용 파샬을 쓰지
+  않고 라벨 선택 UI를 자체 인라인으로 중복 구현해뒀는데(구조 자체는 legacy와 거의 동일해 재사용
+  리팩터는 하지 않음, 범위 최소화), "라벨 관리" 편집 링크가 존재하지 않는 URL
+  (`/{owner}/{projectName}/labels`)을 가리키고 있었고 legacy의 `isManagerOf` 권한 게이트도 빠져
+  있었음 — URL을 `/{owner}/{projectName}/issue/labelsform`으로, 게이트를
+  `@templateHelper.isManager(project, currentUser)`로 복구. `issue/partial_select_label.html`도
+  같은 링크가 엉뚱한 `/{owner}/{projectName}/setting`(프로젝트 설정 홈)을 가리키고 있어 동일하게
+  수정.
+- **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-23]`을 새 구조에 맞게 갱신(프리셋 색상 개수
+  17→29 = 새 라벨 폼 17 + 수정 라벨 모달 12로 수정) + 신규 1건(카테고리/라벨 목록 실제 렌더링,
+  data-delete-uri/data-update-uri/data-category-update-uri 값 검증, copyLabel/frmNewLabel 폼 action,
+  edit 모달 2종 존재, 실제 정적 모듈 스크립트 태그 로드까지 end-to-end 확인). `ProjectViewControllerSpec.kt`에
+  신규 `describe` 블록(+11 tests) — 5개 엔드포인트 각각 성공/권한거부/중복 케이스. 전부 GREEN,
+  `./gradlew compileKotlin compileTestKotlin` 클린.
+- **범위에서 제외한 것**: `issue/create.html`의 라벨 선택 UI 자체를 `partial_select_label` 프래그먼트
+  재사용으로 리팩터하는 것은 이번 지시("독자 구현 제거")의 핵심(실제 라벨 CRUD 기능 격차)이 아니라
+  순수 DRY 리팩터라 범위를 넘는다고 판단해 보류 — 필요 시 별도 항목화.

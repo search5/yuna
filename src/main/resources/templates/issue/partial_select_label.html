@@ -3,7 +3,7 @@
         <dt>
             <span th:text="#{label}">라벨</span>
             <th:block th:if="${project != null and currentUserObj != null and @templateHelper.isManager(project, currentUserObj)}">
-                <a th:href="@{/{owner}/{projectName}/setting(owner=${project.owner}, projectName=${project.name})}" target="_blank" class="label-edit" style="font-size: 11px; margin-left: 5px;">
+                <a th:href="@{/{owner}/{projectName}/issue/labelsform(owner=${project.owner}, projectName=${project.name})}" target="_blank" class="label-edit" style="font-size: 11px; margin-left: 5px;">
                     [<span th:text="#{button.edit}">편집</span>]
                 </a>
             </th:block>
