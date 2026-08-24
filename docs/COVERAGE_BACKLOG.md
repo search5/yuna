@@ -140,6 +140,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `YonaUpdateService`, `StatisticsServiceImpl`, `MarkdownServiceImpl`, `DiagnosticService`, `ReviewThreadServiceImpl` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25 06:48, 20차 배치 완료 후)
+
+- 추가 완료([x]): `CommentController`, `ProjectController`, `SiteApiController`, `CodeHistoryController`, `ImportApiController` (모두 95% 이상 확보 및 완료)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -347,11 +352,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `IssueController` | 80.1 | 59.9 | 95.2 | 36 | 61 | 1 | [x] | 2026-08-24: `IssueControllerSpec.kt`에 47 tests 추가(38→85). 전체 회귀 확정치: LINE 100%, BRANCH 95.4%, METHOD 100% — 목표 달성. 도달 불가능 2건(`checkWritePermission`/`isManagerOrAuthorOrAssignee`의 user==null 분기) |
 | `UserController` | 77.7 | 49.0 | 70.4 | 45 | 50 | 8 | [x] | 2026-08-25: 추가 테스트 보강 완료 (BRANCH 100%) |
 | `PullRequestController` | 71.0 | 48.1 | 83.3 | 36 | 54 | 3 | [x] | 2026-08-24: `PullRequestControllerSpec.kt`에 40 tests 추가(19→59). 전체 회귀 확정치: LINE 100%, BRANCH 96.2%, METHOD 100% — 목표 달성. 도달 불가능 2건(checkWritePermission/isManagerOrContributor의 user==null) |
-| `CommentController` | 80.2 | 44.4 | 52.9 | 19 | 50 | 8 | [ ] | |
-| `ProjectController` | 79.6 | 56.8 | 95.2 | 31 | 32 | 1 | [ ] | |
-| `SiteApiController` | 75.6 | 41.1 | 81.2 | 29 | 33 | 3 | [ ] | |
-| `CodeHistoryController` | 47.4 | 35.3 | 71.4 | 40 | 22 | 2 | [ ] | |
-| `ImportApiController` | 74.4 | 37.1 | 60.0 | 23 | 39 | 2 | [ ] | |
+| `CommentController` | 80.2 | 44.4 | 52.9 | 19 | 50 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `ProjectController` | 79.6 | 56.8 | 95.2 | 31 | 32 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `SiteApiController` | 75.6 | 41.1 | 81.2 | 29 | 33 | 3 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `CodeHistoryController` | 47.4 | 35.3 | 71.4 | 40 | 22 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `ImportApiController` | 74.4 | 37.1 | 60.0 | 23 | 39 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `ImportViewController` | 76.6 | 45.3 | 75.0 | 26 | 35 | 2 | [ ] | |
 | `ProjectApiController` | 94.1 | 61.5 | 100.0 | 14 | 47 | 0 | [ ] | |
 | `OrganizationController` | 45.9 | 25.0 | 64.3 | 33 | 24 | 5 | [ ] | |
