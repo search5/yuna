@@ -1759,7 +1759,8 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 
                 mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/owner/TestProj/pull/1/edit")
                     .principal(org.springframework.security.authentication.UsernamePasswordAuthenticationToken("testuser", "password")))
-                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden)
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk)
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("error/forbidden"))
             }
             
         }
