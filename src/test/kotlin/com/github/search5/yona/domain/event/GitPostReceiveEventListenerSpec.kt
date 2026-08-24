@@ -13,6 +13,8 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.webhook.WebhookService
+import com.github.search5.yona.domain.event.GitPostReceiveEvent
+import java.io.File
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.clearMocks
@@ -77,6 +79,33 @@ class GitPostReceiveEventListenerSpec : DescribeSpec({
                 eventType = EventType.NEW_COMMIT
             )
         } returns emptySet()
+    }
+
+    
+    describe("GitPostReceiveEventListener.handleGitPostReceiveEvent") {
+        it("should return early if repoDir does not exist") {
+            val mockFile = mockk<File>()
+            every { mockFile.exists() } returns false
+            every { mockFile.absolutePath } returns "/fake/path"
+            every { gitService.getRepositoryPath(any(), any()) } returns mockFile
+            
+            val event = GitPostReceiveEvent(project, sender, emptyList())
+            listener.handleGitPostReceiveEvent(event)
+            
+            verify(exactly = 0) { notificationEventRecorder.record(any()) }
+        }
+        
+        it("should handle exceptions silently") {
+            val mockFile = mockk<File>()
+            every { mockFile.exists() } returns true
+            every { gitService.getRepositoryPath(any(), any()) } returns mockFile
+            // This will throw exception because it's not a real git repo
+            
+            val event = GitPostReceiveEvent(project, sender, listOf(mockk(relaxed = true)))
+            listener.handleGitPostReceiveEvent(event)
+            
+            verify(exactly = 0) { notificationEventRecorder.record(any()) }
+        }
     }
 
     describe("GitPostReceiveEventListener.recordReferredIssues") {
