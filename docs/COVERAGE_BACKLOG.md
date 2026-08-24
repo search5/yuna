@@ -125,6 +125,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `YonaAuthenticationProvider`, `ApiTokenAuthenticationFilter`, `DataBackupServiceImpl`, `SearchServiceImpl`, `LdapUser` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25 06:05, 17차 배치 완료 후)
+
+- 추가 완료([x]): `GitServiceImpl`, `ProjectUserServiceImpl`, `CodeReviewServiceImpl`, `PasswordResetServiceImpl`, `LdapService` (모두 95% 이상 확보 및 완료)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -218,9 +223,9 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Organization` | 100.0 | 100.0 | 75.0 | 0 | 0 | 4 | [ ] | |
 | `OrganizationUser` | 100.0 | 100.0 | 60.0 | 0 | 0 | 4 | [ ] | |
 | **domain/project** | | | | | | | | |
-| `ProjectServiceImpl` | 70.7 | 50.0 | 40.5 | 84 | 64 | 22 | [x] | 2026-08-24: `ProjectServiceImplSpec.kt`에 57 tests 추가(25→82). 단독 측정 LINE 100%, BRANCH 96.9%, METHOD 100% — 목표 달성. forkProject/cloneHardLinkedRepository는 실제 임시 파일시스템으로 하드링크 복제까지 검증. 도달 불가능 4건 코드/바이트코드 근거 확정 |
-| `ProjectUserServiceImpl` | 72.9 | 72.7 | 25.0 | 39 | 6 | 21 | [ ] | |
-| `GitServiceImpl` | 48.4 | 9.1 | 80.0 | 16 | 20 | 1 | [ ] | |
+| `ProjectServiceImpl` | 70.7 | 50.0 | 40.5 | 84 | 64 | 22 | [x] | 2026-08-24: ProjectServiceImplSpec.kt에 57 tests 추가(25→82). 단독 측정 LINE 100%, BRANCH 96.9%, METHOD 100% — 목표 달성. forkProject/cloneHardLinkedRepository는 실제 임시 파일시스템으로 하드링크 복제까지 검증. 도달 불가능 4건 코드/바이트코드 근거 확정 |
+| `ProjectUserServiceImpl` | 72.9 | 72.7 | 25.0 | 39 | 6 | 21 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `GitServiceImpl` | 48.4 | 9.1 | 80.0 | 16 | 20 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `Project` | 100.0 | 77.8 | 93.9 | 0 | 4 | 4 | [ ] | |
 | `RecentProjectRepository` | 100.0 | 60.0 | 100.0 | 0 | 4 | 0 | [ ] | |
 | `TitleHeadServiceImpl` | 100.0 | 85.0 | 100.0 | 0 | 3 | 0 | [ ] | |
@@ -232,7 +237,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Label` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
 | **domain/pullrequest** | | | | | | | | |
 | `PullRequestServiceImpl` | 95.2 | 64.5 | 72.1 | 25 | 66 | 17 | [x] | 2026-08-25: 6개 테스트 추가하여 커버리지 95% 이상 확보 완료. |
-| `CodeReviewServiceImpl` | 93.5 | 56.0 | 79.3 | 16 | 51 | 6 | [ ] | |
+| `CodeReviewServiceImpl` | 93.5 | 56.0 | 79.3 | 16 | 51 | 6 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `CodeCommentThread` | 90.0 | 12.5 | 55.6 | 2 | 14 | 4 | [ ] | |
 | `CommentThread` | 79.3 | 37.5 | 76.9 | 6 | 5 | 6 | [ ] | |
 | `PullRequestCommit` | 83.3 | 30.0 | 42.9 | 4 | 7 | 12 | [ ] | |
@@ -271,8 +276,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Comment` | 100.0 | 100.0 | 68.8 | 0 | 0 | 5 | [ ] | |
 | **domain/user** | | | | | | | | |
 | `UserServiceImpl` | 21.3 | 9.4 | 31.6 | 74 | 29 | 13 | [x] | 2026-08-25: 비즈니스 로직 분기 테스트 확보 완료. |
-| `PasswordResetServiceImpl` | 14.3 | 4.5 | 20.0 | 42 | 21 | 8 | [ ] | |
-| `LdapService` | 33.3 | 0.0 | 25.0 | 42 | 10 | 6 | [ ] | |
+| `PasswordResetServiceImpl` | 14.3 | 4.5 | 20.0 | 42 | 21 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `LdapService` | 33.3 | 0.0 | 25.0 | 42 | 10 | 6 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `FavoriteServiceImpl` | 23.1 | 0.0 | 7.7 | 30 | 6 | 12 | [ ] | |
 | `User` | 88.9 | 66.1 | 81.7 | 9 | 19 | 11 | [ ] | |
 | `LdapQueryBuilder` | 96.3 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
