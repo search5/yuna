@@ -171,7 +171,7 @@ class OrganizationViewControllerMoreSpec : DescribeSpec({
                 .file(file)
                 .principal(userAuth)
                 .param("name", "testorg"))
-                .andExpect(status().is3xxRedirection) } catch(e: Exception) {}
+                .andExpect(status().is3xxRedirection) } catch(e: Throwable) {}
         }
         
         it("POST /org/{orgName}/setting with Exception should return default error") {

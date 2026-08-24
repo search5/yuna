@@ -1,34 +1,37 @@
-import re
-import sys
+import xml.etree.ElementTree as ET
 
-files = [
-    "com.github.search5.yona.web/UserController.kt.html",
-    "com.github.search5.yona.web/OrganizationViewController.kt.html",
-    "com.github.search5.yona.web/AttachmentController.kt.html",
-    "com.github.search5.yona.domain.mail/IncomingMailProcessingService.kt.html",
-    "com.github.search5.yona.domain.mail/MailServiceImpl.kt.html"
+tree = ET.parse('build/reports/jacoco/test/jacocoTestReport.xml')
+root = tree.getroot()
+
+classes = [
+    "com/github/search5/yona/web/PullRequestViewController",
+    "com/github/search5/yona/domain/vcs/BareCommit",
+    "com/github/search5/yona/web/OrganizationViewController"
 ]
 
-base_dir = "/home/jiho/yona-convert/yuna/build/reports/jacoco/test/html/"
+for pkg in root.findall('package'):
+    for cls in pkg.findall('class'):
+        if cls.get('name') in classes:
+            print(f"Class: {cls.get('name')}")
+            for counter in cls.findall('counter'):
+                if counter.get('type') in ['BRANCH', 'LINE', 'METHOD']:
+                    missed = int(counter.get('missed'))
+                    covered = int(counter.get('covered'))
+                    total = missed + covered
+                    pct = covered / total * 100 if total > 0 else 100
+                    print(f"  {counter.get('type')}: {pct:.2f}% ({covered}/{total})")
+            
+            # also let's find missing branch lines
+            source_file = cls.get('sourcefilename')
+            for sf in pkg.findall('sourcefile'):
+                if sf.get('name') == source_file:
+                    missing_branch_lines = []
+                    missing_lines = []
+                    for line in sf.findall('line'):
+                        if int(line.get('mb', 0)) > 0:
+                            missing_branch_lines.append(line.get('nr'))
+                        if int(line.get('mi', 0)) > 0 and int(line.get('ci', 0)) == 0:
+                            missing_lines.append(line.get('nr'))
+                    print(f"  Missing branch lines: {', '.join(missing_branch_lines)}")
+                    print(f"  Missing lines: {', '.join(missing_lines)}")
 
-for f in files:
-    path = base_dir + f
-    try:
-        with open(path, 'r') as file:
-            content = file.read()
-            print(f"--- {f} ---")
-            
-            lines = re.findall(r'<span class="[npb]c?[a-z]*"[^>]*id="L(\d+)"[^>]*>(?:<span class="[^"]+" title="([^"]+)">)?', content)
-            
-            # Wait, the structure is usually <span class="nc" id="L123">...</span>
-            # Or <span class="pc bpc" id="L123" title="1 of 2 branches missed.">...</span>
-            # Let's just find all title="...missed..."
-            
-            missed_branches = re.findall(r'id="L(\d+)"><span class="[^"]+" title="([^"]+missed[^"]+)"', content)
-            missed_lines = re.findall(r'<span class="nc" id="L(\d+)">', content)
-            
-            print("Missed Lines:", missed_lines)
-            print("Missed Branches:", missed_branches)
-            print()
-    except Exception as e:
-        print(f"Error reading {path}: {e}")
