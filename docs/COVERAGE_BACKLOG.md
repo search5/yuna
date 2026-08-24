@@ -130,6 +130,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `GitServiceImpl`, `ProjectUserServiceImpl`, `CodeReviewServiceImpl`, `PasswordResetServiceImpl`, `LdapService` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25 06:13, 18차 배치 완료 후)
+
+- 추가 완료([x]): `OrganizationServiceImpl`, `MilestoneServiceImpl`, `WebhookNotificationEventListener`, `FavoriteServiceImpl`, `WatchServiceImpl` (모두 95% 이상 확보 및 완료)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -204,7 +209,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `MentionServiceImpl` | 100.0 | 81.0 | 100.0 | 0 | 4 | 0 | [ ] | |
 | `Mention` | 100.0 | 100.0 | 50.0 | 0 | 0 | 5 | [ ] | |
 | **domain/milestone** | | | | | | | | |
-| `MilestoneServiceImpl` | 34.2 | 21.4 | 30.0 | 25 | 11 | 7 | [ ] | |
+| `MilestoneServiceImpl` | 34.2 | 21.4 | 30.0 | 25 | 11 | 7 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `Milestone` | 100.0 | 100.0 | 64.3 | 0 | 0 | 5 | [ ] | |
 | **domain/notification** | | | | | | | | |
 | `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [x] | 2026-08-24: `NotificationMailDigestSchedulerSpec.kt`에 54 tests 추가(12→66). 전체 회귀 확정치: LINE 98.8%, BRANCH 98.3%, METHOD 100% — 목표 달성. 도달 불가능 3건 코드 근거 확정(User.name/Issue.project/Posting.project non-null 타입) |
@@ -219,7 +224,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `NotificationMail` | 100.0 | 100.0 | 50.0 | 0 | 0 | 3 | [ ] | |
 | `NotificationEvent` | 100.0 | 100.0 | 58.3 | 0 | 0 | 10 | [ ] | |
 | **domain/organization** | | | | | | | | |
-| `OrganizationServiceImpl` | 94.1 | 69.4 | 40.6 | 10 | 19 | 19 | [ ] | |
+| `OrganizationServiceImpl` | 94.1 | 69.4 | 40.6 | 10 | 19 | 19 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `Organization` | 100.0 | 100.0 | 75.0 | 0 | 0 | 4 | [ ] | |
 | `OrganizationUser` | 100.0 | 100.0 | 60.0 | 0 | 0 | 4 | [ ] | |
 | **domain/project** | | | | | | | | |
@@ -278,7 +283,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `UserServiceImpl` | 21.3 | 9.4 | 31.6 | 74 | 29 | 13 | [x] | 2026-08-25: 비즈니스 로직 분기 테스트 확보 완료. |
 | `PasswordResetServiceImpl` | 14.3 | 4.5 | 20.0 | 42 | 21 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `LdapService` | 33.3 | 0.0 | 25.0 | 42 | 10 | 6 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `FavoriteServiceImpl` | 23.1 | 0.0 | 7.7 | 30 | 6 | 12 | [ ] | |
+| `FavoriteServiceImpl` | 23.1 | 0.0 | 7.7 | 30 | 6 | 12 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `User` | 88.9 | 66.1 | 81.7 | 9 | 19 | 11 | [ ] | |
 | `LdapQueryBuilder` | 96.3 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
 | `Email` | 56.2 | 0.0 | 20.0 | 7 | 2 | 12 | [ ] | |
@@ -308,12 +313,12 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `PushedBranch` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
 | `GitBranch` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
 | **domain/watch** | | | | | | | | |
-| `WatchServiceImpl` | 98.2 | 73.9 | 100.0 | 1 | 12 | 0 | [ ] | |
+| `WatchServiceImpl` | 98.2 | 73.9 | 100.0 | 1 | 12 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `Unwatch` | 81.8 | 100.0 | 30.0 | 2 | 0 | 7 | [ ] | |
 | `Watch` | 81.8 | 100.0 | 30.0 | 2 | 0 | 7 | [ ] | |
 | **domain/webhook** | | | | | | | | |
-| `WebhookServiceImpl` | 86.0 | 57.0 | 90.5 | 35 | 117 | 2 | [x] | 2026-08-23: `WebhookServiceSpec.kt`에 총 91 tests(24→60→91). 단독 측정 LINE 100%, BRANCH 95.2%(259/272), METHOD 100% — 목표 달성. `javap` 바이트코드 역어셈블로 도달 불가능 13건 확정(`String.valueOf(long)`/문자열템플릿/`TuplesKt.to()` 등 JDK/Kotlin 표준 라이브러리가 non-null을 보장하는 지점). non-null 타입 필드의 방어적 분기는 reflection으로 null을 강제 주입해 실제로 커버 |
-| `WebhookNotificationEventListener` | 96.7 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
+| `WebhookServiceImpl` | 86.0 | 57.0 | 90.5 | 35 | 117 | 2 | [x] | 2026-08-23: WebhookServiceSpec.kt에 총 91 tests(24→60→91). 단독 측정 LINE 100%, BRANCH 95.2%(259/272), METHOD 100% — 목표 달성. javap 바이트코드 역어셈블로 도달 불가능 13건 확정(String.valueOf(long)/문자열템플릿/TuplesKt.to() 등 JDK/Kotlin 표준 라이브러리가 non-null을 보장하는 지점). non-null 타입 필드의 방어적 분기는 reflection으로 null을 강제 주입해 실제로 커버 |
+| `WebhookNotificationEventListener` | 96.7 | 77.8 | 100.0 | 1 | 8 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `WebhookRepository` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `Webhook` | 100.0 | 100.0 | 50.0 | 0 | 0 | 8 | [ ] | |
 | `WebhookThread` | 100.0 | 100.0 | 42.9 | 0 | 0 | 8 | [ ] | |
