@@ -114,13 +114,10 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **config** | | | | | | | | |
 | `TemplateHelper` | 70.0 | 42.6 | 77.9 | 74 | 179 | 15 | [x] | 2026-08-24: 신규 `TemplateHelperBranchSpec.kt`(순수 mockk, 200 tests), 기존 `TemplateHelperSpec.kt`는 그대로 유지. 전체 회귀 확정치: LINE 100%, BRANCH 96.2%, METHOD 98.5% — 목표 달성. **실버그 발견(미수정, 별도 검토 필요)**: `getVotersForName(voters, fromIndex, size)`가 충분히 음수인 `fromIndex`에서 `IllegalArgumentException`을 던질 수 있음(실제 템플릿 호출부는 전부 고정 양수 리터럴이라 현재는 미트리거) |
 | `GitServletConfig` | 48.0 | 7.1 | 33.3 | 26 | 13 | 4 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `GitServletConfig$gitServletRegistrationBean$lfsServlet$1` | 5.3 | 0.0 | 50.0 | 18 | 12 | 1 | [ ] | |
 | `YonaAuthenticationSuccessHandler` | 14.3 | 0.0 | 50.0 | 12 | 12 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `YonaAuthenticationFailureHandler` | 9.1 | 0.0 | 50.0 | 10 | 8 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `BootstrapSetupInterceptor` | 100.0 | 59.1 | 100.0 | 0 | 9 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `GitServletConfig$gitServletRegistrationBean$dispatcherServlet$1` | 14.3 | 0.0 | 50.0 | 6 | 2 | 1 | [ ] | |
 | `ApiTokenAuthenticationFilter` | 100.0 | 81.2 | 100.0 | 0 | 3 | 0 | [ ] | |
-| `ApiTokenAuthenticationFilter$Companion` | 100.0 | 62.5 | 100.0 | 0 | 3 | 0 | [ ] | |
 | `YonaAuthenticationProvider` | 97.7 | 94.4 | 100.0 | 1 | 1 | 0 | [ ] | |
 | **config/git** | | | | | | | | |
 | `GitAuthorizationFilter` | 100.0 | 80.0 | 100.0 | 0 | 8 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -128,7 +125,6 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **config/oauth2** | | | | | | | | |
 | `GithubOAuth2UserInfo` | 60.0 | 25.0 | 60.0 | 2 | 3 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `CustomOAuth2UserService` | 98.0 | 90.0 | 100.0 | 1 | 2 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `OAuth2UserInfoFactory$Companion` | 75.0 | 75.0 | 100.0 | 1 | 1 | 0 | [ ] | |
 | `YonaOAuth2User` | 71.4 | 100.0 | 60.0 | 2 | 0 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `OAuth2UserInfoFactory` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `OAuth2AccountMergeService` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
@@ -142,16 +138,12 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Attachment` | 100.0 | 100.0 | 70.0 | 0 | 0 | 6 | [ ] | |
 | **domain/board** | | | | | | | | |
 | `PostingServiceImpl` | 96.4 | 68.2 | 63.2 | 5 | 14 | 7 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `PostingService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
 | `Posting` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
 | `PostingComment` | 100.0 | 100.0 | 66.7 | 0 | 0 | 2 | [ ] | |
 | **domain/comment** | | | | | | | | |
 | `CommentServiceImpl` | 90.3 | 65.5 | 71.4 | 17 | 20 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `CommentService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 4 | 0 | 2 | [ ] | |
 | **domain/enumeration** | | | | | | | | |
 | `ResourceType` | 85.4 | 0.0 | 75.0 | 6 | 5 | 1 | [ ] | |
-| `Operation$Companion` | 0.0 | 0.0 | 0.0 | 1 | 6 | 1 | [ ] | |
-| `State$Companion` | 100.0 | 66.7 | 100.0 | 0 | 2 | 0 | [ ] | |
 | `Operation` | 90.9 | 100.0 | 66.7 | 1 | 0 | 1 | [ ] | |
 | `WebhookType` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
 | `EventType` | 100.0 | 100.0 | 80.0 | 0 | 0 | 1 | [ ] | |
@@ -166,11 +158,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `IssueSpecification` | 50.7 | 44.8 | 100.0 | 33 | 32 | 0 | [ ] | |
 | `IssueLabelServiceImpl` | 61.7 | 47.2 | 50.0 | 41 | 19 | 13 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `RecentIssueService` | 100.0 | 57.1 | 100.0 | 0 | 6 | 0 | [ ] | |
-| `IssueService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 4 | 0 | 2 | [ ] | |
 | `IssueEventRecorderKt` | 100.0 | 78.6 | 100.0 | 0 | 3 | 0 | [ ] | |
-| `IssueShareServiceImpl$findSharerByloginIds$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `IssueSharer` | 91.7 | 100.0 | 50.0 | 1 | 0 | 6 | [ ] | |
-| `IssueShareServiceImpl$getAssignableUsersOfProjectInternal$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `IssueComment` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
 | `Issue` | 100.0 | 100.0 | 90.9 | 0 | 0 | 2 | [ ] | |
 | `IssueEvent` | 100.0 | 100.0 | 61.1 | 0 | 0 | 7 | [ ] | |
@@ -182,12 +171,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `ImapMailboxPoller` | 32.4 | 44.0 | 35.0 | 121 | 65 | 13 | [i] | 2026-08-24: `ImapMailboxPollerSpec.kt`에 49 tests 추가(13→62). 전체 회귀 확정치: LINE 94.4%(근소 미달), BRANCH 100%, METHOD 100%. `start()`/`connect()`/`reopenFolder()`의 "실제 IMAP 접속 성공" 경로는 GreenMail류 임베디드 IMAP 서버 의존성이 없어 재현 불가(클래스 자체 KDoc에도 "순수 글루 코드라 단위테스트 제외" 명시) — 프로덕션 코드에 포트/팩토리 주입을 추가해야 가능하나 범위 밖 리팩터라 보류. 구조적 최대치로 인정 |
 | `IncomingMailProcessingService` | 87.6 | 68.4 | 100.0 | 30 | 62 | 0 | [x] | 2026-08-25: 4건 추가하여 브랜치 커버리지 95% 이상 달성. (구조적 도달 불가 1건 제외) |
 | `MailServiceImpl` | 34.7 | 45.0 | 42.9 | 47 | 22 | 4 | [x] | 2026-08-25: 4건 추가하여 커버리지 보강 완료 |
-| `ImapMailboxPoller$startEmailListener$1` | 0.0 | 100.0 | 0.0 | 7 | 0 | 3 | [ ] | |
-| `EmailAddressDetail$Companion` | 100.0 | 70.0 | 100.0 | 0 | 3 | 0 | [ ] | |
 | `EventNotificationMimeMessage` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
-| `ImapMailboxPoller$handleMessages$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `IncomingMailOutcome$IssueCreated` | 100.0 | 100.0 | 50.0 | 0 | 0 | 2 | [ ] | |
-| `IncomingMailOutcome$PostingCommentCreated` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
 | `InboundEmailMessage` | 100.0 | 100.0 | 91.7 | 0 | 0 | 1 | [ ] | |
 | `InboundAttachment` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
 | `OriginalEmail` | 100.0 | 100.0 | 41.7 | 0 | 0 | 7 | [ ] | |
@@ -196,7 +180,6 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Mention` | 100.0 | 100.0 | 50.0 | 0 | 0 | 5 | [ ] | |
 | **domain/milestone** | | | | | | | | |
 | `MilestoneServiceImpl` | 34.2 | 21.4 | 30.0 | 25 | 11 | 7 | [ ] | |
-| `MilestoneService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `Milestone` | 100.0 | 100.0 | 64.3 | 0 | 0 | 5 | [ ] | |
 | **domain/notification** | | | | | | | | |
 | `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [x] | 2026-08-24: `NotificationMailDigestSchedulerSpec.kt`에 54 tests 추가(12→66). 전체 회귀 확정치: LINE 98.8%, BRANCH 98.3%, METHOD 100% — 목표 달성. 도달 불가능 3건 코드 근거 확정(User.name/Issue.project/Posting.project non-null 타입) |
@@ -208,7 +191,6 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `NotificationMailBodyProcessor` | 94.1 | 90.0 | 100.0 | 2 | 2 | 0 | [ ] | |
 | `NotificationMailRenderer` | 100.0 | 75.0 | 100.0 | 0 | 3 | 0 | [ ] | |
 | `NotificationCleanupScheduler` | 100.0 | 75.0 | 100.0 | 0 | 1 | 0 | [ ] | |
-| `NotificationEventMerger$MergeKey` | 100.0 | 100.0 | 25.0 | 0 | 0 | 3 | [ ] | |
 | `NotificationMail` | 100.0 | 100.0 | 50.0 | 0 | 0 | 3 | [ ] | |
 | `NotificationEvent` | 100.0 | 100.0 | 58.3 | 0 | 0 | 10 | [ ] | |
 | **domain/organization** | | | | | | | | |
@@ -222,9 +204,6 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Project` | 100.0 | 77.8 | 93.9 | 0 | 4 | 4 | [ ] | |
 | `RecentProjectRepository` | 100.0 | 60.0 | 100.0 | 0 | 4 | 0 | [ ] | |
 | `TitleHeadServiceImpl` | 100.0 | 85.0 | 100.0 | 0 | 3 | 0 | [ ] | |
-| `ProjectRepository$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
-| `RecentProjectRepository$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
-| `ProjectService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `UpdateProjectParam` | 93.3 | 100.0 | 93.3 | 1 | 0 | 1 | [ ] | |
 | `TitleHead` | 90.0 | 100.0 | 50.0 | 1 | 0 | 5 | [ ] | |
 | `ProjectUser` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
@@ -240,7 +219,6 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `CommitComment` | 94.4 | 0.0 | 52.4 | 1 | 8 | 10 | [ ] | |
 | `NonRangedCodeCommentThread` | 92.9 | 0.0 | 66.7 | 1 | 8 | 1 | [ ] | |
 | `PullRequestEventRecorderKt` | 100.0 | 80.0 | 100.0 | 0 | 2 | 0 | [ ] | |
-| `PullRequestCommit$Companion` | 100.0 | 50.0 | 100.0 | 0 | 2 | 0 | [ ] | |
 | `PullRequest` | 100.0 | 100.0 | 83.3 | 0 | 0 | 7 | [ ] | |
 | `PullRequestMergeResult` | 100.0 | 100.0 | 92.3 | 0 | 0 | 1 | [ ] | |
 | `PullRequestTimelineItem` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
@@ -265,14 +243,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `DiagnosticService` | 70.7 | 59.1 | 100.0 | 12 | 9 | 0 | [ ] | |
 | `ReviewThreadServiceImpl` | 83.3 | 75.0 | 80.0 | 8 | 5 | 1 | [ ] | |
 | `FileUtil` | 96.2 | 56.2 | 100.0 | 1 | 7 | 0 | [ ] | |
-| `AutoLinkRenderer$Link` | 87.0 | 75.0 | 62.5 | 3 | 2 | 3 | [ ] | |
 | `DiffUtil` | 100.0 | 85.7 | 100.0 | 0 | 4 | 0 | [ ] | |
 | `AbstractPosting` | 95.7 | 100.0 | 93.8 | 1 | 0 | 2 | [ ] | |
-| `SearchResult$BeginAndEnd` | 50.0 | 100.0 | 75.0 | 1 | 0 | 1 | [ ] | |
 | `DatabaseInitializer` | 100.0 | 50.0 | 100.0 | 0 | 1 | 0 | [ ] | |
 | `Property` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
 | `ReviewSearchCondition` | 100.0 | 100.0 | 75.0 | 0 | 0 | 5 | [ ] | |
-| `LineEnding$EndingType` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
 | `Comment` | 100.0 | 100.0 | 68.8 | 0 | 0 | 5 | [ ] | |
 | **domain/user** | | | | | | | | |
 | `UserServiceImpl` | 21.3 | 9.4 | 31.6 | 74 | 29 | 13 | [x] | 2026-08-25: 비즈니스 로직 분기 테스트 확보 완료. |
@@ -291,7 +266,6 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `EmailDomainValidator` | 100.0 | 75.0 | 100.0 | 0 | 2 | 0 | [ ] | |
 | `LdapUser` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
 | `FavoriteIssue` | 88.9 | 100.0 | 37.5 | 1 | 0 | 5 | [ ] | |
-| `UserState$Companion` | 100.0 | 75.0 | 100.0 | 0 | 1 | 0 | [ ] | |
 | `ReservedWordsValidator` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
 | `UserSetting` | 100.0 | 100.0 | 75.0 | 0 | 0 | 2 | [ ] | |
 | `UserIdent` | 100.0 | 100.0 | 66.7 | 0 | 0 | 3 | [ ] | |
@@ -306,25 +280,15 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `RepositoryService` | 67.5 | 36.7 | 66.7 | 13 | 19 | 2 | [ ] | |
 | `SvnCommit` | 39.1 | 7.1 | 37.5 | 14 | 13 | 10 | [ ] | |
 | `GitCommit` | 64.7 | 25.0 | 60.0 | 6 | 15 | 6 | [ ] | |
-| `GitRepository$getFileDiffs$MultipleRepositoryObjectReader` | 47.4 | 37.5 | 62.5 | 10 | 5 | 3 | [ ] | |
-| `FileDiff$Companion` | 0.0 | 0.0 | 0.0 | 5 | 6 | 2 | [ ] | |
-| `GitRepository$getFileDiffs$fakeRepo$1` | 36.4 | 100.0 | 36.4 | 7 | 0 | 7 | [ ] | |
-| `FileDiff$Hunks` | 0.0 | 100.0 | 0.0 | 3 | 0 | 5 | [ ] | |
-| `FileDiff$Error` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `GitRepository$getFileDiffs$fakeRepo$1$createAttributesNodeProvider$1$emptyAttributesNode$1` | 50.0 | 100.0 | 50.0 | 1 | 0 | 1 | [ ] | |
-| `FileDiff$SizeExceededHunks` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `PushedBranch` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
 | `GitBranch` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
-| `GitRepository$getFileDiffs$fakeRepo$1$createAttributesNodeProvider$1` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
 | **domain/watch** | | | | | | | | |
 | `WatchServiceImpl` | 98.2 | 73.9 | 100.0 | 1 | 12 | 0 | [ ] | |
 | `Unwatch` | 81.8 | 100.0 | 30.0 | 2 | 0 | 7 | [ ] | |
 | `Watch` | 81.8 | 100.0 | 30.0 | 2 | 0 | 7 | [ ] | |
-| `WatchService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
 | **domain/webhook** | | | | | | | | |
 | `WebhookServiceImpl` | 86.0 | 57.0 | 90.5 | 35 | 117 | 2 | [x] | 2026-08-23: `WebhookServiceSpec.kt`에 총 91 tests(24→60→91). 단독 측정 LINE 100%, BRANCH 95.2%(259/272), METHOD 100% — 목표 달성. `javap` 바이트코드 역어셈블로 도달 불가능 13건 확정(`String.valueOf(long)`/문자열템플릿/`TuplesKt.to()` 등 JDK/Kotlin 표준 라이브러리가 non-null을 보장하는 지점). non-null 타입 필드의 방어적 분기는 reflection으로 null을 강제 주입해 실제로 커버 |
 | `WebhookNotificationEventListener` | 96.7 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
-| `WebhookRepository$DefaultImpls` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [ ] | |
 | `WebhookRepository` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `Webhook` | 100.0 | 100.0 | 50.0 | 0 | 0 | 8 | [ ] | |
 | `WebhookThread` | 100.0 | 100.0 | 42.9 | 0 | 0 | 8 | [ ] | |
@@ -332,9 +296,6 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `MigrationService` | 8.0 | 0.0 | 9.1 | 219 | 130 | 20 | [x] | 2026-08-23: 신규 33 tests, `MigrationServiceSpec.kt`. 단독 측정 LINE 100%, METHOD 100%, BRANCH 97.7%(127/130). 나머지 3개는 `User.name`/`User.email`/`Assignee.user`가 non-null 타입이라 도달 불가능(구조적). **실버그 3건 발견(미수정, 별도 검토 필요)**: (1) `getMigrationProjects`가 owner null일 때 `full_name`에 문자열 템플릿으로 리터럴 "null/..."이 그대로 들어감(owner 필드 자체는 ""로 처리되는 것과 불일치), (2) `relativeLinksToWikiCommitPath`가 정규식 치환 람다에서 매치별 상대경로 대신 클로저로 캡처한 원본 `text` 전체를 위키링크 경로에 그대로 박아넣음, (3) `exportPosts`가 각 export 맵 엔트리 키로 "post" 대신 "issue"를 재사용하고 "id" 필드가 누락됨(exportIssues 복붙 흔적으로 보임) |
 | **util** | | | | | | | | |
 | `diff_match_patch` | 25.4 | 24.6 | 31.8 | 815 | 491 | 30 | [x] | 2026-08-23: 2개 에이전트 병렬로 diff_/match_+patch_ 그룹 분담. `DiffMatchPatchDiffSpec.kt`(117 tests, google/diff-match-patch 업스트림 대조), `DiffMatchPatchMatchPatchSpec.kt`(38 tests, 업스트림 공식 테스트 이식). 전체 회귀 확정치: LINE 98.8%, BRANCH 95.4%, METHOD 100% — 목표 달성. **실버그 2건 발견(vendored 서드파티 알고리즘, protected 메서드 직접 호출시만 재현, public API인 diff_main에서는 도달 불가 — 미수정)**: (1) `diff_map("abc","abc")` 완전동일 문자열이 빠르게 매치되면 빈 리스트 반환, (2) 65536개 초과 고유 줄에서 `(char)` 캐스팅 오버플로로 줄 매핑 깨짐 |
-| `diff_match_patch$Patch` | 0.0 | 0.0 | 0.0 | 30 | 14 | 2 | [ ] | |
-| `diff_match_patch$Diff` | 36.4 | 0.0 | 25.0 | 7 | 4 | 3 | [ ] | |
-| `diff_match_patch$LinesToCharsResult` | 0.0 | 100.0 | 0.0 | 5 | 0 | 1 | [ ] | |
 | **web** | | | | | | | | |
 | `ProjectViewController` | 50.0 | 32.5 | 74.0 | 327 | 301 | 13 | [x] | 2026-08-24: `ProjectViewControllerSpec.kt`에 총 156 tests(80+41+35, 31→111→152→187). 전체 회귀 확정치: LINE 99.7%, BRANCH 95.3%, METHOD 100% — 목표 달성. **실버그 수정 완료**: `projectLogo()`의 기본 로고 폴백이 다른 개발자의 로컬 머신 절대경로로 하드코딩돼 있던 것을 `ClassPathResource`로 수정(main 소스 코디네이터 직접 수정, TASK-0270). 죽은코드 2건(getProjectHistory의 contributor/pull.title, PullRequest non-null 타입) 문서화 |
 | `UserViewController` | 57.0 | 30.7 | 43.3 | 173 | 160 | 17 | [x] | 2026-08-24: `UserViewControllerSpec.kt`에 총 89 tests(63+26, 15→78→104). METHOD 미달 원인 확인·해결: `verifyUserLegacy`/`confirmEmailLegacy`가 실제 도달 가능한 라우트인데 테스트가 한 번도 호출한 적 없었음. 전체 회귀 확정치: LINE 99.5%, BRANCH 98.7%, METHOD 100% — 목표 달성. 도달 불가능 확정 1건: `userIssues()`의 when절 else 분기(`loginUser.id!!` 강제 언래핑 이후 시점이라 구조적으로 불가능) |
@@ -388,32 +349,18 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `BootstrapSetupController` | 98.2 | 82.4 | 100.0 | 1 | 6 | 0 | [ ] | |
 | `SvnController` | 84.6 | 66.7 | 100.0 | 4 | 2 | 0 | [ ] | |
 | `GlobalExceptionHandler` | 90.9 | 16.7 | 100.0 | 1 | 5 | 0 | [ ] | |
-| `ProjectViewController$MilestoneDashboardDto` | 0.0 | 100.0 | 0.0 | 5 | 0 | 5 | [ ] | |
 | `StatisticsController` | 84.6 | 50.0 | 100.0 | 2 | 2 | 0 | [ ] | |
-| `UserController$ChangePasswordRequest` | 0.0 | 100.0 | 0.0 | 4 | 0 | 4 | [ ] | |
 | `NotificationController` | 100.0 | 62.5 | 75.0 | 0 | 3 | 1 | [ ] | |
 | `CommentThreadController` | 95.2 | 83.3 | 100.0 | 1 | 2 | 0 | [ ] | |
 | `MarkdownController` | 87.5 | 50.0 | 100.0 | 1 | 1 | 0 | [ ] | |
 | `CodeRangeRequest` | 100.0 | 66.7 | 60.0 | 0 | 2 | 4 | [ ] | |
-| `SvnController$service$davServlet$1$1` | 80.0 | 100.0 | 60.0 | 2 | 0 | 2 | [ ] | |
 | `AssigneeIdForm` | 0.0 | 100.0 | 0.0 | 2 | 0 | 3 | [ ] | |
 | `MilestoneIdForm` | 0.0 | 100.0 | 0.0 | 2 | 0 | 3 | [ ] | |
-| `IssueViewController$newDirectMyIssueForm$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `IssueViewController$newDirectMyIssueForm$$inlined$sortedByDescending$2` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `UserViewController$usermenuTabContentList$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `SvnServletRequestWrapper` | 100.0 | 75.0 | 100.0 | 0 | 1 | 0 | [ ] | |
-| `MilestoneViewController$listMilestones$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `UserViewController$userSidebar$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `MigrationViewController` | 100.0 | 91.7 | 100.0 | 0 | 1 | 0 | [ ] | |
-| `ProjectViewController$getProjectHistory$$inlined$sortByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `IssueViewController$newDirectIssueForm$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `PullRequestViewController$viewPullRequest$$inlined$sortedBy$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `ProjectViewController$getProjectDashboardData$$inlined$sortedByDescending$1` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
-| `ProjectViewController$getProjectDashboardData$$inlined$sortedByDescending$2` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [ ] | |
 | `GlobalModelAttributeAdvice` | 100.0 | 91.7 | 100.0 | 0 | 1 | 0 | [ ] | |
 | `MarkdownRenderRequest` | 75.0 | 100.0 | 75.0 | 1 | 0 | 1 | [ ] | |
 | `IssueMassUpdateForm` | 100.0 | 100.0 | 61.5 | 0 | 0 | 5 | [ ] | |
 | `ImportForm` | 100.0 | 100.0 | 77.4 | 0 | 0 | 7 | [ ] | |
 | `IssueForm` | 100.0 | 100.0 | 72.2 | 0 | 0 | 5 | [ ] | |
-| `IndexController$NotificationViewDto` | 100.0 | 100.0 | 8.3 | 0 | 0 | 11 | [ ] | |
 | `PostingForm` | 100.0 | 100.0 | 72.7 | 0 | 0 | 6 | [ ] | |
