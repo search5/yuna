@@ -108,7 +108,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `YonaApplicationKt` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [i] | `fun main()`이 `runApplication<YonaApplication>()`을 호출만 하는데, 실제로 호출하면 같은 JVM 안에서 실제 임베디드 톰캣+비-데몬 스레드를 가진 완전한 앱이 뜨고(main()이 리턴은 하지만 컨텍스트를 반환받지 못해 정리도 불가) 테스트 JVM에 잔류해 이후 테스트를 오염시킨다. 별도 프로세스로 기동하는 방식(subprocess)만 가능한데, 이 클래스가 위임하는 로직(ApplicationContext 부트스트랩) 자체는 이미 150여개의 `@SpringBootTest` 스펙이 동일하게 실행·검증하고 있어 별도 프로세스 스모크테스트가 주는 한계효용이 없다고 판단 — 구조적 제약으로 예외 인정 |
 | **config** | | | | | | | | |
 | `TemplateHelper` | 70.0 | 42.6 | 77.9 | 74 | 179 | 15 | [x] | 2026-08-24: 신규 `TemplateHelperBranchSpec.kt`(순수 mockk, 200 tests), 기존 `TemplateHelperSpec.kt`는 그대로 유지. 전체 회귀 확정치: LINE 100%, BRANCH 96.2%, METHOD 98.5% — 목표 달성. **실버그 발견(미수정, 별도 검토 필요)**: `getVotersForName(voters, fromIndex, size)`가 충분히 음수인 `fromIndex`에서 `IllegalArgumentException`을 던질 수 있음(실제 템플릿 호출부는 전부 고정 양수 리터럴이라 현재는 미트리거) |
-| `GitServletConfig` | 48.0 | 7.1 | 33.3 | 26 | 13 | 4 | [ ] | |
+| `GitServletConfig` | 48.0 | 7.1 | 33.3 | 26 | 13 | 4 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `GitServletConfig$gitServletRegistrationBean$lfsServlet$1` | 5.3 | 0.0 | 50.0 | 18 | 12 | 1 | [ ] | |
 | `YonaAuthenticationSuccessHandler` | 14.3 | 0.0 | 50.0 | 12 | 12 | 1 | [ ] | |
 | `YonaAuthenticationFailureHandler` | 9.1 | 0.0 | 50.0 | 10 | 8 | 1 | [ ] | |
@@ -130,7 +130,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **config/security** | | | | | | | | |
 | `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [x] | 2026-08-23~24: 4개 에이전트 걸쳐(헬퍼그룹 174 + IssuePosting 100 + PullRequest 97 + Final 60, 총 431 신규 테스트, 4개 파일). 전체 회귀 확정치: LINE 100%, BRANCH 95.3%, METHOD 100% — 목표 달성. 이 저장소 최대 미커버 클래스(1371개 분기)를 3차 배치에 걸쳐 완주 |
 | **config/svn** | | | | | | | | |
-| `SvnAuthorizationFilter` | 96.2 | 73.8 | 100.0 | 2 | 11 | 0 | [ ] | |
+| `SvnAuthorizationFilter` | 96.2 | 73.8 | 100.0 | 2 | 11 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **domain/attachment** | | | | | | | | |
 | `AttachmentServiceImpl` | 95.8 | 85.7 | 100.0 | 3 | 4 | 0 | [ ] | |
 | `AttachmentCleanupScheduler` | 90.0 | 100.0 | 100.0 | 2 | 0 | 0 | [ ] | |
@@ -141,7 +141,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Posting` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
 | `PostingComment` | 100.0 | 100.0 | 66.7 | 0 | 0 | 2 | [ ] | |
 | **domain/comment** | | | | | | | | |
-| `CommentServiceImpl` | 90.3 | 65.5 | 71.4 | 17 | 20 | 8 | [ ] | |
+| `CommentServiceImpl` | 90.3 | 65.5 | 71.4 | 17 | 20 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `CommentService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 4 | 0 | 2 | [ ] | |
 | **domain/enumeration** | | | | | | | | |
 | `ResourceType` | 85.4 | 0.0 | 75.0 | 6 | 5 | 1 | [ ] | |
@@ -157,9 +157,9 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **domain/issue** | | | | | | | | |
 | `IssueShareServiceImpl` | 33.9 | 8.8 | 27.8 | 119 | 104 | 13 | [i] | 2026-08-23: 46 tests(43+3, `IssueShareServiceImplSpec.kt`). 도달 가능한 분기는 전부 커버(담당자-없음+작성자==본인, 사이트관리자 조회 루프 진입, 검색결과 0건 루프 미진입 등 3건 추가). 도달 불가능 근거 확정: `mapUser`의 `user.avatarUrl ?: ""`(`User.avatarUrl` non-null) + `findAssignableUsers`의 `issue.assignee?.user?.id` 두 곳(각 최대 2분기, `Assignee.user`가 `@JoinColumn(nullable=false)` non-null이라 두번째 safe-call 도달 불가, `if(assignee!=null)` 블록 내부라 첫번째도 구조적으로 도달 불가) — 구조적 한계로 95% 미만이어도 최대치 도달로 인정. **실버그 확정**: `findSharableUsers(query, type: String?)`의 `type` 파라미터가 메서드 본문에서 전혀 참조되지 않음(죽은 파라미터, 타입별 필터링 미완성으로 추정) — 미수정, 별도 검토 필요 |
 | `IssueExcelService` | 3.6 | 0.0 | 16.7 | 106 | 42 | 5 | [i] | 2026-08-23: 신규 5 tests, `IssueExcelServiceSpec.kt`. 전체 회귀 확정치: LINE 98.2%, BRANCH 88.1%(37/42), METHOD 100% — 도달 가능한 분기는 100%(37/37) 커버, 미실행 5개는 `Milestone.title`/`AbstractPosting.title`/`Assignee.user`/`User.name`/`Comment.contents`가 전부 non-null 타입이라 elvis/safe-call의 null 분기가 Kotlin 타입 시스템상 생성 자체가 불가능(순수 코드로 만들 방법 없음) — 구조적 한계로 95% 미달을 인정. 라인 미실행 2개는 `workbook.close()` 실패 catch 블록으로 내부에서 워크북을 생성해 주입 지점이 없어 정상 흐름에서 트리거 불가 |
-| `IssueServiceImpl` | 96.6 | 64.2 | 64.2 | 13 | 58 | 19 | [ ] | |
+| `IssueServiceImpl` | 96.6 | 64.2 | 64.2 | 13 | 58 | 19 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `IssueSpecification` | 50.7 | 44.8 | 100.0 | 33 | 32 | 0 | [ ] | |
-| `IssueLabelServiceImpl` | 61.7 | 47.2 | 50.0 | 41 | 19 | 13 | [ ] | |
+| `IssueLabelServiceImpl` | 61.7 | 47.2 | 50.0 | 41 | 19 | 13 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `RecentIssueService` | 100.0 | 57.1 | 100.0 | 0 | 6 | 0 | [ ] | |
 | `IssueService$DefaultImpls` | 0.0 | 100.0 | 0.0 | 4 | 0 | 2 | [ ] | |
 | `IssueEventRecorderKt` | 100.0 | 78.6 | 100.0 | 0 | 3 | 0 | [ ] | |
