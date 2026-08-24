@@ -115,6 +115,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `OAuth2AccountMergeService`, `AttachmentCleanupScheduler`, `Attachment`, `Posting`, `PostingComment` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25 05:45, 15차 배치 완료 후)
+
+- 추가 완료([x]): `GitProjectVisitRecorder`, `LdapUserProvisioningService`, `UserDetailsServiceImpl`, `UserVerification`, `EmailDomainValidator` (모두 95% 이상 확보 및 완료)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -131,7 +136,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `YonaAuthenticationProvider` | 97.7 | 94.4 | 100.0 | 1 | 1 | 0 | [ ] | |
 | **config/git** | | | | | | | | |
 | `GitAuthorizationFilter` | 100.0 | 80.0 | 100.0 | 0 | 8 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `GitProjectVisitRecorder` | 100.0 | 80.0 | 100.0 | 0 | 4 | 0 | [ ] | |
+| `GitProjectVisitRecorder` | 100.0 | 80.0 | 100.0 | 0 | 4 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **config/oauth2** | | | | | | | | |
 | `GithubOAuth2UserInfo` | 60.0 | 25.0 | 60.0 | 2 | 3 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `CustomOAuth2UserService` | 98.0 | 90.0 | 100.0 | 1 | 2 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -267,13 +272,13 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `User` | 88.9 | 66.1 | 81.7 | 9 | 19 | 11 | [ ] | |
 | `LdapQueryBuilder` | 96.3 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
 | `Email` | 56.2 | 0.0 | 20.0 | 7 | 2 | 12 | [ ] | |
-| `LdapUserProvisioningService` | 97.6 | 70.0 | 100.0 | 1 | 6 | 0 | [ ] | |
-| `UserDetailsServiceImpl` | 94.4 | 75.0 | 66.7 | 1 | 3 | 1 | [ ] | |
+| `LdapUserProvisioningService` | 97.6 | 70.0 | 100.0 | 1 | 6 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `UserDetailsServiceImpl` | 94.4 | 75.0 | 66.7 | 1 | 3 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `FavoriteOrganization` | 81.2 | 50.0 | 45.5 | 3 | 1 | 6 | [ ] | |
 | `FavoriteProject` | 88.9 | 50.0 | 61.5 | 2 | 2 | 5 | [ ] | |
-| `UserVerification` | 85.7 | 50.0 | 38.5 | 2 | 1 | 8 | [ ] | |
+| `UserVerification` | 85.7 | 50.0 | 38.5 | 2 | 1 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `YonaUserDetails` | 86.7 | 100.0 | 66.7 | 2 | 0 | 4 | [ ] | |
-| `EmailDomainValidator` | 100.0 | 75.0 | 100.0 | 0 | 2 | 0 | [ ] | |
+| `EmailDomainValidator` | 100.0 | 75.0 | 100.0 | 0 | 2 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `LdapUser` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
 | `FavoriteIssue` | 88.9 | 100.0 | 37.5 | 1 | 0 | 5 | [ ] | |
 | `ReservedWordsValidator` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
