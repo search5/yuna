@@ -37,5 +37,38 @@ class GitServiceSpec : DescribeSpec({
             deleteResult shouldBe true
             gitService.getRepositoryPath("test-owner", "test-project").exists() shouldBe false
         }
+
+        it("존재하지 않는 저장소 삭제 요청 시 false를 반환해야 한다") {
+            val tempGitBase = tempdir()
+            val gitService = GitServiceImpl(tempGitBase.absolutePath)
+
+            gitService.deleteRepository("test-owner", "non-existent") shouldBe false
+        }
+
+        it("이미 존재하는 저장소에 대해 생성 요청 시 기존 디렉터리를 반환해야 한다") {
+            val tempGitBase = tempdir()
+            val gitService = GitServiceImpl(tempGitBase.absolutePath)
+            val repoFile1 = gitService.createRepository("test-owner", "test-project")
+            
+            val repoFile2 = gitService.createRepository("test-owner", "test-project")
+            repoFile1.absolutePath shouldBe repoFile2.absolutePath
+        }
+
+        it("cloneRepository가 정상 동작해야 한다 (인증 정보 포함/미포함 및 기존 디렉터리 덮어쓰기)") {
+            val tempGitBase = tempdir()
+            val tempRemote = tempdir()
+            val gitService = GitServiceImpl(tempGitBase.absolutePath)
+
+            // 원격 저장소 더미 생성
+            val remoteRepo = GitServiceImpl(tempRemote.absolutePath).createRepository("remote-owner", "remote-repo")
+            
+            // 인증 정보 없이 클론
+            val cloned1 = gitService.cloneRepository(remoteRepo.absolutePath, "test-owner", "cloned-repo", null, null)
+            cloned1.exists() shouldBe true
+
+            // 기존에 존재하는 상태에서 인증 정보 포함하여 클론 시도
+            val cloned2 = gitService.cloneRepository(remoteRepo.absolutePath, "test-owner", "cloned-repo", "user", "pass")
+            cloned2.exists() shouldBe true
+        }
     }
 })

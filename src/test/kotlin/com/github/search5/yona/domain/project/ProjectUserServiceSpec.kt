@@ -232,6 +232,100 @@ class ProjectUserServiceSpec @Autowired constructor(
                 }
                 events.size shouldBe 0
             }
+            it("10. getProjectMembers 조회 검증") {
+                projectUserService.getProjectMembers(project.id!!).size shouldBe 1
+            }
+
+            it("11. enroll 등 엔티티 조회 실패 시 예외 검증") {
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.enroll(-1L, applicant.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.enroll(project.id!!, -1L)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.cancelEnroll(-1L, applicant.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.cancelEnroll(project.id!!, -1L)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.acceptMemberRequest(-1L, applicant.id!!, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.acceptMemberRequest(project.id!!, -1L, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.rejectMemberRequest(-1L, applicant.id!!, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.rejectMemberRequest(project.id!!, -1L, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.addMember(-1L, applicant.loginId, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.addMember(project.id!!, "not-found-login-id", manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.updateMemberRole(-1L, member1.id!!, RoleType.MANAGER.roleType, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.updateMemberRole(project.id!!, -1L, RoleType.MANAGER.roleType, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.updateMemberRole(project.id!!, applicant.id!!, RoleType.MANAGER.roleType, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserRepository.save(ProjectUser(project = project, user = member1, role = roleMember))
+                    projectUserService.updateMemberRole(project.id!!, member1.id!!, -1L, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.removeMember(-1L, member1.id!!, manager.id!!)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.removeMember(project.id!!, -1L, manager.id!!)
+                }
+            }
+
+            it("12. acceptMemberRequest - 이미 가입 완료된 유저라면 대기 신청 목록에서만 소거") {
+                projectUserRepository.save(ProjectUser(project = project, user = applicant, role = roleMember))
+                applicant.enroll(project)
+                userRepository.save(applicant)
+                entityManager.flush()
+                
+                projectUserService.acceptMemberRequest(project.id!!, applicant.id!!, manager.id!!)
+                val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
+                updatedApplicant.enrolledProjects.map { it.id } shouldNotContain project.id
+            }
+
+            it("13. rejectMemberRequest 정상 동작 검증") {
+                projectUserService.enroll(project.id!!, applicant.id!!)
+                entityManager.flush()
+                
+                projectUserService.rejectMemberRequest(project.id!!, applicant.id!!, manager.id!!)
+                val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
+                updatedApplicant.enrolledProjects.map { it.id } shouldNotContain project.id
+            }
+
+            it("14. addMember 정상 동작 및 이미 가입된 경우 예외 검증") {
+                projectUserService.addMember(project.id!!, applicant.loginId, manager.id!!)
+                projectUserRepository.existsByProjectIdAndUserId(project.id!!, applicant.id!!) shouldBe true
+
+                shouldThrow<IllegalArgumentException> {
+                    projectUserService.addMember(project.id!!, applicant.loginId, manager.id!!)
+                }
+            }
+
+            it("15. addMember - 대기 신청에 있던 유저라면 대기 목록에서 소거 검증") {
+                applicant.enroll(project)
+                userRepository.save(applicant)
+                entityManager.flush()
+
+                projectUserService.addMember(project.id!!, applicant.loginId, manager.id!!)
+                val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
+                updatedApplicant.enrolledProjects.map { it.id } shouldNotContain project.id
+            }
         }
     }
 }

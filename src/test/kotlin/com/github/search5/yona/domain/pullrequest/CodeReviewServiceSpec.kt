@@ -789,6 +789,84 @@ class CodeReviewServiceSpec @Autowired constructor(
 
                     codeReviewService.isThreadOutdated(thread.id!!) shouldBe true
                 }
+
+                it("computeOutdated - 잘못된 커밋 ID 등 예외 발생 시 true(outdated)로 처리해야 한다") {
+                    val outdatedProject = projectRepository.save(Project(name = "outdated-repo-err", owner = "owner-x", vcs = "GIT"))
+                    repositoryService.getRepository(outdatedProject).create()
+                    try {
+                        val pr = pullRequestRepository.save(
+                            PullRequest(
+                                title = "outdated 테스트 PR3",
+                                toProject = outdatedProject,
+                                fromProject = outdatedProject,
+                                toBranch = "master",
+                                fromBranch = "feature",
+                                contributor = user,
+                                mergedCommitIdFrom = "invalid-from",
+                                mergedCommitIdTo = "invalid-to"
+                            )
+                        )
+                        val thread = commentThreadRepository.save(
+                            CodeCommentThread(
+                                pullRequest = pr,
+                                project = outdatedProject,
+                                prevCommitId = "invalid-commit-1",
+                                commitId = "invalid-commit-2",
+                                codeRange = CodeRange(path = "test.txt", startLine = 1)
+                            )
+                        )
+                        codeReviewService.isThreadOutdated(thread.id!!) shouldBe true
+                    } finally {
+                        try { repositoryService.getRepository(outdatedProject).delete() } catch (e: Exception) {}
+                    }
+                }
+            }
+
+            describe("기타 분기 및 예외 커버리지") {
+                it("createReviewComment - 커밋 작성자 로딩 실패 시 예외를 무시해야 한다") {
+                    val codeRange = CodeRange(path = "test.txt", startSide = CodeRange.Side.B, startLine = 1, endSide = CodeRange.Side.B, endLine = 1)
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "invalid-commit-id",
+                        contents = "커밋 로딩 실패 테스트", codeRange = codeRange, threadId = null, currentUser = user
+                    )
+                    (comment.thread as CodeCommentThread).codeAuthors.size shouldBe 0
+                }
+
+                it("getCommitWatchers - 커밋 작성자 로딩 실패 시 예외를 무시해야 한다") {
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "invalid-commit-id-2",
+                        contents = "커밋 감시자 로딩 실패 테스트", codeRange = null, threadId = null, currentUser = user
+                    )
+                    val events = notificationEventRepository.findAll().filter { it.newValue == "커밋 감시자 로딩 실패 테스트" }
+                    events.size shouldBe 0
+                }
+
+                it("isThreadOutdated - 잘못된 타입의 스레드인 경우 false를 반환해야 한다") {
+                    val nonCodeThread = commentThreadRepository.save(
+                        NonRangedCodeCommentThread(
+                            pullRequest = pullRequest, project = project, commitId = "a", prevCommitId = "b"
+                        )
+                    )
+                    codeReviewService.isThreadOutdated(nonCodeThread.id!!) shouldBe false
+                }
+
+                it("isThreadOutdated - 라인 정보나 커밋 ID가 누락된 경우 false를 반환해야 한다") {
+                    val thread = commentThreadRepository.save(
+                        CodeCommentThread(
+                            pullRequest = pullRequest, project = project, commitId = "", prevCommitId = "", codeRange = CodeRange(path = "test.txt")
+                        )
+                    )
+                    codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                }
+
+                it("isThreadOutdated - pullRequest 정보가 없는 경우 false를 반환해야 한다") {
+                    val thread = commentThreadRepository.save(
+                        CodeCommentThread(
+                            pullRequest = null, project = project, commitId = "c", prevCommitId = "p", codeRange = CodeRange(path = "test.txt", startLine = 1)
+                        )
+                    )
+                    codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                }
             }
         }
     }

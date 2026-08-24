@@ -1736,7 +1736,6 @@ class PullRequestServiceSpec @Autowired constructor(
                 val updated = pullRequestService.changeState(pr.id!!, State.OPEN, contributor.loginId)
                 updated.state shouldBe State.OPEN
             }
-        }
 
             it("getDiff(pullRequest, commitId) - state가 MERGED면 toProject 저장소에서 diff를 조회해야 한다") {
                 val toBareDir = repositoryService.getRepository(toProject).getDirectory()
