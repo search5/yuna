@@ -176,6 +176,17 @@ class TranslationServiceImplSpec : DescribeSpec({
             requestSlot.captured.headers().firstValue("X-Custom").isPresent shouldBe false
         }
 
+        it("헤더 키가 비어있고 값만 있으면 커스텀 헤더를 추가하지 않는다") {
+            val (service, httpClient) = newTranslationService(headerKey = "", headerValue = "secret")
+            val requestSlot = slot<HttpRequest>()
+            every { httpClient.send<String>(capture(requestSlot), any()) } returns
+                mockHttpResponse(200, """{"result":{"translatedText":"ok"}}""")
+
+            service.callPrivate("callExternalApi", arrayOf(String::class.java), "chunk")
+
+            requestSlot.captured.headers().map().values.flatten().contains("secret") shouldBe false
+        }
+
         it("헤더 키/값이 모두 있으면 커스텀 헤더를 추가한다") {
             val (service, httpClient) = newTranslationService(headerKey = "X-Custom", headerValue = "secret")
             val requestSlot = slot<HttpRequest>()

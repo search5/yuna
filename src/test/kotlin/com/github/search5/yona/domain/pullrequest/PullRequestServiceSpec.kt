@@ -1675,6 +1675,68 @@ class PullRequestServiceSpec @Autowired constructor(
                 val diffs = pullRequestService.getDiff(pr)
                 diffs.any { it.pathA == "test.txt" } shouldBe true
             }
+            
+            it("attemptMerge - Target branch not found throws exception") {
+                val pr = pullRequestRepository.save(PullRequest(title = "Title", body = "Body", toProject = toProject, fromProject = fromProject, toBranch = "refs/heads/invalid-target", fromBranch = "refs/heads/feature", contributor = contributor, receiver = receiver, created = Instant.now(), state = State.OPEN))
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature", "test3.txt", "source modification", "Update source")
+
+                io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                    pullRequestService.attemptMerge(pr.id!!)
+                }.message shouldContain "Target branch"
+            }
+
+            it("attemptMerge - Source branch not found throws exception") {
+                val pr = pullRequestRepository.save(PullRequest(title = "Title", body = "Body", toProject = toProject, fromProject = fromProject, toBranch = "refs/heads/master", fromBranch = "refs/heads/invalid-source", contributor = contributor, receiver = receiver, created = Instant.now(), state = State.OPEN))
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+
+                io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                    pullRequestService.attemptMerge(pr.id!!)
+                }.message shouldContain "Fetched source branch not found"
+            }
+
+            it("previewMerge - Source branch not found throws exception") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello", "init")
+
+                io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                    pullRequestService.previewMerge(fromProject, toProject, "invalid-source", "refs/heads/master")
+                }
+            }
+
+            it("merge - Source head ref not found throws exception") {
+                val pr = pullRequestRepository.save(PullRequest(title = "Title", body = "Body", toProject = toProject, fromProject = fromProject, toBranch = "refs/heads/master", fromBranch = "refs/heads/invalid-source", contributor = contributor, receiver = receiver, created = Instant.now(), state = State.OPEN))
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+
+                io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                    pullRequestService.merge(pr.id!!, receiver)
+                }.message shouldContain "Source head ref not found"
+            }
+
+            it("updatePullRequest - throws DuplicatedPullRequestException when duplicate exists") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+
+                val pr1 = pullRequestRepository.save(PullRequest(title = "Title 1", body = "Body", toProject = toProject, fromProject = fromProject, toBranch = "refs/heads/master", fromBranch = "refs/heads/feature", contributor = contributor, receiver = receiver, created = Instant.now(), state = State.OPEN))
+                val pr2 = pullRequestRepository.save(PullRequest(title = "Title 2", body = "Body", toProject = toProject, fromProject = fromProject, toBranch = "refs/heads/master", fromBranch = "refs/heads/feature2", contributor = contributor, receiver = receiver, created = Instant.now(), state = State.OPEN))
+                
+                io.kotest.assertions.throwables.shouldThrow<DuplicatedPullRequestException> {
+                    pullRequestService.updatePullRequest(pr2.id!!, "Title 2", "Body", "refs/heads/feature", "refs/heads/master")
+                }
+            }
+
+            it("changeState - same state does not trigger event") {
+                val pr = pullRequestRepository.save(PullRequest(title = "Title", body = "Body", toProject = toProject, fromProject = fromProject, toBranch = "refs/heads/master", fromBranch = "refs/heads/feature", contributor = contributor, receiver = receiver, created = Instant.now(), state = State.OPEN))
+                val updated = pullRequestService.changeState(pr.id!!, State.OPEN, contributor.loginId)
+                updated.state shouldBe State.OPEN
+            }
+        }
 
             it("getDiff(pullRequest, commitId) - state가 MERGED면 toProject 저장소에서 diff를 조회해야 한다") {
                 val toBareDir = repositoryService.getRepository(toProject).getDirectory()
