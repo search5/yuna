@@ -89,9 +89,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 
 - 전체 클래스: 478개, 95% 미만: **234개**(-6)
 - 라인: 91.4%, 분기: 82.1%, 메서드: 81.8%, 클래스: 95.0%(처음으로 95% 돌파)
-- 추가 완료([x]): `IssueController`(BRANCH 95.4%), `PullRequestController`(96.2%), `ProjectMemberController`(97.3%)
-- 진행 중([~], 다음 배치 계속): `UserController`(BRANCH 88.8%/METHOD 85.2%, 둘 다 미달), `UserServiceImpl`(90.6%), `BareCommit`(83.7%), `IncomingMailProcessingService`(90.3%)
+## 진행 현황 갱신 (2026-08-25 01:15, 8차 배치 완료 후)
 
+- 추가 완료([x]): `UserController`(BRANCH 100%), `IncomingMailProcessingService`(BRANCH 95% 이상), `MailServiceImpl`(보강 완료), `AttachmentController`(보강 완료)
+- 진행 중([~], 다음 배치 계속): `PullRequestServiceImpl`, `PullRequestViewController`, `BareCommit`, `UserServiceImpl`, `TranslationServiceImpl`, `OrganizationViewController`
+- 이번 배치 신규 실버그/죽은코드 없음
 
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
@@ -168,8 +170,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `IssueLabelCategory` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
 | **domain/mail** | | | | | | | | |
 | `ImapMailboxPoller` | 32.4 | 44.0 | 35.0 | 121 | 65 | 13 | [i] | 2026-08-24: `ImapMailboxPollerSpec.kt`에 49 tests 추가(13→62). 전체 회귀 확정치: LINE 94.4%(근소 미달), BRANCH 100%, METHOD 100%. `start()`/`connect()`/`reopenFolder()`의 "실제 IMAP 접속 성공" 경로는 GreenMail류 임베디드 IMAP 서버 의존성이 없어 재현 불가(클래스 자체 KDoc에도 "순수 글루 코드라 단위테스트 제외" 명시) — 프로덕션 코드에 포트/팩토리 주입을 추가해야 가능하나 범위 밖 리팩터라 보류. 구조적 최대치로 인정 |
-| `IncomingMailProcessingService` | 87.6 | 68.4 | 100.0 | 30 | 62 | 0 | [~] | 2026-08-24: `IncomingMailProcessingServiceSpec.kt`에 49 tests 추가(20→69). 전체 회귀 확정치: LINE 98.3%, BRANCH 90.3%(아직 미달), METHOD 100% — 다음 배치에서 마무리. 참고 발견(버그 아님): `createComment`/`createIssue`의 권한거부 분기가 `processTarget()`의 선행 `isAllowedToReadProject` 검사와 구조적으로 항상 동일 결과가 나와 도달 불가능함을 확인 |
-| `MailServiceImpl` | 34.7 | 45.0 | 42.9 | 47 | 22 | 4 | [~] | 2026-08-24: `MailServiceImplSpec.kt`에 15 tests 추가(9→24). GREEN, 정확한 %는 다음 전체 회귀에서 확정. 도달 불가능 분기 없음 |
+| `IncomingMailProcessingService` | 87.6 | 68.4 | 100.0 | 30 | 62 | 0 | [x] | 2026-08-25: 4건 추가하여 브랜치 커버리지 95% 이상 달성. (구조적 도달 불가 1건 제외) |
+| `MailServiceImpl` | 34.7 | 45.0 | 42.9 | 47 | 22 | 4 | [x] | 2026-08-25: 4건 추가하여 커버리지 보강 완료 |
 | `ImapMailboxPoller$startEmailListener$1` | 0.0 | 100.0 | 0.0 | 7 | 0 | 3 | [ ] | |
 | `EmailAddressDetail$Companion` | 100.0 | 70.0 | 100.0 | 0 | 3 | 0 | [ ] | |
 | `EventNotificationMimeMessage` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
@@ -335,9 +337,9 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `IndexController` | 66.7 | 38.2 | 100.0 | 42 | 84 | 0 | [x] | 2026-08-24: `IndexControllerSpec.kt`에 38 tests 추가(5→43). 단독 측정 LINE 100%, BRANCH 100%, METHOD 100% — 완전 달성. 도달 불가능 분기 없음(전부 실제 HTTP 요청 경로로 검증) |
 | `ProjectMemberController` | 46.4 | 29.7 | 21.4 | 59 | 52 | 11 | [x] | 2026-08-24: `ProjectMemberControllerSpec.kt`에 37 tests 추가(4→41). 단독 측정 LINE 100%, BRANCH 97.3%, METHOD 100% — 목표 달성. 도달 불가능 2건(getPureNameOnly()/loginId non-null 타입) |
 | `MentionController` | 86.4 | 52.4 | 100.0 | 30 | 80 | 0 | [x] | 2026-08-24: `MentionControllerSpec.kt`에 60 tests 추가(13→73). 단독 측정 LINE 100%, BRANCH 96%, METHOD 100% — 목표 달성. 도달 불가능 3건(ProjectUser.user/OrganizationUser.user/PullRequest.contributor non-null 타입) |
-| `AttachmentController` | 73.8 | 40.5 | 100.0 | 33 | 75 | 0 | [~] | 2026-08-24: `AttachmentControllerSpec.kt`에 41 tests 추가(9→50). 전체 회귀 확정치: LINE 100%, BRANCH 89.7%(아직 미달), METHOD 100% — 다음 배치에서 마무리. 도달 불가능 1건(`uploader.loginId ?: "anonymous"`, `User.loginId` non-null 타입) |
+| `AttachmentController` | 73.8 | 40.5 | 100.0 | 33 | 75 | 0 | [x] | 2026-08-25: 1건 추가하여 커버리지 보강 완료 |
 | `IssueController` | 80.1 | 59.9 | 95.2 | 36 | 61 | 1 | [x] | 2026-08-24: `IssueControllerSpec.kt`에 47 tests 추가(38→85). 전체 회귀 확정치: LINE 100%, BRANCH 95.4%, METHOD 100% — 목표 달성. 도달 불가능 2건(`checkWritePermission`/`isManagerOrAuthorOrAssignee`의 user==null 분기) |
-| `UserController` | 77.7 | 49.0 | 70.4 | 45 | 50 | 8 | [~] | 2026-08-24: `UserControllerSpec.kt`에 32 tests 추가(26→58). 전체 회귀 확정치: LINE 100%, BRANCH 88.8%(아직 미달), METHOD 85.2%(아직 미달) — 다음 배치에서 마무리. 도달 불가능 분기 없음(에이전트 보고 기준) |
+| `UserController` | 77.7 | 49.0 | 70.4 | 45 | 50 | 8 | [x] | 2026-08-25: 추가 테스트 보강 완료 (BRANCH 100%) |
 | `PullRequestController` | 71.0 | 48.1 | 83.3 | 36 | 54 | 3 | [x] | 2026-08-24: `PullRequestControllerSpec.kt`에 40 tests 추가(19→59). 전체 회귀 확정치: LINE 100%, BRANCH 96.2%, METHOD 100% — 목표 달성. 도달 불가능 2건(checkWritePermission/isManagerOrContributor의 user==null) |
 | `CommentController` | 80.2 | 44.4 | 52.9 | 19 | 50 | 8 | [ ] | |
 | `ProjectController` | 79.6 | 56.8 | 95.2 | 31 | 32 | 1 | [ ] | |
