@@ -110,6 +110,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `GitPostReceiveEventListener`, `PullRequestMergeEventListener`, `IssueSpecification`, `SvnRepository`, `RepositoryService` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25 05:42, 14차 배치 완료 후)
+
+- 추가 완료([x]): `OAuth2AccountMergeService`, `AttachmentCleanupScheduler`, `Attachment`, `Posting`, `PostingComment` (모두 95% 이상 확보 및 완료)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -132,19 +137,19 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `CustomOAuth2UserService` | 98.0 | 90.0 | 100.0 | 1 | 2 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `YonaOAuth2User` | 71.4 | 100.0 | 60.0 | 2 | 0 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `OAuth2UserInfoFactory` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `OAuth2AccountMergeService` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
+| `OAuth2AccountMergeService` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **config/security** | | | | | | | | |
 | `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [x] | 2026-08-23~24: 4개 에이전트 걸쳐(헬퍼그룹 174 + IssuePosting 100 + PullRequest 97 + Final 60, 총 431 신규 테스트, 4개 파일). 전체 회귀 확정치: LINE 100%, BRANCH 95.3%, METHOD 100% — 목표 달성. 이 저장소 최대 미커버 클래스(1371개 분기)를 3차 배치에 걸쳐 완주 |
 | **config/svn** | | | | | | | | |
 | `SvnAuthorizationFilter` | 96.2 | 73.8 | 100.0 | 2 | 11 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **domain/attachment** | | | | | | | | |
 | `AttachmentServiceImpl` | 95.8 | 85.7 | 100.0 | 3 | 4 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `AttachmentCleanupScheduler` | 90.0 | 100.0 | 100.0 | 2 | 0 | 0 | [ ] | |
-| `Attachment` | 100.0 | 100.0 | 70.0 | 0 | 0 | 6 | [ ] | |
+| `AttachmentCleanupScheduler` | 90.0 | 100.0 | 100.0 | 2 | 0 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `Attachment` | 100.0 | 100.0 | 70.0 | 0 | 0 | 6 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **domain/board** | | | | | | | | |
 | `PostingServiceImpl` | 96.4 | 68.2 | 63.2 | 5 | 14 | 7 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `Posting` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
-| `PostingComment` | 100.0 | 100.0 | 66.7 | 0 | 0 | 2 | [ ] | |
+| `Posting` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `PostingComment` | 100.0 | 100.0 | 66.7 | 0 | 0 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **domain/comment** | | | | | | | | |
 | `CommentServiceImpl` | 90.3 | 65.5 | 71.4 | 17 | 20 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **domain/enumeration** | | | | | | | | |
