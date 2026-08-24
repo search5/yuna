@@ -318,5 +318,114 @@ class GitAuthorizationFilterSpec : DescribeSpec({
             response.status shouldBe HttpServletResponse.SC_OK
             verify(exactly = 1) { filterChain.doFilter(any(), any()) }
         }
+        it("Git 경로가 아닌 경우 그냥 통과해야 한다") {
+            val request = MockHttpServletRequest("GET", "/some-other-path")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, filterChain)
+
+            verify(exactly = 1) { filterChain.doFilter(request, response) }
+        }
+
+        it("PUBLIC 프로젝트라도 isCodeAccessibleMemberOnly가 true면 익명 사용자는 401을 응답해야 한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/public-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+
+            val project = Project(owner = "gildong", name = "public-repo", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true)
+            every { projectService.findByOwnerAndName("gildong", "public-repo") } returns project
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_UNAUTHORIZED
+            verify(exactly = 0) { filterChain.doFilter(any(), any()) }
+        }
+
+        it("URI가 /git-receive-pack으로 끝나면 write 요청으로 간주한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/public-repo.git/git-receive-pack")
+            val response = MockHttpServletResponse()
+            val project = Project(owner = "gildong", name = "public-repo", projectScope = ProjectScope.PUBLIC)
+            every { projectService.findByOwnerAndName("gildong", "public-repo") } returns project
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_UNAUTHORIZED
+            verify(exactly = 0) { filterChain.doFilter(any(), any()) }
+        }
+        
+        it("HTTP PUT 메소드면 write 요청으로 간주한다") {
+            val request = MockHttpServletRequest("PUT", "/git/gildong/public-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+            val project = Project(owner = "gildong", name = "public-repo", projectScope = ProjectScope.PUBLIC)
+            every { projectService.findByOwnerAndName("gildong", "public-repo") } returns project
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_UNAUTHORIZED
+            verify(exactly = 0) { filterChain.doFilter(any(), any()) }
+        }
+
+        it("project.id가 null인 경우 isMember는 false를 반환하고 403을 응답해야 한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/private-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+
+            val project = Project(id = null, owner = "gildong", name = "private-repo", projectScope = ProjectScope.PRIVATE)
+            every { projectService.findByOwnerAndName("gildong", "private-repo") } returns project
+
+            val auth = UsernamePasswordAuthenticationToken("chulsoo", "password", AuthorityUtils.createAuthorityList("ROLE_ACTIVE"))
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_FORBIDDEN
+        }
+
+        it("isMember에서 userRepository에 유저가 없으면 false를 반환하고 403을 응답해야 한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/private-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+
+            val project = Project(id = 1L, owner = "gildong", name = "private-repo", projectScope = ProjectScope.PRIVATE)
+            every { projectService.findByOwnerAndName("gildong", "private-repo") } returns project
+            every { projectService.isMember(1L, "chulsoo") } returns false
+            every { userRepository.findByLoginId("chulsoo") } returns Optional.empty()
+
+            val auth = UsernamePasswordAuthenticationToken("chulsoo", "password", AuthorityUtils.createAuthorityList("ROLE_ACTIVE"))
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_FORBIDDEN
+        }
+
+        it("PUBLIC 프로젝트 요청 시 authentication이 null이면 통과되어야 한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/public-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+
+            val project = Project(owner = "gildong", name = "public-repo", projectScope = ProjectScope.PUBLIC)
+            every { projectService.findByOwnerAndName("gildong", "public-repo") } returns project
+
+            SecurityContextHolder.clearContext()
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_OK
+            verify(exactly = 1) { filterChain.doFilter(any(), any()) }
+        }
+
+        it("PUBLIC 프로젝트 요청 시 인증되지 않은 authentication이면 통과되어야 한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/public-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+
+            val project = Project(owner = "gildong", name = "public-repo", projectScope = ProjectScope.PUBLIC)
+            every { projectService.findByOwnerAndName("gildong", "public-repo") } returns project
+
+            val auth = UsernamePasswordAuthenticationToken("chulsoo", "password")
+            auth.isAuthenticated = false
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_OK
+            verify(exactly = 1) { filterChain.doFilter(any(), any()) }
+        }
     }
 })
