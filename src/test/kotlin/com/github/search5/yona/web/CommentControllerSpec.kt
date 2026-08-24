@@ -99,6 +99,17 @@ class CommentControllerSpec : DescribeSpec({
 
         user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
 
+        // isManager 판단 람다(projectUserRepository.findByProjectIdAndUserId(...).map { it.role.id == MANAGER })가
+        // 실제로 실행되는 분기(0/4 커버리지)를 위한 추가 사용자 — 프로젝트 멤버라서 checkReadPermission은
+        // 통과하지만, 댓글 작성자는 아니라서 isManager 값에 따라 결과가 갈린다.
+        val managerUser = User(id = 40L, loginId = "manageruser", name = "매니저유저")
+        val managerAuth = UsernamePasswordAuthenticationToken("manageruser", "password")
+        managerUser.projectUsers.add(ProjectUser(id = 901L, user = managerUser, project = project, role = Role(id = RoleType.MANAGER.roleType)))
+
+        val memberUser = User(id = 41L, loginId = "memberuser", name = "일반멤버")
+        val memberAuth = UsernamePasswordAuthenticationToken("memberuser", "password")
+        memberUser.projectUsers.add(ProjectUser(id = 902L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+
         describe("POST /api/projects/{projectId}/issues/{number}/comments (이슈 댓글 작성)") {
             it("권한이 있는 멤버가 호출 시 201 Created를 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
@@ -172,6 +183,63 @@ class CommentControllerSpec : DescribeSpec({
                         .content("{\"contents\": \"이슈댓글\"}")
                 )
                     .andExpect(status().isCreated)
+            }
+
+            it("존재하지 않는 프로젝트로 요청하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/projects/999/issues/5/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"이슈댓글\"}")
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            // getLoginUser()의 authentication == null 분기 커버 (비로그인 요청).
+            it("비로그인 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"이슈댓글\"}")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            // CommentRequest.contents의 기본값("") 분기 커버 — 요청 JSON에 contents 필드 자체가
+            // 없으면 Kotlin data class 기본값이 적용된다.
+            it("contents 필드가 없으면 빈 문자열 기본값으로 댓글을 생성해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { commentService.createIssueComment(50L, "", user) } returns issueComment
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/5/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                )
+                    .andExpect(status().isCreated)
+
+                verify(exactly = 1) { commentService.createIssueComment(50L, "", user) }
+            }
+
+            it("존재하지 않는 이슈 번호로 요청하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(
+                    post("/api/projects/1/issues/999/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"이슈댓글\"}")
+                )
+                    .andExpect(status().isNotFound)
             }
         }
 
@@ -251,6 +319,119 @@ class CommentControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isForbidden)
             }
+
+            it("존재하지 않는 프로젝트로 요청하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/999/issues/5/comments/100")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("가입되지 않은 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/100")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("프로젝트 읽기 권한이 없는 사용자가 요청하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/100")
+                        .principal(otherAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isForbidden)
+            }
+
+            it("존재하지 않는 댓글이면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/999")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            // isManager 람다가 false를 반환하는 분기(프로젝트 멤버지만 매니저는 아님) 커버.
+            it("작성자도 매니저도 아닌 프로젝트 멤버가 수정 시 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 41L) } returns
+                    Optional.of(ProjectUser(id = 903L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/100")
+                        .principal(memberAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { commentService.updateIssueComment(any(), any(), any()) }
+            }
+
+            // Role.id는 @Id(PK)라 실제 DB에서 조회되면 항상 non-null이지만, isManager 람다
+            // (it.role.id == RoleType.MANAGER.roleType)의 role.id가 null인 방어분기도 mockk로
+            // 직접 구성 가능해 함께 커버한다.
+            it("역할 id가 null인 프로젝트 멤버가 수정 시도하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 41L) } returns
+                    Optional.of(ProjectUser(id = 904L, user = memberUser, project = project, role = Role(id = null)))
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/100")
+                        .principal(memberAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { commentService.updateIssueComment(any(), any(), any()) }
+            }
+
+            // isManager 람다가 true를 반환하는 분기 커버 — 매니저는 작성자가 아니어도 수정할 수 있다.
+            it("매니저는 타인이 작성한 댓글도 수정할 수 있어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 40L) } returns
+                    Optional.of(ProjectUser(id = 901L, user = managerUser, project = project, role = Role(id = RoleType.MANAGER.roleType)))
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+
+                val updatedComment = IssueComment(id = 100L, contents = "매니저수정", issue = issue, authorId = user.id, authorLoginId = user.loginId, authorName = user.name)
+                every { commentService.updateIssueComment(100L, "매니저수정", managerUser) } returns updatedComment
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/100")
+                        .principal(managerAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"매니저수정\"}")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.contents").value("매니저수정"))
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/issues/{number}/comments/{commentId} (이슈 댓글 삭제)") {
@@ -267,6 +448,104 @@ class CommentControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            it("존재하지 않는 프로젝트로 요청하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/api/projects/999/issues/5/comments/100")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("가입되지 않은 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/api/projects/1/issues/5/comments/100")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("프로젝트 읽기 권한이 없는 사용자가 요청하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+
+                mockMvc.perform(
+                    delete("/api/projects/1/issues/5/comments/100")
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
+            }
+
+            it("존재하지 않는 댓글이면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/api/projects/1/issues/5/comments/999")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            // isManager 람다가 false를 반환하는 분기 커버.
+            it("작성자도 매니저도 아닌 프로젝트 멤버가 삭제 시 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 41L) } returns
+                    Optional.of(ProjectUser(id = 903L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+
+                mockMvc.perform(
+                    delete("/api/projects/1/issues/5/comments/100")
+                        .principal(memberAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { commentService.deleteIssueComment(any(), any()) }
+            }
+
+            // Role.id는 @Id(PK)라 실제 DB에서 조회되면 항상 non-null이지만, isManager 람다
+            // (it.role.id == RoleType.MANAGER.roleType)의 role.id가 null인 방어분기도 mockk로
+            // 직접 구성 가능해 함께 커버한다.
+            it("역할 id가 null인 프로젝트 멤버가 삭제 시도하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 41L) } returns
+                    Optional.of(ProjectUser(id = 904L, user = memberUser, project = project, role = Role(id = null)))
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+
+                mockMvc.perform(
+                    delete("/api/projects/1/issues/5/comments/100")
+                        .principal(memberAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { commentService.deleteIssueComment(any(), any()) }
+            }
+
+            // isManager 람다가 true를 반환하는 분기 커버 — 매니저는 작성자가 아니어도 삭제할 수 있다.
+            it("매니저는 타인이 작성한 댓글도 삭제할 수 있어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 40L) } returns
+                    Optional.of(ProjectUser(id = 901L, user = managerUser, project = project, role = Role(id = RoleType.MANAGER.roleType)))
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+                every { commentService.deleteIssueComment(100L, managerUser) } returns Unit
+
+                mockMvc.perform(
+                    delete("/api/projects/1/issues/5/comments/100")
+                        .principal(managerAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { commentService.deleteIssueComment(100L, managerUser) }
             }
         }
 
@@ -344,6 +623,45 @@ class CommentControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isCreated)
             }
+
+            it("존재하지 않는 프로젝트로 요청하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/projects/999/posts/6/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"게시판댓글\"}")
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("가입되지 않은 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts/6/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"게시판댓글\"}")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 게시글 번호로 요청하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { postingRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts/999/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"게시판댓글\"}")
+                )
+                    .andExpect(status().isNotFound)
+            }
         }
 
         describe("PUT /api/projects/{projectId}/posts/{number}/comments/{commentId} (게시글 댓글 수정)") {
@@ -406,6 +724,119 @@ class CommentControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { commentService.updatePostingComment(any(), any(), any()) }
             }
+
+            it("존재하지 않는 프로젝트로 요청하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/999/posts/6/comments/200")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("가입되지 않은 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/200")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("프로젝트 읽기 권한이 없는 사용자가 요청하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/200")
+                        .principal(otherAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isForbidden)
+            }
+
+            it("존재하지 않는 댓글이면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { postingCommentRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/999")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            // isManager 람다가 false를 반환하는 분기 커버.
+            it("작성자도 매니저도 아닌 프로젝트 멤버가 수정 시 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 41L) } returns
+                    Optional.of(ProjectUser(id = 903L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/200")
+                        .principal(memberAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { commentService.updatePostingComment(any(), any(), any()) }
+            }
+
+            // Role.id는 @Id(PK)라 실제 DB에서 조회되면 항상 non-null이지만, isManager 람다
+            // (it.role.id == RoleType.MANAGER.roleType)의 role.id가 null인 방어분기도 mockk로
+            // 직접 구성 가능해 함께 커버한다.
+            it("역할 id가 null인 프로젝트 멤버가 수정 시도하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 41L) } returns
+                    Optional.of(ProjectUser(id = 904L, user = memberUser, project = project, role = Role(id = null)))
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/200")
+                        .principal(memberAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { commentService.updatePostingComment(any(), any(), any()) }
+            }
+
+            // isManager 람다가 true를 반환하는 분기 커버 — 매니저는 작성자가 아니어도 수정할 수 있다.
+            it("매니저는 타인이 작성한 게시글 댓글도 수정할 수 있어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 40L) } returns
+                    Optional.of(ProjectUser(id = 901L, user = managerUser, project = project, role = Role(id = RoleType.MANAGER.roleType)))
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+
+                val updatedComment = PostingComment(id = 200L, contents = "매니저수정", posting = posting, authorId = user.id, authorLoginId = user.loginId, authorName = user.name)
+                every { commentService.updatePostingComment(200L, "매니저수정", managerUser) } returns updatedComment
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/200")
+                        .principal(managerAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"매니저수정\"}")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.contents").value("매니저수정"))
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/posts/{number}/comments/{commentId} (게시글 댓글 삭제)") {
@@ -422,6 +853,104 @@ class CommentControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            it("존재하지 않는 프로젝트로 요청하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/api/projects/999/posts/6/comments/200")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            it("가입되지 않은 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/api/projects/1/posts/6/comments/200")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("프로젝트 읽기 권한이 없는 사용자가 요청하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+
+                mockMvc.perform(
+                    delete("/api/projects/1/posts/6/comments/200")
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isForbidden)
+            }
+
+            it("존재하지 않는 댓글이면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { postingCommentRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/api/projects/1/posts/6/comments/999")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isNotFound)
+            }
+
+            // isManager 람다가 false를 반환하는 분기 커버.
+            it("작성자도 매니저도 아닌 프로젝트 멤버가 삭제 시 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 41L) } returns
+                    Optional.of(ProjectUser(id = 903L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+
+                mockMvc.perform(
+                    delete("/api/projects/1/posts/6/comments/200")
+                        .principal(memberAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { commentService.deletePostingComment(any(), any()) }
+            }
+
+            // Role.id는 @Id(PK)라 실제 DB에서 조회되면 항상 non-null이지만, isManager 람다
+            // (it.role.id == RoleType.MANAGER.roleType)의 role.id가 null인 방어분기도 mockk로
+            // 직접 구성 가능해 함께 커버한다.
+            it("역할 id가 null인 프로젝트 멤버가 삭제 시도하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 41L) } returns
+                    Optional.of(ProjectUser(id = 904L, user = memberUser, project = project, role = Role(id = null)))
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+
+                mockMvc.perform(
+                    delete("/api/projects/1/posts/6/comments/200")
+                        .principal(memberAuth)
+                )
+                    .andExpect(status().isForbidden)
+
+                verify(exactly = 0) { commentService.deletePostingComment(any(), any()) }
+            }
+
+            // isManager 람다가 true를 반환하는 분기 커버 — 매니저는 작성자가 아니어도 삭제할 수 있다.
+            it("매니저는 타인이 작성한 게시글 댓글도 삭제할 수 있어야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 40L) } returns
+                    Optional.of(ProjectUser(id = 901L, user = managerUser, project = project, role = Role(id = RoleType.MANAGER.roleType)))
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+                every { commentService.deletePostingComment(200L, managerUser) } returns Unit
+
+                mockMvc.perform(
+                    delete("/api/projects/1/posts/6/comments/200")
+                        .principal(managerAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { commentService.deletePostingComment(200L, managerUser) }
             }
         }
     }

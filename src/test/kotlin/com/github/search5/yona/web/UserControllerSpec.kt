@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.user.UserService
 import com.github.search5.yona.domain.user.UserSetting
 import com.github.search5.yona.domain.user.UserSettingRepository
 import com.github.search5.yona.domain.user.UserState
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -107,6 +108,16 @@ class UserControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(content().json("[]"))
             }
+
+            it("아이디/이름 어느 쪽도 일치하지 않으면 결과에서 제외해야 한다") {
+                every { userRepository.findAll() } returns listOf(testUser)
+
+                mockMvc.perform(get("/api/users").param("query", "존재하지않는검색어"))
+                    .andExpect(status().isOk)
+                    .andExpect(content().json("[]"))
+
+                verify(exactly = 1) { userRepository.findAll() }
+            }
         }
 
         describe("POST /api/users/emails") {
@@ -157,6 +168,33 @@ class UserControllerSpec : DescribeSpec({
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.error").value("User not found"))
             }
+
+            it("저장된 이메일에 id가 없으면 emailId를 0으로 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                val newEmail = Email(id = null, user = testUser, email = "gildong-sub@example.com")
+                every { userService.addEmail(1L, "gildong-sub@example.com") } returns newEmail
+
+                mockMvc.perform(
+                    post("/api/users/emails")
+                        .param("email", "gildong-sub@example.com")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.emailId").value(0))
+            }
+
+            it("예외 메시지가 없으면 기본 에러 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userService.addEmail(1L, "dup@example.com") } throws RuntimeException()
+
+                mockMvc.perform(
+                    post("/api/users/emails")
+                        .param("email", "dup@example.com")
+                        .principal(auth)
+                )
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("Failed to add email"))
+            }
         }
 
         describe("DELETE /api/users/emails/{emailId}") {
@@ -184,6 +222,18 @@ class UserControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.error").value("삭제 권한이 없습니다."))
+            }
+
+            it("예외 메시지가 없으면 기본 에러 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userService.deleteEmail(1L, 10L) } throws RuntimeException()
+
+                mockMvc.perform(
+                    delete("/api/users/emails/10")
+                        .principal(auth)
+                )
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("Failed to delete email"))
             }
         }
 
@@ -242,6 +292,18 @@ class UserControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.error").value("메일을 보낼 권한이 없습니다."))
+            }
+
+            it("예외 메시지가 없으면 기본 에러 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userService.sendValidationEmail(1L, 10L, "http://localhost") } throws RuntimeException()
+
+                mockMvc.perform(
+                    post("/api/users/emails/10/send-verification")
+                        .principal(auth)
+                )
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("Failed to send verification email"))
             }
         }
 
@@ -311,6 +373,18 @@ class UserControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.error").value("변경 권한이 없습니다."))
+            }
+
+            it("예외 메시지가 없으면 기본 에러 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userService.setAsMainEmail(1L, 10L) } throws RuntimeException()
+
+                mockMvc.perform(
+                    post("/api/users/emails/10/set-main")
+                        .principal(auth)
+                )
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("Failed to set main email"))
             }
         }
 
@@ -416,6 +490,36 @@ class UserControllerSpec : DescribeSpec({
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.error").value("Unauthorized"))
             }
+
+            it("로그인은 되어 있으나 조회 시점에 사용자가 사라졌으면 400과 User not found를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userRepository.findById(1L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/users/profile/update")
+                        .param("name", "신길동")
+                        .param("email", "new-mail@example.com")
+                        .principal(auth)
+                )
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("User not found"))
+            }
+
+            it("예외 메시지가 없으면 기본 에러 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userRepository.findById(1L) } returns Optional.of(testUser)
+                every { userService.isEmailExist("new-mail@example.com") } returns false
+                every { userRepository.save(any()) } throws RuntimeException()
+
+                mockMvc.perform(
+                    post("/api/users/profile/update")
+                        .param("name", "신길동")
+                        .param("email", "new-mail@example.com")
+                        .principal(auth)
+                )
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("Failed to update profile"))
+            }
         }
 
         describe("POST /api/users/token/reset") {
@@ -439,6 +543,25 @@ class UserControllerSpec : DescribeSpec({
                 mockMvc.perform(post("/api/users/token/reset"))
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.error").value("Unauthorized"))
+            }
+
+            it("로그인은 되어 있으나 조회 시점에 사용자가 사라졌으면 400과 User not found를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userRepository.findById(1L) } returns Optional.empty()
+
+                mockMvc.perform(post("/api/users/token/reset").principal(auth))
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("User not found"))
+            }
+
+            it("예외 메시지가 없으면 기본 에러 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userRepository.findById(1L) } returns Optional.of(testUser)
+                every { userRepository.save(any()) } throws RuntimeException()
+
+                mockMvc.perform(post("/api/users/token/reset").principal(auth))
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("Failed to reset token"))
             }
         }
 
@@ -550,6 +673,40 @@ class UserControllerSpec : DescribeSpec({
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.error").value("Unauthorized"))
             }
+
+            it("로그인은 되어 있으나 조회 시점에 사용자가 사라졌으면 400과 User not found를 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userRepository.findById(1L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/users/password/change")
+                        .principal(auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"oldPassword": "oldpw", "password": "newpw1", "retypedPassword": "newpw1"}""")
+                )
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("User not found"))
+            }
+
+            it("예외 메시지가 없으면 기본 에러 메시지를 반환해야 한다") {
+                val salt = "oldsalt5"
+                val userWithPw = User(
+                    id = 1L, loginId = "gildong", name = "홍길동", email = "gildong@example.com",
+                    password = testHashPassword("oldpw", salt), passwordSalt = salt
+                )
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userRepository.findById(1L) } returns Optional.of(userWithPw)
+                every { userRepository.save(any()) } throws RuntimeException()
+
+                mockMvc.perform(
+                    post("/api/users/password/change")
+                        .principal(auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"oldPassword": "oldpw", "password": "newpw1", "retypedPassword": "newpw1"}""")
+                )
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("Failed to change password"))
+            }
         }
 
         describe("GET /api/users/me/recent-issues (P1-41)") {
@@ -614,6 +771,21 @@ class UserControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.defaultLoginPage").value("pull-requests"))
 
                 verify(exactly = 1) { userSettingRepository.save(match { it.id == 100L && it.loginDefaultPage == "pull-requests" }) }
+            }
+
+            it("인증 정보가 없으면 IllegalArgumentException을 던져야 한다") {
+                // 이 엔드포인트는 try-catch가 없어 예외가 그대로 컨트롤러 밖으로 전파된다
+                shouldThrow<IllegalArgumentException> {
+                    userController.setDefaultLoginPage("notifications", null)
+                }.message shouldBe "Unauthorized"
+            }
+
+            it("로그인은 되어 있으나 저장소에 사용자가 없으면 IllegalArgumentException을 던져야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.empty()
+
+                shouldThrow<IllegalArgumentException> {
+                    userController.setDefaultLoginPage("notifications", auth)
+                }.message shouldBe "User not found"
             }
         }
 
@@ -749,6 +921,19 @@ class UserControllerSpec : DescribeSpec({
                     post("/api/users/token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""{"id": "locked", "password": "pw"}""")
+                )
+                    .andExpect(status().isUnauthorized)
+                    .andExpect(jsonPath("$.message").value("No valid user by id"))
+            }
+
+            it("탈퇴(DELETED) 상태 계정이면 401과 No valid user by id를 반환해야 한다") {
+                val deleted = User(id = 4L, loginId = "gone", name = "탈퇴자", email = "gone@example.com", state = UserState.DELETED)
+                every { userRepository.findByLoginId("gone") } returns Optional.of(deleted)
+
+                mockMvc.perform(
+                    post("/api/users/token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"id": "gone", "password": "pw"}""")
                 )
                     .andExpect(status().isUnauthorized)
                     .andExpect(jsonPath("$.message").value("No valid user by id"))

@@ -69,17 +69,17 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 val uniqueSuffix = System.currentTimeMillis().toString() + "-" + UUID.randomUUID().toString().take(6)
 
-                contributor = com.github.search5.yona.domain.user.User(id=1L, loginId="user", name="user", email="u@y.io")Repository.save(
+                contributor = userRepository.save(
                     User(loginId = "contrib-$uniqueSuffix", name = "기여자", email = "contrib-$uniqueSuffix@yona.io")
                 )
                 receiver = userRepository.save(
                     User(loginId = "receive-$uniqueSuffix", name = "수신자", email = "receive-$uniqueSuffix@yona.io")
                 )
 
-                toProject = com.github.search5.yona.domain.project.Project(id=1L, owner="owner", name="repo")Repository.save(
+                toProject = projectRepository.save(
                     Project(name = "to-repo-$uniqueSuffix", owner = "owner-a", vcs = "GIT", projectScope = ProjectScope.PUBLIC)
                 )
-                fromProject = com.github.search5.yona.domain.project.Project(id=1L, owner="owner", name="repo")Repository.save(
+                fromProject = projectRepository.save(
                     Project(name = "from-repo-$uniqueSuffix", owner = "owner-b", vcs = "GIT")
                 )
 

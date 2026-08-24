@@ -299,7 +299,7 @@ class BareCommitSpec : DescribeSpec({
                 
                 // "root.txt" has no parent directory, so file.parentFile is null.
                 val commitId = bare.commitTextFile("develop", "root.txt", "content", "msg")
-                io.kotest.matchers.shouldNotBe.shouldNotBe(commitId, null)
+                commitId shouldNotBe null
             }
             
             it("should handle unreachable branches using reflection") {
@@ -319,13 +319,13 @@ class BareCommitSpec : DescribeSpec({
                 val inserterMethod = com.github.search5.yona.domain.vcs.BareCommit::class.java.getDeclaredMethod("createTreeWith", org.eclipse.jgit.lib.ObjectInserter::class.java, String::class.java, org.eclipse.jgit.lib.ObjectId::class.java)
                 inserterMethod.isAccessible = true
                 
-                val git = com.github.search5.yona.domain.vcs.PlayRepository.gitRepository(project, gitBaseDir.absolutePath)
-                git.repository.newObjectInserter().use { inserter ->
+                val repo = org.eclipse.jgit.storage.file.FileRepositoryBuilder().setGitDir(bareDir).build()
+                repo.newObjectInserter().use { inserter ->
                     val zeroBlob = org.eclipse.jgit.lib.ObjectId.zeroId()
                     val treeId = inserterMethod.invoke(bare, inserter, "test.txt", zeroBlob) as org.eclipse.jgit.lib.ObjectId
-                    io.kotest.matchers.shouldNotBe.shouldNotBe(treeId, null)
+                    treeId shouldNotBe null
                 }
-                git.close()
+                repo.close()
             }
         }
     

@@ -169,7 +169,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **domain/mail** | | | | | | | | |
 | `ImapMailboxPoller` | 32.4 | 44.0 | 35.0 | 121 | 65 | 13 | [i] | 2026-08-24: `ImapMailboxPollerSpec.kt`에 49 tests 추가(13→62). 전체 회귀 확정치: LINE 94.4%(근소 미달), BRANCH 100%, METHOD 100%. `start()`/`connect()`/`reopenFolder()`의 "실제 IMAP 접속 성공" 경로는 GreenMail류 임베디드 IMAP 서버 의존성이 없어 재현 불가(클래스 자체 KDoc에도 "순수 글루 코드라 단위테스트 제외" 명시) — 프로덕션 코드에 포트/팩토리 주입을 추가해야 가능하나 범위 밖 리팩터라 보류. 구조적 최대치로 인정 |
 | `IncomingMailProcessingService` | 87.6 | 68.4 | 100.0 | 30 | 62 | 0 | [~] | 2026-08-24: `IncomingMailProcessingServiceSpec.kt`에 49 tests 추가(20→69). 전체 회귀 확정치: LINE 98.3%, BRANCH 90.3%(아직 미달), METHOD 100% — 다음 배치에서 마무리. 참고 발견(버그 아님): `createComment`/`createIssue`의 권한거부 분기가 `processTarget()`의 선행 `isAllowedToReadProject` 검사와 구조적으로 항상 동일 결과가 나와 도달 불가능함을 확인 |
-| `MailServiceImpl` | 34.7 | 45.0 | 42.9 | 47 | 22 | 4 | [ ] | |
+| `MailServiceImpl` | 34.7 | 45.0 | 42.9 | 47 | 22 | 4 | [~] | 2026-08-24: `MailServiceImplSpec.kt`에 15 tests 추가(9→24). GREEN, 정확한 %는 다음 전체 회귀에서 확정. 도달 불가능 분기 없음 |
 | `ImapMailboxPoller$startEmailListener$1` | 0.0 | 100.0 | 0.0 | 7 | 0 | 3 | [ ] | |
 | `EmailAddressDetail$Companion` | 100.0 | 70.0 | 100.0 | 0 | 3 | 0 | [ ] | |
 | `EventNotificationMimeMessage` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
@@ -240,7 +240,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `SiteService` | 41.2 | 18.6 | 41.7 | 60 | 57 | 7 | [x] | 2026-08-23: 27 tests 추가(총 33). 단독 측정 LINE 100%, METHOD 100%, BRANCH 95.7%(67/70) — 목표 달성. 도달 불가능 3건 확인(`getMailList`/`getNoAvatarUsers`의 `User.email`이 non-nullable `var email: String=""`이라 null 분기가 타입 시스템상 불가능) |
 | `DataBackupServiceImpl` | 86.1 | 72.7 | 100.0 | 14 | 15 | 0 | [ ] | |
 | **domain/support** | | | | | | | | |
-| `TranslationServiceImpl` | 11.5 | 0.0 | 25.0 | 54 | 30 | 3 | [ ] | |
+| `TranslationServiceImpl` | 11.5 | 0.0 | 25.0 | 54 | 30 | 3 | [~] | 2026-08-24: 신규 `TranslationServiceImplSpec.kt`(15 tests, lateinit `@Value` 필드는 리플렉션으로 세팅). GREEN, 정확한 %는 다음 전체 회귀에서 확정. 도달 불가능 분기 없음 |
 | `SearchServiceImpl` | 68.2 | 37.5 | 85.7 | 27 | 40 | 1 | [ ] | |
 | `AutoLinkRenderer` | 75.0 | 57.9 | 75.0 | 33 | 32 | 5 | [ ] | |
 | `SearchResult` | 63.3 | 40.6 | 93.0 | 29 | 19 | 3 | [ ] | |

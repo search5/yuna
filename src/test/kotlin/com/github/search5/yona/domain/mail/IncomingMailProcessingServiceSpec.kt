@@ -1633,11 +1633,11 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
             it("[TASK-02] resolveByDeterministicMessageId에서 유효하지 않은 ResourceType 예외 발생 분기를 커버한다") {
                 // resolveByDeterministicMessageId 내에서 IllegalArgumentException 발생 유도
                 val message = baseMessage(recipients = listOf("yona+dlab/hive@example.com"))
-                    .copy(inReplyTo = listOf("<invalid_type/123@yona.io>"))
+                    .copy(inReplyTo = "<invalid_type/123@yona.io>")
                 
                 // 에러 발생 없이 무시되고 새 이슈 생성으로 넘어가야 함
-                every { issueRepository.findByProjectAndNumber(project, 1L) } returns Optional.empty()
-                every { issueService.createIssue(any()) } answers { firstArg<Issue>().apply { id = 123L } }
+                every { issueRepository.findByProjectAndNumber(project, 1L) } returns null
+                every { issueService.createIssue(any(), any(), any(), any(), any()) } answers { firstArg<Issue>().apply { id = 123L } }
                 
                 service.process(message)
             }
@@ -1646,8 +1646,8 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 // owner/project/project/123 으로 보내면 resolveDirectResource가 ResourceType.PROJECT를 파싱하고
                 // resolveResourceProject에서 else -> null 을 리턴하여 스레드로 인식되지 않고 새 이슈 생성으로 넘어간다.
                 val message = baseMessage(recipients = listOf("yona+dlab/hive/project/123@example.com"))
-                every { issueRepository.findByProjectAndNumber(project, 1L) } returns Optional.empty()
-                every { issueService.createIssue(any()) } answers { firstArg<Issue>().apply { id = 124L } }
+                every { issueRepository.findByProjectAndNumber(project, 1L) } returns null
+                every { issueService.createIssue(any(), any(), any(), any(), any()) } answers { firstArg<Issue>().apply { id = 124L } }
                 
                 service.process(message)
             }

@@ -1711,7 +1711,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk)
             }
             
-            it("should handle viewPullRequest$lambda$5(Attachment) with null fields") {
+            it("should handle viewPullRequest\$lambda\$5(Attachment) with null fields") {
                 val memberUser = com.github.search5.yona.domain.user.User(id = 10L, loginId = "testuser", name = "테스트유저")
                 val project = com.github.search5.yona.domain.project.Project(id = 1L, name = "TestProj", owner = "owner", projectScope = com.github.search5.yona.domain.project.ProjectScope.PRIVATE)
                 memberUser.projectUsers.add(com.github.search5.yona.domain.project.ProjectUser(id = 900L, user = memberUser, project = project, role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)))
