@@ -110,18 +110,18 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `TemplateHelper` | 70.0 | 42.6 | 77.9 | 74 | 179 | 15 | [x] | 2026-08-24: 신규 `TemplateHelperBranchSpec.kt`(순수 mockk, 200 tests), 기존 `TemplateHelperSpec.kt`는 그대로 유지. 전체 회귀 확정치: LINE 100%, BRANCH 96.2%, METHOD 98.5% — 목표 달성. **실버그 발견(미수정, 별도 검토 필요)**: `getVotersForName(voters, fromIndex, size)`가 충분히 음수인 `fromIndex`에서 `IllegalArgumentException`을 던질 수 있음(실제 템플릿 호출부는 전부 고정 양수 리터럴이라 현재는 미트리거) |
 | `GitServletConfig` | 48.0 | 7.1 | 33.3 | 26 | 13 | 4 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `GitServletConfig$gitServletRegistrationBean$lfsServlet$1` | 5.3 | 0.0 | 50.0 | 18 | 12 | 1 | [ ] | |
-| `YonaAuthenticationSuccessHandler` | 14.3 | 0.0 | 50.0 | 12 | 12 | 1 | [ ] | |
-| `YonaAuthenticationFailureHandler` | 9.1 | 0.0 | 50.0 | 10 | 8 | 1 | [ ] | |
-| `BootstrapSetupInterceptor` | 100.0 | 59.1 | 100.0 | 0 | 9 | 0 | [ ] | |
+| `YonaAuthenticationSuccessHandler` | 14.3 | 0.0 | 50.0 | 12 | 12 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `YonaAuthenticationFailureHandler` | 9.1 | 0.0 | 50.0 | 10 | 8 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `BootstrapSetupInterceptor` | 100.0 | 59.1 | 100.0 | 0 | 9 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `GitServletConfig$gitServletRegistrationBean$dispatcherServlet$1` | 14.3 | 0.0 | 50.0 | 6 | 2 | 1 | [ ] | |
 | `ApiTokenAuthenticationFilter` | 100.0 | 81.2 | 100.0 | 0 | 3 | 0 | [ ] | |
 | `ApiTokenAuthenticationFilter$Companion` | 100.0 | 62.5 | 100.0 | 0 | 3 | 0 | [ ] | |
 | `YonaAuthenticationProvider` | 97.7 | 94.4 | 100.0 | 1 | 1 | 0 | [ ] | |
 | **config/git** | | | | | | | | |
-| `GitAuthorizationFilter` | 100.0 | 80.0 | 100.0 | 0 | 8 | 0 | [ ] | |
+| `GitAuthorizationFilter` | 100.0 | 80.0 | 100.0 | 0 | 8 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `GitProjectVisitRecorder` | 100.0 | 80.0 | 100.0 | 0 | 4 | 0 | [ ] | |
 | **config/oauth2** | | | | | | | | |
-| `GithubOAuth2UserInfo` | 60.0 | 25.0 | 60.0 | 2 | 3 | 2 | [ ] | |
+| `GithubOAuth2UserInfo` | 60.0 | 25.0 | 60.0 | 2 | 3 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `CustomOAuth2UserService` | 98.0 | 90.0 | 100.0 | 1 | 2 | 0 | [ ] | |
 | `OAuth2UserInfoFactory$Companion` | 75.0 | 75.0 | 100.0 | 1 | 1 | 0 | [ ] | |
 | `YonaOAuth2User` | 71.4 | 100.0 | 60.0 | 2 | 0 | 2 | [ ] | |
