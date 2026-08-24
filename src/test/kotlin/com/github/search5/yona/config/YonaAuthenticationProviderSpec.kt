@@ -245,6 +245,26 @@ class YonaAuthenticationProviderSpec : DescribeSpec({
             }
         }
 
+        it("LDAP 서버 연결 실패 + fallback 활성화면 로컬 인증을 시도해야 한다") {
+            val salt = "test-salt"
+            val rawPassword = "myPassword123!"
+            val expectedHashed = getLegacyHashedPassword(rawPassword, salt)
+            val userDetails = YonaUserDetails(
+                id = 1L, loginId = "gildong", passwordVal = expectedHashed, passwordSalt = salt,
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_ACTIVE"))
+            )
+
+            every { ldapService.enabled } returns true
+            every { ldapService.fallbackToLocalLogin } returns true
+            every { ldapService.authenticate("gildong", rawPassword) } returns LdapAuthResult.ConnectionFailed(RuntimeException("timeout"))
+            every { userDetailsService.loadUserByUsername("gildong") } returns userDetails
+
+            val authRequest = UsernamePasswordAuthenticationToken("gildong", rawPassword)
+            val authResult = authenticationProvider.authenticate(authRequest)
+
+            authResult.isAuthenticated shouldBe true
+        }
+
         it("LDAP로 재조정된 사용자가 LOCKED 상태면 LockedException이 발생해야 한다") {
             val ldapUser = LdapUser(displayName = "잠긴유저", email = "locked@example.com", loginId = "lockeduser")
             val reconciledUser = User(id = 8L, loginId = "lockeduser", name = "잠긴유저", email = "locked@example.com")
@@ -263,6 +283,16 @@ class YonaAuthenticationProviderSpec : DescribeSpec({
             shouldThrow<LockedException> {
                 authenticationProvider.authenticate(authRequest)
             }
+        }
+    }
+
+    describe("YonaAuthenticationProvider - supports") {
+        it("UsernamePasswordAuthenticationToken을 지원해야 한다") {
+            authenticationProvider.supports(UsernamePasswordAuthenticationToken::class.java) shouldBe true
+        }
+
+        it("다른 Authentication 구현체는 지원하지 않아야 한다") {
+            authenticationProvider.supports(org.springframework.security.authentication.TestingAuthenticationToken::class.java) shouldBe false
         }
     }
 })

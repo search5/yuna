@@ -102,5 +102,60 @@ class ApiTokenAuthenticationFilterSpec : DescribeSpec({
 
             SecurityContextHolder.getContext().authentication shouldBe null
         }
+
+        it("잠금(LOCKED)된 사용자의 토큰이면 인증하지 않아야 한다") {
+            val lockedUser = User(id = 3L, loginId = "locked", name = "잠금", token = "locked-token", state = UserState.LOCKED)
+            every { userRepository.findByToken("locked-token") } returns Optional.of(lockedUser)
+
+            val request = MockHttpServletRequest()
+            request.addHeader("Yona-Token", "locked-token")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, filterChain)
+
+            SecurityContextHolder.getContext().authentication shouldBe null
+        }
+
+        it("이미 인증된 상태(Anonymous가 아님)라면 필터가 다시 인증하지 않아야 한다") {
+            val userDetails = YonaUserDetails(
+                id = 1L, loginId = "gildong", passwordVal = "x", passwordSalt = "y",
+                authoritiesVal = listOf(org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ACTIVE"))
+            )
+            val auth = org.springframework.security.authentication.UsernamePasswordAuthenticationToken(userDetails, null, userDetails.authorities)
+            SecurityContextHolder.getContext().authentication = auth
+
+            val request = MockHttpServletRequest()
+            request.addHeader("Yona-Token", "some-token")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, filterChain)
+
+            // userRepository 호출이 없어야 함
+            io.mockk.verify(exactly = 0) { userRepository.findByToken(any()) }
+            SecurityContextHolder.getContext().authentication shouldBe auth
+        }
+
+        it("현재 인증이 AnonymousAuthenticationToken이면 재인증을 시도해야 한다") {
+            val anonymousAuth = org.springframework.security.authentication.AnonymousAuthenticationToken(
+                "key", "anonymousUser", listOf(org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ANONYMOUS"))
+            )
+            SecurityContextHolder.getContext().authentication = anonymousAuth
+
+            val user = User(id = 4L, loginId = "anon-user", name = "테스트", token = "valid-token")
+            val userDetails = YonaUserDetails(
+                id = 4L, loginId = "anon-user", passwordVal = "x", passwordSalt = "y",
+                authoritiesVal = listOf(org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ACTIVE"))
+            )
+            every { userRepository.findByToken("valid-token") } returns Optional.of(user)
+            every { userDetailsService.loadUserByUsername("anon-user") } returns userDetails
+
+            val request = MockHttpServletRequest()
+            request.addHeader("Yona-Token", "valid-token")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, filterChain)
+
+            SecurityContextHolder.getContext().authentication?.principal shouldBe userDetails
+        }
     }
 })
