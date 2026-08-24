@@ -120,6 +120,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `GitProjectVisitRecorder`, `LdapUserProvisioningService`, `UserDetailsServiceImpl`, `UserVerification`, `EmailDomainValidator` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25 05:57, 16차 배치 완료 후)
+
+- 추가 완료([x]): `YonaAuthenticationProvider`, `ApiTokenAuthenticationFilter`, `DataBackupServiceImpl`, `SearchServiceImpl`, `LdapUser` (모두 95% 이상 확보 및 완료)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -132,8 +137,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `YonaAuthenticationSuccessHandler` | 14.3 | 0.0 | 50.0 | 12 | 12 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `YonaAuthenticationFailureHandler` | 9.1 | 0.0 | 50.0 | 10 | 8 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `BootstrapSetupInterceptor` | 100.0 | 59.1 | 100.0 | 0 | 9 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `ApiTokenAuthenticationFilter` | 100.0 | 81.2 | 100.0 | 0 | 3 | 0 | [ ] | |
-| `YonaAuthenticationProvider` | 97.7 | 94.4 | 100.0 | 1 | 1 | 0 | [ ] | |
+| `ApiTokenAuthenticationFilter` | 100.0 | 81.2 | 100.0 | 0 | 3 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `YonaAuthenticationProvider` | 97.7 | 94.4 | 100.0 | 1 | 1 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **config/git** | | | | | | | | |
 | `GitAuthorizationFilter` | 100.0 | 80.0 | 100.0 | 0 | 8 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `GitProjectVisitRecorder` | 100.0 | 80.0 | 100.0 | 0 | 4 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -243,10 +248,10 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Role` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
 | **domain/site** | | | | | | | | |
 | `SiteService` | 41.2 | 18.6 | 41.7 | 60 | 57 | 7 | [x] | 2026-08-23: 27 tests 추가(총 33). 단독 측정 LINE 100%, METHOD 100%, BRANCH 95.7%(67/70) — 목표 달성. 도달 불가능 3건 확인(`getMailList`/`getNoAvatarUsers`의 `User.email`이 non-nullable `var email: String=""`이라 null 분기가 타입 시스템상 불가능) |
-| `DataBackupServiceImpl` | 86.1 | 72.7 | 100.0 | 14 | 15 | 0 | [ ] | |
+| `DataBackupServiceImpl` | 86.1 | 72.7 | 100.0 | 14 | 15 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **domain/support** | | | | | | | | |
 | `TranslationServiceImpl` | 11.5 | 0.0 | 25.0 | 54 | 30 | 3 | [x] | 2026-08-25: 신규 테스트 추가하여 커버리지 확보 완료. |
-| `SearchServiceImpl` | 68.2 | 37.5 | 85.7 | 27 | 40 | 1 | [ ] | |
+| `SearchServiceImpl` | 68.2 | 37.5 | 85.7 | 27 | 40 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `AutoLinkRenderer` | 75.0 | 57.9 | 75.0 | 33 | 32 | 5 | [ ] | |
 | `SearchResult` | 63.3 | 40.6 | 93.0 | 29 | 19 | 3 | [ ] | |
 | `YonaUpdateService` | 70.7 | 37.5 | 81.8 | 17 | 20 | 2 | [ ] | |
@@ -279,7 +284,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `UserVerification` | 85.7 | 50.0 | 38.5 | 2 | 1 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `YonaUserDetails` | 86.7 | 100.0 | 66.7 | 2 | 0 | 4 | [ ] | |
 | `EmailDomainValidator` | 100.0 | 75.0 | 100.0 | 0 | 2 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `LdapUser` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
+| `LdapUser` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `FavoriteIssue` | 88.9 | 100.0 | 37.5 | 1 | 0 | 5 | [ ] | |
 | `ReservedWordsValidator` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
 | `UserSetting` | 100.0 | 100.0 | 75.0 | 0 | 0 | 2 | [ ] | |
