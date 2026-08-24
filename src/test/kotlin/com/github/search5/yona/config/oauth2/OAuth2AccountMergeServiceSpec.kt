@@ -80,5 +80,15 @@ class OAuth2AccountMergeServiceSpec : DescribeSpec({
                 service.merge(keepUserId = 99L, otherUserId = 42L)
             }
         }
+
+        it("존재하지 않는 otherUser id면 IllegalArgumentException을 던져야 한다") {
+            val keepUser = User(id = 99L, loginId = "keep", name = "유지될유저", state = UserState.ACTIVE)
+            every { userRepository.findById(99L) } returns Optional.of(keepUser)
+            every { userRepository.findById(42L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                service.merge(keepUserId = 99L, otherUserId = 42L)
+            }
+        }
     }
 })
