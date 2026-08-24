@@ -2,9 +2,10 @@ package com.github.search5.yona.domain.support
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
-import io.mockk.Runs
+import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
 
@@ -44,6 +45,94 @@ class YonaUpdateServiceSpec : DescribeSpec({
             service.refreshVersionToUpdate()
 
             verify(exactly = 1) { service.checkForUpdate() }
+        }
+    }
+
+    describe("YonaUpdateService properties and checkForUpdate") {
+        it("기본 프로퍼티 반환 테스트") {
+            val service = YonaUpdateService("repo", "1.15.0")
+            service.getLatestVersion() shouldBe null
+            service.isUpdateRequired() shouldBe false
+            service.getReleaseUrl() shouldBe "https://github.com/yona-projects/yona/releases/tag/v"
+        }
+
+        it("checkForUpdate에서 Exception이 발생하면 로그만 남기고 지나간다") {
+            val service = YonaUpdateService("invalid-repo", "1.15.0")
+            io.mockk.mockkStatic(org.eclipse.jgit.api.Git::class)
+            every { org.eclipse.jgit.api.Git.lsRemoteRepository() } throws RuntimeException("Git Error")
+            
+            service.checkForUpdate()
+            service.isUpdateRequired() shouldBe false
+            io.mockk.unmockkStatic(org.eclipse.jgit.api.Git::class)
+        }
+
+        it("정상적으로 태그를 읽어와 업데이트가 필요한 경우") {
+            val service = YonaUpdateService("repo", "1.15.0")
+            
+            val mockRef1 = mockk<org.eclipse.jgit.lib.Ref>()
+            every { mockRef1.name } returns "^refs/tags/v1.16.0"
+            val mockRef2 = mockk<org.eclipse.jgit.lib.Ref>()
+            every { mockRef2.name } returns "^refs/tags/1.14.0-beta"
+            val mockRef3 = mockk<org.eclipse.jgit.lib.Ref>()
+            every { mockRef3.name } returns "^refs/tags/vX.Y.Z" // parse 실패용
+            
+            val lsCommand = mockk<org.eclipse.jgit.api.LsRemoteCommand>()
+            every { lsCommand.setRemote(any()) } returns lsCommand
+            every { lsCommand.setHeads(any()) } returns lsCommand
+            every { lsCommand.setTags(any()) } returns lsCommand
+            every { lsCommand.call() } returns listOf(mockRef1, mockRef2, mockRef3)
+
+            io.mockk.mockkStatic(org.eclipse.jgit.api.Git::class)
+            every { org.eclipse.jgit.api.Git.lsRemoteRepository() } returns lsCommand
+            
+            service.checkForUpdate()
+            
+            service.isUpdateRequired() shouldBe true
+            service.getLatestVersion() shouldBe "1.16.0"
+            io.mockk.unmockkStatic(org.eclipse.jgit.api.Git::class)
+        }
+
+        it("최신 버전이 이미 적용된 경우") {
+            val service = YonaUpdateService("repo", "1.16.0")
+            
+            val mockRef = mockk<org.eclipse.jgit.lib.Ref>()
+            every { mockRef.name } returns "^refs/tags/v1.15.0"
+            
+            val lsCommand = mockk<org.eclipse.jgit.api.LsRemoteCommand>()
+            every { lsCommand.setRemote(any()) } returns lsCommand
+            every { lsCommand.setHeads(any()) } returns lsCommand
+            every { lsCommand.setTags(any()) } returns lsCommand
+            every { lsCommand.call() } returns listOf(mockRef)
+
+            io.mockk.mockkStatic(org.eclipse.jgit.api.Git::class)
+            every { org.eclipse.jgit.api.Git.lsRemoteRepository() } returns lsCommand
+            
+            service.checkForUpdate()
+            
+            service.isUpdateRequired() shouldBe false
+            service.getLatestVersion() shouldBe null
+            io.mockk.unmockkStatic(org.eclipse.jgit.api.Git::class)
+        }
+        
+        it("currentVersion 파싱 실패 시 1.15.0을 기본으로 동작한다") {
+            val service = YonaUpdateService("repo", "invalid-version")
+            
+            val mockRef = mockk<org.eclipse.jgit.lib.Ref>()
+            every { mockRef.name } returns "^refs/tags/v1.16.0"
+            
+            val lsCommand = mockk<org.eclipse.jgit.api.LsRemoteCommand>()
+            every { lsCommand.setRemote(any()) } returns lsCommand
+            every { lsCommand.setHeads(any()) } returns lsCommand
+            every { lsCommand.setTags(any()) } returns lsCommand
+            every { lsCommand.call() } returns listOf(mockRef)
+
+            io.mockk.mockkStatic(org.eclipse.jgit.api.Git::class)
+            every { org.eclipse.jgit.api.Git.lsRemoteRepository() } returns lsCommand
+            
+            service.checkForUpdate()
+            
+            service.isUpdateRequired() shouldBe true
+            io.mockk.unmockkStatic(org.eclipse.jgit.api.Git::class)
         }
     }
 })

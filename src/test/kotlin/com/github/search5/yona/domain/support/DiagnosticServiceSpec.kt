@@ -63,4 +63,41 @@ class DiagnosticServiceSpec : DescribeSpec({
             service.checkAll() shouldNotContain "The Email Receiver is not initialized"
         }
     }
+
+    describe("checkAll - DB 및 스토리지 예외 및 에러 점검") {
+        it("DB connection이 유효하지 않으면 에러를 포함해야 한다") {
+            val ds = mockk<DataSource>()
+            val conn = mockk<Connection>(relaxed = true)
+            every { ds.connection } returns conn
+            every { conn.isValid(any()) } returns false
+            val service = DiagnosticService(dataSource = ds, baseUrl = "http://localhost")
+            service.checkAll() shouldContain "Database Connection is invalid (isValid returned false)"
+        }
+        it("DB connection 중 예외가 발생하면 에러를 포함해야 한다") {
+            val ds = mockk<DataSource>()
+            every { ds.connection } throws RuntimeException("DB down")
+            val service = DiagnosticService(dataSource = ds, baseUrl = "http://localhost")
+            service.checkAll() shouldContain "Database Connection Check Failed: DB down"
+        }
+        it("Git 저장소 권한이 없으면 에러를 포함해야 한다") {
+            // JVM/OS 환경에 따라 canWrite() 등을 mock 하기 어려우므로 예외를 발생시키도록
+            System.setProperty("yona.data", "/dev/null/invalid_path")
+            val service = DiagnosticService(dataSource = validDataSource(), baseUrl = "http://localhost")
+            val errors = service.checkAll()
+            // Git 저장소 에러가 하나는 있어야 함 (canWrite false 이거나 mkdirs 실패 후 엑세스 거부)
+            val hasGitError = errors.any { it.contains("Git Repository Storage Directory is not writable") || it.contains("Git Storage Check Failed") }
+            hasGitError shouldBe true
+        }
+        it("SVN 저장소 예외/권한 에러 테스트") {
+            System.setProperty("yona.data", "/dev/null/invalid_path")
+            val service = DiagnosticService(dataSource = validDataSource(), baseUrl = "http://localhost")
+            val errors = service.checkAll()
+            val hasSvnError = errors.any { it.contains("SVN Repository Storage Directory is not writable") || it.contains("SVN Storage Check Failed") }
+            hasSvnError shouldBe true
+        }
+        it("JavaMailSender가 없으면 에러를 포함해야 한다") {
+            val service = DiagnosticService(dataSource = validDataSource(), mailSender = null, baseUrl = "http://localhost")
+            service.checkAll() shouldContain "JavaMailSender is not configured. Email notifications may not work."
+        }
+    }
 })

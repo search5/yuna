@@ -388,4 +388,81 @@ class MarkdownServiceImplSpec : DescribeSpec({
             }
         }
     }
+
+    describe("MarkdownServiceImpl 추가 커버리지 검증") {
+        val project = Project(id = 1L, name = "yobi", owner = "yobi", vcs = "GIT")
+        
+        it("body가 비어있으면 빈 문자열을 반환해야 한다") {
+            markdownService.render("") shouldBe ""
+            markdownService.render("", breaks = true) shouldBe ""
+            markdownService.render("", breaks = true, project = null) shouldBe ""
+        }
+
+        it("checkReferrer - host가 null인 경우(mailto 등) 예외/오류 없이 처리된다") {
+            val service = MarkdownServiceImpl(
+                autoLinkRenderer, repositoryService,
+                issueMarkdownProjectRepository, issueMarkdownIssueRepository,
+                issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
+                noreferrerEnabled = true, hostname = "yuna.example.com"
+            )
+            val rendered = service.render("<a href=\"mailto:test@test.com\">메일</a>")
+            rendered.shouldContain("mailto:test@test.com")
+        }
+
+        it("checkReferrer - URISyntaxException이 발생하는 잘못된 링크는 무시된다") {
+            val service = MarkdownServiceImpl(
+                autoLinkRenderer, repositoryService,
+                issueMarkdownProjectRepository, issueMarkdownIssueRepository,
+                issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
+                noreferrerEnabled = true, hostname = "yuna.example.com"
+            )
+            val rendered = service.render("<a href=\"http://[\">Bad Link</a>")
+            rendered.shouldContain("http://[")
+        }
+
+        it("transformIssueLink - URI path가 null이거나 issue 패턴이 없으면 변환하지 않는다") {
+            val rendered1 = markdownService.render("https://yuna.example.com")
+            rendered1.shouldContain("https://yuna.example.com")
+
+            val rendered2 = markdownService.render("https://yuna.example.com/owner/proj/other/5")
+            rendered2.shouldContain("other/5")
+        }
+
+        it("transformIssueLink - project 또는 issue를 못 찾으면 변환하지 않는다") {
+            every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "unknown") } returns Optional.empty()
+            val rendered1 = markdownService.render("https://yuna.example.com/owner/unknown/issue/5")
+            rendered1.shouldNotContain("issueLink")
+
+            val proj = Project(id = 1L, name = "proj", owner = "owner", vcs = "GIT")
+            every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(proj)
+            every { issueMarkdownIssueRepository.findByProjectAndNumber(proj, 999L) } returns null
+            val rendered2 = markdownService.render("https://yuna.example.com/owner/proj/issue/999")
+            rendered2.shouldNotContain("issueLink")
+        }
+
+        it("transformIssueLink - RuntimeException 발생 시 로깅하고 넘어간다") {
+            every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "error") } throws RuntimeException("DB error")
+            val rendered = markdownService.render("https://yuna.example.com/owner/error/issue/1")
+            rendered.shouldContain("https://yuna.example.com/owner/error/issue/1")
+            rendered.shouldNotContain("issueLink")
+        }
+
+        it("transformIssueLink - fragment가 있으면 링크 텍스트에 포함된다") {
+            val proj = Project(id = 1L, name = "proj", owner = "owner", vcs = "GIT")
+            val issue = Issue(id = 10L, title = "프래그먼트", project = proj, number = 7L, state = State.OPEN)
+            every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(proj)
+            every { issueMarkdownIssueRepository.findByProjectAndNumber(proj, 7L) } returns issue
+            every { issueMarkdownAccessControl.isAllowed(null, proj, issue, Operation.READ) } returns true
+            every { messageSource.getMessage(any(), any(), any(), any()) } returns "열림"
+
+            val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/7#comment-123")
+            rendered.shouldContain("#7.프래그먼트#comment-123")
+        }
+
+        it("getDefaultBranch 예외 시 master 반환") {
+            every { repositoryService.getRepository(any()) } throws RuntimeException("Repo not found")
+            val output = markdownService.renderFileInCodeBrowser("![test](./img.png)", project)
+            output.shouldContain("/yobi/yobi/files/master/img.png")
+        }
+    }
 })
