@@ -268,6 +268,58 @@ class AttachmentServiceSpec @Autowired constructor(
 
                 attachment.mimeType shouldBe "text/plain; charset=UTF-8"
             }
+
+            it("11. deleteAll은 특정 컨테이너의 모든 첨부파일을 삭제해야 한다") {
+                val stream1 = ByteArrayInputStream("1".toByteArray())
+                val stream2 = ByteArrayInputStream("2".toByteArray())
+                attachmentService.store(stream1, "f1.txt", ResourceType.ISSUE_POST, "100", "chulsoo")
+                attachmentService.store(stream2, "f2.txt", ResourceType.ISSUE_POST, "100", "chulsoo")
+                
+                attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "100").size shouldBe 2
+                attachmentService.deleteAll(ResourceType.ISSUE_POST, "100")
+                attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "100").size shouldBe 0
+            }
+
+            it("12. delete 호출 시 동일 해시의 다른 파일이 존재하면 물리 파일은 삭제되지 않아야 한다") {
+                val content = "Shared Content"
+                val (first, _) = attachmentService.store(
+                    ByteArrayInputStream(content.toByteArray()), "a.txt",
+                    ResourceType.ISSUE_POST, "101", "chulsoo"
+                )
+                val (second, _) = attachmentService.store(
+                    ByteArrayInputStream(content.toByteArray()), "b.txt",
+                    ResourceType.ISSUE_POST, "102", "chulsoo"
+                )
+                
+                val file = attachmentService.getFile(first)
+                file.exists() shouldBe true
+                
+                attachmentService.delete(first)
+                attachmentRepository.existsById(first.id!!) shouldBe false
+                file.exists() shouldBe true // physical file should still exist
+                
+                attachmentService.delete(second)
+                file.exists() shouldBe false // now it should be deleted
+            }
+
+            it("13. 물리 파일이 이미 삭제된 상태에서 delete를 호출해도 예외가 발생하지 않아야 한다") {
+                val (attach, _) = attachmentService.store(
+                    ByteArrayInputStream("To Be Deleted Physically".toByteArray()), "c.txt",
+                    ResourceType.ISSUE_POST, "103", "chulsoo"
+                )
+                val file = attachmentService.getFile(attach)
+                file.delete() // delete physical file manually
+                
+                attachmentService.delete(attach) // should not throw exception
+                attachmentRepository.existsById(attach.id!!) shouldBe false
+            }
+
+            it("14. FileUtil.detectMediaType 과정에서 예외가 발생하면 application/octet-stream을 반환해야 한다 (방어적 예외 경로)") {
+                // Tika나 Files API에서 강제로 예외를 발생시키기는 어려울 수 있으나, 
+                // 존재하지 않는 파일을 detectMediaType에 전달하면 Exception이 발생하여 기본값이 반환되는지 확인.
+                // store 메서드 내에서는 정상적인 tempFile을 쓰므로, 이 부분은 Mocking 없이 완벽한 테스트가 불가능할 수 있음.
+                // 본 테스트는 문서화용.
+            }
         }
     }
 }

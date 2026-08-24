@@ -293,5 +293,32 @@ class CustomOAuth2UserServiceSpec : DescribeSpec({
             oauth2User.user.id shouldBe 99L
             verify(exactly = 0) { linkedAccountRepository.save(any()) }
         }
+
+        it("이메일로 찾을 수 없지만 loginId가 일치하는 경우 기존 사용자 계정과 연결해야 한다") {
+            val clientRegistration = ClientRegistration.withRegistrationId("github")
+                .clientId("client-id").tokenUri("https://token.uri").authorizationUri("https://auth.uri")
+                .userInfoUri("https://user.info.uri").authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("https://redirect.uri").build()
+            val userRequest = mockk<OAuth2UserRequest>()
+            every { userRequest.clientRegistration } returns clientRegistration
+
+            val attributes = mapOf("id" to 888, "login" to "gildong", "name" to "홍길동", "email" to "new-email@example.com")
+            val defaultOAuth2User = DefaultOAuth2User(listOf(SimpleGrantedAuthority("ROLE_USER")), attributes, "id")
+            every { delegate.loadUser(userRequest) } returns defaultOAuth2User
+
+            val existingUser = User(id = 42L, loginId = "gildong", name = "홍길동", email = "old-email@example.com", state = UserState.ACTIVE)
+            every { linkedAccountRepository.findByProviderKeyAndProviderUserId("github", "888") } returns Optional.empty()
+            every { userRepository.findByEmail("new-email@example.com") } returns Optional.empty()
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(existingUser)
+            every { linkedAccountRepository.save(any()) } answers { firstArg() }
+
+            val oauth2User = customOAuth2UserService.loadUser(userRequest) as YonaOAuth2User
+
+            oauth2User.user.id shouldBe 42L
+            verify(exactly = 0) { userRepository.save(any()) }
+            verify(exactly = 1) {
+                linkedAccountRepository.save(match { it.providerKey == "github" && it.providerUserId == "888" && it.user.id == 42L })
+            }
+        }
     }
 })

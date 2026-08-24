@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.watch.Watch
 import com.github.search5.yona.domain.watch.WatchRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.assertions.throwables.shouldThrow
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 
@@ -288,6 +289,82 @@ class PostingServiceSpec @Autowired constructor(
                     postingService.deletePosting(project.id!!, saved.number!!, author.id!!)
 
                     titleHeadRepository.findByProjectIdAndHeadKeyword(project.id!!, "공지") shouldBe null
+                }
+            }
+
+            describe("예외 및 엣지 케이스 테스트 (미커버 분기)") {
+                it("getPostings - 존재하지 않는 프로젝트 조회 시 예외 발생") {
+                    shouldThrow<IllegalArgumentException> {
+                        postingService.getPostings(9999L, org.springframework.data.domain.PageRequest.of(0, 10))
+                    }.message shouldBe "프로젝트를 찾을 수 없습니다."
+                }
+
+                it("getNotices - 존재하지 않는 프로젝트 조회 시 예외 발생") {
+                    shouldThrow<IllegalArgumentException> {
+                        postingService.getNotices(9999L)
+                    }.message shouldBe "프로젝트를 찾을 수 없습니다."
+                }
+
+                it("getPosting - 존재하지 않는 프로젝트 조회 시 예외 발생") {
+                    shouldThrow<IllegalArgumentException> {
+                        postingService.getPosting(9999L, 1L)
+                    }.message shouldBe "프로젝트를 찾을 수 없습니다."
+                }
+
+                it("createPosting - 존재하지 않는 프로젝트 조회 시 예외 발생") {
+                    val dummyProject = Project(name = "dummy", owner = "dummy")
+                    val posting = Posting(title = "test", body = "test", project = dummyProject)
+                    shouldThrow<IllegalArgumentException> {
+                        postingService.createPosting(9999L, posting, 1L)
+                    }.message shouldBe "프로젝트를 찾을 수 없습니다."
+                }
+
+                it("createPosting - 존재하지 않는 사용자 조회 시 예외 발생") {
+                    val project = projectRepository.save(Project(name = "test-project", owner = "owner"))
+                    val posting = Posting(title = "test", body = "test", project = project)
+                    shouldThrow<IllegalArgumentException> {
+                        postingService.createPosting(project.id!!, posting, 9999L)
+                    }.message shouldBe "사용자를 찾을 수 없습니다."
+                }
+
+                it("updatePosting - 존재하지 않는 포스팅 조회 시 예외 발생") {
+                    val project = projectRepository.save(Project(name = "test-project", owner = "owner"))
+                    shouldThrow<IllegalArgumentException> {
+                        postingService.updatePosting(project.id!!, 9999L, "title", "body", false, false, 1L, false)
+                    }.message shouldBe "포스팅을 찾을 수 없습니다."
+                }
+
+                it("updatePosting - updater가 null인 경우(사용자가 삭제된 경우)에도 정상 수정되어야 한다") {
+                    val author = userRepository.save(User(loginId = "author", name = "작성자", email = "author@yona.io"))
+                    val project = projectRepository.save(Project(name = "test-project", owner = "author"))
+                    val saved = postingService.createPosting(project.id!!, Posting(title = "원본", body = "본문", project = project), author.id!!)
+                    
+                    // authorId에 해당하는 사용자가 존재하지 않는 9999L로 전달
+                    val updated = postingService.updatePosting(
+                        projectId = project.id!!, number = saved.number!!,
+                        title = "수정됨", body = "수정된 본문", notice = false, readme = true,
+                        authorId = 9999L, sendNotificationMail = true
+                    )
+
+                    updated.title shouldBe "수정됨"
+                    updated.history shouldBe null // updater가 없으므로 history 기록 불가
+                }
+
+                it("deletePosting - 존재하지 않는 포스팅 삭제 시 예외 발생") {
+                    val project = projectRepository.save(Project(name = "test-project", owner = "owner"))
+                    shouldThrow<IllegalArgumentException> {
+                        postingService.deletePosting(project.id!!, 9999L, 1L)
+                    }.message shouldBe "포스팅을 찾을 수 없습니다."
+                }
+
+                it("deletePosting - 존재하지 않는 사용자(actor) 삭제 시 예외 발생") {
+                    val author = userRepository.save(User(loginId = "author2", name = "작성자2", email = "a2@yona.io"))
+                    val project = projectRepository.save(Project(name = "test-project2", owner = "author2"))
+                    val saved = postingService.createPosting(project.id!!, Posting(title = "원본", body = "본문", project = project), author.id!!)
+                    
+                    shouldThrow<IllegalArgumentException> {
+                        postingService.deletePosting(project.id!!, saved.number!!, 9999L)
+                    }.message shouldBe "사용자를 찾을 수 없습니다."
                 }
             }
         }
