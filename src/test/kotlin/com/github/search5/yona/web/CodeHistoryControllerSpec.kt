@@ -191,6 +191,124 @@ class CodeHistoryControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/vcs/owner/TestProj/commit/$commitId/comments"))
                     .andExpect(status().isOk)
             }
+            it("프로젝트가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NotFound") } returns Optional.empty()
+                mockMvc.perform(get("/api/vcs/owner/NotFound/commit/$commitId/comments"))
+                    .andExpect(status().isNotFound)
+            }
+        }
+
+        describe("CodeHistoryController 커밋 내역 API") {
+            describe("GET /api/vcs/{owner}/{projectName}/history") {
+                it("히스토리를 성공적으로 조회해야 한다") {
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                    val playRepo = mockk<PlayRepository>()
+                    every { repositoryService.getRepository(project) } returns playRepo
+                    val commit = mockk<Commit>(relaxed = true)
+                    every { commit.getId() } returns commitId
+                    every { commit.getShortId() } returns "abc123d"
+                    every { commit.getAuthorDate() } returns java.util.Date()
+                    every { commit.getCommitterDate() } returns java.util.Date()
+                    every { playRepo.getHistory(0, 20, "HEAD", null) } returns listOf(commit)
+
+                    mockMvc.perform(get("/api/vcs/owner/TestProj/history"))
+                        .andExpect(status().isOk)
+                }
+
+                it("프로젝트가 없으면 404를 반환해야 한다") {
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NotFound") } returns Optional.empty()
+                    mockMvc.perform(get("/api/vcs/owner/NotFound/history"))
+                        .andExpect(status().isNotFound)
+                }
+            }
+
+            describe("GET /api/vcs/{owner}/{projectName}/commit/{commitId}") {
+                it("커밋을 성공적으로 조회해야 한다") {
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                    val playRepo = mockk<PlayRepository>()
+                    every { repositoryService.getRepository(project) } returns playRepo
+                    val commit = mockk<Commit>(relaxed = true)
+                    every { commit.getId() } returns commitId
+                    every { commit.getShortId() } returns "abc123d"
+                    every { commit.getAuthorDate() } returns null
+                    every { commit.getCommitterDate() } returns null
+                    every { playRepo.getCommit(commitId) } returns commit
+
+                    mockMvc.perform(get("/api/vcs/owner/TestProj/commit/$commitId"))
+                        .andExpect(status().isOk)
+                }
+
+                it("프로젝트가 없으면 404를 반환해야 한다") {
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NotFound") } returns Optional.empty()
+                    mockMvc.perform(get("/api/vcs/owner/NotFound/commit/$commitId"))
+                        .andExpect(status().isNotFound)
+                }
+
+                it("커밋이 없으면 404를 반환해야 한다") {
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                    val playRepo = mockk<PlayRepository>()
+                    every { repositoryService.getRepository(project) } returns playRepo
+                    every { playRepo.getCommit(commitId) } returns null
+
+                    mockMvc.perform(get("/api/vcs/owner/TestProj/commit/$commitId"))
+                        .andExpect(status().isNotFound)
+                }
+            }
+        }
+
+        describe("추가 예외 케이스들") {
+            it("POST /comments - 프로젝트가 없으면 404") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NotFound") } returns Optional.empty()
+                mockMvc.perform(
+                    post("/api/vcs/owner/NotFound/commit/$commitId/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"contents": "댓글"}""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("POST /comments - 로그인 안하면 401") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                mockMvc.perform(
+                    post("/api/vcs/owner/TestProj/commit/$commitId/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"contents": "댓글"}""")
+                ).andExpect(status().isUnauthorized)
+            }
+
+            it("POST /comments - 권한 없으면 403") {
+                val privateProject = Project(id = 2L, name = "PrivateProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProj") } returns Optional.of(privateProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(2L, 10L) } returns Optional.empty()
+                mockMvc.perform(
+                    post("/api/vcs/owner/PrivateProj/commit/$commitId/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"contents": "댓글"}""")
+                        .principal(userAuth)
+                ).andExpect(status().isForbidden)
+            }
+
+            it("DELETE /comments - 프로젝트가 없으면 404") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NotFound") } returns Optional.empty()
+                mockMvc.perform(delete("/api/vcs/owner/NotFound/commit/$commitId/comments/500"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("DELETE /comments - 로그인 안하면 401") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                mockMvc.perform(delete("/api/vcs/owner/TestProj/commit/$commitId/comments/500"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("DELETE /comments - 댓글이 없으면 404") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { commitCommentRepository.findById(999L) } returns Optional.empty()
+                mockMvc.perform(
+                    delete("/api/vcs/owner/TestProj/commit/$commitId/comments/999")
+                        .principal(userAuth)
+                ).andExpect(status().isNotFound)
+            }
         }
     }
 })

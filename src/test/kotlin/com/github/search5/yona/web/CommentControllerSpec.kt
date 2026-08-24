@@ -432,6 +432,17 @@ class CommentControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.contents").value("매니저수정"))
             }
+
+            it("비로그인 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    put("/api/projects/1/issues/5/comments/100")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/issues/{number}/comments/{commentId} (이슈 댓글 삭제)") {
@@ -547,6 +558,15 @@ class CommentControllerSpec : DescribeSpec({
 
                 verify(exactly = 1) { commentService.deleteIssueComment(100L, managerUser) }
             }
+
+            it("비로그인 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    delete("/api/projects/1/issues/5/comments/100")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
         }
 
         describe("POST /api/projects/{projectId}/posts/{number}/comments (게시글 댓글 작성)") {
@@ -661,6 +681,35 @@ class CommentControllerSpec : DescribeSpec({
                         .content("{\"contents\": \"게시판댓글\"}")
                 )
                     .andExpect(status().isNotFound)
+            }
+
+            it("비로그인 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts/6/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"게시판댓글\"}")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("contents 필드가 없으면 빈 문자열 기본값으로 댓글을 생성해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { postingRepository.findByProjectAndNumber(project, 6L) } returns posting
+                every { commentService.createPostingComment(60L, "", user) } returns postingComment
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts/6/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                )
+                    .andExpect(status().isCreated)
+
+                verify(exactly = 1) { commentService.createPostingComment(60L, "", user) }
             }
         }
 
@@ -837,6 +886,17 @@ class CommentControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.contents").value("매니저수정"))
             }
+
+            it("비로그인 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/6/comments/200")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contents\": \"수정\"}")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/posts/{number}/comments/{commentId} (게시글 댓글 삭제)") {
@@ -951,6 +1011,36 @@ class CommentControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
 
                 verify(exactly = 1) { commentService.deletePostingComment(200L, managerUser) }
+            }
+
+            it("비로그인 사용자가 요청하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    delete("/api/projects/1/posts/6/comments/200")
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+        }
+
+        describe("CommentRequest data class test") {
+            it("기본값 및 data class 메서드들이 정상 동작해야 한다") {
+                val req1 = CommentController.CommentRequest()
+                val req2 = CommentController.CommentRequest(contents = "test", original = "orig", parentCommentId = 1L)
+                val req3 = req2.copy()
+                
+                assert(req1.contents == "")
+                assert(req1.original == null)
+                assert(req1.parentCommentId == null)
+                
+                assert(req2.contents == "test")
+                assert(req2.original == "orig")
+                assert(req2.parentCommentId == 1L)
+                
+                assert(req2.hashCode() == req3.hashCode())
+                assert(req2.toString() == req3.toString())
+                assert(req2 == req3)
+                assert(req1 != req2)
             }
         }
     }

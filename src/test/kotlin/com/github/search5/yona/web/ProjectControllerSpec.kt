@@ -440,5 +440,188 @@ class ProjectControllerSpec : DescribeSpec({
                     .andExpect(status().isForbidden)
             }
         }
+
+        describe("GET /api/projects/search") {
+            it("로그인하지 않은 경우 401을 반환해야 한다") {
+                mockMvc.perform(get("/api/projects/search"))
+                    .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print()).andExpect(status().isUnauthorized)
+            }
+            it("siteManager는 모든 프로젝트를 검색할 수 있어야 한다") {
+                val adminUser = User(id = 30L, loginId = "admin", name = "Admin", state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN)
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                val adminAuth = UsernamePasswordAuthenticationToken("admin", "password")
+                val page = org.springframework.data.domain.PageImpl(listOf(project))
+                every { projectRepository.findProjectsForAdmin(any(), any()) } returns page
+
+                mockMvc.perform(get("/api/projects/search").principal(adminAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0]").value("owner/TestProject"))
+            }
+            it("일반 유저는 자신이 허용된 프로젝트 아이디가 있으면 그걸로 검색해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(1L)
+                val page = org.springframework.data.domain.PageImpl(listOf(project))
+                every { projectRepository.searchProjects(listOf(1L), any(), any()) } returns page
+
+                mockMvc.perform(get("/api/projects/search").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0]").value("owner/TestProject"))
+            }
+            it("허용된 프로젝트가 없고 공개 프로젝트가 없으면 빈 리스트를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findAllowedProjectIdsForUser(10L) } returns emptyList()
+                every { projectRepository.findPublicProjectIds() } returns emptyList()
+
+                mockMvc.perform(get("/api/projects/search").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$").isEmpty)
+            }
+            it("허용된 프로젝트가 없고 공개 프로젝트가 있으면 공개 프로젝트 내에서 검색해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findAllowedProjectIdsForUser(10L) } returns emptyList()
+                every { projectRepository.findPublicProjectIds() } returns listOf(1L)
+                val page = org.springframework.data.domain.PageImpl(listOf(project))
+                every { projectRepository.searchProjects(listOf(1L), any(), any()) } returns page
+
+                mockMvc.perform(get("/api/projects/search").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0]").value("owner/TestProject"))
+            }
+        }
+
+        describe("PUT /api/projects/{projectId} 추가 예외 처리") {
+            it("로그인하지 않은 경우 401을 반환해야 한다") {
+                mockMvc.perform(put("/api/projects/1").contentType(MediaType.APPLICATION_JSON).content("""{"overview":"test","projectScope":"PUBLIC"}"""))
+                    .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print()).andExpect(status().isUnauthorized)
+            }
+            it("서비스가 IllegalStateException을 던지면 500을 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { projectService.updateProject(1L, any()) } throws IllegalStateException("Internal Error")
+
+                val jsonContent = """{"overview": "새로운 설명", "projectScope": "PUBLIC"}"""
+                mockMvc.perform(put("/api/projects/1").contentType(MediaType.APPLICATION_JSON).content(jsonContent).principal(userAuth))
+                    .andExpect(status().isInternalServerError)
+            }
+        }
+
+        describe("DELETE /api/projects/{projectId} 추가 예외 처리") {
+            it("프로젝트가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+                mockMvc.perform(delete("/api/projects/999"))
+                    .andExpect(status().isNotFound)
+            }
+            it("로그인하지 않은 경우 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                mockMvc.perform(delete("/api/projects/1"))
+                    .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print()).andExpect(status().isUnauthorized)
+            }
+            it("owner가 아니지만 MANAGER인 경우 200 OK를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user) // testuser != owner
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser) // MANAGER
+                every { projectService.deleteProject(1L) } returns Unit
+
+                mockMvc.perform(delete("/api/projects/1").principal(userAuth))
+                    .andExpect(status().isOk)
+            }
+            it("owner도 아니고 MANAGER도 아니면 403을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/1").principal(userAuth))
+                    .andExpect(status().isForbidden)
+            }
+        }
+
+        describe("POST /api/{owner}/{projectName}/transfer") {
+            it("로그인하지 않은 경우 401을 반환해야 한다") {
+                mockMvc.perform(post("/api/owner/TestProject/transfer").param("destination", "dest"))
+                    .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print()).andExpect(status().isUnauthorized)
+            }
+            it("프로젝트가 없으면 404를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+                mockMvc.perform(post("/api/owner/unknown/transfer").param("destination", "dest").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+            it("MANAGER가 아니면 403을 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+                mockMvc.perform(post("/api/owner/TestProject/transfer").param("destination", "dest").principal(userAuth))
+                    .andExpect(status().isForbidden)
+            }
+            it("정상적으로 이전 요청을 수행하면 200 OK를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                val transferMock = com.github.search5.yona.domain.project.ProjectTransfer(id = 1L, sender = user, destination = "dest", project = project)
+                every { projectService.requestNewTransfer(1L, 10L, "dest") } returns transferMock
+
+                mockMvc.perform(post("/api/owner/TestProject/transfer").param("destination", "dest").principal(userAuth))
+                    .andExpect(status().isOk)
+            }
+            it("IllegalArgumentException이 발생하면 400을 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { projectService.requestNewTransfer(1L, 10L, "dest") } throws IllegalArgumentException("error")
+
+                mockMvc.perform(post("/api/owner/TestProject/transfer").param("destination", "dest").principal(userAuth))
+                    .andExpect(status().isBadRequest)
+            }
+        }
+
+        describe("POST /api/projects/transfer/{transferId}/accept") {
+            it("로그인하지 않은 경우 401을 반환해야 한다") {
+                mockMvc.perform(post("/api/projects/transfer/1/accept").param("confirmKey", "key"))
+                    .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print()).andExpect(status().isUnauthorized)
+            }
+            it("정상 수락 시 200 OK를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectService.acceptTransfer(1L, "key", 10L) } returns Unit
+
+                mockMvc.perform(post("/api/projects/transfer/1/accept").param("confirmKey", "key").principal(userAuth))
+                    .andExpect(status().isOk)
+            }
+            it("IllegalArgumentException 발생 시 400을 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectService.acceptTransfer(1L, "key", 10L) } throws IllegalArgumentException("err")
+
+                mockMvc.perform(post("/api/projects/transfer/1/accept").param("confirmKey", "key").principal(userAuth))
+                    .andExpect(status().isBadRequest)
+            }
+        }
+
+        describe("POST /api/{owner}/{projectName}/fork") {
+            it("로그인하지 않은 경우 401을 반환해야 한다") {
+                mockMvc.perform(post("/api/owner/TestProject/fork"))
+                    .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print()).andExpect(status().isUnauthorized)
+            }
+            it("프로젝트가 없으면 404를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+                mockMvc.perform(post("/api/owner/unknown/fork").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+            it("정상적으로 포크하면 200 OK를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { projectService.forkProject(1L, 10L) } returns project
+
+                mockMvc.perform(post("/api/owner/TestProject/fork").principal(userAuth))
+                    .andExpect(status().isOk)
+            }
+            it("IllegalArgumentException 발생 시 400을 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { projectService.forkProject(1L, 10L) } throws IllegalArgumentException("error")
+
+                mockMvc.perform(post("/api/owner/TestProject/fork").principal(userAuth))
+                    .andExpect(status().isBadRequest)
+            }
+        }
     }
 })
