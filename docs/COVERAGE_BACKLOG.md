@@ -105,6 +105,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `AttachmentServiceImpl`, `PostingServiceImpl`, `CustomOAuth2UserService`, `YonaOAuth2User`, `OAuth2UserInfoFactory` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25 05:36, 13차 배치 완료 후)
+
+- 추가 완료([x]): `GitPostReceiveEventListener`, `PullRequestMergeEventListener`, `IssueSpecification`, `SvnRepository`, `RepositoryService` (모두 95% 이상 확보 및 완료)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -148,14 +153,14 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `WebhookType` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
 | `EventType` | 100.0 | 100.0 | 80.0 | 0 | 0 | 1 | [ ] | |
 | **domain/event** | | | | | | | | |
-| `GitPostReceiveEventListener` | 51.1 | 26.7 | 55.6 | 45 | 22 | 4 | [ ] | |
-| `PullRequestMergeEventListener` | 96.1 | 73.7 | 100.0 | 4 | 10 | 0 | [ ] | |
+| `GitPostReceiveEventListener` | 51.1 | 26.7 | 55.6 | 45 | 22 | 4 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `PullRequestMergeEventListener` | 96.1 | 73.7 | 100.0 | 4 | 10 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `PullRequestMergeEvent` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
 | **domain/issue** | | | | | | | | |
 | `IssueShareServiceImpl` | 33.9 | 8.8 | 27.8 | 119 | 104 | 13 | [i] | 2026-08-23: 46 tests(43+3, `IssueShareServiceImplSpec.kt`). 도달 가능한 분기는 전부 커버(담당자-없음+작성자==본인, 사이트관리자 조회 루프 진입, 검색결과 0건 루프 미진입 등 3건 추가). 도달 불가능 근거 확정: `mapUser`의 `user.avatarUrl ?: ""`(`User.avatarUrl` non-null) + `findAssignableUsers`의 `issue.assignee?.user?.id` 두 곳(각 최대 2분기, `Assignee.user`가 `@JoinColumn(nullable=false)` non-null이라 두번째 safe-call 도달 불가, `if(assignee!=null)` 블록 내부라 첫번째도 구조적으로 도달 불가) — 구조적 한계로 95% 미만이어도 최대치 도달로 인정. **실버그 확정**: `findSharableUsers(query, type: String?)`의 `type` 파라미터가 메서드 본문에서 전혀 참조되지 않음(죽은 파라미터, 타입별 필터링 미완성으로 추정) — 미수정, 별도 검토 필요 |
 | `IssueExcelService` | 3.6 | 0.0 | 16.7 | 106 | 42 | 5 | [i] | 2026-08-23: 신규 5 tests, `IssueExcelServiceSpec.kt`. 전체 회귀 확정치: LINE 98.2%, BRANCH 88.1%(37/42), METHOD 100% — 도달 가능한 분기는 100%(37/37) 커버, 미실행 5개는 `Milestone.title`/`AbstractPosting.title`/`Assignee.user`/`User.name`/`Comment.contents`가 전부 non-null 타입이라 elvis/safe-call의 null 분기가 Kotlin 타입 시스템상 생성 자체가 불가능(순수 코드로 만들 방법 없음) — 구조적 한계로 95% 미달을 인정. 라인 미실행 2개는 `workbook.close()` 실패 catch 블록으로 내부에서 워크북을 생성해 주입 지점이 없어 정상 흐름에서 트리거 불가 |
 | `IssueServiceImpl` | 96.6 | 64.2 | 64.2 | 13 | 58 | 19 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `IssueSpecification` | 50.7 | 44.8 | 100.0 | 33 | 32 | 0 | [ ] | |
+| `IssueSpecification` | 50.7 | 44.8 | 100.0 | 33 | 32 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `IssueLabelServiceImpl` | 61.7 | 47.2 | 50.0 | 41 | 19 | 13 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `RecentIssueService` | 100.0 | 57.1 | 100.0 | 0 | 6 | 0 | [ ] | |
 | `IssueEventRecorderKt` | 100.0 | 78.6 | 100.0 | 0 | 3 | 0 | [ ] | |
@@ -276,8 +281,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `BareCommit` | 61.0 | 30.6 | 87.5 | 53 | 34 | 1 | [i] | 2026-08-25: BRANCH 91.84% 확보. JGit 내부 `ru.forceUpdate` IO 실패 분기 및 git 트리 내 중복 이름 조회 루프 분기는 구조적으로 테스트에서 도달할 수 없어 최대 실질 커버리지에 도달한 예외로 인정. |
 | `Hunk` | 0.0 | 0.0 | 0.0 | 26 | 18 | 15 | [ ] | |
 | `DiffLine` | 0.0 | 0.0 | 0.0 | 21 | 22 | 9 | [ ] | |
-| `SvnRepository` | 92.2 | 63.9 | 91.4 | 15 | 26 | 3 | [ ] | |
-| `RepositoryService` | 67.5 | 36.7 | 66.7 | 13 | 19 | 2 | [ ] | |
+| `SvnRepository` | 92.2 | 63.9 | 91.4 | 15 | 26 | 3 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `RepositoryService` | 67.5 | 36.7 | 66.7 | 13 | 19 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `SvnCommit` | 39.1 | 7.1 | 37.5 | 14 | 13 | 10 | [ ] | |
 | `GitCommit` | 64.7 | 25.0 | 60.0 | 6 | 15 | 6 | [ ] | |
 | `PushedBranch` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
