@@ -92,5 +92,51 @@ class GitProjectVisitRecorderSpec : DescribeSpec({
 
             verify(exactly = 0) { recentProjectRepository.recordVisit(any(), any()) }
         }
+
+        it("POST 요청이지만 RPC URI가 아니면 방문을 기록하지 않아야 한다") {
+            val request = MockHttpServletRequest("POST", "/git/gildong/sample-repo.git/something-else")
+            recorder.recordIfApplicable(request)
+            verify(exactly = 0) { projectService.findByOwnerAndName(any(), any()) }
+        }
+
+        it("RPC 요청이지만 git URI 패턴에 맞지 않으면 방문을 기록하지 않아야 한다") {
+            val request = MockHttpServletRequest("POST", "/invalid-uri/git-upload-pack")
+            recorder.recordIfApplicable(request)
+            verify(exactly = 0) { projectService.findByOwnerAndName(any(), any()) }
+        }
+
+        it("SecurityContext에 Authentication이 없으면 방문을 기록하지 않아야 한다") {
+            val request = MockHttpServletRequest("POST", "/git/gildong/sample-repo.git/git-upload-pack")
+            every { projectService.findByOwnerAndName("gildong", "sample-repo") } returns project
+            SecurityContextHolder.clearContext()
+
+            recorder.recordIfApplicable(request)
+
+            verify(exactly = 0) { recentProjectRepository.recordVisit(any(), any()) }
+        }
+
+        it("Authentication이 isAuthenticated=false이면 방문을 기록하지 않아야 한다") {
+            val request = MockHttpServletRequest("POST", "/git/gildong/sample-repo.git/git-upload-pack")
+            every { projectService.findByOwnerAndName("gildong", "sample-repo") } returns project
+            val auth = UsernamePasswordAuthenticationToken("gildong", "password")
+            auth.isAuthenticated = false
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            recorder.recordIfApplicable(request)
+
+            verify(exactly = 0) { recentProjectRepository.recordVisit(any(), any()) }
+        }
+
+        it("인증된 사용자지만 DB에 존재하지 않으면 방문을 기록하지 않아야 한다") {
+            val request = MockHttpServletRequest("POST", "/git/gildong/sample-repo.git/git-upload-pack")
+            every { projectService.findByOwnerAndName("gildong", "sample-repo") } returns project
+            every { userRepository.findByLoginId("gildong") } returns Optional.empty()
+            val auth = UsernamePasswordAuthenticationToken("gildong", "password", AuthorityUtils.createAuthorityList("ROLE_ACTIVE"))
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            recorder.recordIfApplicable(request)
+
+            verify(exactly = 0) { recentProjectRepository.recordVisit(any(), any()) }
+        }
     }
 })

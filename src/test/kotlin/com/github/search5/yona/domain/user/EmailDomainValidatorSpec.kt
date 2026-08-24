@@ -28,5 +28,13 @@ class EmailDomainValidatorSpec : DescribeSpec({
         it("도메인 목록 항목에 공백이 섞여 있어도 정상 매칭해야 한다") {
             EmailDomainValidator.isAllowed("gildong@example.com", "  example.com  ,other.com") shouldBe true
         }
+
+        it("이메일이 @로 끝나면 거부해야 한다") {
+            EmailDomainValidator.isAllowed("gildong@", "example.com") shouldBe false
+        }
+
+        it("도메인 설정에 빈 문자열이나 공백만 있는 항목이 포함되어도 무시해야 한다") {
+            EmailDomainValidator.isAllowed("gildong@example.com", "example.com, ,  ,other.com") shouldBe true
+        }
     }
 })

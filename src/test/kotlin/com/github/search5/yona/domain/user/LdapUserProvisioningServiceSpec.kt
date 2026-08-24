@@ -108,5 +108,37 @@ class LdapUserProvisioningServiceSpec : DescribeSpec({
 
             result.englishName shouldBe "Gildong Hong"
         }
+
+        it("신규 유저 생성 시 englishName이 존재하면 설정해야 한다") {
+            val ldapUser = LdapUser(
+                displayName = "홍길동", email = "gildong@example.com", loginId = "gildong",
+                department = "개발팀", isGuestUser = false, englishName = "Gildong Hong"
+            )
+            every { userRepository.findByEmail("gildong@example.com") } returns Optional.empty()
+            val savedSlot = slot<User>()
+            every { userRepository.save(capture(savedSlot)) } answers { savedSlot.captured }
+
+            val result = service.reconcile(ldapUser, "myPassword123!")
+
+            result.englishName shouldBe "Gildong Hong"
+        }
+
+        it("기존 유저의 passwordSalt가 null이면 비밀번호 불일치로 간주하고 재발급해야 한다") {
+            val existingUser = User(
+                id = 5L, loginId = "gildong", name = "옛이름", email = "gildong@example.com",
+                password = "somePassword", passwordSalt = null, isGuest = false
+            )
+            every { userRepository.findByEmail("gildong@example.com") } returns Optional.of(existingUser)
+            every { userRepository.save(any()) } answers { firstArg() }
+
+            val ldapUser = LdapUser(
+                displayName = "홍길동", email = "gildong@example.com", loginId = "gildong",
+                department = "개발팀", isGuestUser = true
+            )
+
+            val result = service.reconcile(ldapUser, "newPassword456!")
+
+            result.passwordSalt shouldNotBe null
+        }
     }
 })

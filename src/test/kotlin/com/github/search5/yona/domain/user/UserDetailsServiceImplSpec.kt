@@ -35,5 +35,26 @@ class UserDetailsServiceImplSpec : DescribeSpec({
             authorityNames.contains("ROLE_SITE_ADMIN") shouldBe true
             authorityNames.contains("ROLE_ADMIN") shouldBe true
         }
+
+        it("사용자를 찾을 수 없으면 UsernameNotFoundException을 던져야 한다") {
+            every { userRepository.findByLoginId("unknown") } returns Optional.empty()
+            
+            io.kotest.assertions.throwables.shouldThrow<org.springframework.security.core.userdetails.UsernameNotFoundException> {
+                service.loadUserByUsername("unknown")
+            }
+        }
+
+        it("id, password, passwordSalt가 null일 때 기본값을 처리해야 한다") {
+            val user = User(id = null, loginId = "nullfields", name = "null", email = "null@example.com", state = UserState.ACTIVE)
+            user.password = null
+            user.passwordSalt = null
+            every { userRepository.findByLoginId("nullfields") } returns Optional.of(user)
+
+            val details = service.loadUserByUsername("nullfields") as YonaUserDetails
+
+            details.id shouldBe 0L
+            details.password shouldBe ""
+            details.passwordSalt shouldBe ""
+        }
     }
 })
