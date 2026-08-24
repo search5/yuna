@@ -135,6 +135,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `OrganizationServiceImpl`, `MilestoneServiceImpl`, `WebhookNotificationEventListener`, `FavoriteServiceImpl`, `WatchServiceImpl` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25 06:25, 19차 배치 완료 후)
+
+- 추가 완료([x]): `YonaUpdateService`, `StatisticsServiceImpl`, `MarkdownServiceImpl`, `DiagnosticService`, `ReviewThreadServiceImpl` (모두 95% 이상 확보 및 완료)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -264,14 +269,14 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `SearchServiceImpl` | 68.2 | 37.5 | 85.7 | 27 | 40 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `AutoLinkRenderer` | 75.0 | 57.9 | 75.0 | 33 | 32 | 5 | [ ] | |
 | `SearchResult` | 63.3 | 40.6 | 93.0 | 29 | 19 | 3 | [ ] | |
-| `YonaUpdateService` | 70.7 | 37.5 | 81.8 | 17 | 20 | 2 | [ ] | |
-| `StatisticsServiceImpl` | 7.7 | 100.0 | 50.0 | 36 | 0 | 1 | [ ] | |
+| `YonaUpdateService` | 70.7 | 37.5 | 81.8 | 17 | 20 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `StatisticsServiceImpl` | 7.7 | 100.0 | 50.0 | 36 | 0 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `LineEnding` | 43.5 | 32.4 | 66.7 | 13 | 23 | 2 | [ ] | |
-| `MarkdownServiceImpl` | 90.5 | 74.0 | 100.0 | 14 | 13 | 0 | [ ] | |
+| `MarkdownServiceImpl` | 90.5 | 74.0 | 100.0 | 14 | 13 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `CodeRange` | 63.2 | 0.0 | 27.8 | 7 | 16 | 13 | [ ] | |
 | `HistoryUtil` | 83.6 | 67.6 | 100.0 | 9 | 12 | 0 | [ ] | |
-| `DiagnosticService` | 70.7 | 59.1 | 100.0 | 12 | 9 | 0 | [ ] | |
-| `ReviewThreadServiceImpl` | 83.3 | 75.0 | 80.0 | 8 | 5 | 1 | [ ] | |
+| `DiagnosticService` | 70.7 | 59.1 | 100.0 | 12 | 9 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
+| `ReviewThreadServiceImpl` | 83.3 | 75.0 | 80.0 | 8 | 5 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `FileUtil` | 96.2 | 56.2 | 100.0 | 1 | 7 | 0 | [ ] | |
 | `DiffUtil` | 100.0 | 85.7 | 100.0 | 0 | 4 | 0 | [ ] | |
 | `AbstractPosting` | 95.7 | 100.0 | 93.8 | 1 | 0 | 2 | [ ] | |
