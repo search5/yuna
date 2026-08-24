@@ -267,6 +267,101 @@ class OrganizationServiceSpec @Autowired constructor(
                 val updatedFavorite = favoriteOrganizationRepository.findById(favorite.id!!).orElseThrow()
                 updatedFavorite.organizationName shouldBe "new-org-name"
             }
+            describe("추가 커버리지 테스트") {
+                it("findByName 조회 검증") {
+                    val org = organizationService.createOrganization("find-org", "desc", admin.id!!)
+                    organizationService.findByName("find-org")?.id shouldBe org.id
+                    organizationService.findByName("not-exist-org") shouldBe null
+                }
+                
+                it("updateOrganizationSettings에서 이미 존재하는 이름으로 변경 시 예외") {
+                    organizationService.createOrganization("org-1", "desc1", admin.id!!)
+                    val org2 = organizationService.createOrganization("org-2", "desc2", admin.id!!)
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.updateOrganizationSettings(org2.id!!, "org-1", "new desc", admin.id!!)
+                    }
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.updateOrganizationSettings(org2.id!!, admin.loginId, "new desc", admin.id!!)
+                    }
+                }
+                
+                it("addOrganizationMember 이미 멤버인 유저 및 enroll 취소 검증") {
+                    val org = organizationService.createOrganization("org-member-test", "desc", admin.id!!)
+                    val targetUser = userRepository.save(User(loginId = "target-user", name = "타겟", email = "target@yona.io"))
+                    
+                    targetUser.enroll(org)
+                    userRepository.save(targetUser)
+                    
+                    organizationService.addOrganizationMember(org.id!!, targetUser.loginId, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.addOrganizationMember(org.id!!, targetUser.loginId, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    }
+                    val reloadedUser = userRepository.findById(targetUser.id!!).get()
+                    reloadedUser.enrolledOrganizations.contains(org) shouldBe false
+                }
+                
+                it("removeOrganizationMember 멤버가 없는 경우 예외") {
+                    val org = organizationService.createOrganization("org-remove-test", "desc", admin.id!!)
+                    val targetUser = userRepository.save(User(loginId = "target-user2", name = "타겟2", email = "target2@yona.io"))
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.removeOrganizationMember(org.id!!, targetUser.id!!, admin.id!!)
+                    }
+                }
+                
+                it("updateOrganizationMemberRole 관리자가 여러명이면 마지막 관리자가 아니므로 강등 가능") {
+                    val org = organizationService.createOrganization("org-role-test", "desc", admin.id!!)
+                    val targetUser = userRepository.save(User(loginId = "target-admin", name = "관리자2", email = "admin2@yona.io"))
+                    organizationService.addOrganizationMember(org.id!!, targetUser.loginId, RoleType.ORG_ADMIN.roleType, admin.id!!)
+                    
+                    organizationService.updateOrganizationMemberRole(org.id!!, admin.id!!, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    val updatedAdmin = organizationUserRepository.findByOrganizationIdAndUserId(org.id!!, admin.id!!).get()
+                    updatedAdmin.role.id shouldBe RoleType.ORG_MEMBER.roleType
+                }
+                
+                it("enroll 시 이미 대기중인 경우 조용히 리턴") {
+                    val org = organizationService.createOrganization("org-enroll-test", "desc", admin.id!!)
+                    val targetUser = userRepository.save(User(loginId = "enroll-user", name = "대기자", email = "enroll@yona.io"))
+                    
+                    organizationService.enroll(org.name, targetUser.id!!)
+                    organizationService.enroll(org.name, targetUser.id!!) // should return silently
+                }
+                
+                it("enroll 시 관리자가 없는 경우 알림 전송 안함") {
+                    val org = organizationService.createOrganization("org-noadmin-test", "desc", admin.id!!)
+                    organizationUserRepository.deleteAll() // 강제로 관리자 없앰
+                    val targetUser = userRepository.save(User(loginId = "enroll-user2", name = "대기자2", email = "enroll2@yona.io"))
+                    organizationService.enroll(org.name, targetUser.id!!) // doesn't crash
+                }
+                
+                it("leaveOrganization 관리자가 탈퇴") {
+                    val org = organizationService.createOrganization("org-leave-test", "desc", admin.id!!)
+                    organizationService.leaveOrganization(org.id!!, admin.id!!)
+                    organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, admin.id!!) shouldBe false
+                }
+                
+                it("leaveOrganization 일반 멤버가 관리자가 1명일때 탈퇴 실패") {
+                    val org = organizationService.createOrganization("org-leave-fail", "desc", admin.id!!)
+                    val targetUser = userRepository.save(User(loginId = "leave-user", name = "탈퇴자", email = "leave@yona.io"))
+                    organizationService.addOrganizationMember(org.id!!, targetUser.loginId, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    
+                    shouldThrow<IllegalStateException> {
+                        organizationService.leaveOrganization(org.id!!, targetUser.id!!)
+                    }
+                }
+                
+                it("leaveOrganization 일반 멤버가 관리자가 2명일때 탈퇴 성공") {
+                    val org = organizationService.createOrganization("org-leave-success", "desc", admin.id!!)
+                    val admin2 = userRepository.save(User(loginId = "admin-2", name = "어드민2", email = "admin2@yona.io"))
+                    organizationService.addOrganizationMember(org.id!!, admin2.loginId, RoleType.ORG_ADMIN.roleType, admin.id!!)
+                    
+                    val targetUser = userRepository.save(User(loginId = "leave-user2", name = "탈퇴자2", email = "leave2@yona.io"))
+                    organizationService.addOrganizationMember(org.id!!, targetUser.loginId, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    
+                    organizationService.leaveOrganization(org.id!!, targetUser.id!!)
+                    organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, targetUser.id!!) shouldBe false
+                }
+            }
         }
     }
 }

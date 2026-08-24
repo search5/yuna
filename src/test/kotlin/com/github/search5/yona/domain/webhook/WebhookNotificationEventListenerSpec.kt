@@ -226,5 +226,13 @@ class WebhookNotificationEventListenerSpec : DescribeSpec({
 
             verify(exactly = 0) { webhookService.sendWebhook(any(), any(), any(), any()) }
         }
+        it("지원하지 않는 리소스 타입(else 분기)인 경우 웹훅을 발송하지 않아야 한다") {
+            val event = NotificationEvent(
+                title = "기타 리소스", senderId = 9L, created = Instant.now(),
+                resourceType = ResourceType.PROJECT, resourceId = "100", eventType = EventType.NEW_COMMENT
+            )
+            listener.handleNotificationEvent(event)
+            verify(exactly = 0) { webhookService.sendWebhook(any(), any(), any(), any()) }
+        }
     }
 })

@@ -322,6 +322,31 @@ class WatchServiceSpec @Autowired constructor(
                     watchers.map { it.loginId }.toSet() shouldBe setOf("user1", "user2")
                 }
             }
+            describe("추가 커버리지 테스트") {
+                it("unwatch 후 다시 watch 시 unwatch 데이터가 삭제되어야 한다") {
+                    watchService.unwatch(user2, ResourceType.ISSUE_POST, issue.id.toString())
+                    watchService.watch(user2, ResourceType.ISSUE_POST, issue.id.toString())
+                    watchService.isWatching(user2, ResourceType.ISSUE_POST, issue.id.toString()) shouldBe true
+                }
+                it("watch 안 한 상태에서 unwatch 시 watch null 분기 커버리지") {
+                    watchService.unwatch(user3, ResourceType.ISSUE_POST, issue.id.toString())
+                    watchService.isWatching(user3, ResourceType.ISSUE_POST, issue.id.toString()) shouldBe false
+                }
+                it("siteManager는 allowedWatchersOnly 필터에서 무조건 포함된다") {
+                    val managerRole = roleRepository.findById(RoleType.MANAGER.roleType).orElseGet { roleRepository.save(Role(id = RoleType.MANAGER.roleType, name = "MANAGER")) }
+                    val privateProject = projectRepository.save(Project(name = "private-project-3", owner = "user1", projectScope = ProjectScope.PRIVATE))
+                    val siteManagerUser = userRepository.save(User(loginId = "sitemanager", name = "관리자", email = "site@example.com").apply { state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN })
+                    
+                    watchService.watch(siteManagerUser, ResourceType.ISSUE_POST, "999")
+                    val watchers = watchService.findActualWatchers(emptySet(), ResourceType.ISSUE_POST, "999", privateProject.id, true)
+                    watchers.map { it.loginId }.contains("sitemanager") shouldBe true
+                }
+                it("projectId가 null인 전역 리소스는 누구나 읽을 수 있다 (hasReadPermission)") {
+                    watchService.watch(user2, ResourceType.ISSUE_POST, "999")
+                    val watchers = watchService.findActualWatchers(emptySet(), ResourceType.ISSUE_POST, "999", null, true)
+                    watchers.map { it.loginId }.contains("user2") shouldBe true
+                }
+            }
         }
     }
 }
