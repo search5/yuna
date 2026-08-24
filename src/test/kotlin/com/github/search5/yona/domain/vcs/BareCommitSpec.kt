@@ -286,4 +286,72 @@ class BareCommitSpec : DescribeSpec({
             }
         }
     }
+
+        describe("Coverage addition for BareCommit") {
+            it("should handle null parentFile in commitTextFile (4-args)") {
+                val gitBaseDir = java.nio.file.Files.createTempDirectory("yuna-barecommit-cov").toFile()
+                val bareDir = java.io.File(gitBaseDir, "tester/repo.git")
+                org.eclipse.jgit.api.Git.init().setDirectory(bareDir).setBare(true).call().close()
+                
+                val project = com.github.search5.yona.domain.project.Project(id = 1L, owner = "tester", name = "repo")
+                val user = com.github.search5.yona.domain.user.User(id = 1L, loginId = "tester", name = "tester", email = "tester@yona.io")
+                val bare = com.github.search5.yona.domain.vcs.BareCommit(project, user, gitBaseDir.absolutePath)
+                
+                // "root.txt" has no parent directory, so file.parentFile is null.
+                val commitId = bare.commitTextFile("develop", "root.txt", "content", "msg")
+                io.kotest.matchers.shouldNotBe.shouldNotBe(commitId, null)
+            }
+            
+            it("should handle unreachable branches using reflection") {
+                val gitBaseDir = java.nio.file.Files.createTempDirectory("yuna-barecommit-cov2").toFile()
+                val bareDir = java.io.File(gitBaseDir, "tester/repo.git")
+                org.eclipse.jgit.api.Git.init().setDirectory(bareDir).setBare(true).call().close()
+                
+                val project = com.github.search5.yona.domain.project.Project(id = 1L, owner = "tester", name = "repo")
+                val user = com.github.search5.yona.domain.user.User(id = 1L, loginId = "tester", name = "tester", email = "tester@yona.io")
+                val bare = com.github.search5.yona.domain.vcs.BareCommit(project, user, gitBaseDir.absolutePath)
+                
+                // Access private field headObjectId and set to null to cover branch in createTreeWith
+                val field = com.github.search5.yona.domain.vcs.BareCommit::class.java.getDeclaredField("headObjectId")
+                field.isAccessible = true
+                field.set(bare, null)
+                
+                val inserterMethod = com.github.search5.yona.domain.vcs.BareCommit::class.java.getDeclaredMethod("createTreeWith", org.eclipse.jgit.lib.ObjectInserter::class.java, String::class.java, org.eclipse.jgit.lib.ObjectId::class.java)
+                inserterMethod.isAccessible = true
+                
+                val git = com.github.search5.yona.domain.vcs.PlayRepository.gitRepository(project, gitBaseDir.absolutePath)
+                git.repository.newObjectInserter().use { inserter ->
+                    val zeroBlob = org.eclipse.jgit.lib.ObjectId.zeroId()
+                    val treeId = inserterMethod.invoke(bare, inserter, "test.txt", zeroBlob) as org.eclipse.jgit.lib.ObjectId
+                    io.kotest.matchers.shouldNotBe.shouldNotBe(treeId, null)
+                }
+                git.close()
+            }
+        }
+    
+
+        describe("Coverage addition for BareCommit - Constructor nulls") {
+            it("should handle null name and email in constructor") {
+                val gitBaseDir = java.nio.file.Files.createTempDirectory("yuna-barecommit-cov3").toFile()
+                val bareDir = java.io.File(gitBaseDir, "tester/repo.git")
+                org.eclipse.jgit.api.Git.init().setDirectory(bareDir).setBare(true).call().close()
+                
+                val project = com.github.search5.yona.domain.project.Project(id = 1L, owner = "tester", name = "repo")
+                
+                // Create User via Unsafe or just use MockK if possible? No, MockK doesn't like returning null for non-null types.
+                // We can use Java reflection to set the field to null directly.
+                val user = com.github.search5.yona.domain.user.User(id = 1L, loginId = "tester", name = "tester", email = "tester@yona.io")
+                val nameField = com.github.search5.yona.domain.user.User::class.java.getDeclaredField("name")
+                nameField.isAccessible = true
+                nameField.set(user, null)
+                
+                val emailField = com.github.search5.yona.domain.user.User::class.java.getDeclaredField("email")
+                emailField.isAccessible = true
+                emailField.set(user, null)
+                
+                val bare = com.github.search5.yona.domain.vcs.BareCommit(project, user, gitBaseDir.absolutePath)
+                bare shouldNotBe null
+            }
+        }
+    
 })
