@@ -1637,6 +1637,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 
                 // 에러 발생 없이 무시되고 새 이슈 생성으로 넘어가야 함
                 every { originalEmailRepository.findByMessageId(any()) } returns java.util.Optional.empty()
+                every { originalEmailRepository.save(any()) } answers { firstArg() }
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns null
                 every { projectRepository.findByOwnerAndName("dlab", "hive") } returns java.util.Optional.of(project)
                 every { issueService.createIssue(any(), any(), any(), any(), any()) } answers { firstArg<Issue>().apply { id = 123L } }
@@ -1649,6 +1650,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
                 // resolveResourceProject에서 else -> null 을 리턴하여 스레드로 인식되지 않고 새 이슈 생성으로 넘어간다.
                 val message = baseMessage(recipients = listOf("yona+dlab/hive/project/123@example.com"))
                 every { originalEmailRepository.findByMessageId(any()) } returns java.util.Optional.empty()
+                every { originalEmailRepository.save(any()) } answers { firstArg() }
                 every { projectRepository.findByOwnerAndName("dlab", "hive") } returns java.util.Optional.of(project)
                 every { issueRepository.findByProjectAndNumber(project, 1L) } returns null
                 every { issueService.createIssue(any(), any(), any(), any(), any()) } answers { firstArg<Issue>().apply { id = 124L } }

@@ -1003,7 +1003,7 @@ class AttachmentControllerSpec : DescribeSpec({
                 every { attachmentService.getFile(attachment) } returns mockFile
                 
                 mockMvc.perform(
-                    get("/api/attachments/100")
+                    get("/files/100")
                 ).andExpect(status().isInternalServerError)
             }
         }
