@@ -32,6 +32,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.project.ProjectUser
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 
 class BranchViewControllerSpec : DescribeSpec({
@@ -134,6 +135,144 @@ class BranchViewControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/owner/group-project/branches").principal(groupAuth))
                     .andExpect(status().isOk)
                     .andExpect(view().name("code/branches"))
+            }
+
+            it("존재하지 않는 프로젝트면 error/404 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+                mockMvc.perform(get("/owner/nosuch/branches"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/404"))
+            }
+
+            it("isCodeAccessibleMemberOnly가 true이고 로그인 사용자이지만 멤버도 그룹멤버도 아니면 403 Forbidden이어야 한다") {
+                val memberOnlyProject = Project(id = 6L, owner = "owner", name = "memberonly-loggedin", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "git")
+                val outsider = User(id = 20L, loginId = "outsider", name = "외부인")
+                val outsiderAuth = UsernamePasswordAuthenticationToken("outsider", "password")
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-loggedin") } returns Optional.of(memberOnlyProject)
+                every { userRepository.findByLoginId("outsider") } returns Optional.of(outsider)
+                every { projectUserRepository.existsByProjectIdAndUserId(6L, 20L) } returns false
+
+                mockMvc.perform(get("/owner/memberonly-loggedin/branches").principal(outsiderAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
+
+            // isCodeAccessibleMemberOnly=true일 때 line 38의 `isAllowedIfGroupMember` 호출 자체가
+            // true를 반환하는 경로 — 위쪽 "직접 멤버가 아니어도... 200 OK" 테스트는 이 옵션이 꺼진 채로
+            // 50번째 줄의 별도 isAllowed() 경로를 타므로 이 분기와는 다르다.
+            it("isCodeAccessibleMemberOnly가 true이고 직접 멤버는 아니어도 조직 멤버면 200 OK를 반환해야 한다") {
+                val groupOrg2 = Organization(id = 2L, name = "org2")
+                val groupUser2 = User(id = 22L, loginId = "groupuser2", name = "그룹멤버2")
+                groupOrg2.organizationUsers.add(
+                    OrganizationUser(
+                        id = 2L, user = groupUser2, organization = groupOrg2,
+                        role = Role(id = RoleType.ORG_MEMBER.roleType)
+                    )
+                )
+                val memberOnlyGroupProject = Project(
+                    id = 108L, owner = "owner", name = "memberonly-group", vcs = "git",
+                    projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, organization = groupOrg2
+                )
+                val groupAuth2 = UsernamePasswordAuthenticationToken("groupuser2", "password")
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-group") } returns Optional.of(memberOnlyGroupProject)
+                every { userRepository.findByLoginId("groupuser2") } returns Optional.of(groupUser2)
+                every { projectUserRepository.existsByProjectIdAndUserId(108L, 22L) } returns false
+                every { repositoryService.getRepository(memberOnlyGroupProject) } returns playRepository
+                every { playRepository.getBranches() } returns listOf(otherBranch)
+                every { playRepository.getHeadBranch() } returns null
+
+                mockMvc.perform(get("/owner/memberonly-group/branches").principal(groupAuth2))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/branches"))
+            }
+
+            it("isCodeAccessibleMemberOnly가 true여도 프로젝트 직접 멤버면 200 OK를 반환해야 한다") {
+                val memberOnlyProject = Project(id = 7L, owner = "owner", name = "memberonly-member", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "git")
+                val memberUser = User(id = 21L, loginId = "memberuser", name = "멤버")
+                val memberAuth = UsernamePasswordAuthenticationToken("memberuser", "password")
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "memberonly-member") } returns Optional.of(memberOnlyProject)
+                every { userRepository.findByLoginId("memberuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(7L, 21L) } returns true
+                every { repositoryService.getRepository(memberOnlyProject) } returns playRepository
+                every { playRepository.getBranches() } returns listOf(otherBranch)
+                every { playRepository.getHeadBranch() } returns null
+
+                mockMvc.perform(get("/owner/memberonly-member/branches").principal(memberAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/branches"))
+            }
+
+            it("isCodeAccessibleMemberOnly가 아니어도 READ 권한이 없으면(비공개 프로젝트+비로그인) 403 Forbidden이어야 한다") {
+                val privateProject = Project(id = 8L, owner = "owner", name = "private-project", vcs = "git", projectScope = ProjectScope.PRIVATE)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "private-project") } returns Optional.of(privateProject)
+
+                mockMvc.perform(get("/owner/private-project/branches"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
+
+            // vcs가 null이면 project.vcs?.uppercase() ?: "GIT" 엘비스가 기본값 GIT으로 처리해
+            // git 저장소로 취급되어야 한다(400이 아니어야 한다).
+            it("vcs가 null이면 기본값 GIT으로 취급해 정상적으로 브랜치 목록을 반환해야 한다") {
+                val noVcsProject = Project(id = 12L, owner = "owner", name = "no-vcs-project", vcs = null, projectScope = ProjectScope.PUBLIC)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "no-vcs-project") } returns Optional.of(noVcsProject)
+                every { repositoryService.getRepository(noVcsProject) } returns playRepository
+                every { playRepository.getBranches() } returns listOf(otherBranch)
+                every { playRepository.getHeadBranch() } returns null
+
+                mockMvc.perform(get("/owner/no-vcs-project/branches"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/branches"))
+            }
+
+            it("git이 아닌 저장소면 error/400 뷰를 반환해야 한다") {
+                val svnProject = Project(id = 9L, owner = "owner", name = "svn-project", vcs = "svn", projectScope = ProjectScope.PUBLIC)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "svn-project") } returns Optional.of(svnProject)
+
+                mockMvc.perform(get("/owner/svn-project/branches"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/400"))
+            }
+
+            it("HEAD 브랜치가 없으면 브랜치 목록을 필터링하지 않고 그대로 반환해야 한다") {
+                val noHeadProject = Project(id = 10L, owner = "owner", name = "no-head-project", vcs = "git", projectScope = ProjectScope.PUBLIC)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "no-head-project") } returns Optional.of(noHeadProject)
+                every { repositoryService.getRepository(noHeadProject) } returns playRepository
+                every { playRepository.getBranches() } returns listOf(otherBranch)
+                every { playRepository.getHeadBranch() } returns null
+
+                mockMvc.perform(get("/owner/no-head-project/branches"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("code/branches"))
+                    .andExpect(model().attribute("allBranches", listOf(otherBranch)))
+                    .andExpect(model().attribute("headBranch", null as Any?))
+            }
+
+            // yona code/branches.scala.html:59-62 대응 — 매니저는 UPDATE/DELETE 권한이 모두 있어
+            // showActionsColumn/canUpdate/canDelete가 전부 true여야 한다(다른 성공 케이스는 전부
+            // 익명/비매니저라 false였음).
+            it("매니저 권한이 있으면 canUpdate/canDelete/showActionsColumn이 모두 true여야 한다") {
+                val managerProject = Project(id = 11L, owner = "owner", name = "manager-project", vcs = "git", projectScope = ProjectScope.PUBLIC)
+                val managerUser = User(id = 22L, loginId = "manageruser", name = "매니저")
+                val managerRole = Role(id = RoleType.MANAGER.roleType)
+                managerUser.projectUsers.add(ProjectUser(id = 200L, user = managerUser, project = managerProject, role = managerRole))
+                val managerAuth = UsernamePasswordAuthenticationToken("manageruser", "password")
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "manager-project") } returns Optional.of(managerProject)
+                every { userRepository.findByLoginId("manageruser") } returns Optional.of(managerUser)
+                every { repositoryService.getRepository(managerProject) } returns playRepository
+                every { playRepository.getBranches() } returns listOf(otherBranch)
+                every { playRepository.getHeadBranch() } returns null
+
+                mockMvc.perform(get("/owner/manager-project/branches").principal(managerAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("showActionsColumn", true))
+                    .andExpect(model().attribute("canUpdate", true))
+                    .andExpect(model().attribute("canDelete", true))
             }
         }
     }

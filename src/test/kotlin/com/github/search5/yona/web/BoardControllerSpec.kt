@@ -127,6 +127,23 @@ class BoardControllerSpec : DescribeSpec({
 
                 pageableSlot.captured.pageSize shouldBe 15
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/posts")).andExpect(status().isNotFound)
+            }
+
+            it("읽기 권한이 없으면 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 99L) } returns false
+
+                mockMvc.perform(get("/api/projects/1/posts").principal(strangerAuth))
+                    .andExpect(status().isForbidden)
+            }
         }
 
         describe("GET /api/projects/{projectId}/posts/{postId}") {
@@ -139,6 +156,31 @@ class BoardControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/projects/1/posts/1").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.title").value("포스트 제목"))
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/posts/1")).andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 게시글이면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 999L) } returns null
+
+                mockMvc.perform(get("/api/projects/1/posts/999")).andExpect(status().isNotFound)
+            }
+
+            it("읽기 권한이 없으면 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 99L) } returns false
+
+                mockMvc.perform(get("/api/projects/1/posts/1").principal(strangerAuth))
+                    .andExpect(status().isForbidden)
             }
         }
 
@@ -197,6 +239,58 @@ class BoardControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isCreated)
             }
+
+            it("notice/readme 필드를 생략하면 기본값 false로 생성해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                val postingSlot = slot<Posting>()
+                every { postingService.createPosting(1L, capture(postingSlot), 10L) } returns posting
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                        .principal(userAuth)
+                ).andExpect(status().isCreated)
+
+                postingSlot.captured.notice shouldBe false
+                postingSlot.captured.readme shouldBe false
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/projects/999/posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                ).andExpect(status().isUnauthorized)
+            }
+
+            it("작성 권한이 없으면(비공개 프로젝트의 비멤버) 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+
+                mockMvc.perform(
+                    post("/api/projects/1/posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                        .principal(strangerAuth)
+                ).andExpect(status().isForbidden)
+            }
         }
 
         describe("PUT /api/projects/{projectId}/posts/{postId}") {
@@ -252,6 +346,71 @@ class BoardControllerSpec : DescribeSpec({
 
                 verify(exactly = 1) { postingService.updatePosting(1L, 1L, "수정된 포스트 제목", "수정된 포스트 내용", false, false, 10L, true) }
             }
+
+            it("notice/readme/sendNotificationMail 필드를 생략하면 기본값 false로 전달해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { postingService.updatePosting(1L, 1L, "t", "b", false, false, 10L, false) } returns posting
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                        .principal(userAuth)
+                ).andExpect(status().isOk)
+
+                verify(exactly = 1) { postingService.updatePosting(1L, 1L, "t", "b", false, false, 10L, false) }
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/999/posts/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 게시글이면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 999L) } returns null
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                ).andExpect(status().isUnauthorized)
+            }
+
+            it("수정 권한이 없으면 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 99L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"title":"t","body":"b"}""")
+                        .principal(strangerAuth)
+                ).andExpect(status().isForbidden)
+            }
         }
 
         // yona BoardApi.java:128-159 updatePostingContent() 대응 (P1-107).
@@ -293,6 +452,72 @@ class BoardControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { postingRepository.save(any()) }
             }
+
+            it("posting.body가 null이면 빈 문자열로 취급해 original이 빈 문자열일 때만 통과해야 한다") {
+                val blankPosting = Posting(id = 53L, title = "포스트4", body = null, project = project, authorId = user.id, number = 4L)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 4L) } returns blankPosting
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { postingRepository.save(blankPosting) } returns blankPosting
+
+                mockMvc.perform(
+                    patch("/api/projects/1/posts/4/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\": \"새 내용\", \"original\": \"\"}")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.body").value("새 내용"))
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    patch("/api/projects/999/posts/1/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"content":"c","original":"o"}""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 게시글이면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 999L) } returns null
+
+                mockMvc.perform(
+                    patch("/api/projects/1/posts/999/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"content":"c","original":"o"}""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+
+                mockMvc.perform(
+                    patch("/api/projects/1/posts/1/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"content":"c","original":"o"}""")
+                ).andExpect(status().isUnauthorized)
+            }
+
+            it("수정 권한이 없으면 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 99L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    patch("/api/projects/1/posts/1/content")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"content":"c","original":"o"}""")
+                        .principal(strangerAuth)
+                ).andExpect(status().isForbidden)
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/posts/{postId}") {
@@ -321,6 +546,38 @@ class BoardControllerSpec : DescribeSpec({
                 mockMvc.perform(delete("/api/projects/1/posts/1").principal(plainMemberAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/999/posts/1")).andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 게시글이면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 999L) } returns null
+
+                mockMvc.perform(delete("/api/projects/1/posts/999")).andExpect(status().isNotFound)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+
+                mockMvc.perform(delete("/api/projects/1/posts/1")).andExpect(status().isUnauthorized)
+            }
+
+            it("삭제 권한이 없으면 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 99L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/1/posts/1").principal(strangerAuth))
+                    .andExpect(status().isForbidden)
             }
         }
 
@@ -366,6 +623,38 @@ class BoardControllerSpec : DescribeSpec({
                         .principal(otherAuth)
                 )
                     .andExpect(status().isForbidden)
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/999/posts/1/labels")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[1]")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 게시글이면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 999L) } returns null
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/999/labels")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[1]")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { postingService.getPosting(1L, 1L) } returns posting
+
+                mockMvc.perform(
+                    put("/api/projects/1/posts/1/labels")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[1]")
+                ).andExpect(status().isUnauthorized)
             }
         }
     }

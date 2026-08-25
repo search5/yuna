@@ -492,5 +492,153 @@ class SiteControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("errors"))
             }
         }
+
+        describe("SiteViewController.checkAdmin() 공통 인증/인가 분기") {
+            it("인증되지 않은 요청(authentication == null)은 error/403 뷰를 반환해야 한다") {
+                mockMvcView.perform(get("/site/users"))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
+
+            it("로그인 ID에 해당하는 사용자가 DB에 없으면 error/403 뷰를 반환해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.empty()
+
+                mockMvcView.perform(get("/site/users").principal(adminAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/403"))
+            }
+        }
+
+        describe("GET /site/userList - state 파라미터 분기") {
+            it("존재하지 않는 state 값이면 UserState.of()가 null을 반환해 기본값 ACTIVE로 대체해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { userRepository.findUsersForAdmin(UserState.ACTIVE, any(), any()) } returns PageImpl(listOf(normalUser))
+                every { userRepository.countUsersForAdmin(UserState.SITE_ADMIN, any()) } returns 1
+
+                mockMvcView.perform(
+                    get("/site/userList")
+                        .param("state", "존재하지않는상태값")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("userState", UserState.ACTIVE))
+            }
+        }
+
+        describe("GET /site/issueList - state=all 분기") {
+            it("state=all이면 전체 이슈 목록(findAll)을 조회해야 한다") {
+                val testProject = Project(id = 100L, name = "test", owner = "gildong")
+                val testIssue = Issue(id = 11L, title = "전체이슈", body = "내용", project = testProject)
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { issueRepository.findAll(any<Pageable>()) } returns PageImpl(listOf(testIssue))
+
+                mockMvcView.perform(
+                    get("/site/issueList")
+                        .param("state", "all")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("currentState", State.ALL))
+
+                verify(exactly = 1) { issueRepository.findAll(any<Pageable>()) }
+            }
+        }
+
+        describe("GET /site/mail - SMTP 설정 미비/기본값 분기") {
+            it("host/username/password가 모두 비어있으면 notConfiguredItems에 셋 다 담기고 sender는 하드코딩 기본값이어야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { environment.getProperty("spring.mail.host") } returns ""
+                every { environment.getProperty("spring.mail.username") } returns null
+                every { environment.getProperty("spring.mail.password") } returns null
+                every { environment.getProperty("spring.mail.properties.mail.smtp.from") } returns null
+
+                mockMvcView.perform(
+                    get("/site/mail")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("sender", "yona@yona.io"))
+            }
+
+            it("공백 문자만 있는 값도 isNullOrBlank에서 blank로 취급되어 notConfiguredItems에 담겨야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { environment.getProperty("spring.mail.host") } returns "   "
+                every { environment.getProperty("spring.mail.username") } returns "   "
+                every { environment.getProperty("spring.mail.password") } returns "   "
+                every { environment.getProperty("spring.mail.properties.mail.smtp.from") } returns null
+
+                mockMvcView.perform(
+                    get("/site/mail")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("notConfiguredItems", listOf("smtp.host", "smtp.user", "smtp.password")))
+            }
+
+            it("smtp.from은 없지만 username이 있으면 sender는 username으로 대체되어야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { environment.getProperty("spring.mail.host") } returns "smtp.gmail.com"
+                every { environment.getProperty("spring.mail.username") } returns "fallback@example.com"
+                every { environment.getProperty("spring.mail.password") } returns "password"
+                every { environment.getProperty("spring.mail.properties.mail.smtp.from") } returns null
+
+                mockMvcView.perform(
+                    get("/site/mail")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("sender", "fallback@example.com"))
+            }
+        }
+
+        describe("GET /site/update") {
+            it("갱신이 필요 없으면 versionToUpdate는 null이고 예외도 없어야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { yonaUpdateService.refreshVersionToUpdate() } returns Unit
+                every { yonaUpdateService.isUpdateRequired() } returns false
+                every { yonaUpdateService.getLatestVersion() } returns "1.15.0"
+                every { yonaUpdateService.getReleaseUrl() } returns "https://example.com/release"
+
+                mockMvcView.perform(
+                    get("/site/update")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("site/update"))
+                    .andExpect(model().attribute("versionToUpdate", null as String?))
+                    .andExpect(model().attribute("exception", null as Exception?))
+            }
+
+            it("갱신이 필요하면 versionToUpdate에 최신 버전이 담겨야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { yonaUpdateService.refreshVersionToUpdate() } returns Unit
+                every { yonaUpdateService.isUpdateRequired() } returns true
+                every { yonaUpdateService.getLatestVersion() } returns "1.16.0"
+                every { yonaUpdateService.getReleaseUrl() } returns "https://example.com/release"
+
+                mockMvcView.perform(
+                    get("/site/update")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("versionToUpdate", "1.16.0"))
+            }
+
+            it("refreshVersionToUpdate()에서 예외가 발생해도 뷰는 정상 렌더링되고 exception이 모델에 담겨야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { yonaUpdateService.refreshVersionToUpdate() } throws RuntimeException("network down")
+                every { yonaUpdateService.isUpdateRequired() } returns false
+                every { yonaUpdateService.getLatestVersion() } returns null
+                every { yonaUpdateService.getReleaseUrl() } returns "https://example.com/release"
+
+                mockMvcView.perform(
+                    get("/site/update")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("site/update"))
+                    .andExpect(model().attributeExists("exception"))
+            }
+        }
     }
 })

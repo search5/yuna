@@ -194,5 +194,167 @@ class VoteControllerSpec : DescribeSpec({
                 .andExpect(status().is3xxRedirection)
                 .andExpect(redirectedUrl("/tester/test-project/issue/1"))
         }
+
+        it("존재하지 않는 프로젝트에 이슈 투표 요청 시 404 Not Found를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/vote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isNotFound)
+        }
+
+        it("존재하지 않는 이슈에 투표 요청 시 404 Not Found를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+            every { issueRepository.findByProjectAndNumber(project, 1L) } returns null
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/vote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isNotFound)
+        }
+
+        it("존재하지 않는 프로젝트에 이슈 투표 취소 요청 시 404 Not Found를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/unvote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isNotFound)
+        }
+
+        it("익명 사용자가 이슈 투표 취소 요청 시 401 Unauthorized 상태코드를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/unvote")
+            )
+                .andExpect(status().isUnauthorized)
+        }
+
+        it("읽기 권한이 없는 사용자가 이슈 투표 취소 요청 시 403 Forbidden 상태코드를 반환해야 한다") {
+            val privateProject = Project(id = 1L, name = "test-project", owner = "tester", projectScope = ProjectScope.PRIVATE)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(privateProject)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/unvote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isForbidden)
+        }
+
+        it("존재하지 않는 이슈에 투표 취소 요청 시 404 Not Found를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+            every { issueRepository.findByProjectAndNumber(project, 1L) } returns null
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/unvote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isNotFound)
+        }
+
+        it("존재하지 않는 프로젝트에 이슈 댓글 투표 요청 시 404 Not Found를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/comment/100/vote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isNotFound)
+        }
+
+        it("익명 사용자가 이슈 댓글 투표 요청 시 401 Unauthorized 상태코드를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/comment/100/vote")
+            )
+                .andExpect(status().isUnauthorized)
+        }
+
+        it("읽기 권한이 없는 사용자가 이슈 댓글 투표 요청 시 403 Forbidden 상태코드를 반환해야 한다") {
+            val privateProject = Project(id = 1L, name = "test-project", owner = "tester", projectScope = ProjectScope.PRIVATE)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(privateProject)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/comment/100/vote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isForbidden)
+        }
+
+        it("존재하지 않는 댓글에 투표 요청 시 404 Not Found를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+            every { issueCommentRepository.findById(100L) } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/comment/100/vote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isNotFound)
+        }
+
+        it("존재하지 않는 프로젝트에 이슈 댓글 투표 취소 요청 시 404 Not Found를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/comment/100/unvote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isNotFound)
+        }
+
+        it("익명 사용자가 이슈 댓글 투표 취소 요청 시 401 Unauthorized 상태코드를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/comment/100/unvote")
+            )
+                .andExpect(status().isUnauthorized)
+        }
+
+        it("읽기 권한이 없는 사용자가 이슈 댓글 투표 취소 요청 시 403 Forbidden 상태코드를 반환해야 한다") {
+            val privateProject = Project(id = 1L, name = "test-project", owner = "tester", projectScope = ProjectScope.PRIVATE)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(privateProject)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns false
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/comment/100/unvote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isForbidden)
+        }
+
+        it("존재하지 않는 댓글에 투표 취소 요청 시 404 Not Found를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("tester", "test-project") } returns Optional.of(project)
+            every { userRepository.findByLoginId("tester") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+            user.projectUsers.add(ProjectUser(id = 900L, user = user, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+            every { issueCommentRepository.findById(100L) } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/tester/test-project/issue/1/comment/100/unvote")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isNotFound)
+        }
     }
 })

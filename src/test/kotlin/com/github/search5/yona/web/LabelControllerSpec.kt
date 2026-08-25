@@ -52,6 +52,28 @@ class LabelControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.size()").value(1))
                     .andExpect(jsonPath("$[0]").value("bug"))
             }
+
+            it("limit이 최대치(1000)를 초과하면 1000으로 clamp되어야 한다") {
+                every { labelRepository.countByCategoryContainingIgnoreCaseAndNameContainingIgnoreCase("", "") } returns 0L
+                every {
+                    labelRepository.findByCategoryContainingIgnoreCaseAndNameContainingIgnoreCase("", "", PageRequest.of(0, 1000))
+                } returns emptyList()
+
+                mockMvc.perform(get("/labels").param("limit", "5000"))
+                    .andExpect(status().isOk)
+            }
+
+            it("전체 개수가 limit보다 많으면 Content-Range 헤더를 포함해야 한다") {
+                val label1 = Label(id = 1L, category = "issue", name = "bug")
+                every { labelRepository.countByCategoryContainingIgnoreCaseAndNameContainingIgnoreCase("", "") } returns 5L
+                every {
+                    labelRepository.findByCategoryContainingIgnoreCaseAndNameContainingIgnoreCase("", "", PageRequest.of(0, 1))
+                } returns listOf(label1)
+
+                mockMvc.perform(get("/labels").param("limit", "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Range", "items 1/5"))
+            }
         }
 
         describe("GET /categories") {
@@ -72,6 +94,37 @@ class LabelControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.size()").value(2))
                     .andExpect(jsonPath("$[0]").value("issue"))
                     .andExpect(jsonPath("$[1]").value("release"))
+            }
+
+            it("query가 주어지면 DISTINCT 카테고리를 검색어로 필터링해야 한다") {
+                every { labelRepository.countDistinctCategoriesContaining("is") } returns 1L
+                every { labelRepository.findDistinctCategoriesContaining("is", PageRequest.of(0, 5)) } returns listOf("issue")
+
+                mockMvc.perform(
+                    get("/categories")
+                        .param("limit", "5")
+                        .param("query", "is")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.size()").value(1))
+                    .andExpect(jsonPath("$[0]").value("issue"))
+            }
+
+            it("limit이 최대치(1000)를 초과하면 1000으로 clamp되어야 한다") {
+                every { labelRepository.countDistinctCategories() } returns 0L
+                every { labelRepository.findDistinctCategories(PageRequest.of(0, 1000)) } returns emptyList()
+
+                mockMvc.perform(get("/categories").param("limit", "5000"))
+                    .andExpect(status().isOk)
+            }
+
+            it("전체 개수가 limit보다 많으면 Content-Range 헤더를 포함해야 한다") {
+                every { labelRepository.countDistinctCategories() } returns 5L
+                every { labelRepository.findDistinctCategories(PageRequest.of(0, 1)) } returns listOf("issue")
+
+                mockMvc.perform(get("/categories").param("limit", "1"))
+                    .andExpect(status().isOk)
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Range", "items 1/5"))
             }
         }
     }

@@ -11,10 +11,16 @@ import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.springframework.ui.Model
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.organization.OrganizationUser
+import com.github.search5.yona.domain.role.Role
+import com.github.search5.yona.domain.role.RoleType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -198,6 +204,181 @@ class ReviewApiControllerSpec : DescribeSpec({
                     .principal(auth)
             )
                 .andExpect(status().isForbidden)
+        }
+
+        it("인증되지 않은 댓글 삭제 요청은 401을 반환해야 한다") {
+            mockMvc.perform(delete("/comments/REVIEW_COMMENT/200"))
+                .andExpect(status().isUnauthorized)
+
+            verify(exactly = 0) { codeReviewService.deleteReviewComment(any(), any()) }
+        }
+
+        it("인증은 되었지만 DB에 없는 사용자의 댓글 삭제 요청은 401을 반환해야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.empty()
+
+            mockMvc.perform(
+                delete("/comments/REVIEW_COMMENT/200")
+                    .principal(auth)
+            )
+                .andExpect(status().isUnauthorized)
+
+            verify(exactly = 0) { codeReviewService.deleteReviewComment(any(), any()) }
+        }
+
+        it("지원하지 않는 type이면 어떤 서비스도 호출하지 않고 200을 반환해야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+
+            mockMvc.perform(
+                delete("/comments/UNKNOWN_TYPE/200")
+                    .principal(auth)
+            )
+                .andExpect(status().isOk)
+
+            verify(exactly = 0) { codeReviewService.deleteReviewComment(any(), any()) }
+            verify(exactly = 0) { codeReviewService.deleteCommitComment(any(), any()) }
+        }
+
+        it("Permission denied가 아닌 다른 메시지의 예외는 그대로 전파되어야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { codeReviewService.deleteReviewComment(200L, user) } throws IllegalArgumentException("Other reason")
+
+            shouldThrow<IllegalArgumentException> {
+                reviewApiController.deleteComment("REVIEW_COMMENT", 200L, auth)
+            }
+        }
+
+        it("인증되지 않은 review 요청은 IllegalStateException을 던져야 한다") {
+            val model = mockk<Model>(relaxed = true)
+
+            shouldThrow<IllegalStateException> {
+                reviewApiController.review("gildong", "yona-project", 100L, null, model)
+            }
+        }
+
+        it("인증은 되었지만 DB에 없는 사용자의 review 요청은 IllegalStateException을 던져야 한다") {
+            val model = mockk<Model>(relaxed = true)
+            every { userRepository.findByLoginId("gildong") } returns Optional.empty()
+
+            shouldThrow<IllegalStateException> {
+                reviewApiController.review("gildong", "yona-project", 100L, auth, model)
+            }
+        }
+
+        it("존재하지 않는 프로젝트에 대한 review 요청은 error/404 뷰를 반환해야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "nosuch") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/api/gildong/nosuch/pullRequest/100/review")
+                    .principal(auth)
+            ).andExpect(view().name("error/404"))
+        }
+
+        it("존재하지 않는 PullRequest에 대한 review 요청은 error/notfound 뷰를 반환해야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
+            every { projectUserRepository.existsByProjectIdAndUserId(10L, 1L) } returns true
+            every { pullRequestRepository.findById(999L) } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/api/gildong/yona-project/pullRequest/999/review")
+                    .principal(auth)
+            ).andExpect(view().name("error/notfound"))
+        }
+
+        // yona AccessControl.isAllowedIfGroupMember() 대응 — 프로젝트 직접 멤버가 아니어도 PUBLIC/PROTECTED
+        // 프로젝트의 조직(그룹) 멤버라면 review 권한을 가져야 한다.
+        it("프로젝트 멤버는 아니지만 PUBLIC 프로젝트의 조직 멤버라면 리뷰어로 등록할 수 있어야 한다") {
+            val org = Organization(id = 500L, name = "org")
+            val groupMemberUser = User(id = 3L, loginId = "groupmember", name = "그룹멤버")
+            val groupMemberAuth = UsernamePasswordAuthenticationToken("groupmember", "pass")
+            val orgRole = Role(id = RoleType.ORG_MEMBER.roleType)
+            org.organizationUsers.add(OrganizationUser(id = 900L, user = groupMemberUser, organization = org, role = orgRole))
+            val publicOrgProject = Project(id = 12L, name = "public-org-project", owner = "owner", projectScope = ProjectScope.PUBLIC, organization = org)
+            val orgPullRequest = PullRequest(
+                id = 101L, number = 6L, title = "PR", toProject = publicOrgProject, fromProject = publicOrgProject, contributor = groupMemberUser
+            )
+
+            every { userRepository.findByLoginId("groupmember") } returns Optional.of(groupMemberUser)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "public-org-project") } returns Optional.of(publicOrgProject)
+            every { projectUserRepository.existsByProjectIdAndUserId(12L, 3L) } returns false
+            every { pullRequestRepository.findById(101L) } returns Optional.of(orgPullRequest)
+            every { codeReviewService.addReviewer(101L, 3L) } returns Unit
+
+            mockMvc.perform(
+                post("/api/owner/public-org-project/pullRequest/101/review")
+                    .principal(groupMemberAuth)
+            )
+                .andExpect(status().is3xxRedirection)
+                .andExpect(redirectedUrl("/owner/public-org-project/pullRequest/6"))
+
+            verify { codeReviewService.addReviewer(101L, 3L) }
+        }
+
+        it("인증되지 않은 unreview 요청은 IllegalStateException을 던져야 한다") {
+            val model = mockk<Model>(relaxed = true)
+
+            shouldThrow<IllegalStateException> {
+                reviewApiController.unreview("gildong", "yona-project", 100L, null, model)
+            }
+        }
+
+        it("인증은 되었지만 DB에 없는 사용자의 unreview 요청은 IllegalStateException을 던져야 한다") {
+            val model = mockk<Model>(relaxed = true)
+            every { userRepository.findByLoginId("gildong") } returns Optional.empty()
+
+            shouldThrow<IllegalStateException> {
+                reviewApiController.unreview("gildong", "yona-project", 100L, auth, model)
+            }
+        }
+
+        it("존재하지 않는 프로젝트에 대한 unreview 요청은 error/404 뷰를 반환해야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "nosuch") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/api/gildong/nosuch/pullRequest/100/unreview")
+                    .principal(auth)
+            ).andExpect(view().name("error/404"))
+        }
+
+        it("존재하지 않는 PullRequest에 대한 unreview 요청은 error/notfound 뷰를 반환해야 한다") {
+            every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("gildong", "yona-project") } returns Optional.of(project)
+            every { projectUserRepository.existsByProjectIdAndUserId(10L, 1L) } returns true
+            every { pullRequestRepository.findById(999L) } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/api/gildong/yona-project/pullRequest/999/unreview")
+                    .principal(auth)
+            ).andExpect(view().name("error/notfound"))
+        }
+
+        it("프로젝트 멤버는 아니지만 PUBLIC 프로젝트의 조직 멤버라면 리뷰어를 해제할 수 있어야 한다") {
+            val org = Organization(id = 501L, name = "org2")
+            val groupMemberUser = User(id = 4L, loginId = "groupmember2", name = "그룹멤버2")
+            val groupMemberAuth = UsernamePasswordAuthenticationToken("groupmember2", "pass")
+            val orgRole = Role(id = RoleType.ORG_ADMIN.roleType)
+            org.organizationUsers.add(OrganizationUser(id = 901L, user = groupMemberUser, organization = org, role = orgRole))
+            val publicOrgProject = Project(id = 13L, name = "public-org-project2", owner = "owner", projectScope = ProjectScope.PUBLIC, organization = org)
+            val orgPullRequest = PullRequest(
+                id = 102L, number = 7L, title = "PR", toProject = publicOrgProject, fromProject = publicOrgProject, contributor = groupMemberUser
+            )
+
+            every { userRepository.findByLoginId("groupmember2") } returns Optional.of(groupMemberUser)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "public-org-project2") } returns Optional.of(publicOrgProject)
+            every { projectUserRepository.existsByProjectIdAndUserId(13L, 4L) } returns false
+            every { pullRequestRepository.findById(102L) } returns Optional.of(orgPullRequest)
+            every { codeReviewService.removeReviewer(102L, 4L) } returns Unit
+
+            mockMvc.perform(
+                post("/api/owner/public-org-project2/pullRequest/102/unreview")
+                    .principal(groupMemberAuth)
+            )
+                .andExpect(status().is3xxRedirection)
+                .andExpect(redirectedUrl("/owner/public-org-project2/pullRequest/7"))
+
+            verify { codeReviewService.removeReviewer(102L, 4L) }
         }
     }
 })

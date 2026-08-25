@@ -129,6 +129,40 @@ class SearchControllerSpec : DescribeSpec({
                 .andExpect(model().attributeExists("keyword", "searchResult", "currentUser", "org"))
         }
 
+        it("GET /org/{organizationName}/search - 익명 사용자도 200 OK를 반환해야 한다") {
+            val org = Organization(id = 5L, name = "testorg")
+            every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+            every { searchService.searchInAGroup("yona", SearchType.ISSUE, null, org, any()) } returns searchResult
+
+            mockMvc.perform(
+                get("/org/testorg/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("currentUser", null))
+        }
+
+        it("GET /org/{organizationName}/search - 검색어가 비어있을 때 400 Bad Request를 반환해야 한다") {
+            mockMvc.perform(
+                get("/org/testorg/search")
+                    .param("keyword", " ")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isBadRequest)
+        }
+
+        it("GET /org/{organizationName}/search - 존재하지 않는 조직이면 404를 반환해야 한다") {
+            every { organizationRepository.findByName("nosuch") } returns Optional.empty()
+
+            mockMvc.perform(
+                get("/org/nosuch/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isNotFound)
+        }
+
         it("GET /org/{organizationName}/search - searchType이 인식 불가(NA로 폴백)이면 400 Bad Request를 반환해야 한다 (P2-31, yona SearchApp.java:134-136)") {
             val org = Organization(id = 5L, name = "testorg")
             every { organizationRepository.findByName("testorg") } returns Optional.of(org)
@@ -181,6 +215,40 @@ class SearchControllerSpec : DescribeSpec({
             )
                 .andExpect(status().isBadRequest)
         }
+
+        it("GET /{owner}/{projectName}/search - 익명 사용자도 200 OK를 반환해야 한다") {
+            val project = Project(id = 1L, name = "TestProj", owner = "owner")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+            every { searchService.searchInAProject("yona", SearchType.ISSUE, null, project, any()) } returns searchResult
+
+            mockMvc.perform(
+                get("/owner/TestProj/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isOk)
+                .andExpect(model().attribute("currentUser", null))
+        }
+
+        it("GET /{owner}/{projectName}/search - 검색어가 비어있을 때 400 Bad Request를 반환해야 한다") {
+            mockMvc.perform(
+                get("/owner/TestProj/search")
+                    .param("keyword", " ")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isBadRequest)
+        }
+
+        it("GET /{owner}/{projectName}/search - 존재하지 않는 프로젝트면 404를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+            mockMvc.perform(
+                get("/owner/nosuch/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+            )
+                .andExpect(status().isNotFound)
+        }
     }
 
     // yona SearchApp.java:126-130 대응 (P0-23) — HIDE_PROJECT_LISTING이 켜져 있을 때의 조직 검색 게이트.
@@ -209,6 +277,24 @@ class SearchControllerSpec : DescribeSpec({
                 .andExpect(status().isBadRequest)
         }
 
+        it("ORG_MEMBER이지만 ORG_ADMIN은 아닌 사용자도 400을 반환해야 한다(OR 조건의 두 번째 피연산자 분기)") {
+            val user = User(id = 10L, loginId = "testuser", name = "테스트유저")
+            val userAuth = UsernamePasswordAuthenticationToken("testuser", "password")
+            val org = Organization(id = 5L, name = "testorg")
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+            every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+            every { organizationUserRepository.findByOrganizationIdAndUserId(5L, 10L) } returns
+                Optional.of(OrganizationUser(user = user, organization = org, role = Role(id = RoleType.ORG_MEMBER.roleType)))
+
+            hiddenMockMvc.perform(
+                get("/org/testorg/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isBadRequest)
+        }
+
         it("비로그인 사용자는 400을 반환해야 한다") {
             val org = Organization(id = 5L, name = "testorg")
             every { organizationRepository.findByName("testorg") } returns Optional.of(org)
@@ -217,6 +303,45 @@ class SearchControllerSpec : DescribeSpec({
                 get("/org/testorg/search")
                     .param("keyword", "yona")
                     .param("searchType", "issue")
+            )
+                .andExpect(status().isBadRequest)
+        }
+
+        // 로그인 사용자를 찾았어도 id가 없으면(orgUser 조회 자체를 생략) loginUser?.id?.let{} 체인의
+        // id-null 분기를 태운다.
+        it("로그인 사용자의 id가 없으면 조직 멤버십 조회 없이 400을 반환해야 한다") {
+            val user = User(id = null, loginId = "noidyet", name = "아이디없음")
+            val userAuth = UsernamePasswordAuthenticationToken("noidyet", "password")
+            val org = Organization(id = 5L, name = "testorg")
+            every { userRepository.findByLoginId("noidyet") } returns Optional.of(user)
+            every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+
+            hiddenMockMvc.perform(
+                get("/org/testorg/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+                    .principal(userAuth)
+            )
+                .andExpect(status().isBadRequest)
+        }
+
+        // orgUser는 조회되지만 role.id가 null이면(미영속 Role) isMember/isAdmin 둘 다 "역할 불일치"가
+        // 아니라 "id 자체가 없어서" false가 되는 별도 분기를 태운다. role 자체는 OrganizationUser의
+        // 필수(non-null) 프로퍼티라 role이 null인 경우는 없다(구조적으로 도달 불가능).
+        it("조직 멤버십은 있지만 역할의 id가 없으면 400을 반환해야 한다") {
+            val user = User(id = 10L, loginId = "testuser", name = "테스트유저")
+            val userAuth = UsernamePasswordAuthenticationToken("testuser", "password")
+            val org = Organization(id = 5L, name = "testorg")
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+            every { organizationRepository.findByName("testorg") } returns Optional.of(org)
+            every { organizationUserRepository.findByOrganizationIdAndUserId(5L, 10L) } returns
+                Optional.of(OrganizationUser(user = user, organization = org, role = Role(id = null)))
+
+            hiddenMockMvc.perform(
+                get("/org/testorg/search")
+                    .param("keyword", "yona")
+                    .param("searchType", "issue")
+                    .principal(userAuth)
             )
                 .andExpect(status().isBadRequest)
         }
