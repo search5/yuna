@@ -26,7 +26,7 @@
 | `BareRepository.java` | 없음(우회 구현만) | 공백(낮은 심각도) | README 탐색 전용 메서드들은 없지만 `getRawFile`로 기능적 우회 구현 존재 |
 | `GitBranch.java`(pullRequest 필드) | `GitBranch.kt`에 pullRequest 연결 없음 | 확인 필요 | 다른 항목보다 신뢰도 낮음(추가 검증 권장) |
 | `GitRepository.java`(35개 메서드) | **재검증으로 대부분 기각** | 신뢰 불가 | 담당 에이전트가 `GitRepository.kt` 파일 하나만 보고 전체 코드베이스를 검색하지 않아 생긴 오탐 — 직접 재확인한 `deleteFromBranch`/`cloneRepository` 2건이 이미 `PullRequestServiceImpl.kt`/`GitServiceImpl.kt`에 존재함을 확인. 나머지 33개도 같은 이유로 대부분 다른 파일에 흩어져 있을 가능성이 높아 이 목록 자체는 폐기, 재조사 필요 시 전체 코드베이스 검색으로 다시 수행할 것 |
-| `GitRef.java`/`VCSRef.java` | 없음 | 무시 가능 | legacy 자체에서도 정의 외 참조 0건(레거시 죽은 코드) — 이식 누락의 실무 영향 없음 |
+| `GitRef.java`/`VCSRef.java` | 없음 | 무시 가능 | legacy 자체에서도 정의 외 참조 0건(레거시 죽은 코드) — 이식 누락의 실무 영향 없음. **2026-08-26 사용자 요청으로 `find_referencing_symbols`+전체 텍스트 검색 2가지 방법으로 재검증**: `GitRef`는 자기 파일 외 참조 0건, `VCSRef`는 유일한 외부 참조가 `GitRef.java:23`의 상속 선언뿐(그 GitRef 자체가 미사용이므로 죽은 상속 체인) — 원 판정 확인됨. **사용자 결정: 티켓 미등록 유지** |
 | `SVNRepository.java`,`RepositoryService.java`(분산: `GitService.kt`+`GitServletConfig.kt`),`PlayRepository.java`,`FileDiff.java`,`GitCommit.java`,`SvnCommit.java`,`Hunk.java`,`DiffLine.java`,`DiffLineType.java`,`IssueReferredFromCommitEvent.java`,`NotifyPushedCommits.java`,`ReceiveCommandUtil.java`,`RejectPushToReservedRefs.java`,`UpdateLastPushedDate.java`,`YonaUserServicePlugin.java`,`PullRequestException.java` | 각각 확인됨 | 완전/거의완전 대응 | 개별 상세 비고는 세션 기록 참고. `PullRequestException`은 전용 예외 타입 대신 `IOException`을 재사용(기능은 동일, 타입 구분만 약함 — 경미) |
 
 **미검토(다음 배치 대상)**: 나머지 1934건(HIGH 외 영역 — models/controllers/utils/data/mailbox/actions 등), 아직 자동 2차 필터의 "파일 자체 미인용" 단계까지만 거쳤고 사람 검토 전.
