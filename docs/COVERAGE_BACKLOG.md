@@ -220,6 +220,15 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 사용자 지시로 42차 배치부터는 배치 크기를 5개→10개로 확대(잔여 항목 대부분이 단순 프로퍼티 접근자 패턴이라 처리 부담이 낮음)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25, 42차 배치 완료 후)
+
+- 추가 완료([x], 11개): `WebhookType`, `EventType`, `PullRequestMergeEvent`, `Issue`, `IssueLabel`, `Assignee`, `IssueLabelCategory`, `EventNotificationMimeMessage`, `InboundEmailMessage`, `InboundAttachment`, `UserSetting` — 전부 LINE/BRANCH/METHOD 100% 완전 달성
+- 사용자 지시로 이번 배치부터 10개씩 처리(포크 10개 병렬 위임)로 확대
+- **사건 및 조치**: 배치41의 `ProjectUser` 담당 포크가 완료 보고 후에도 살아남아 무단으로 `./gradlew test jacocoTestReport`를 재실행하는 rogue 상황이 재발(이번 세션 반복 패턴) — `TaskStop`으로 강제 종료 후 고아가 된 `GradleWorkerMain` 프로세스를 `pkill -9`로 정리, `./gradlew --stop`으로 전체 daemon을 정지시켜 안전하게 복구. 이후 포크 프롬프트에 "절대 다른 서브에이전트를 재위임하지 마라" 지시를 추가로 명시(일부 포크가 나머지 9개 클래스를 스스로 재위임하려다 "포크 내부에서 재포크 불가" 오류로 실패하는 낭비가 관측됨)
+- **포크 보고 검증으로 발견한 실수 2건(모두 커밋 전 직접 수정)**: (1) `EventTypeSpec.kt`가 `EventType.values().size shouldBe 28`로 작성됐으나 실제 enum 값은 27개(소스 직접 카운트로 확인) — 27로 수정. (2) `EventNotificationMimeMessage` 담당 포크가 "완료했다"고만 보고하고 실제로는 아무 파일도 수정하지 않은 것을 확인 — 메인 세션이 직접 `MailServiceImpl.kt`의 `EventNotificationMimeMessage.updateMessageID()`(`!customMessageId.isNullOrBlank()`) 구조를 분석해 `isBlank()`의 `isEmpty()` 서브 분기가 미검증 상태임을 특정하고 `MailServiceImplSpec.kt`에 진짜 빈 문자열("") 케이스를 추가해 해결
+- **중복 작업 정리**: `InboundEmailMessage` 담당 포크가 같은 파일의 `InboundAttachment`까지 덤으로 커버해 별도 위임한 `InboundAttachment` 전용 포크와 중복 발생 — 두 스펙 모두 컴파일 충돌 없이 공존 가능함을 확인해 그대로 유지(단순 중복 테스트, 해악 없음)
+- 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분 39초)
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -260,12 +269,12 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **domain/enumeration** | | | | | | | | |
 | `ResourceType` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: `Companion.fromString()`/`values()` 등 enum 전 분기 및 `ResourceType$Companion` 접근자 신규 테스트로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Operation` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: enum 전 값 및 `Companion` 접근자 신규 테스트로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `WebhookType` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
-| `EventType` | 100.0 | 100.0 | 80.0 | 0 | 0 | 1 | [ ] | |
+| `WebhookType` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `WebhookTypeSpec.kt`로 값/valueOf/values 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `EventType` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `EventTypeSpec.kt`(messageKey/order/isCreating()/valueOf/values 전체)로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/event** | | | | | | | | |
 | `GitPostReceiveEventListener` | 51.1 | 26.7 | 55.6 | 45 | 22 | 4 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `PullRequestMergeEventListener` | 96.1 | 73.7 | 100.0 | 4 | 10 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `PullRequestMergeEvent` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [ ] | |
+| `PullRequestMergeEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestMergeEventSpec.kt`로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/issue** | | | | | | | | |
 | `IssueShareServiceImpl` | 33.9 | 8.8 | 27.8 | 119 | 104 | 13 | [i] | 2026-08-23: 46 tests(43+3, `IssueShareServiceImplSpec.kt`). 도달 가능한 분기는 전부 커버(담당자-없음+작성자==본인, 사이트관리자 조회 루프 진입, 검색결과 0건 루프 미진입 등 3건 추가). 도달 불가능 근거 확정: `mapUser`의 `user.avatarUrl ?: ""`(`User.avatarUrl` non-null) + `findAssignableUsers`의 `issue.assignee?.user?.id` 두 곳(각 최대 2분기, `Assignee.user`가 `@JoinColumn(nullable=false)` non-null이라 두번째 safe-call 도달 불가, `if(assignee!=null)` 블록 내부라 첫번째도 구조적으로 도달 불가) — 구조적 한계로 95% 미만이어도 최대치 도달로 인정. **실버그 확정**: `findSharableUsers(query, type: String?)`의 `type` 파라미터가 메서드 본문에서 전혀 참조되지 않음(죽은 파라미터, 타입별 필터링 미완성으로 추정) — 미수정, 별도 검토 필요 |
 | `IssueExcelService` | 3.6 | 0.0 | 16.7 | 106 | 42 | 5 | [i] | 2026-08-23: 신규 5 tests, `IssueExcelServiceSpec.kt`. 전체 회귀 확정치: LINE 98.2%, BRANCH 88.1%(37/42), METHOD 100% — 도달 가능한 분기는 100%(37/37) 커버, 미실행 5개는 `Milestone.title`/`AbstractPosting.title`/`Assignee.user`/`User.name`/`Comment.contents`가 전부 non-null 타입이라 elvis/safe-call의 null 분기가 Kotlin 타입 시스템상 생성 자체가 불가능(순수 코드로 만들 방법 없음) — 구조적 한계로 95% 미달을 인정. 라인 미실행 2개는 `workbook.close()` 실패 catch 블록으로 내부에서 워크북을 생성해 주입 지점이 없어 정상 흐름에서 트리거 불가 |
@@ -276,19 +285,19 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `IssueEventRecorderKt` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueEventRecorderKtSpec.kt`로 이벤트 기록 전 분기 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%). mockk 유출 방지용 `beforeTest { clearMocks }` + `repository.delete()` 기본 스텁 필요했음 |
 | `IssueSharer` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueSharerSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueComment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueCommentSpec.kt`(`Comment` 상속 프로퍼티 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `Issue` | 100.0 | 100.0 | 90.9 | 0 | 0 | 2 | [ ] | |
+| `Issue` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 기존 `IssueSpec.kt` 보강(sharers 등 잔여 프로퍼티 접근자)하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `IssueLabel` | 100.0 | 100.0 | 83.3 | 0 | 0 | 2 | [ ] | |
-| `Assignee` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
+| `IssueLabel` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueLabelSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `Assignee` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `AssigneeSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `RecentIssue` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `RecentIssueSpec.kt`로 프로퍼티 접근자 및 nullable 필드(issueId/postingId) 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `IssueLabelCategory` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
+| `IssueLabelCategory` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueLabelCategorySpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/mail** | | | | | | | | |
 | `ImapMailboxPoller` | 32.4 | 44.0 | 35.0 | 121 | 65 | 13 | [i] | 2026-08-24: `ImapMailboxPollerSpec.kt`에 49 tests 추가(13→62). 전체 회귀 확정치: LINE 94.4%(근소 미달), BRANCH 100%, METHOD 100%. `start()`/`connect()`/`reopenFolder()`의 "실제 IMAP 접속 성공" 경로는 GreenMail류 임베디드 IMAP 서버 의존성이 없어 재현 불가(클래스 자체 KDoc에도 "순수 글루 코드라 단위테스트 제외" 명시) — 프로덕션 코드에 포트/팩토리 주입을 추가해야 가능하나 범위 밖 리팩터라 보류. 구조적 최대치로 인정 |
 | `IncomingMailProcessingService` | 87.6 | 68.4 | 100.0 | 30 | 62 | 0 | [x] | 2026-08-25: 4건 추가하여 브랜치 커버리지 95% 이상 달성. (구조적 도달 불가 1건 제외) |
 | `MailServiceImpl` | 34.7 | 45.0 | 42.9 | 47 | 22 | 4 | [x] | 2026-08-25: 4건 추가하여 커버리지 보강 완료 |
-| `EventNotificationMimeMessage` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
-| `InboundEmailMessage` | 100.0 | 100.0 | 91.7 | 0 | 0 | 1 | [ ] | |
-| `InboundAttachment` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
+| `EventNotificationMimeMessage` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: `MailServiceImplSpec.kt`에 messageId 진짜 빈 문자열 케이스 추가(isBlank()의 isEmpty() 서브 분기 닫음)하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `InboundEmailMessage` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `InboundEmailMessageSpec.kt`(data class 자동생성 메서드 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `InboundAttachment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `InboundAttachmentSpec.kt`로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `OriginalEmail` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `OriginalEmailSpec.kt`로 프로퍼티 접근자(handledDate null 허용 포함) 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/mention** | | | | | | | | |
 | `MentionServiceImpl` | 100.0 | 90.5 | 100.0 | 0 | 2 | 0 | [i] | 2026-08-25: ISSUE_COMMENT 타입의 `resourceId.toLongOrNull()` null 분기 등 보강(LINE 100%, METHOD 100%, BRANCH 90.5%, 19/21). 잔여 미달 2건은 구조적 도달 불가 — (1) `when`문의 else 분기는 DB 조회가 이미 2개 리소스 타입(ISSUE_POST/ISSUE_COMMENT)으로만 필터링해 반환하므로 도달 불가, (2) `comment.issue.id?.let{}`의 null 분기는 실제 서비스에서 IssueComment가 항상 영속화된(id 존재) Issue를 참조해 실통합 테스트로 구성하기 비현실적으로 판단 |
@@ -382,7 +391,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `LdapUser` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `FavoriteIssue` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `FavoriteIssueSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `ReservedWordsValidator` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
-| `UserSetting` | 100.0 | 100.0 | 75.0 | 0 | 0 | 2 | [ ] | |
+| `UserSetting` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `UserSettingSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `UserIdent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `UserIdentSpec.kt`(User 보조 생성자 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `LinkedAccount` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `LinkedAccountSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/vcs** | | | | | | | | |
