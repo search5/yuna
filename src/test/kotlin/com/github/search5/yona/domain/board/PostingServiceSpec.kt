@@ -17,6 +17,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.assertions.throwables.shouldThrow
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 
 // yona BoardApp.newPost/deletePost 대응 (P1-18): 게시글 생성/삭제 시 알림 미발송 문제 검증
@@ -295,7 +296,7 @@ class PostingServiceSpec @Autowired constructor(
             describe("예외 및 엣지 케이스 테스트 (미커버 분기)") {
                 it("getPostings - 존재하지 않는 프로젝트 조회 시 예외 발생") {
                     shouldThrow<IllegalArgumentException> {
-                        postingService.getPostings(9999L, org.springframework.data.domain.PageRequest.of(0, 10))
+                        postingService.getPostings(9999L, PageRequest.of(0, 10))
                     }.message shouldBe "프로젝트를 찾을 수 없습니다."
                 }
 

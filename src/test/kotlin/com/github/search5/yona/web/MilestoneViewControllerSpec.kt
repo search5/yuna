@@ -42,6 +42,8 @@ import io.mockk.clearMocks
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationUser
 import org.springframework.ui.ExtendedModelMap
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 class MilestoneViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -520,7 +522,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                 // non-null 분기도 함께 커버한다.
                 val milestoneWithContents = Milestone(
                     id = 2L, title = "마일스톤 테스트", contents = "본문 \"내용\"\n둘째줄",
-                    dueDate = java.time.Instant.now().plus(10, java.time.temporal.ChronoUnit.DAYS),
+                    dueDate = Instant.now().plus(10, ChronoUnit.DAYS),
                     project = project
                 )
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)

@@ -12,6 +12,8 @@ import io.mockk.mockk
 import jakarta.servlet.FilterChain
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
+import org.springframework.security.authentication.AnonymousAuthenticationToken
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.core.userdetails.UserDetailsService
@@ -119,9 +121,9 @@ class ApiTokenAuthenticationFilterSpec : DescribeSpec({
         it("이미 인증된 상태(Anonymous가 아님)라면 필터가 다시 인증하지 않아야 한다") {
             val userDetails = YonaUserDetails(
                 id = 1L, loginId = "gildong", passwordVal = "x", passwordSalt = "y",
-                authoritiesVal = listOf(org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ACTIVE"))
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_ACTIVE"))
             )
-            val auth = org.springframework.security.authentication.UsernamePasswordAuthenticationToken(userDetails, null, userDetails.authorities)
+            val auth = UsernamePasswordAuthenticationToken(userDetails, null, userDetails.authorities)
             SecurityContextHolder.getContext().authentication = auth
 
             val request = MockHttpServletRequest()
@@ -136,15 +138,15 @@ class ApiTokenAuthenticationFilterSpec : DescribeSpec({
         }
 
         it("현재 인증이 AnonymousAuthenticationToken이면 재인증을 시도해야 한다") {
-            val anonymousAuth = org.springframework.security.authentication.AnonymousAuthenticationToken(
-                "key", "anonymousUser", listOf(org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ANONYMOUS"))
+            val anonymousAuth = AnonymousAuthenticationToken(
+                "key", "anonymousUser", listOf(SimpleGrantedAuthority("ROLE_ANONYMOUS"))
             )
             SecurityContextHolder.getContext().authentication = anonymousAuth
 
             val user = User(id = 4L, loginId = "anon-user", name = "테스트", token = "valid-token")
             val userDetails = YonaUserDetails(
                 id = 4L, loginId = "anon-user", passwordVal = "x", passwordSalt = "y",
-                authoritiesVal = listOf(org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ACTIVE"))
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_ACTIVE"))
             )
             every { userRepository.findByToken("valid-token") } returns Optional.of(user)
             every { userDetailsService.loadUserByUsername("anon-user") } returns userDetails

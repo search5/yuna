@@ -25,6 +25,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.io.File
 import java.util.*
+import java.nio.file.Files
+import java.text.MessageFormat
 
 class ImportViewControllerSpec : DescribeSpec({
     val projectService = mockk<ProjectService>()
@@ -362,7 +364,7 @@ class ImportViewControllerSpec : DescribeSpec({
             }
 
             it("서비스가 허용되지 않는(serviceNotPermitted) 에러면 forbidden 에러를 반환해야 한다") {
-                val forbiddenMessage = "some " + java.text.MessageFormat.format(JGitText.get().serviceNotPermitted, "") + " here"
+                val forbiddenMessage = "some " + MessageFormat.format(JGitText.get().serviceNotPermitted, "") + " here"
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
                 every { organizationUserRepository.findByUserIdAndRoleId(1L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
@@ -420,8 +422,8 @@ class ImportViewControllerSpec : DescribeSpec({
             }
 
             it("clone은 성공했지만 이후 단계에서 실패하면 clone된 디렉터리와 기본 저장소 경로를 모두 삭제해야 한다") {
-                val clonedTempDir = java.nio.file.Files.createTempDirectory("yuna-import-cloned").toFile()
-                val defaultRepoTempDir = java.nio.file.Files.createTempDirectory("yuna-import-default").toFile()
+                val clonedTempDir = Files.createTempDirectory("yuna-import-cloned").toFile()
+                val defaultRepoTempDir = Files.createTempDirectory("yuna-import-default").toFile()
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
                 every { organizationUserRepository.findByUserIdAndRoleId(1L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()

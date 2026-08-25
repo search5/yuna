@@ -3,6 +3,7 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.site.SiteService
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.mail.MailService
 import com.github.search5.yona.domain.site.DataBackupService
@@ -55,7 +56,7 @@ class SiteApiControllerSpec : DescribeSpec({
         )
     }
 
-    val adminUser = User(id = 1L, loginId = "admin", name = "Admin", state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN)
+    val adminUser = User(id = 1L, loginId = "admin", name = "Admin", state = UserState.SITE_ADMIN)
     val adminAuth = UsernamePasswordAuthenticationToken("admin", "password")
 
     val normalUser = User(id = 2L, loginId = "user", name = "User")

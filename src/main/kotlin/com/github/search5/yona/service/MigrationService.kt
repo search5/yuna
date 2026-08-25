@@ -378,7 +378,7 @@ class MigrationService(
         }
     }
 
-    private fun addAttachmentsString(sb: java.lang.StringBuilder, type: ResourceType, id: String) {
+    private fun addAttachmentsString(sb: StringBuilder, type: ResourceType, id: String) {
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(type, id)
         if (attachments.isNotEmpty()) {
             sb.append("\n\n--- attachments ---")
@@ -388,7 +388,7 @@ class MigrationService(
         }
     }
 
-    private fun addAttachmentsStringUsingWikiCommit(sb: java.lang.StringBuilder, type: ResourceType, id: String) {
+    private fun addAttachmentsStringUsingWikiCommit(sb: StringBuilder, type: ResourceType, id: String) {
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(type, id)
         if (attachments.isNotEmpty()) {
             sb.append("\n\n--- attachments ---")

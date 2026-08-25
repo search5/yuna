@@ -44,6 +44,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
 import java.text.SimpleDateFormat
 import java.time.Instant
+import java.util.Date
 import java.util.Locale
 
 // yona controllers/api/ProjectApi.java의 newProject() 대응 (P2-45). legacy 경로는
@@ -485,14 +486,14 @@ class ProjectApiController(
     // createdAt/updatedAt에 쓰인다. null이면 legacy도 빈 문자열을 반환한다(JodaDateUtil.getDateString).
     private fun formatIsoDate(instant: Instant?): String {
         if (instant == null) return ""
-        return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(java.util.Date.from(instant))
+        return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(Date.from(instant))
     }
 
     // yona ProjectApi.java:322-325 getDateString()("yyyy-MM-dd a hh:mm:ss Z", Locale.ENGLISH) 대응 —
     // projectCreatedDate/dueDate(이슈+마일스톤)에 쓰인다. parseProjectCreatedDate()의 역함수와 동일 포맷.
     private fun formatProjectApiDate(instant: Instant?): String? {
         if (instant == null) return null
-        return SimpleDateFormat("yyyy-MM-dd a hh:mm:ss Z", Locale.ENGLISH).format(java.util.Date.from(instant))
+        return SimpleDateFormat("yyyy-MM-dd a hh:mm:ss Z", Locale.ENGLISH).format(Date.from(instant))
     }
 }
 

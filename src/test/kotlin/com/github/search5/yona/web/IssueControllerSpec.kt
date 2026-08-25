@@ -51,6 +51,7 @@ import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.issue.IssueComment
 import java.security.MessageDigest
 import java.time.Instant
+import org.hamcrest.Matchers
 
 class IssueControllerSpec : DescribeSpec({
     val issueService = mockk<IssueService>()
@@ -1275,7 +1276,7 @@ class IssueControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
-                    .andExpect(jsonPath("$.commentAuthorName").value(org.hamcrest.Matchers.nullValue()))
+                    .andExpect(jsonPath("$.commentAuthorName").value(Matchers.nullValue()))
             }
 
             // 댓글 작성자의 loginId는 남아있지만(탈퇴 등) userRepository에서 찾지 못하는 경우

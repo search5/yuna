@@ -7,6 +7,7 @@ import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.lang.Long as JLong
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.util.ReflectionTestUtils
 import tools.jackson.databind.ObjectMapper
@@ -81,16 +82,16 @@ class DataBackupServiceImplSpec : DescribeSpec({
             
             every { jdbcTemplate.queryForObject(
                 "SELECT AUTO_INCREMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
-                java.lang.Long::class.java,
+                JLong::class.java,
                 "test_catalog",
                 "projects"
-            ) } returns 10L as java.lang.Long
+            ) } returns 10L as JLong
             every { jdbcTemplate.queryForObject(
                 "SELECT AUTO_INCREMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
-                java.lang.Long::class.java,
+                JLong::class.java,
                 "test_catalog",
                 "users"
-            ) } returns 20L as java.lang.Long
+            ) } returns 20L as JLong
 
             val result = service.exportAll()
             val str = String(result)
@@ -111,7 +112,7 @@ class DataBackupServiceImplSpec : DescribeSpec({
             every { jdbcTemplate.queryForList("SELECT * FROM users") } returns listOf(mapOf("id" to 1))
             
             every { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, "users") } returns "users_id_seq"
-            every { jdbcTemplate.queryForObject("SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM users_id_seq", java.lang.Long::class.java) } returns 30L as java.lang.Long
+            every { jdbcTemplate.queryForObject("SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM users_id_seq", JLong::class.java) } returns 30L as JLong
 
             val result = service.exportAll()
             val str = String(result)

@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.project
 
+import com.github.search5.yona.domain.user.User
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 
@@ -12,7 +13,7 @@ class ProjectSpec : DescribeSpec({
             val fork = Project(name = "fork")
 
             project.forkingProjects = mutableListOf(fork)
-            project.enrolledUsers = mutableListOf(com.github.search5.yona.domain.user.User())
+            project.enrolledUsers = mutableListOf(User())
             project.labels = mutableSetOf()
 
             project.forkingProjects shouldBe mutableListOf(fork)

@@ -3,6 +3,9 @@ package com.github.search5.yona.domain.pullrequest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserIdent
 import java.time.Instant
 
 // CommentThread는 abstract class라 직접 인스턴스화할 수 없어, 구체 서브클래스인
@@ -13,14 +16,14 @@ class CommentThreadSpec : DescribeSpec({
         it("모든 필드의 getter/setter가 정상 동작해야 한다") {
             val thread = CodeCommentThread()
             val pr = PullRequest(
-                toProject = com.github.search5.yona.domain.project.Project(),
-                fromProject = com.github.search5.yona.domain.project.Project(),
-                contributor = com.github.search5.yona.domain.user.User()
+                toProject = Project(),
+                fromProject = Project(),
+                contributor = User()
             )
-            val author = com.github.search5.yona.domain.user.UserIdent(id = 1L, loginId = "gildong", name = "홍길동")
+            val author = UserIdent(id = 1L, loginId = "gildong", name = "홍길동")
             val date = Instant.parse("2026-01-01T00:00:00Z")
 
-            val project = com.github.search5.yona.domain.project.Project()
+            val project = Project()
             val comments = mutableListOf<ReviewComment>()
 
             thread.id = 10L
@@ -52,9 +55,9 @@ class CommentThreadSpec : DescribeSpec({
     describe("isOnPullRequest()") {
         it("pullRequest가 있으면 true여야 한다") {
             val pr = PullRequest(
-                toProject = com.github.search5.yona.domain.project.Project(),
-                fromProject = com.github.search5.yona.domain.project.Project(),
-                contributor = com.github.search5.yona.domain.user.User()
+                toProject = Project(),
+                fromProject = Project(),
+                contributor = User()
             )
             val thread = CodeCommentThread(pullRequest = pr)
             thread.isOnPullRequest() shouldBe true

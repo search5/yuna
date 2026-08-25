@@ -21,6 +21,7 @@ import org.eclipse.jgit.storage.file.WindowCacheConfig
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileNotFoundException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.zip.ZipInputStream
@@ -431,7 +432,7 @@ class GitRepositorySpec : DescribeSpec({
             try {
                 repo.getRawFile("no-such-rev", "a.txt")
                 throw AssertionError("FileNotFoundException이 발생해야 한다")
-            } catch (e: java.io.FileNotFoundException) {
+            } catch (e: FileNotFoundException) {
                 // expected
             }
         }
@@ -445,7 +446,7 @@ class GitRepositorySpec : DescribeSpec({
             try {
                 repo.getRawFile("HEAD", "no-such.txt")
                 throw AssertionError("FileNotFoundException이 발생해야 한다")
-            } catch (e: java.io.FileNotFoundException) {
+            } catch (e: FileNotFoundException) {
                 // expected
             }
         }

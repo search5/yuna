@@ -35,6 +35,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import java.time.Instant
+import java.util.Date
 import java.util.Locale
 import java.util.Optional
 
@@ -1108,7 +1109,7 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
             every { issueRepository.existsById(1L) } returns true
             every { issueRepository.findById(1L) } returns Optional.empty()
 
-            val sentDateSlot = slot<java.util.Date>()
+            val sentDateSlot = slot<Date>()
             every {
                 mailService.sendNotificationMail(any(), any(), any(), any(), any(), any(), any(), any(), any(), capture(sentDateSlot))
             } returns Unit

@@ -38,8 +38,11 @@ import org.eclipse.jgit.revwalk.RevWalk
 import tools.jackson.databind.ObjectMapper
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.time.Instant
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Date
 import java.util.Optional
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -1316,9 +1319,9 @@ class WebhookServiceSpec : DescribeSpec({
             // ZonedDateTime의 JDK 계약(never null)에 의해 정상적으로는 도달 불가능하지만, mockk가 이
             // final JDK 클래스까지 모킹 가능한 것을 확인해 실제로 null을 주입해 검증한다.
             it("authorInstant.atZone()이 null을 반환하면(플랫폼 타입 방어 분기) timestamp가 빈 문자열이어야 한다") {
-                val instantWithNullZone = mockk<java.time.Instant>(relaxed = true)
+                val instantWithNullZone = mockk<Instant>(relaxed = true)
                 every { instantWithNullZone.atZone(any()) } returns null
-                val dateReturningMockInstant = mockk<java.util.Date>(relaxed = true)
+                val dateReturningMockInstant = mockk<Date>(relaxed = true)
                 every { dateReturningMockInstant.toInstant() } returns instantWithNullZone
                 val identWithMockDate = mockk<PersonIdent>(relaxed = true)
                 every { identWithMockDate.`when` } returns dateReturningMockInstant
@@ -1337,11 +1340,11 @@ class WebhookServiceSpec : DescribeSpec({
             }
 
             it("authorInstant.atZone().format()이 null을 반환하면(플랫폼 타입 방어 분기) timestamp가 빈 문자열이어야 한다") {
-                val zonedDateTimeWithNullFormat = mockk<java.time.ZonedDateTime>(relaxed = true)
+                val zonedDateTimeWithNullFormat = mockk<ZonedDateTime>(relaxed = true)
                 every { zonedDateTimeWithNullFormat.format(any()) } returns null
-                val instantWithNullFormat = mockk<java.time.Instant>(relaxed = true)
-                every { instantWithNullFormat.atZone(any<java.time.ZoneId>()) } returns zonedDateTimeWithNullFormat
-                val dateReturningMockInstant = mockk<java.util.Date>(relaxed = true)
+                val instantWithNullFormat = mockk<Instant>(relaxed = true)
+                every { instantWithNullFormat.atZone(any<ZoneId>()) } returns zonedDateTimeWithNullFormat
+                val dateReturningMockInstant = mockk<Date>(relaxed = true)
                 every { dateReturningMockInstant.toInstant() } returns instantWithNullFormat
                 val identWithMockDate = mockk<PersonIdent>(relaxed = true)
                 every { identWithMockDate.`when` } returns dateReturningMockInstant

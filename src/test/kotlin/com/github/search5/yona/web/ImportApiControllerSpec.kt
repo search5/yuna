@@ -19,6 +19,11 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.io.File
 import java.util.*
+import com.github.search5.yona.domain.organization.OrganizationUser
+import java.text.MessageFormat
+import org.eclipse.jgit.api.errors.InvalidRemoteException
+import org.eclipse.jgit.api.errors.JGitInternalException
+import org.eclipse.jgit.internal.JGitText
 
 class ImportApiControllerSpec : DescribeSpec({
     val projectService = mockk<ProjectService>()
@@ -193,7 +198,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
-                every { gitService.cloneRepository("http://invalid", "testuser", "yona-imported", null, null) } throws org.eclipse.jgit.api.errors.InvalidRemoteException("invalid")
+                every { gitService.cloneRepository("http://invalid", "testuser", "yona-imported", null, null) } throws InvalidRemoteException("invalid")
                 every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.wrong.url", null, any()) } returns "잘못된 URL"
                 val requestJson = """{"url": "http://invalid", "owner": "testuser", "name": "yona-imported"}"""
@@ -206,7 +211,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
-                every { gitService.cloneRepository("http://invalid", "testuser", "yona-imported", null, null) } throws org.eclipse.jgit.api.errors.JGitInternalException("internal")
+                every { gitService.cloneRepository("http://invalid", "testuser", "yona-imported", null, null) } throws JGitInternalException("internal")
                 every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.wrong.url", null, any()) } returns "잘못된 URL"
                 val requestJson = """{"url": "http://invalid", "owner": "testuser", "name": "yona-imported"}"""
@@ -232,7 +237,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
-                every { gitService.cloneRepository("http://forbidden", "testuser", "yona-imported", null, null) } throws TransportException(java.text.MessageFormat.format(org.eclipse.jgit.internal.JGitText.get().serviceNotPermitted, ""))
+                every { gitService.cloneRepository("http://forbidden", "testuser", "yona-imported", null, null) } throws TransportException(MessageFormat.format(JGitText.get().serviceNotPermitted, ""))
                 every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport.forbidden", null, any()) } returns "접근 금지"
                 val requestJson = """{"url": "http://forbidden", "owner": "testuser", "name": "yona-imported"}"""
@@ -268,7 +273,7 @@ class ImportApiControllerSpec : DescribeSpec({
 
             it("조직으로 임포트 성공 시 200 OK와 함께 생성된 프로젝트 정보를 반환해야 한다") {
                 val org = Organization(id = 10L, name = "myorg")
-                val mockOrgUser = mockk<com.github.search5.yona.domain.organization.OrganizationUser>()
+                val mockOrgUser = mockk<OrganizationUser>()
                 every { mockOrgUser.role.id } returns RoleType.ORG_ADMIN.roleType
 
                 val mockRepoPath = File("/tmp/yuna/git/myorg/yona-imported.git")

@@ -56,7 +56,10 @@ import com.github.search5.yona.domain.issue.IssueSpecification
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.config.TemplateHelper
 import com.github.search5.yona.domain.issue.IssueExcelService
+import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.issue.RecentIssueService
+import com.github.search5.yona.domain.role.RoleType
+import org.springframework.http.HttpStatus
 
 @Controller
 class IssueViewController(
@@ -381,8 +384,8 @@ class IssueViewController(
     private fun buildTimelineModel(
         project: Project,
         issue: Issue,
-        comments: List<com.github.search5.yona.domain.issue.IssueComment>,
-        loginUser: com.github.search5.yona.domain.user.User?,
+        comments: List<IssueComment>,
+        loginUser: User?,
         model: Model
     ) {
         val events = issueEventRepository.findByIssueOrderByCreatedAsc(issue)
@@ -391,7 +394,7 @@ class IssueViewController(
         // 재작업) — 대댓글(parentComment != null)은 최상위 타임라인에 별도 항목으로 나타나지 않고
         // 부모 댓글 아래 common/childComments 조각에서만 렌더링된다.
         val topLevelComments = comments.filter { it.parentComment == null }
-        val childCommentsByParentId: Map<Long, List<com.github.search5.yona.domain.issue.IssueComment>> =
+        val childCommentsByParentId: Map<Long, List<IssueComment>> =
             comments.filter { it.parentComment != null }
                 .groupBy { it.parentComment!!.id!! }
         val timeline = (
@@ -402,7 +405,7 @@ class IssueViewController(
         // legacy issue/partial_comment.scala.html의 isAllowed(..., Operation.DELETE) 대응 —
         // 매니저는 남의 댓글도 삭제할 수 있다(CommentController의 실제 권한 체크와 동일 기준).
         val isProjectManager = loginUser != null && projectUserRepository.findByProjectIdAndUserId(project.id!!, loginUser.id!!)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
 
         model.addAttribute("childCommentsByParentId", childCommentsByParentId)
@@ -744,7 +747,7 @@ class IssueViewController(
 
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
         if (loginUser == null) {
-            if (wantsJson) return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build<Any>()
+            if (wantsJson) return ResponseEntity.status(HttpStatus.FORBIDDEN).build<Any>()
             // yona error/forbidden.scala.html 대응 (P-템플릿 #47) — 프로젝트는 이미 찾았으므로
             // 컨텍스트 인지형 403. 멤버십 게이트(isMemberOf)는 TASK-0260에서 legacy massUpdate()와
             // 동일하게 이슈 단위 권한 체크로 대체돼 여기서는 로그인 여부만 확인한다(주석 아래 참고).
@@ -861,7 +864,7 @@ class IssueViewController(
 
         // yona IssueApp.massUpdate() "if (updatedItems == 0 && rejectedByPermission > 0) return forbidden(...)" 대응.
         if (updatedItems == 0 && rejectedByPermission > 0) {
-            return if (wantsJson) ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build<Any>() else "redirect:/error/403"
+            return if (wantsJson) ResponseEntity.status(HttpStatus.FORBIDDEN).build<Any>() else "redirect:/error/403"
         }
 
         if (wantsJson) {

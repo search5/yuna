@@ -29,6 +29,7 @@ import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.ui.ExtendedModelMap
 import io.mockk.verify
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -363,7 +364,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "제목", body = "본문", temporaryUploadFiles = "900")
 
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj/post/5"
                 verify(exactly = 1) {
@@ -394,7 +395,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "새 README", body = "새 본문", readme = true)
 
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
@@ -414,7 +415,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "첫 README", body = "본문", readme = true)
 
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj"
                 verify(exactly = 1) { postingService.createPosting(1L, any(), 10L) }
@@ -432,7 +433,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "이슈 템플릿", body = "템플릿 내용", issueTemplate = "true")
 
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
@@ -464,7 +465,7 @@ class BoardViewControllerSpec : DescribeSpec({
                     branch = "develop"
                 )
 
-                val result = boardViewController.createPost("owner", "CodeEditProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "CodeEditProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/CodeEditProj/code/develop/src/main/Foo.kt"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
@@ -504,7 +505,7 @@ class BoardViewControllerSpec : DescribeSpec({
 
                 val request = PostingForm(title = "제목", body = "본문")
 
-                val result = boardViewController.createPost("owner", "PublicProj", request, nonMemberAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "PublicProj", request, nonMemberAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/PublicProj/post/1"
             }
@@ -1057,7 +1058,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(101L, 10L) } returns true
 
                 val request = PostingForm(title = "커밋", body = "내용", path = "a.txt")
-                val result = boardViewController.createPost("owner", "BrokenRepo", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "BrokenRepo", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/BrokenRepo/code//a.txt"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
@@ -1073,7 +1074,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(102L, 10L) } returns true
 
                 val request = PostingForm(title = "템플릿", body = "내용", issueTemplate = "true")
-                val result = boardViewController.createPost("owner", "BrokenIssueTpl", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "BrokenIssueTpl", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/BrokenIssueTpl"
                 verify(exactly = 0) { postingService.createPosting(any(), any(), any()) }
@@ -1092,7 +1093,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { postingService.createPosting(103L, any(), 10L) } returns savedPosting
 
                 val request = PostingForm(title = "README", body = "내용", readme = true)
-                val result = boardViewController.createPost("owner", "BrokenReadmeCommit", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "BrokenReadmeCommit", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/BrokenReadmeCommit"
             }
@@ -1115,7 +1116,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 } returns 1
 
                 val request = PostingForm(title = "제목", body = "본문", temporaryUploadFiles = "901, abc, ")
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj/post/6"
                 verify(exactly = 1) {
@@ -1149,7 +1150,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 } returns 1
 
                 val request = PostingForm(title = "제목", body = null, notice = null, readme = null, temporaryUploadFiles = "902")
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj/post/20"
                 verify(exactly = 1) {
@@ -1170,7 +1171,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(104L, 10L) } returns true
 
                 val request = PostingForm(title = "템플릿", body = null, issueTemplate = "true")
-                val result = boardViewController.createPost("owner", "BrokenIssueTplNullBody", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "BrokenIssueTplNullBody", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/BrokenIssueTplNullBody"
             }
@@ -1187,7 +1188,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { postingService.createPosting(105L, any(), 45L) } returns savedPosting
 
                 val request = PostingForm(title = "제목", body = "본문", path = "a.txt")
-                val result = boardViewController.createPost("owner", "PathNonMember", request, nonMemberAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "PathNonMember", request, nonMemberAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/PathNonMember/post/21"
                 verify(exactly = 1) { postingService.createPosting(105L, any(), 45L) }
@@ -1204,7 +1205,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { postingService.createPosting(1L, any(), 10L) } returns savedPosting
 
                 val request = PostingForm(title = "제목", body = "본문", path = "   ")
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj/post/24"
             }
@@ -1218,7 +1219,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(106L, 10L) } returns true
 
                 val request = PostingForm(title = "커밋", body = null, path = "a.txt")
-                val result = boardViewController.createPost("owner", "BrokenPathNullBody", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "BrokenPathNullBody", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/BrokenPathNullBody/code//a.txt"
             }
@@ -1236,7 +1237,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { postingService.createPosting(107L, any(), 10L) } returns savedPosting
 
                 val request = PostingForm(title = "README", body = "무시됨", readme = true)
-                val result = boardViewController.createPost("owner", "BrokenReadmeNullBody", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "BrokenReadmeNullBody", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/BrokenReadmeNullBody"
             }
@@ -1252,7 +1253,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { postingService.createPosting(1L, any(), 10L) } returns savedPosting
 
                 val request = PostingForm(title = "제목", body = "본문", temporaryUploadFiles = "   ")
-                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.createPost("owner", "TestProj", request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj/post/23"
                 verify(exactly = 0) { attachmentService.moveOnlySelected(any(), any(), ResourceType.BOARD_POST, "140", any(), any()) }
@@ -1356,7 +1357,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { postingService.updatePosting(1L, 1L, "제목", "", false, false, 10L, false) } returns posting
 
                 val request = PostingForm(title = "제목", body = null, notice = null, readme = null, sendNotificationMail = null)
-                val result = boardViewController.editPost("owner", "TestProj", 1L, request, userAuth, org.springframework.ui.ExtendedModelMap())
+                val result = boardViewController.editPost("owner", "TestProj", 1L, request, userAuth, ExtendedModelMap())
 
                 result shouldBe "redirect:/owner/TestProj/post/1"
                 verify(exactly = 1) { postingService.updatePosting(1L, 1L, "제목", "", false, false, 10L, false) }
@@ -1483,7 +1484,7 @@ class BoardViewControllerSpec : DescribeSpec({
                 every { postingService.getNotices(1L) } returns emptyList()
 
                 val result = boardViewController.listPosts(
-                    "owner", "TestProj", 0, null, null, "createdDate", "desc", emptyList(), userAuth, org.springframework.ui.ExtendedModelMap()
+                    "owner", "TestProj", 0, null, null, "createdDate", "desc", emptyList(), userAuth, ExtendedModelMap()
                 )
 
                 result shouldBe "board/list"

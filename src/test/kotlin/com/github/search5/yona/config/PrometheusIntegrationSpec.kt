@@ -1,6 +1,7 @@
 package com.github.search5.yona.config
 
 import io.kotest.core.spec.style.DescribeSpec
+import org.hamcrest.Matchers
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
@@ -29,7 +30,7 @@ class PrometheusIntegrationSpec : DescribeSpec({
         it("GET /actuator/prometheus 접근 시, 200 OK와 함께 프로메테우스 텍스트 메트릭 데이터를 반환해야 한다") {
             mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk)
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("jvm_memory_used_bytes")))
+                .andExpect(content().string(Matchers.containsString("jvm_memory_used_bytes")))
         }
     }
 })

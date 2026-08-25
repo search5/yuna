@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.event
 
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.notification.NotificationEvent
@@ -61,14 +62,14 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
     describe("PullRequestMergeEventListener.handlePullRequestMergeEvent") {
 
         it("should return if PR not found") {
-            every { pullRequestRepository.findById(999L) } returns java.util.Optional.empty()
+            every { pullRequestRepository.findById(999L) } returns Optional.empty()
             listener.handlePullRequestMergeEvent(PullRequestMergeEvent(pullRequestId = 999L, sender = sender, isNewPullRequest = false))
             verify(exactly = 0) { pullRequestRepository.save(any()) }
         }
         
         it("should handle exceptions when closing issues") {
             val mergedPr = pr(201L, conflict = false)
-            every { pullRequestRepository.findById(201L) } returns java.util.Optional.of(mergedPr)
+            every { pullRequestRepository.findById(201L) } returns Optional.of(mergedPr)
             every { pullRequestRepository.save(any()) } answers { firstArg() }
             every { pullRequestEventRepository.save(any()) } answers { firstArg() }
             every { pullRequestCommitRepository.findByPullRequest(mergedPr) } throws RuntimeException("DB Error")
@@ -108,17 +109,17 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
             every { pullRequestCommitRepository.findByPullRequest(pr) } returns listOf(commit1)
             every { issueService.changeState(any(), any(), any()) } returns mockk(relaxed = true)
             
-            val issue1 = mockk<com.github.search5.yona.domain.issue.Issue>(relaxed = true)
+            val issue1 = mockk<Issue>(relaxed = true)
             every { issue1.id } returns 101L
             every { issue1.number } returns 1L
             every { issue1.state } returns State.OPEN
             
-            val issue2 = mockk<com.github.search5.yona.domain.issue.Issue>(relaxed = true)
+            val issue2 = mockk<Issue>(relaxed = true)
             every { issue2.id } returns 102L
             every { issue2.number } returns 2L
             every { issue2.state } returns State.OPEN
             
-            val issue3 = mockk<com.github.search5.yona.domain.issue.Issue>(relaxed = true)
+            val issue3 = mockk<Issue>(relaxed = true)
             every { issue3.id } returns 103L
             every { issue3.number } returns 3L
             every { issue3.state } returns State.CLOSED
@@ -168,7 +169,7 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
                 relatedPr.isConflict = true
                 PullRequestMergeResult(pullRequest = relatedPr)
             }
-            every { pullRequestRepository.findById(105L) } returns java.util.Optional.of(relatedPr)
+            every { pullRequestRepository.findById(105L) } returns Optional.of(relatedPr)
             
             listener.handleRelatedPullRequestMergeEvent(RelatedPullRequestMergeEvent(project, "feature", sender))
             

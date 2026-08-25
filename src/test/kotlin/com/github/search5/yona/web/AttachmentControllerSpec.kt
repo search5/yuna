@@ -998,7 +998,7 @@ class AttachmentControllerSpec : DescribeSpec({
                 val attachment = Attachment(id = 100L, name = "test.txt", hash = "abc", containerType = ResourceType.ISSUE_POST, containerId = "1", ownerLoginId = "user1")
                 every { attachmentRepository.findById(100L) } returns Optional.of(attachment)
                 every { accessControl.isAllowedAttachment(any(), attachment, Operation.READ) } returns true
-                val mockFile = mockk<java.io.File>()
+                val mockFile = mockk<File>()
                 every { mockFile.exists() } returns false
                 every { attachmentService.getFile(attachment) } returns mockFile
                 

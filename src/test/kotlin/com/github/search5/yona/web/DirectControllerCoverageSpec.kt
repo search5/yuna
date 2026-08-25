@@ -17,6 +17,7 @@ import org.springframework.ui.ExtendedModelMap
 import org.springframework.mock.web.MockMultipartFile
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
+import java.io.File
 
 class DirectControllerCoverageSpec : DescribeSpec({
     describe("Direct method calls for OrganizationViewController coverage") {
@@ -54,7 +55,7 @@ class DirectControllerCoverageSpec : DescribeSpec({
             every { organizationRepository.findByName("testorg") } returns Optional.of(org)
             val attachment = mockk<Attachment>(relaxed = true)
             every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns listOf(attachment)
-            every { attachmentService.getFile(any()) } returns java.io.File("does_not_exist_xyz.png")
+            every { attachmentService.getFile(any()) } returns File("does_not_exist_xyz.png")
             
             try {
                 controller.organizationLogo(1L)

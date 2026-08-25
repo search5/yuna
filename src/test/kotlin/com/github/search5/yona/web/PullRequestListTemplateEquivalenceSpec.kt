@@ -33,6 +33,7 @@ import org.thymeleaf.spring6.SpringTemplateEngine
 import org.springframework.beans.factory.annotation.Value
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.vcs.BareCommit
+import java.io.File
 
 // 그룹11 서브셋(#167/#168/#169/#175/#177/#180/#182) 전용 회귀 스펙. 공용
 // TemplateEquivalenceSpec.kt와 병렬로 다른 에이전트가 작업 중이라 충돌을 피하기 위해 별도 파일로
@@ -85,7 +86,7 @@ class PullRequestListTemplateEquivalenceSpec @Autowired constructor(
             // 물리 bare git 저장소를 만들고 커밋을 하나 심어둔다(PullRequestServiceSpec의 기존 패턴 재사용).
             run {
                 val repo = repositoryService.getRepository(prProj)
-                val gitDir = java.io.File(java.io.File(gitBaseDir), "${prProj.owner}/${prProj.name}.git")
+                val gitDir = File(File(gitBaseDir), "${prProj.owner}/${prProj.name}.git")
                 if (!gitDir.exists()) {
                     repo.create()
                     val bareCommit = BareCommit(prProj, owner, gitBaseDir)

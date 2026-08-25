@@ -18,6 +18,10 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.view
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
+import org.springframework.test.web.servlet.ResultActions
+import org.springframework.web.servlet.View
+import org.springframework.web.servlet.ViewResolver
+import org.springframework.web.servlet.view.RedirectView
 
 class BootstrapSetupControllerSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
@@ -29,11 +33,11 @@ class BootstrapSetupControllerSpec : DescribeSpec({
     // 한정 문제 — 다른 뷰 이름을 쓰는 컨트롤러들은 겪지 않음). "redirect:" 접두사는 실제
     // RedirectView로 그대로 처리하고, 그 외에는 실제 렌더링 없이 뷰 이름만 확인하는 no-op 뷰로 교체한다.
     val mockMvc = MockMvcBuilders.standaloneSetup(controller)
-        .setViewResolvers(org.springframework.web.servlet.ViewResolver { viewName, _ ->
+        .setViewResolvers(ViewResolver { viewName, _ ->
             if (viewName.startsWith("redirect:")) {
-                org.springframework.web.servlet.view.RedirectView(viewName.removePrefix("redirect:"))
+                RedirectView(viewName.removePrefix("redirect:"))
             } else {
-                org.springframework.web.servlet.View { _, _, response -> response.status = 200 }
+                View { _, _, response -> response.status = 200 }
             }
         })
         .build()
@@ -74,7 +78,7 @@ class BootstrapSetupControllerSpec : DescribeSpec({
             "retypedPassword" to "password1"
         )
 
-        fun perform(overrides: Map<String, String> = emptyMap()): org.springframework.test.web.servlet.ResultActions {
+        fun perform(overrides: Map<String, String> = emptyMap()): ResultActions {
             val params = validParams() + overrides
             var request = post("/bootstrap-setup")
             params.forEach { (k, v) -> request = request.param(k, v) }

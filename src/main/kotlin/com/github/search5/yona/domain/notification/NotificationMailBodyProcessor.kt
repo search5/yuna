@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.notification
 
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -31,7 +32,7 @@ class NotificationMailBodyProcessor(
     }
 
     // 모든 링크를 절대경로로 만들고, 필요하면 rel=noreferrer를 붙인다.
-    fun handleLinks(doc: org.jsoup.nodes.Document) {
+    fun handleLinks(doc: Document) {
         val attrNames = arrayOf("src", "href")
 
         for (attrName in attrNames) {
@@ -64,7 +65,7 @@ class NotificationMailBodyProcessor(
         }
     }
 
-    fun handleImages(doc: org.jsoup.nodes.Document) {
+    fun handleImages(doc: Document) {
         for (img: Element in doc.select("img")) {
             img.attr("style", "max-width:1024px;" + img.attr("style"))
             img.wrap("""<a href="${img.attr("src")}" target="_blank" style="border:0;outline:0;"></a>""")

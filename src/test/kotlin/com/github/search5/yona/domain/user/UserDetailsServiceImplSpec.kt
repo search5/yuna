@@ -1,9 +1,11 @@
 package com.github.search5.yona.domain.user
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import org.springframework.security.core.userdetails.UsernameNotFoundException
 import java.util.Optional
 
 // yona models/User.java:563-569 isSiteManager() 대응 (P1-119). SiteAdmin 테이블 소속 여부만으로
@@ -39,7 +41,7 @@ class UserDetailsServiceImplSpec : DescribeSpec({
         it("사용자를 찾을 수 없으면 UsernameNotFoundException을 던져야 한다") {
             every { userRepository.findByLoginId("unknown") } returns Optional.empty()
             
-            io.kotest.assertions.throwables.shouldThrow<org.springframework.security.core.userdetails.UsernameNotFoundException> {
+            shouldThrow<UsernameNotFoundException> {
                 service.loadUserByUsername("unknown")
             }
         }

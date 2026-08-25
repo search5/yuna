@@ -30,7 +30,13 @@ import org.eclipse.angus.mail.imap.IMAPStore
 import org.springframework.scheduling.TaskScheduler
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+import jakarta.mail.internet.InternetAddress
+import java.time.Duration
+import java.time.Instant
+import java.util.Date
 import java.util.Properties
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ScheduledFuture
 
 // yona mailbox/CreationViaEmail.java의 MIME 파트 트리 순회(processPart 등) 대응 (P1-29).
 // 실제 jakarta.mail 객체를 구성해 IMAP 서버 연결 없이도 파싱 로직을 검증한다.
@@ -271,7 +277,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
 
         it("idleThread가 살아있으면 null을 반환해야 한다") {
             val p = freshPoller()
-            val latch = java.util.concurrent.CountDownLatch(1)
+            val latch = CountDownLatch(1)
             val alive = Thread { latch.await() }.apply { isDaemon = true; start() }
             p.setField("idleThread", alive)
             try {
@@ -294,7 +300,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
             val p = freshPoller()
             val mockFolder = mockk<IMAPFolder>(relaxed = true)
             val mockStore = mockk<IMAPStore>(relaxed = true)
-            val mockTask = mockk<java.util.concurrent.ScheduledFuture<*>>(relaxed = true)
+            val mockTask = mockk<ScheduledFuture<*>>(relaxed = true)
             p.setField("folder", mockFolder)
             p.setField("store", mockStore)
             p.setField("pollingTask", mockTask)
@@ -401,7 +407,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
 
             p.callPrivate("handleNewMessagesAndStartListener")
 
-            verify(exactly = 1) { taskScheduler.scheduleWithFixedDelay(any(), any<java.time.Instant>(), any<java.time.Duration>()) }
+            verify(exactly = 1) { taskScheduler.scheduleWithFixedDelay(any(), any<Instant>(), any<Duration>()) }
         }
 
         it("신규 메일 처리(handleNewMessages) 중 예외가 발생해도 리스너 시작은 계속 시도해야 한다") {
@@ -684,8 +690,8 @@ class ImapMailboxPollerSpec : DescribeSpec({
             p.setField("folder", folder)
             val runnableSlot = slot<Runnable>()
             every {
-                taskScheduler.scheduleWithFixedDelay(capture(runnableSlot), any<java.time.Instant>(), any<java.time.Duration>())
-            } returns mockk<java.util.concurrent.ScheduledFuture<*>>(relaxed = true)
+                taskScheduler.scheduleWithFixedDelay(capture(runnableSlot), any<Instant>(), any<Duration>())
+            } returns mockk<ScheduledFuture<*>>(relaxed = true)
 
             p.callPrivate("startEmailPolling")
             runnableSlot.captured.run()
@@ -710,8 +716,8 @@ class ImapMailboxPollerSpec : DescribeSpec({
             p.setField("store", store)
             val runnableSlot = slot<Runnable>()
             every {
-                taskScheduler.scheduleWithFixedDelay(capture(runnableSlot), any<java.time.Instant>(), any<java.time.Duration>())
-            } returns mockk<java.util.concurrent.ScheduledFuture<*>>(relaxed = true)
+                taskScheduler.scheduleWithFixedDelay(capture(runnableSlot), any<Instant>(), any<Duration>())
+            } returns mockk<ScheduledFuture<*>>(relaxed = true)
 
             p.callPrivate("startEmailPolling")
             runnableSlot.captured.run()
@@ -730,8 +736,8 @@ class ImapMailboxPollerSpec : DescribeSpec({
             p.setField("folder", folder)
             val runnableSlot = slot<Runnable>()
             every {
-                taskScheduler.scheduleWithFixedDelay(capture(runnableSlot), any<java.time.Instant>(), any<java.time.Duration>())
-            } returns mockk<java.util.concurrent.ScheduledFuture<*>>(relaxed = true)
+                taskScheduler.scheduleWithFixedDelay(capture(runnableSlot), any<Instant>(), any<Duration>())
+            } returns mockk<ScheduledFuture<*>>(relaxed = true)
 
             p.callPrivate("startEmailPolling")
             runnableSlot.captured.run() // 예외가 전파되지 않으면 성공
@@ -916,8 +922,8 @@ class ImapMailboxPollerSpec : DescribeSpec({
             // folder는 세팅하지 않음(null)
             val runnableSlot = slot<Runnable>()
             every {
-                taskScheduler.scheduleWithFixedDelay(capture(runnableSlot), any<java.time.Instant>(), any<java.time.Duration>())
-            } returns mockk<java.util.concurrent.ScheduledFuture<*>>(relaxed = true)
+                taskScheduler.scheduleWithFixedDelay(capture(runnableSlot), any<Instant>(), any<Duration>())
+            } returns mockk<ScheduledFuture<*>>(relaxed = true)
 
             p.callPrivate("startEmailPolling")
             runnableSlot.captured.run()
@@ -954,7 +960,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
 
         it("From 헤더에 표시 이름(personal)이 있으면 그 이름을 fromName으로 써야 한다") {
             val message = MimeMessage(session)
-            message.setFrom(jakarta.mail.internet.InternetAddress("gildong@example.com", "홍길동", "UTF-8"))
+            message.setFrom(InternetAddress("gildong@example.com", "홍길동", "UTF-8"))
             message.setRecipients(Message.RecipientType.TO, "yona@example.com")
             message.subject = "표시 이름"
             message.setText("본문")
@@ -967,7 +973,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
         it("From 주소 자체가 비어있으면(address=null) fromAddress/fromName 모두 빈 문자열이어야 한다") {
             val p = freshPoller()
             val addressless = mockk<Message>(relaxed = true)
-            every { addressless.from } returns arrayOf(jakarta.mail.internet.InternetAddress())
+            every { addressless.from } returns arrayOf(InternetAddress())
             every { addressless.allRecipients } returns null
             every { addressless.subject } returns "제목"
             every { addressless.isMimeType(any()) } returns false
@@ -1046,7 +1052,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
             every { message.isMimeType("text/plain") } returns true
             every { message.isMimeType("multipart/*") } returns false
             every { message.isMimeType("text/html") } returns false
-            every { message.content } returns java.util.Date() // String이 아닌 임의의 객체
+            every { message.content } returns Date() // String이 아닌 임의의 객체
             every { message.fileName } returns null
 
             val result = p.toInboundEmailMessage(message)
@@ -1063,7 +1069,7 @@ class ImapMailboxPollerSpec : DescribeSpec({
             every { message.isMimeType("text/plain") } returns false
             every { message.isMimeType("multipart/*") } returns false
             every { message.isMimeType("text/html") } returns true
-            every { message.content } returns java.util.Date() // String이 아닌 임의의 객체
+            every { message.content } returns Date() // String이 아닌 임의의 객체
             every { message.fileName } returns null
 
             val result = p.toInboundEmailMessage(message)

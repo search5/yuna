@@ -76,6 +76,8 @@ import java.io.File
 import java.time.Instant
 import io.mockk.spyk
 import com.github.search5.yona.domain.vcs.SvnRepository
+import com.github.search5.yona.domain.issue.DuplicateLabelCategoryNameException
+import org.springframework.data.domain.Sort
 
 class ProjectViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -153,7 +155,7 @@ class ProjectViewControllerSpec : DescribeSpec({
         every { recentProjectRepository.recordVisit(any(), any()) } just Runs
         every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
         every {
-            milestoneRepository.findByProjectAndState(any(), any(), any<org.springframework.data.domain.Sort>())
+            milestoneRepository.findByProjectAndState(any(), any(), any<Sort>())
         } returns emptyList()
     }
 
@@ -502,8 +504,8 @@ class ProjectViewControllerSpec : DescribeSpec({
 
             describe("POST /{owner}/{projectName}/issue/labels") {
                 it("생성 권한이 있으면 201 Created와 새 라벨 JSON을 반환해야 한다") {
-                    val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "새카테고리", project = labelProject)
-                    val newLabel = com.github.search5.yona.domain.issue.IssueLabel(id = 10L, name = "새라벨", color = "#2196f3", category = category, project = labelProject)
+                    val category = IssueLabelCategory(id = 1L, name = "새카테고리", project = labelProject)
+                    val newLabel = IssueLabel(id = 10L, name = "새라벨", color = "#2196f3", category = category, project = labelProject)
                     every {
                         issueLabelService.newLabelByCategoryName(5L, "새카테고리", false, "새라벨", "#2196f3")
                     } returns newLabel
@@ -580,10 +582,10 @@ class ProjectViewControllerSpec : DescribeSpec({
 
             describe("PUT /{owner}/{projectName}/issue/label/{id}") {
                 it("수정 권한이 있으면 라벨을 수정하고 200 OK를 반환해야 한다") {
-                    val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "카테고리", project = labelProject)
+                    val category = IssueLabelCategory(id = 1L, name = "카테고리", project = labelProject)
                     every {
                         issueLabelService.updateLabel(10L, "수정된이름", "#ff0000", 1L)
-                    } returns com.github.search5.yona.domain.issue.IssueLabel(id = 10L, name = "수정된이름", color = "#ff0000", category = category, project = labelProject)
+                    } returns IssueLabel(id = 10L, name = "수정된이름", color = "#ff0000", category = category, project = labelProject)
 
                     mockMvc.perform(
                         MockMvcRequestBuilders.put("/owner/LabelProj/issue/label/10")
@@ -599,7 +601,7 @@ class ProjectViewControllerSpec : DescribeSpec({
 
             describe("PUT /{owner}/{projectName}/issue/label/category/{id}") {
                 it("수정 권한이 있으면 카테고리를 수정하고 200 OK를 반환해야 한다") {
-                    val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "수정된카테고리", project = labelProject)
+                    val category = IssueLabelCategory(id = 1L, name = "수정된카테고리", project = labelProject)
                     every { issueLabelService.updateCategory(1L, "수정된카테고리", true) } returns category
 
                     mockMvc.perform(
@@ -613,7 +615,7 @@ class ProjectViewControllerSpec : DescribeSpec({
                 it("같은 프로젝트 내 다른 카테고리와 이름이 중복되면 400 Bad Request를 반환해야 한다") {
                     every {
                         issueLabelService.updateCategory(1L, "중복이름", false)
-                    } throws com.github.search5.yona.domain.issue.DuplicateLabelCategoryNameException("dup")
+                    } throws DuplicateLabelCategoryNameException("dup")
 
                     mockMvc.perform(
                         MockMvcRequestBuilders.put("/owner/LabelProj/issue/label/category/1")

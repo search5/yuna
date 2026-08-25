@@ -62,6 +62,9 @@ import com.github.search5.yona.domain.pullrequest.PullRequestCommit
 import com.github.search5.yona.domain.pullrequest.MergePreviewResult
 import com.github.search5.yona.domain.vcs.PushedBranch
 import com.github.search5.yona.domain.attachment.Attachment
+import org.springframework.data.jpa.domain.Specification
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 import io.kotest.matchers.string.shouldContain
 import io.mockk.verify
 
@@ -142,10 +145,10 @@ class PullRequestViewControllerSpec : DescribeSpec({
         )
         every { pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(any()) } returns emptyList()
         every {
-            pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
+            pullRequestRepository.findAll(any<Specification<PullRequest>>(), any<Pageable>())
         } returns PageImpl(emptyList())
         every {
-            pullRequestRepository.count(any<org.springframework.data.jpa.domain.Specification<PullRequest>>())
+            pullRequestRepository.count(any<Specification<PullRequest>>())
         } returns 0L
         every { pullRequestRepository.findDistinctContributorsByToProject(any()) } returns emptyList()
     }
@@ -177,7 +180,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every {
-                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
+                    pullRequestRepository.findAll(any<Specification<PullRequest>>(), any<Pageable>())
                 } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/pulls").principal(userAuth))
@@ -204,7 +207,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 val pageableSlot = slot<Pageable>()
                 every {
-                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), capture(pageableSlot))
+                    pullRequestRepository.findAll(any<Specification<PullRequest>>(), capture(pageableSlot))
                 } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/pulls").principal(userAuth))
@@ -228,7 +231,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { projectUserRepository.existsByProjectIdAndUserId(12L, 10L) } returns false
                 every {
-                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
+                    pullRequestRepository.findAll(any<Specification<PullRequest>>(), any<Pageable>())
                 } returns PageImpl(emptyList(), pageRequest, 0)
 
                 mockMvc.perform(get("/owner/group-project/pulls").principal(userAuth))
@@ -245,7 +248,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every {
-                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
+                    pullRequestRepository.findAll(any<Specification<PullRequest>>(), any<Pageable>())
                 } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/closedPullRequests").principal(userAuth))
@@ -273,7 +276,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 every {
-                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<PullRequest>>(), any<Pageable>())
+                    pullRequestRepository.findAll(any<Specification<PullRequest>>(), any<Pageable>())
                 } returns PageImpl(listOf(pullRequest), pageRequest, 1)
 
                 mockMvc.perform(get("/owner/TestProj/sentPullRequests").principal(userAuth))
@@ -1670,97 +1673,97 @@ class PullRequestViewControllerSpec : DescribeSpec({
 
         describe("Coverage addition for PullRequestViewController") {
             it("should handle null states, null filter, null contributorId in listPullRequests") {
-                val memberUser = com.github.search5.yona.domain.user.User(id = 10L, loginId = "testuser", name = "테스트유저")
-                val project = com.github.search5.yona.domain.project.Project(id = 1L, name = "TestProj", owner = "owner", projectScope = com.github.search5.yona.domain.project.ProjectScope.PRIVATE)
-                memberUser.projectUsers.add(com.github.search5.yona.domain.project.ProjectUser(id = 900L, user = memberUser, project = project, role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)))
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 
-                io.mockk.every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns java.util.Optional.of(project)
-                io.mockk.every { userRepository.findByLoginId("testuser") } returns java.util.Optional.of(memberUser)
+                io.mockk.every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                io.mockk.every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 io.mockk.every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 io.mockk.every {
-                    pullRequestRepository.findAll(any<org.springframework.data.jpa.domain.Specification<com.github.search5.yona.domain.pullrequest.PullRequest>>(), any<org.springframework.data.domain.Pageable>())
-                } returns org.springframework.data.domain.PageImpl(emptyList<com.github.search5.yona.domain.pullrequest.PullRequest>(), org.springframework.data.domain.PageRequest.of(0, 20), 0)
+                    pullRequestRepository.findAll(any<Specification<PullRequest>>(), any<Pageable>())
+                } returns PageImpl(emptyList<PullRequest>(), PageRequest.of(0, 20), 0)
                 
                 // state=all (states=null), filter=null, contributorId=null
-                mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/owner/TestProj/pulls")
+                mockMvc.perform(MockMvcRequestBuilders.get("/owner/TestProj/pulls")
                     .param("state", "all")
-                    .principal(org.springframework.security.authentication.UsernamePasswordAuthenticationToken("testuser", "password")))
-                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk)
+                    .principal(UsernamePasswordAuthenticationToken("testuser", "password")))
+                    .andExpect(MockMvcResultMatchers.status().isOk)
             }
             
             it("should handle getReferredIssues with empty body") {
-                val memberUser = com.github.search5.yona.domain.user.User(id = 10L, loginId = "testuser", name = "테스트유저")
-                val project = com.github.search5.yona.domain.project.Project(id = 1L, name = "TestProj", owner = "owner", projectScope = com.github.search5.yona.domain.project.ProjectScope.PRIVATE)
-                memberUser.projectUsers.add(com.github.search5.yona.domain.project.ProjectUser(id = 900L, user = memberUser, project = project, role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)))
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
                 
-                val prWithEmptyBody = com.github.search5.yona.domain.pullrequest.PullRequest(
+                val prWithEmptyBody = PullRequest(
                     id = 50L, title = "PR tests", body = null, toProject = project, fromProject = project,
-                    toBranch = "master", fromBranch = "feature", contributor = memberUser, state = com.github.search5.yona.domain.enumeration.State.OPEN, number = 1L
+                    toBranch = "master", fromBranch = "feature", contributor = memberUser, state = State.OPEN, number = 1L
                 )
                 
-                io.mockk.every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns java.util.Optional.of(project)
-                io.mockk.every { userRepository.findByLoginId("testuser") } returns java.util.Optional.of(memberUser)
+                io.mockk.every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                io.mockk.every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 io.mockk.every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 io.mockk.every { pullRequestService.getPullRequest(1L, 1L) } returns prWithEmptyBody
-                io.mockk.every { pullRequestService.attemptMerge(50L) } returns com.github.search5.yona.domain.pullrequest.PullRequestMergeResult(pullRequest = prWithEmptyBody)
+                io.mockk.every { pullRequestService.attemptMerge(50L) } returns PullRequestMergeResult(pullRequest = prWithEmptyBody)
                 io.mockk.every { commentThreadRepository.findByPullRequest(prWithEmptyBody) } returns emptyList()
                 io.mockk.every { pullRequestCommitRepository.findByPullRequest(prWithEmptyBody) } returns emptyList()
                 
-                mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/owner/TestProj/pull/1")
-                    .principal(org.springframework.security.authentication.UsernamePasswordAuthenticationToken("testuser", "password")))
-                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk)
+                mockMvc.perform(MockMvcRequestBuilders.get("/owner/TestProj/pull/1")
+                    .principal(UsernamePasswordAuthenticationToken("testuser", "password")))
+                    .andExpect(MockMvcResultMatchers.status().isOk)
             }
             
             it("should handle viewPullRequest\$lambda\$5(Attachment) with null fields") {
-                val memberUser = com.github.search5.yona.domain.user.User(id = 10L, loginId = "testuser", name = "테스트유저")
-                val project = com.github.search5.yona.domain.project.Project(id = 1L, name = "TestProj", owner = "owner", projectScope = com.github.search5.yona.domain.project.ProjectScope.PRIVATE)
-                memberUser.projectUsers.add(com.github.search5.yona.domain.project.ProjectUser(id = 900L, user = memberUser, project = project, role = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)))
-                val pr = com.github.search5.yona.domain.pullrequest.PullRequest(
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
+                val pr = PullRequest(
                     id = 50L, title = "PR test", body = "body", toProject = project, fromProject = project,
-                    toBranch = "master", fromBranch = "feature", contributor = memberUser, state = com.github.search5.yona.domain.enumeration.State.OPEN, number = 1L
+                    toBranch = "master", fromBranch = "feature", contributor = memberUser, state = State.OPEN, number = 1L
                 )
                 
-                io.mockk.every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns java.util.Optional.of(project)
-                io.mockk.every { userRepository.findByLoginId("testuser") } returns java.util.Optional.of(memberUser)
+                io.mockk.every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                io.mockk.every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 io.mockk.every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 io.mockk.every { pullRequestService.getPullRequest(1L, 1L) } returns pr
-                io.mockk.every { pullRequestService.attemptMerge(50L) } returns com.github.search5.yona.domain.pullrequest.PullRequestMergeResult(pullRequest = pr)
+                io.mockk.every { pullRequestService.attemptMerge(50L) } returns PullRequestMergeResult(pullRequest = pr)
                 io.mockk.every { commentThreadRepository.findByPullRequest(pr) } returns emptyList()
                 io.mockk.every { pullRequestCommitRepository.findByPullRequest(pr) } returns emptyList()
                 
-                val attachment = com.github.search5.yona.domain.attachment.Attachment(
-                    id = null, mimeType = null, name = "test.txt", size = null, containerType = com.github.search5.yona.domain.enumeration.ResourceType.PULL_REQUEST, containerId = "50"
+                val attachment = Attachment(
+                    id = null, mimeType = null, name = "test.txt", size = null, containerType = ResourceType.PULL_REQUEST, containerId = "50"
                 )
-                io.mockk.every { attachmentRepository.findByContainerTypeAndContainerId(com.github.search5.yona.domain.enumeration.ResourceType.PULL_REQUEST, "50") } returns listOf(attachment)
+                io.mockk.every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.PULL_REQUEST, "50") } returns listOf(attachment)
                 
-                mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/owner/TestProj/pull/1")
-                    .principal(org.springframework.security.authentication.UsernamePasswordAuthenticationToken("testuser", "password")))
-                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk)
+                mockMvc.perform(MockMvcRequestBuilders.get("/owner/TestProj/pull/1")
+                    .principal(UsernamePasswordAuthenticationToken("testuser", "password")))
+                    .andExpect(MockMvcResultMatchers.status().isOk)
             }
             
             it("should return false when isManagerOrContributor is called for non-manager") {
-                val memberUser = com.github.search5.yona.domain.user.User(id = 10L, loginId = "testuser", name = "테스트유저")
-                val project = com.github.search5.yona.domain.project.Project(id = 1L, name = "TestProj", owner = "owner", projectScope = com.github.search5.yona.domain.project.ProjectScope.PRIVATE)
-                val memberRole = com.github.search5.yona.domain.role.Role(id = com.github.search5.yona.domain.role.RoleType.MEMBER.roleType)
-                memberUser.projectUsers.add(com.github.search5.yona.domain.project.ProjectUser(id = 900L, user = memberUser, project = project, role = memberRole))
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                val project = Project(id = 1L, name = "TestProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
+                val memberRole = Role(id = RoleType.MEMBER.roleType)
+                memberUser.projectUsers.add(ProjectUser(id = 900L, user = memberUser, project = project, role = memberRole))
                 
-                val pr = com.github.search5.yona.domain.pullrequest.PullRequest(
+                val pr = PullRequest(
                     id = 50L, title = "PR test", body = "body", toProject = project, fromProject = project,
                     toBranch = "master", fromBranch = "feature", 
-                    contributor = com.github.search5.yona.domain.user.User(id = 20L, loginId = "other", name = "other"), 
-                    state = com.github.search5.yona.domain.enumeration.State.OPEN, number = 1L
+                    contributor = User(id = 20L, loginId = "other", name = "other"), 
+                    state = State.OPEN, number = 1L
                 )
                 
-                io.mockk.every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns java.util.Optional.of(project)
-                io.mockk.every { userRepository.findByLoginId("testuser") } returns java.util.Optional.of(memberUser)
+                io.mockk.every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                io.mockk.every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
                 io.mockk.every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
                 io.mockk.every { pullRequestService.getPullRequest(1L, 1L) } returns pr
-                io.mockk.every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns java.util.Optional.of(com.github.search5.yona.domain.project.ProjectUser(id = 900L, user = memberUser, project = project, role = memberRole))
+                io.mockk.every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(ProjectUser(id = 900L, user = memberUser, project = project, role = memberRole))
                 
-                mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/owner/TestProj/pull/1/edit")
-                    .principal(org.springframework.security.authentication.UsernamePasswordAuthenticationToken("testuser", "password")))
-                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk)
-                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.view().name("error/forbidden"))
+                mockMvc.perform(MockMvcRequestBuilders.get("/owner/TestProj/pull/1/edit")
+                    .principal(UsernamePasswordAuthenticationToken("testuser", "password")))
+                    .andExpect(MockMvcResultMatchers.status().isOk)
+                    .andExpect(MockMvcResultMatchers.view().name("error/forbidden"))
             }
             
         }

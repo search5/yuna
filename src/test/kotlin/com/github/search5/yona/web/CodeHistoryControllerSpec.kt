@@ -35,6 +35,7 @@ import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import io.mockk.clearMocks
+import java.util.Date
 
 class CodeHistoryControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -207,8 +208,8 @@ class CodeHistoryControllerSpec : DescribeSpec({
                     val commit = mockk<Commit>(relaxed = true)
                     every { commit.getId() } returns commitId
                     every { commit.getShortId() } returns "abc123d"
-                    every { commit.getAuthorDate() } returns java.util.Date()
-                    every { commit.getCommitterDate() } returns java.util.Date()
+                    every { commit.getAuthorDate() } returns Date()
+                    every { commit.getCommitterDate() } returns Date()
                     every { playRepo.getHistory(0, 20, "HEAD", null) } returns listOf(commit)
 
                     mockMvc.perform(get("/api/vcs/owner/TestProj/history"))

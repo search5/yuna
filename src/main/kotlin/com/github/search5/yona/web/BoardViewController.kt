@@ -31,6 +31,8 @@ import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.issue.RecentIssueService
 import org.eclipse.jgit.lib.Constants
 import tools.jackson.databind.ObjectMapper
+import com.github.search5.yona.domain.board.PostingComment
+import com.github.search5.yona.domain.role.RoleType
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -173,12 +175,12 @@ class BoardViewController(
         // 재작업) — 대댓글은 최상위 댓글 목록에서 제외하고 부모별로 묶어 common/childComments에
         // 넘긴다(issue/view.html과 동일한 패턴).
         val topLevelComments = comments.filter { it.parentComment == null }
-        val childCommentsByParentId: Map<Long, List<com.github.search5.yona.domain.board.PostingComment>> =
+        val childCommentsByParentId: Map<Long, List<PostingComment>> =
             comments.filter { it.parentComment != null }
                 .groupBy { it.parentComment!!.id!! }
 
         val isProjectManager = loginUser != null && projectUserRepository.findByProjectIdAndUserId(project.id!!, loginUser.id!!)
-            .map { it.role.id == com.github.search5.yona.domain.role.RoleType.MANAGER.roleType }
+            .map { it.role.id == RoleType.MANAGER.roleType }
             .orElse(false)
 
         model.addAttribute("project", project)

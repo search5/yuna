@@ -28,6 +28,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
+import com.github.search5.yona.domain.vcs.PlayRepository
 import org.springframework.context.MessageSource
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -100,7 +101,7 @@ class PullRequestViewControllerMoreSpec : DescribeSpec({
             every { pushedBranchRepository.findByOriginalProjectAndOwnerAndPushedDateAfter(any(), any(), any()) } returns emptyList()
             
             val specSlot = slot<Specification<PullRequest>>()
-            every { pullRequestRepository.findAll(capture(specSlot), any<org.springframework.data.domain.Pageable>()) } returns PageImpl(emptyList())
+            every { pullRequestRepository.findAll(capture(specSlot), any<Pageable>()) } returns PageImpl(emptyList())
 
             try { mockMvc.perform(get("/owner/pub/pulls")
                 .principal(userAuth)
@@ -238,7 +239,7 @@ class PullRequestViewControllerMoreSpec : DescribeSpec({
             every { pullRequestCommitRepository.findByPullRequest(any()) } returns emptyList()
             every { watchService.isWatching(any(), any(), any()) } returns false
             every { commentThreadRepository.findByPullRequest(any()) } returns emptyList()
-            val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+            val playRepo = mockk<PlayRepository>()
             every { repositoryService.getRepository(any<Project>()) } returns playRepo
             every { playRepo.getRefNames() } returns listOf("refs/heads/mybranch")
             
@@ -255,7 +256,7 @@ class PullRequestViewControllerMoreSpec : DescribeSpec({
             every { userRepository.findByLoginId(any()) } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(any(), any()) } returns true
             
-            val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+            val playRepo = mockk<PlayRepository>()
             every { repositoryService.getRepository(any<Project>()) } returns playRepo
             every { playRepo.getRefNames() } returns listOf("refs/heads/branch1", "refs/heads/branch2")
             every { pullRequestService.previewMerge(any(), any(), any(), any()) } throws RuntimeException("preview error")
@@ -271,7 +272,7 @@ class PullRequestViewControllerMoreSpec : DescribeSpec({
             every { userRepository.findByLoginId(any()) } returns Optional.of(user)
             every { projectUserRepository.existsByProjectIdAndUserId(any(), any()) } returns true
             
-            val playRepo = mockk<com.github.search5.yona.domain.vcs.PlayRepository>()
+            val playRepo = mockk<PlayRepository>()
             every { repositoryService.getRepository(any<Project>()) } returns playRepo
             every { playRepo.getRefNames() } returns emptyList()
             

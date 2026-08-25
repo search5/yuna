@@ -53,6 +53,8 @@ import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.project.ProjectScope
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.time.Instant
+import com.github.search5.yona.domain.pullrequest.PullRequest
 
 // yona ProjectApi.java newProject() 대응 (P2-45).
 class ProjectApiControllerSpec : DescribeSpec({
@@ -501,7 +503,7 @@ class ProjectApiControllerSpec : DescribeSpec({
             val category = IssueLabelCategory(id = 600L, name = "우선순위", isExclusive = true, project = project)
             val label = IssueLabel(id = 601L, name = "긴급", color = "#ff0000", category = category, project = project)
 
-            val issueCreated = java.time.Instant.parse("2026-01-01T00:00:00Z")
+            val issueCreated = Instant.parse("2026-01-01T00:00:00Z")
             val issue = Issue(
                 id = 700L, title = "버그 발생", body = "이슈 본문", project = project, number = 1L,
                 authorId = issueAuthor.id, createdDate = issueCreated, updatedDate = issueCreated,
@@ -542,7 +544,7 @@ class ProjectApiControllerSpec : DescribeSpec({
             every { projectUserRepository.findByProjectId(200L) } returns project.projectUsers
             every { assigneeRepository.findByProjectId(200L) } returns listOf(Assignee(id = 702L, user = assigneeUser, project = project))
             every { pullRequestRepository.findByToProject(project) } returns listOf(
-                com.github.search5.yona.domain.pullrequest.PullRequest(
+                PullRequest(
                     id = 1100L, number = 1L, toProject = project, fromProject = project, contributor = prContributor
                 )
             )
@@ -612,7 +614,7 @@ class ProjectApiControllerSpec : DescribeSpec({
             every { userRepository.findByLoginId("manager") } returns Optional.of(manager)
 
             val sharedAuthor = User(id = 44L, loginId = "shared", name = "공동작성자", email = "shared@example.com")
-            val dueInstant = java.time.Instant.parse("2026-06-01T00:00:00Z")
+            val dueInstant = Instant.parse("2026-06-01T00:00:00Z")
             val milestoneWithDue = Milestone(
                 id = 501L, title = "1.1", contents = "패치", project = project2, state = State.OPEN, dueDate = dueInstant
             )
@@ -664,7 +666,7 @@ class ProjectApiControllerSpec : DescribeSpec({
             every { assigneeRepository.findByProjectId(201L) } returns emptyList()
             // PR 기여자도 이슈/게시글 작성자와 동일인 — findAuthors의 dedup(containsKey) 분기 커버
             every { pullRequestRepository.findByToProject(project2) } returns listOf(
-                com.github.search5.yona.domain.pullrequest.PullRequest(
+                PullRequest(
                     id = 1101L, number = 2L, toProject = project2, fromProject = project2, contributor = sharedAuthor
                 )
             )
@@ -710,7 +712,7 @@ class ProjectApiControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("acme", "widget3") } returns Optional.of(project3)
             every { userRepository.findByLoginId("manager") } returns Optional.of(manager)
 
-            val when0 = java.time.Instant.parse("2026-03-01T00:00:00Z")
+            val when0 = Instant.parse("2026-03-01T00:00:00Z")
             val issue3 = Issue(
                 id = 720L, title = "작성자 없는 이슈", project = project3, number = 3L,
                 authorId = null, createdDate = when0, updatedDate = null, state = State.OPEN

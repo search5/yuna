@@ -27,6 +27,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.context.WebApplicationContext
+import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder
 
 // yona issue/partial_list_draft.scala.html 대응 (그룹7 #119, TASK-0256). 이슈 목록 첫 페이지
 // (검색조건 없음, CLOSED 탭 아님)에 로그인한 본인의 초안(State.DRAFT) 이슈만 최상단에 노출되고,
@@ -43,7 +44,7 @@ class IssueDraftListTemplateRenderingSpec @Autowired constructor(
 
     private val mockMvc: MockMvc by lazy {
         MockMvcBuilders.webAppContextSetup(webApplicationContext)
-            .apply<org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder>(SecurityMockMvcConfigurers.springSecurity())
+            .apply<DefaultMockMvcBuilder>(SecurityMockMvcConfigurers.springSecurity())
             .build()
     }
 

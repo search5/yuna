@@ -16,6 +16,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.context.WebApplicationContext
+import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserRepository
 
 // yona issue/partial_view_child.scala.html(#134)/partial_view_childIssueList.scala.html(#135)/
 // partial_view_childIssueListOnly.scala.html(#136) 대응 (그룹7 TASK-0256). 이슈 상세화면
@@ -25,7 +27,7 @@ import org.springframework.web.context.WebApplicationContext
 class IssueChildIssueListTemplateRenderingSpec @Autowired constructor(
     private val webApplicationContext: WebApplicationContext,
     private val projectRepository: ProjectRepository,
-    private val userRepository: com.github.search5.yona.domain.user.UserRepository,
+    private val userRepository: UserRepository,
     private val issueRepository: IssueRepository
 ) : AbstractIntegrationTest() {
 
@@ -34,7 +36,7 @@ class IssueChildIssueListTemplateRenderingSpec @Autowired constructor(
     init {
         describe("이슈 상세화면 하위이슈 영역 렌더링") {
             it("부모 이슈 화면에 진행률 바와 오픈/클로즈 하위이슈가 실제로 렌더링돼야 한다") {
-                val author = userRepository.save(com.github.search5.yona.domain.user.User(loginId = "tmpl-child-author", name = "작성자", email = "tmpl-child-author@yona.io"))
+                val author = userRepository.save(User(loginId = "tmpl-child-author", name = "작성자", email = "tmpl-child-author@yona.io"))
                 val project = projectRepository.save(Project(name = "tmpl-child-proj", owner = "tmpl-child-owner", projectScope = ProjectScope.PUBLIC))
 
                 val parent = issueRepository.save(
@@ -59,8 +61,8 @@ class IssueChildIssueListTemplateRenderingSpec @Autowired constructor(
             }
 
             it("다른 사용자의 초안 하위이슈는 노출되지 않아야 한다") {
-                val author = userRepository.save(com.github.search5.yona.domain.user.User(loginId = "tmpl-child-author2", name = "작성자2", email = "tmpl-child-author2@yona.io"))
-                val otherAuthor = userRepository.save(com.github.search5.yona.domain.user.User(loginId = "tmpl-child-other", name = "다른작성자", email = "tmpl-child-other@yona.io"))
+                val author = userRepository.save(User(loginId = "tmpl-child-author2", name = "작성자2", email = "tmpl-child-author2@yona.io"))
+                val otherAuthor = userRepository.save(User(loginId = "tmpl-child-other", name = "다른작성자", email = "tmpl-child-other@yona.io"))
                 val project = projectRepository.save(Project(name = "tmpl-child-proj2", owner = "tmpl-child-owner2", projectScope = ProjectScope.PUBLIC))
 
                 val parent = issueRepository.save(

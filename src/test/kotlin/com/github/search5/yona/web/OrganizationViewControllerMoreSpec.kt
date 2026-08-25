@@ -159,7 +159,7 @@ class OrganizationViewControllerMoreSpec : DescribeSpec({
             org.organizationUsers = mutableListOf(OrganizationUser(id = 3L, user = user, organization = org, role = roleAdmin))
             every { organizationRepository.findByName("testorg") } returns Optional.of(org)
             every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-            every { accessControl.isAllowed(any<User>(), any<Organization>(), any<com.github.search5.yona.domain.enumeration.Operation>()) } returns true
+            every { accessControl.isAllowed(any<User>(), any<Organization>(), any<Operation>()) } returns true
             every { organizationService.updateOrganizationSettings(any(), any(), "", any()) } returns Unit
             every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
             every { attachmentService.store(any(), any(), any(), any(), any()) } returns (mockk<Attachment>(relaxed = true) to true)
@@ -179,7 +179,7 @@ class OrganizationViewControllerMoreSpec : DescribeSpec({
             org.organizationUsers = mutableListOf(OrganizationUser(id = 3L, user = user, organization = org, role = roleAdmin))
             every { organizationRepository.findByName("testorg") } returns Optional.of(org)
             every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
-            every { accessControl.isAllowed(any<User>(), any<Organization>(), any<com.github.search5.yona.domain.enumeration.Operation>()) } returns true
+            every { accessControl.isAllowed(any<User>(), any<Organization>(), any<Operation>()) } returns true
             every { organizationService.updateOrganizationSettings(any(), any(), any(), any()) } throws RuntimeException()
             
             mockMvc.perform(post("/org/testorg/setting")

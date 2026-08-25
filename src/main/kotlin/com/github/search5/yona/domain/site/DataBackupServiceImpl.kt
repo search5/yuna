@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
+import java.lang.Long as JLong
 import java.sql.Timestamp
 import java.sql.Types
 import java.time.Instant
@@ -164,7 +165,7 @@ class DataBackupServiceImpl(
                 val catalog = dataSource.connection.use { it.catalog }
                 jdbcTemplate.queryForObject(
                     "SELECT AUTO_INCREMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
-                    java.lang.Long::class.java,
+                    JLong::class.java,
                     catalog,
                     table
                 )?.toLong()
@@ -175,7 +176,7 @@ class DataBackupServiceImpl(
                 ) ?: return null
                 jdbcTemplate.queryForObject(
                     "SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM $sequenceName",
-                    java.lang.Long::class.java
+                    JLong::class.java
                 )?.toLong()
             }
             Dialect.OTHER -> null

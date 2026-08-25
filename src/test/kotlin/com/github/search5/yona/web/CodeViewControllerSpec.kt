@@ -40,6 +40,7 @@ import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.eclipse.jgit.api.errors.NoHeadException
+import com.github.search5.yona.domain.vcs.Commit
 
 class CodeViewControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -252,7 +253,7 @@ class CodeViewControllerSpec : DescribeSpec({
 
         describe("GET /{owner}/{projectName}/commit/{commitId} — 커밋 감시(watch) 버튼 배선 (P-템플릿 그룹10 #161 재검토)") {
             it("로그인 사용자에게 commitResourceId와 isWatching 모델 속성을 전달해야 한다") {
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "abcdef1234"
                 val watcherAuth = UsernamePasswordAuthenticationToken("watcher", "password")
                 val watcher = User(id = 10L, loginId = "watcher", name = "감시자")
@@ -915,7 +916,7 @@ class CodeViewControllerSpec : DescribeSpec({
             // 경로를 2세그먼트(src/main.kt)로 줘서 breadcrumbs 누적 로직의 cumulative.isEmpty()
             // true(첫 세그먼트)/false(이후 세그먼트) 분기를 한 테스트에서 모두 실행시킨다.
             it("경로가 있으면 breadcrumbs를 담고 commentThreadRepository로 경로별 댓글 수를 조회해야 한다") {
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "c1"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
@@ -932,7 +933,7 @@ class CodeViewControllerSpec : DescribeSpec({
             }
 
             it("경로가 없으면(GIT) commentThreadRepository로 커밋별 댓글 수를 조회해야 한다") {
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "c2"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
@@ -950,7 +951,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("SVN 프로젝트면 commitCommentRepository로 커밋별 댓글 수를 조회해야 한다") {
                 val svnProject = Project(id = 58L, owner = "testowner", name = "svn-hist2", projectScope = ProjectScope.PUBLIC, vcs = "SUBVERSION")
                 val svnPlayRepo = mockk<PlayRepository>()
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "c3"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "svn-hist2") } returns Optional.of(svnProject)
@@ -970,7 +971,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("vcs 값이 'SVN' 리터럴이어도 SVN 프로젝트로 인식해 commitCommentRepository를 사용해야 한다") {
                 val svnLiteralProject = Project(id = 59L, owner = "testowner", name = "svn-literal-hist", projectScope = ProjectScope.PUBLIC, vcs = "SVN")
                 val svnPlayRepo = mockk<PlayRepository>()
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "c4"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "svn-literal-hist") } returns Optional.of(svnLiteralProject)
@@ -989,7 +990,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("vcs가 null이면 SVN이 아닌 것으로 판단해 commentThreadRepository를 사용해야 한다") {
                 val novcsProject = Project(id = 60L, owner = "testowner", name = "novcs-hist", projectScope = ProjectScope.PUBLIC, vcs = null)
                 val novcsPlayRepo = mockk<PlayRepository>()
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "c5"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "novcs-hist") } returns Optional.of(novcsProject)
@@ -1056,7 +1057,7 @@ class CodeViewControllerSpec : DescribeSpec({
                 val memberProject = Project(id = 62L, owner = "testowner", name = "member-commit", projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, vcs = "GIT")
                 val memberUser = User(id = 63L, loginId = "commitmember", name = "commitmember")
                 val memberAuth = UsernamePasswordAuthenticationToken("commitmember", "password")
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "cm1"
                 val cmPlayRepo = mockk<PlayRepository>()
 
@@ -1085,7 +1086,7 @@ class CodeViewControllerSpec : DescribeSpec({
                 )
                 val groupProject = Project(id = 65L, owner = "testowner", name = "group-commit", vcs = "GIT", projectScope = ProjectScope.PROTECTED, isCodeAccessibleMemberOnly = true, organization = groupOrg)
                 val groupAuth = UsernamePasswordAuthenticationToken("commitgroupuser", "password")
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "cm2"
                 val cmPlayRepo = mockk<PlayRepository>()
 
@@ -1138,7 +1139,7 @@ class CodeViewControllerSpec : DescribeSpec({
             }
 
             it("getParentCommitOf가 예외를 던져도 parentCommit을 null로 두고 정상 진행해야 한다") {
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "cm3"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
@@ -1156,9 +1157,9 @@ class CodeViewControllerSpec : DescribeSpec({
             }
 
             it("익명 사용자가 조회하고 부모 커밋도 정상 조회되면 isWatching은 false, parentCommit은 값이 있어야 한다") {
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "cm4"
-                val parentCommit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val parentCommit = mockk<Commit>(relaxed = true)
                 every { parentCommit.getId() } returns "cm3"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)
@@ -1178,7 +1179,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("SVN 커밋이면 getPatch 결과를 patch 모델 속성에 담아 code/svnDiff를 반환해야 한다") {
                 val svnProject = Project(id = 67L, owner = "testowner", name = "svn-commit", projectScope = ProjectScope.PUBLIC, vcs = "SUBVERSION")
                 val svnPlayRepo = mockk<PlayRepository>()
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "5"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "svn-commit") } returns Optional.of(svnProject)
@@ -1198,7 +1199,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("SVN 커밋에서 getPatch가 예외를 던지면 빈 문자열 patch로 대체해야 한다") {
                 val svnProject = Project(id = 68L, owner = "testowner", name = "svn-commit2", projectScope = ProjectScope.PUBLIC, vcs = "SUBVERSION")
                 val svnPlayRepo = mockk<PlayRepository>()
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "6"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "svn-commit2") } returns Optional.of(svnProject)
@@ -1220,7 +1221,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("vcs 값이 'SVN' 리터럴이어도 SVN 커밋으로 인식해 code/svnDiff를 반환해야 한다") {
                 val svnLiteralProject = Project(id = 69L, owner = "testowner", name = "svn-literal-commit", projectScope = ProjectScope.PUBLIC, vcs = "SVN")
                 val svnPlayRepo = mockk<PlayRepository>()
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "7"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "svn-literal-commit") } returns Optional.of(svnLiteralProject)
@@ -1241,7 +1242,7 @@ class CodeViewControllerSpec : DescribeSpec({
             it("vcs가 null이면 SVN이 아닌 것으로 판단해 code/diff를 반환해야 한다") {
                 val novcsProject = Project(id = 70L, owner = "testowner", name = "novcs-commit", projectScope = ProjectScope.PUBLIC, vcs = null)
                 val novcsPlayRepo = mockk<PlayRepository>()
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "cm6"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "novcs-commit") } returns Optional.of(novcsProject)
@@ -1258,7 +1259,7 @@ class CodeViewControllerSpec : DescribeSpec({
             }
 
             it("GIT 커밋에서 getDiff가 예외를 던지면 error/404를 반환해야 한다") {
-                val commit = mockk<com.github.search5.yona.domain.vcs.Commit>(relaxed = true)
+                val commit = mockk<Commit>(relaxed = true)
                 every { commit.getId() } returns "cm5"
 
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("testowner", "testproject") } returns Optional.of(project)

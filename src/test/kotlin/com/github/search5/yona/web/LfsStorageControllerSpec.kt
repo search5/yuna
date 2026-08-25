@@ -14,6 +14,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import jakarta.servlet.ReadListener
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 
 class LfsStorageControllerSpec : DescribeSpec({
     val tempDir = Files.createTempDirectory("yuna-lfs-test").toFile()
@@ -49,7 +51,7 @@ class LfsStorageControllerSpec : DescribeSpec({
 
             mockMvc.perform(get("/git-lfs/owner/proj/objects/$oid"))
                 .andExpect(status().isOk)
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Disposition", "attachment; filename=\"$oid\""))
+                .andExpect(MockMvcResultMatchers.header().string("Content-Disposition", "attachment; filename=\"$oid\""))
         }
     }
 
@@ -84,7 +86,7 @@ class LfsStorageControllerSpec : DescribeSpec({
             val stream = object : ServletInputStream() {
                 override fun isFinished() = true
                 override fun isReady() = true
-                override fun setReadListener(readListener: jakarta.servlet.ReadListener?) {}
+                override fun setReadListener(readListener: ReadListener?) {}
                 override fun read(): Int = -1
             }
             every { request.inputStream } returns stream
@@ -101,7 +103,7 @@ class LfsStorageControllerSpec : DescribeSpec({
             val brokenStream = object : ServletInputStream() {
                 override fun isFinished() = false
                 override fun isReady() = true
-                override fun setReadListener(readListener: jakarta.servlet.ReadListener?) {}
+                override fun setReadListener(readListener: ReadListener?) {}
                 override fun read(): Int = throw IOException("boom")
             }
             every { brokenRequest.inputStream } returns brokenStream

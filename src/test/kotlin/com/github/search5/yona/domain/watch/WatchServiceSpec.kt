@@ -14,6 +14,7 @@ import com.github.search5.yona.domain.role.RoleRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.user.UserState
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
@@ -335,7 +336,7 @@ class WatchServiceSpec @Autowired constructor(
                 it("siteManager는 allowedWatchersOnly 필터에서 무조건 포함된다") {
                     val managerRole = roleRepository.findById(RoleType.MANAGER.roleType).orElseGet { roleRepository.save(Role(id = RoleType.MANAGER.roleType, name = "MANAGER")) }
                     val privateProject = projectRepository.save(Project(name = "private-project-3", owner = "user1", projectScope = ProjectScope.PRIVATE))
-                    val siteManagerUser = userRepository.save(User(loginId = "sitemanager", name = "관리자", email = "site@example.com").apply { state = com.github.search5.yona.domain.user.UserState.SITE_ADMIN })
+                    val siteManagerUser = userRepository.save(User(loginId = "sitemanager", name = "관리자", email = "site@example.com").apply { state = UserState.SITE_ADMIN })
                     
                     watchService.watch(siteManagerUser, ResourceType.ISSUE_POST, "999")
                     val watchers = watchService.findActualWatchers(emptySet(), ResourceType.ISSUE_POST, "999", privateProject.id, true)

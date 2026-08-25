@@ -2,6 +2,7 @@ package com.github.search5.yona.domain.support
 
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.pullrequest.CommentThread
+import java.lang.Long as JLong
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 import org.springframework.data.domain.Page
@@ -42,7 +43,7 @@ class ReviewThreadServiceImpl(
     @Transactional(readOnly = true)
     override fun countReviewThreads(project: Project, condition: ReviewSearchCondition): Long {
         val (jpql, params) = buildQuery(project, condition, isCount = true)
-        val query = entityManager.createQuery(jpql, java.lang.Long::class.java)
+        val query = entityManager.createQuery(jpql, JLong::class.java)
         params.forEach { (k, v) -> query.setParameter(k, v) }
         return query.singleResult.toLong()
     }

@@ -7,6 +7,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.lang.Long as JLong
 import jakarta.persistence.EntityManager
 import jakarta.persistence.TypedQuery
 import org.springframework.data.domain.PageRequest
@@ -31,9 +32,9 @@ class ReviewThreadServiceImplSpec : DescribeSpec({
             every { entityManager.createQuery(any<String>(), CommentThread::class.java) } returns query
             every { query.resultList } returns listOf()
 
-            val countQuery = mockk<TypedQuery<java.lang.Long>>(relaxed = true)
-            every { entityManager.createQuery(any<String>(), java.lang.Long::class.java) } returns countQuery
-            every { countQuery.singleResult } answers { 0L as java.lang.Long }
+            val countQuery = mockk<TypedQuery<JLong>>(relaxed = true)
+            every { entityManager.createQuery(any<String>(), JLong::class.java) } returns countQuery
+            every { countQuery.singleResult } answers { 0L as JLong }
 
             val page = service.getReviewThreads(project, condition, pageable)
             page.totalElements shouldBe 0L

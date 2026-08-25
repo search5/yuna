@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 import io.mockk.clearMocks
 
 class LabelControllerSpec : DescribeSpec({
@@ -72,7 +73,7 @@ class LabelControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/labels").param("limit", "1"))
                     .andExpect(status().isOk)
-                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Range", "items 1/5"))
+                    .andExpect(MockMvcResultMatchers.header().string("Content-Range", "items 1/5"))
             }
         }
 
@@ -124,7 +125,7 @@ class LabelControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/categories").param("limit", "1"))
                     .andExpect(status().isOk)
-                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Range", "items 1/5"))
+                    .andExpect(MockMvcResultMatchers.header().string("Content-Range", "items 1/5"))
             }
         }
     }

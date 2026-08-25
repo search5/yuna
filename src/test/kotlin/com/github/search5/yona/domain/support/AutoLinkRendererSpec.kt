@@ -20,6 +20,8 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.context.MessageSource
 import java.util.Optional
+import com.github.search5.yona.domain.organization.Organization
+import com.github.search5.yona.domain.user.User
 
 // yona utils/AutoLinkRenderer.java:268-296 toValidSHALink() 대응 (P2-35). SHA 커밋 자동 링크화가
 // project.isGit() 뿐 아니라 project.isCodeAvailable()(코드브라우저 메뉴 활성 여부)도 검사해야 하는데,
@@ -206,7 +208,7 @@ class AutoLinkRendererSpec : DescribeSpec({
 
     describe("render() - 사용자/조직/프로젝트 링크") {
         it("@이름이 조직명과 일치하면 조직 링크로 변환된다") {
-            val org = mockk<com.github.search5.yona.domain.organization.Organization>()
+            val org = mockk<Organization>()
             every { org.name } returns "myorg"
             every { organizationRepository.findByName("myorg") } returns Optional.of(org)
             every { userRepository.findByLoginId("myorg") } returns Optional.empty()
@@ -218,7 +220,7 @@ class AutoLinkRendererSpec : DescribeSpec({
         }
 
         it("조직이 아니지만 사용자가 있으면 사용자 링크로 변환된다(기본 아바타)") {
-            val user = com.github.search5.yona.domain.user.User(id = 30L, name = "홍길동", loginId = "gildong")
+            val user = User(id = 30L, name = "홍길동", loginId = "gildong")
             every { organizationRepository.findByName("gildong") } returns Optional.empty()
             every { userRepository.findByLoginId("gildong") } returns Optional.of(user)
 
@@ -230,7 +232,7 @@ class AutoLinkRendererSpec : DescribeSpec({
         }
 
         it("사용자가 커스텀 아바타를 가지고 있으면 img 태그가 포함된다") {
-            val user = com.github.search5.yona.domain.user.User(id = 31L, name = "김철수", loginId = "chulsoo")
+            val user = User(id = 31L, name = "김철수", loginId = "chulsoo")
             user.avatarId = 999L
             every { organizationRepository.findByName("chulsoo") } returns Optional.empty()
             every { userRepository.findByLoginId("chulsoo") } returns Optional.of(user)
@@ -242,7 +244,7 @@ class AutoLinkRendererSpec : DescribeSpec({
         }
 
         it("lang 인자가 없으면 현재 요청 로케일을 사용해도 정상적으로 링크가 만들어진다") {
-            val user = com.github.search5.yona.domain.user.User(id = 32L, name = "이영희", loginId = "younghee")
+            val user = User(id = 32L, name = "이영희", loginId = "younghee")
             every { organizationRepository.findByName("younghee") } returns Optional.empty()
             every { userRepository.findByLoginId("younghee") } returns Optional.of(user)
 
@@ -252,7 +254,7 @@ class AutoLinkRendererSpec : DescribeSpec({
         }
 
         it("사용자 id가 없으면(비영속 상태) 링크로 변환되지 않는다") {
-            val user = com.github.search5.yona.domain.user.User(id = null, name = "유령", loginId = "ghost")
+            val user = User(id = null, name = "유령", loginId = "ghost")
             every { organizationRepository.findByName("ghost") } returns Optional.empty()
             every { userRepository.findByLoginId("ghost") } returns Optional.of(user)
 
@@ -262,7 +264,7 @@ class AutoLinkRendererSpec : DescribeSpec({
         }
 
         it("loginId가 anonymous면 링크로 변환되지 않는다") {
-            val user = com.github.search5.yona.domain.user.User(id = 33L, name = "익명", loginId = "anonymous")
+            val user = User(id = 33L, name = "익명", loginId = "anonymous")
             every { organizationRepository.findByName("anonymous") } returns Optional.empty()
             every { userRepository.findByLoginId("anonymous") } returns Optional.of(user)
 

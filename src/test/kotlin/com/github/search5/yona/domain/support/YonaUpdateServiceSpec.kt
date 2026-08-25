@@ -8,6 +8,9 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
+import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.LsRemoteCommand
+import org.eclipse.jgit.lib.Ref
 
 // yona YobiUpdate.java:40-41 대응 (P2-10). **표현 정정**: 최초 등록 문구는 "yona 1시간 기본값 대비
 // yuna 24시간, 24배 차이"였으나 코드 레벨 fallback(1시간)만 확인하고 실제 배포용 conf 템플릿을
@@ -58,81 +61,81 @@ class YonaUpdateServiceSpec : DescribeSpec({
 
         it("checkForUpdate에서 Exception이 발생하면 로그만 남기고 지나간다") {
             val service = YonaUpdateService("invalid-repo", "1.15.0")
-            io.mockk.mockkStatic(org.eclipse.jgit.api.Git::class)
-            every { org.eclipse.jgit.api.Git.lsRemoteRepository() } throws RuntimeException("Git Error")
+            io.mockk.mockkStatic(Git::class)
+            every { Git.lsRemoteRepository() } throws RuntimeException("Git Error")
             
             service.checkForUpdate()
             service.isUpdateRequired() shouldBe false
-            io.mockk.unmockkStatic(org.eclipse.jgit.api.Git::class)
+            io.mockk.unmockkStatic(Git::class)
         }
 
         it("정상적으로 태그를 읽어와 업데이트가 필요한 경우") {
             val service = YonaUpdateService("repo", "1.15.0")
             
-            val mockRef1 = mockk<org.eclipse.jgit.lib.Ref>()
+            val mockRef1 = mockk<Ref>()
             every { mockRef1.name } returns "^refs/tags/v1.16.0"
-            val mockRef2 = mockk<org.eclipse.jgit.lib.Ref>()
+            val mockRef2 = mockk<Ref>()
             every { mockRef2.name } returns "^refs/tags/1.14.0-beta"
-            val mockRef3 = mockk<org.eclipse.jgit.lib.Ref>()
+            val mockRef3 = mockk<Ref>()
             every { mockRef3.name } returns "^refs/tags/vX.Y.Z" // parse 실패용
             
-            val lsCommand = mockk<org.eclipse.jgit.api.LsRemoteCommand>()
+            val lsCommand = mockk<LsRemoteCommand>()
             every { lsCommand.setRemote(any()) } returns lsCommand
             every { lsCommand.setHeads(any()) } returns lsCommand
             every { lsCommand.setTags(any()) } returns lsCommand
             every { lsCommand.call() } returns listOf(mockRef1, mockRef2, mockRef3)
 
-            io.mockk.mockkStatic(org.eclipse.jgit.api.Git::class)
-            every { org.eclipse.jgit.api.Git.lsRemoteRepository() } returns lsCommand
+            io.mockk.mockkStatic(Git::class)
+            every { Git.lsRemoteRepository() } returns lsCommand
             
             service.checkForUpdate()
             
             service.isUpdateRequired() shouldBe true
             service.getLatestVersion() shouldBe "1.16.0"
-            io.mockk.unmockkStatic(org.eclipse.jgit.api.Git::class)
+            io.mockk.unmockkStatic(Git::class)
         }
 
         it("최신 버전이 이미 적용된 경우") {
             val service = YonaUpdateService("repo", "1.16.0")
             
-            val mockRef = mockk<org.eclipse.jgit.lib.Ref>()
+            val mockRef = mockk<Ref>()
             every { mockRef.name } returns "^refs/tags/v1.15.0"
             
-            val lsCommand = mockk<org.eclipse.jgit.api.LsRemoteCommand>()
+            val lsCommand = mockk<LsRemoteCommand>()
             every { lsCommand.setRemote(any()) } returns lsCommand
             every { lsCommand.setHeads(any()) } returns lsCommand
             every { lsCommand.setTags(any()) } returns lsCommand
             every { lsCommand.call() } returns listOf(mockRef)
 
-            io.mockk.mockkStatic(org.eclipse.jgit.api.Git::class)
-            every { org.eclipse.jgit.api.Git.lsRemoteRepository() } returns lsCommand
+            io.mockk.mockkStatic(Git::class)
+            every { Git.lsRemoteRepository() } returns lsCommand
             
             service.checkForUpdate()
             
             service.isUpdateRequired() shouldBe false
             service.getLatestVersion() shouldBe null
-            io.mockk.unmockkStatic(org.eclipse.jgit.api.Git::class)
+            io.mockk.unmockkStatic(Git::class)
         }
         
         it("currentVersion 파싱 실패 시 1.15.0을 기본으로 동작한다") {
             val service = YonaUpdateService("repo", "invalid-version")
             
-            val mockRef = mockk<org.eclipse.jgit.lib.Ref>()
+            val mockRef = mockk<Ref>()
             every { mockRef.name } returns "^refs/tags/v1.16.0"
             
-            val lsCommand = mockk<org.eclipse.jgit.api.LsRemoteCommand>()
+            val lsCommand = mockk<LsRemoteCommand>()
             every { lsCommand.setRemote(any()) } returns lsCommand
             every { lsCommand.setHeads(any()) } returns lsCommand
             every { lsCommand.setTags(any()) } returns lsCommand
             every { lsCommand.call() } returns listOf(mockRef)
 
-            io.mockk.mockkStatic(org.eclipse.jgit.api.Git::class)
-            every { org.eclipse.jgit.api.Git.lsRemoteRepository() } returns lsCommand
+            io.mockk.mockkStatic(Git::class)
+            every { Git.lsRemoteRepository() } returns lsCommand
             
             service.checkForUpdate()
             
             service.isUpdateRequired() shouldBe true
-            io.mockk.unmockkStatic(org.eclipse.jgit.api.Git::class)
+            io.mockk.unmockkStatic(Git::class)
         }
     }
 })

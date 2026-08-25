@@ -11,9 +11,12 @@ import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.notification.UserProjectNotification
 import com.github.search5.yona.domain.notification.UserProjectNotificationRepository
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.enumeration.Operation
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -377,7 +380,7 @@ class WatchControllerSpec : DescribeSpec({
             }
 
             it("PULL_REQUEST: 정상적으로 toProject를 찾아 감시 등록해야 한다") {
-                val pr = com.github.search5.yona.domain.pullrequest.PullRequest(
+                val pr = PullRequest(
                     id = 400L, number = 1L, toProject = project, fromProject = project,
                     contributor = user1
                 )
@@ -511,9 +514,9 @@ class WatchControllerSpec : DescribeSpec({
                 every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
                 every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns true
                 every {
-                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, com.github.search5.yona.domain.enumeration.EventType.NEW_COMMENT)
+                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, EventType.NEW_COMMENT)
                 } returns null
-                val savedSlot = slot<com.github.search5.yona.domain.notification.UserProjectNotification>()
+                val savedSlot = slot<UserProjectNotification>()
                 every { userProjectNotificationRepository.save(capture(savedSlot)) } returns mockk()
 
                 mockMvc.perform(post("/watch/toggle/1/NEW_COMMENT").principal(auth)).andExpect(status().isOk)
@@ -522,9 +525,9 @@ class WatchControllerSpec : DescribeSpec({
             }
 
             it("기존 알림 설정 토글 후 allowed가 기본값과 같아지면 설정을 삭제해야 한다") {
-                val existing = com.github.search5.yona.domain.notification.UserProjectNotification(
+                val existing = UserProjectNotification(
                     id = 500L, user = user1, project = project,
-                    notificationType = com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE, allowed = false
+                    notificationType = EventType.NEW_ISSUE, allowed = false
                 )
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
@@ -532,7 +535,7 @@ class WatchControllerSpec : DescribeSpec({
                 every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
                 every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns true
                 every {
-                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE)
+                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, EventType.NEW_ISSUE)
                 } returns existing
                 every { userProjectNotificationRepository.delete(existing) } just Runs
 
@@ -542,9 +545,9 @@ class WatchControllerSpec : DescribeSpec({
             }
 
             it("기존 알림 설정 토글 후 allowed가 기본값과 달라지면 설정을 저장해야 한다") {
-                val existing = com.github.search5.yona.domain.notification.UserProjectNotification(
+                val existing = UserProjectNotification(
                     id = 501L, user = user1, project = project,
-                    notificationType = com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE, allowed = true
+                    notificationType = EventType.NEW_ISSUE, allowed = true
                 )
                 every { auth.name } returns "user1"
                 every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
@@ -552,7 +555,7 @@ class WatchControllerSpec : DescribeSpec({
                 every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
                 every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns true
                 every {
-                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE)
+                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, EventType.NEW_ISSUE)
                 } returns existing
                 every { userProjectNotificationRepository.save(existing) } returns existing
 

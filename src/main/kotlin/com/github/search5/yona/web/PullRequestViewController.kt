@@ -30,6 +30,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.attachment.AttachmentRepository
 import org.springframework.context.MessageSource
+import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -43,6 +44,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
 import java.time.Duration
 import java.time.Instant
+import java.util.Locale
 
 @Controller
 class PullRequestViewController(
@@ -360,9 +362,9 @@ class PullRequestViewController(
         model.addAttribute("isAcceptable", isAcceptable)
         val disabledAcceptReason = when {
             isAcceptable -> null
-            pullRequest.isConflict == true -> messageSource.getMessage("pullRequest.is.not.safe", null, org.springframework.context.i18n.LocaleContextHolder.getLocale())
-            pullRequest.isMerging == true -> messageSource.getMessage("pullRequest.is.merging", null, java.util.Locale.KOREA)
-            !meetsReviewerCount -> messageSource.getMessage("pullRequest.is.not.safe", null, org.springframework.context.i18n.LocaleContextHolder.getLocale())
+            pullRequest.isConflict == true -> messageSource.getMessage("pullRequest.is.not.safe", null, LocaleContextHolder.getLocale())
+            pullRequest.isMerging == true -> messageSource.getMessage("pullRequest.is.merging", null, Locale.KOREA)
+            !meetsReviewerCount -> messageSource.getMessage("pullRequest.is.not.safe", null, LocaleContextHolder.getLocale())
             else -> null
         }
         model.addAttribute("disabledAcceptReason", disabledAcceptReason)

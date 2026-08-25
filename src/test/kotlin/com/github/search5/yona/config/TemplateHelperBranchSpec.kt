@@ -48,6 +48,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import java.time.ZoneId
 import java.util.Optional
 
 /**
@@ -129,7 +130,7 @@ class TemplateHelperBranchSpec : DescribeSpec({
             result[2] shouldBe '-'
         }
         it("8일 이상이고 작년 이전이면 yyyy-MM-dd 형식으로 반환한다") {
-            val result = templateHelper.agoOrDateString(Instant.now().atZone(java.time.ZoneId.systemDefault()).minusYears(2).toInstant())
+            val result = templateHelper.agoOrDateString(Instant.now().atZone(ZoneId.systemDefault()).minusYears(2).toInstant())
             result.length shouldBe 10
         }
     }

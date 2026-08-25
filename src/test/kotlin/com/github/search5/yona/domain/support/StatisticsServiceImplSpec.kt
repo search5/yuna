@@ -7,6 +7,7 @@ import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.lang.Long as JLong
 
 class StatisticsServiceImplSpec : DescribeSpec({
     describe("StatisticsServiceImpl") {
@@ -14,10 +15,10 @@ class StatisticsServiceImplSpec : DescribeSpec({
             val entityManager = mockk<EntityManager>()
             val service = StatisticsServiceImpl(entityManager)
             
-            val query = mockk<TypedQuery<java.lang.Long>>()
-            every { entityManager.createQuery(any<String>(), java.lang.Long::class.java) } returns query
+            val query = mockk<TypedQuery<JLong>>()
+            every { entityManager.createQuery(any<String>(), JLong::class.java) } returns query
             every { query.setParameter(any<String>(), any()) } returns query
-            every { query.singleResult } answers { 10L as java.lang.Long }
+            every { query.singleResult } answers { 10L as JLong }
 
             val response = service.getUserStatistics(1L)
             
@@ -29,7 +30,7 @@ class StatisticsServiceImplSpec : DescribeSpec({
             response.issueVoter shouldBe 10L
             response.issueCommentVoter shouldBe 10L
             
-            verify(exactly = 7) { entityManager.createQuery(any<String>(), java.lang.Long::class.java) }
+            verify(exactly = 7) { entityManager.createQuery(any<String>(), JLong::class.java) }
         }
     }
 })

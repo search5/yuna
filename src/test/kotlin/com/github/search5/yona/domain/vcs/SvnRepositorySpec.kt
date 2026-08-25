@@ -6,10 +6,15 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import org.tmatesoft.svn.core.SVNException
+import org.tmatesoft.svn.core.SVNNodeKind
 import org.tmatesoft.svn.core.SVNURL
+import org.tmatesoft.svn.core.auth.BasicAuthenticationManager
 import org.tmatesoft.svn.core.io.SVNRepositoryFactory
 import org.tmatesoft.svn.core.io.diff.SVNDeltaGenerator
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.FileNotFoundException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
@@ -38,17 +43,17 @@ class SvnRepositorySpec : DescribeSpec({
             var currentPath = ""
             for (i in 0 until segments.size - 1) {
                 currentPath = if (currentPath.isEmpty()) segments[i] else "$currentPath/${segments[i]}"
-                if (probe.checkPath(currentPath, -1) == org.tmatesoft.svn.core.SVNNodeKind.DIR) {
+                if (probe.checkPath(currentPath, -1) == SVNNodeKind.DIR) {
                     existingDirs.add(currentPath)
                 }
             }
-            fileExists = probe.checkPath(path, -1) == org.tmatesoft.svn.core.SVNNodeKind.FILE
+            fileExists = probe.checkPath(path, -1) == SVNNodeKind.FILE
         } finally {
             probe.closeSession()
         }
 
         val svnRepository = SVNRepositoryFactory.create(svnURL)
-        svnRepository.authenticationManager = org.tmatesoft.svn.core.auth.BasicAuthenticationManager.newInstance(author, CharArray(0))
+        svnRepository.authenticationManager = BasicAuthenticationManager.newInstance(author, CharArray(0))
         try {
             val editor = svnRepository.getCommitEditor(message, null)
             editor.openRoot(-1)
@@ -170,7 +175,7 @@ class SvnRepositorySpec : DescribeSpec({
             try {
                 repo.getCommit("999")
                 throw AssertionError("SVNException이 발생해야 한다")
-            } catch (e: org.tmatesoft.svn.core.SVNException) {
+            } catch (e: SVNException) {
                 // expected
             }
         }
@@ -284,7 +289,7 @@ class SvnRepositorySpec : DescribeSpec({
             try {
                 repo.getRawFile("HEAD", "no-such.txt")
                 throw AssertionError("FileNotFoundException이 발생해야 한다")
-            } catch (e: java.io.FileNotFoundException) {
+            } catch (e: FileNotFoundException) {
                 // expected
             }
         }
@@ -421,7 +426,7 @@ class SvnRepositorySpec : DescribeSpec({
             val repo = SvnRepository("owner29", "proj29", newTempBaseDir(), userResolver)
             repo.create()
 
-            val out = java.io.ByteArrayOutputStream()
+            val out = ByteArrayOutputStream()
             repo.getArchive(out, "HEAD")
 
             out.size() shouldBe 0

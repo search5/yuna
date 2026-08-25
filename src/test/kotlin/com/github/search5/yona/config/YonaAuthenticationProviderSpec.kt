@@ -23,6 +23,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.userdetails.UserDetailsService
 import java.security.MessageDigest
 import java.util.Base64
+import org.springframework.security.authentication.TestingAuthenticationToken
 
 class YonaAuthenticationProviderSpec : DescribeSpec({
     val userDetailsService = mockk<UserDetailsService>()
@@ -292,7 +293,7 @@ class YonaAuthenticationProviderSpec : DescribeSpec({
         }
 
         it("다른 Authentication 구현체는 지원하지 않아야 한다") {
-            authenticationProvider.supports(org.springframework.security.authentication.TestingAuthenticationToken::class.java) shouldBe false
+            authenticationProvider.supports(TestingAuthenticationToken::class.java) shouldBe false
         }
     }
 })
