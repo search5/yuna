@@ -280,6 +280,37 @@ class ProjectApiControllerSpec : DescribeSpec({
             projectSlot.captured.projectScope shouldBe ProjectScope.PRIVATE
         }
 
+        it("projectScope가 명시적으로 PRIVATE/PROTECTED이면 그 값 그대로 처리돼야 한다") {
+            every { userRepository.findByLoginId("admin") } returns Optional.of(siteManager)
+            every { organizationRepository.findByName("admin") } returns Optional.empty()
+            every { roleRepository.findById(RoleType.SITEMANAGER.roleType) } returns Optional.of(sitemanagerRole)
+            every { projectUserRepository.save(any()) } answers { firstArg() }
+            val playRepo = mockk<PlayRepository>(relaxed = true)
+            every { repositoryService.getRepository(any()) } returns playRepo
+
+            every { projectRepository.findByOwnerAndName("admin", "scopeprivate") } returns Optional.empty()
+            val privateSlot = slot<Project>()
+            every { projectRepository.save(capture(privateSlot)) } answers { privateSlot.captured.apply { id = 110L } }
+            mockMvc.perform(
+                post("/api/projects/admin")
+                    .principal(siteManagerAuth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"projectName": "scopeprivate", "projectScope": "PRIVATE"}""")
+            ).andExpect(status().isCreated)
+            privateSlot.captured.projectScope shouldBe ProjectScope.PRIVATE
+
+            every { projectRepository.findByOwnerAndName("admin", "scopeprotected") } returns Optional.empty()
+            val protectedSlot = slot<Project>()
+            every { projectRepository.save(capture(protectedSlot)) } answers { protectedSlot.captured.apply { id = 111L } }
+            mockMvc.perform(
+                post("/api/projects/admin")
+                    .principal(siteManagerAuth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"projectName": "scopeprotected", "projectScope": "PROTECTED"}""")
+            ).andExpect(status().isCreated)
+            protectedSlot.captured.projectScope shouldBe ProjectScope.PROTECTED
+        }
+
         it("projectVcs가 없으면 GIT을 기본값으로 사용해야 한다") {
             every { userRepository.findByLoginId("admin") } returns Optional.of(siteManager)
             every { projectRepository.findByOwnerAndName("admin", "newproj3") } returns Optional.empty()
@@ -434,6 +465,14 @@ class ProjectApiControllerSpec : DescribeSpec({
         project.projectUsers.add(managerProjectUser)
         manager.projectUsers.add(managerProjectUser)
 
+        val project2 = Project(
+            id = 201L, owner = "acme", name = "widget2", overview = "위젯2 프로젝트",
+            vcs = "GIT", projectScope = ProjectScope.PRIVATE
+        )
+        val managerProjectUser2 = ProjectUser(id = 901L, user = manager, project = project2, role = managerRole)
+        project2.projectUsers.add(managerProjectUser2)
+        manager.projectUsers.add(managerProjectUser2)
+
         it("존재하지 않는 프로젝트는 404를 반환해야 한다") {
             every { projectRepository.findByOwnerAndName("acme", "nope") } returns Optional.empty()
 
@@ -566,6 +605,238 @@ class ProjectApiControllerSpec : DescribeSpec({
                 .andExpect(jsonPath("$.posts[0].state").doesNotExist())
                 .andExpect(jsonPath("$.posts[0].assignees").doesNotExist())
                 .andExpect(jsonPath("$.posts[0].refUrl").doesNotExist())
+        }
+
+        it("담당자/마일스톤/라벨이 없는 이슈, 마감일이 있는 마일스톤/이슈, 저자가 겹치는 경우, 첨부있는 게시글/댓글, 중첩된 게시글 댓글, 기여자 없는 PR까지 잔여 분기를 모두 커버한다") {
+            every { projectRepository.findByOwnerAndName("acme", "widget2") } returns Optional.of(project2)
+            every { userRepository.findByLoginId("manager") } returns Optional.of(manager)
+
+            val sharedAuthor = User(id = 44L, loginId = "shared", name = "공동작성자", email = "shared@example.com")
+            val dueInstant = java.time.Instant.parse("2026-06-01T00:00:00Z")
+            val milestoneWithDue = Milestone(
+                id = 501L, title = "1.1", contents = "패치", project = project2, state = State.OPEN, dueDate = dueInstant
+            )
+
+            // 담당자/라벨/마일스톤 전부 없고, 마감일만 있는 이슈 — 작성자는 posting과 동일인(dedup 분기)
+            val bareIssue = Issue(
+                id = 710L, title = "담당자 없는 이슈", project = project2, number = 2L,
+                authorId = sharedAuthor.id, createdDate = dueInstant, updatedDate = dueInstant,
+                state = State.OPEN, dueDate = dueInstant
+            )
+
+            val posting2 = Posting(
+                id = 810L, title = "첨부있는 공지", body = "본문", project = project2, number = 2L,
+                authorId = sharedAuthor.id, createdDate = dueInstant, updatedDate = dueInstant
+            )
+            val postingAttachment = Attachment(
+                id = 1001L, name = "file.pdf", hash = "def456",
+                containerType = ResourceType.BOARD_POST, containerId = "810",
+                mimeType = "application/pdf", size = 2048L, createdDate = null, ownerLoginId = "shared"
+            )
+
+            val commentWithAttachment = IssueComment(
+                id = 910L, contents = "첨부있는 댓글", issue = bareIssue, authorId = null, createdDate = dueInstant
+            )
+            val commentAttachment = Attachment(
+                id = 1002L, name = "log.txt", hash = "ghi789",
+                containerType = ResourceType.ISSUE_COMMENT, containerId = "910",
+                mimeType = "text/plain", size = 10L, createdDate = dueInstant, ownerLoginId = "shared"
+            )
+
+            val postTopComment = PostingComment(
+                id = 920L, contents = "게시글댓글", posting = posting2, authorId = sharedAuthor.id, createdDate = dueInstant
+            )
+            val postReplyComment = PostingComment(
+                id = 921L, contents = "게시글답글", posting = posting2, authorId = sharedAuthor.id,
+                parentComment = postTopComment, createdDate = dueInstant
+            )
+            // 3단계 중첩(대댓글의 대댓글) — legacy는 NPE지만 yuna는 조용히 무시해야 한다(게시글 댓글 쪽)
+            val postOrphanReply = PostingComment(
+                id = 922L, contents = "게시글 고아 답글", posting = posting2, authorId = sharedAuthor.id,
+                parentComment = postReplyComment, createdDate = dueInstant
+            )
+
+            every { issueRepository.findByProject(project2) } returns listOf(bareIssue)
+            every { postingRepository.findByProject(project2) } returns listOf(posting2)
+            every { milestoneRepository.findByProject(project2) } returns listOf(milestoneWithDue)
+            every { issueLabelRepository.findByProject(project2) } returns emptyList()
+            every { projectUserRepository.findByProjectId(201L) } returns project2.projectUsers
+            every { assigneeRepository.findByProjectId(201L) } returns emptyList()
+            // PR 기여자도 이슈/게시글 작성자와 동일인 — findAuthors의 dedup(containsKey) 분기 커버
+            every { pullRequestRepository.findByToProject(project2) } returns listOf(
+                com.github.search5.yona.domain.pullrequest.PullRequest(
+                    id = 1101L, number = 2L, toProject = project2, fromProject = project2, contributor = sharedAuthor
+                )
+            )
+            every { userRepository.findById(sharedAuthor.id!!) } returns Optional.of(sharedAuthor)
+            every { userRepository.findById(manager.id!!) } returns Optional.of(manager)
+            every { notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "710") } returns "http://localhost/acme/widget2/issue/2"
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "710") } returns emptyList()
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.BOARD_POST, "810") } returns listOf(postingAttachment)
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_COMMENT, "910") } returns listOf(commentAttachment)
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.NONISSUE_COMMENT, any()) } returns emptyList()
+            every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(710L) } returns listOf(commentWithAttachment)
+            every { postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(810L) } returns
+                listOf(postTopComment, postReplyComment, postOrphanReply)
+
+            mockMvc.perform(get("/api/projects/acme/widget2/exports").principal(managerAuth))
+                .andExpect(status().isOk)
+                // 담당자 없는 이슈: assignees 필드 자체가 없어야 한다
+                .andExpect(jsonPath("$.issues[0].assignees").doesNotExist())
+                .andExpect(jsonPath("$.issues[0].labels").doesNotExist())
+                .andExpect(jsonPath("$.issues[0].milestoneId").doesNotExist())
+                .andExpect(jsonPath("$.issues[0].dueDate").exists())
+                .andExpect(jsonPath("$.milestones[0].dueDate").exists())
+                // 저자 없는 댓글: author의 loginId/name/email이 전부 null
+                .andExpect(jsonPath("$.issues[0].comments[0].author.loginId").doesNotExist())
+                .andExpect(jsonPath("$.issues[0].comments[0].attachments[0].name").value("log.txt"))
+                .andExpect(jsonPath("$.posts[0].attachments[0].name").value("file.pdf"))
+                .andExpect(jsonPath("$.posts[0].attachments[0].createdDate").doesNotExist())
+                .andExpect(jsonPath("$.posts[0].comments[0].id").value(920))
+                .andExpect(jsonPath("$.posts[0].comments[0].childComments[0].id").value(921))
+                // authors: 이슈작성자==게시글작성자==PR기여자가 전부 동일인이라 dedup으로 1번만 나와야 한다
+                .andExpect(jsonPath("$.authors.length()").value(1))
+                .andExpect(jsonPath("$.authors[0].loginId").value("shared"))
+        }
+
+        it("작성자가 없는(authorId=null) 이슈, updatedDate가 없는 경우, id가 없는(미영속) 최상위 댓글은 목록에서 빠져야 한다") {
+            val project3 = Project(
+                id = 202L, owner = "acme", name = "widget3", vcs = "GIT", projectScope = ProjectScope.PRIVATE
+            )
+            val managerProjectUser3 = ProjectUser(id = 902L, user = manager, project = project3, role = managerRole)
+            project3.projectUsers.add(managerProjectUser3)
+            manager.projectUsers.add(managerProjectUser3)
+
+            every { projectRepository.findByOwnerAndName("acme", "widget3") } returns Optional.of(project3)
+            every { userRepository.findByLoginId("manager") } returns Optional.of(manager)
+
+            val when0 = java.time.Instant.parse("2026-03-01T00:00:00Z")
+            val issue3 = Issue(
+                id = 720L, title = "작성자 없는 이슈", project = project3, number = 3L,
+                authorId = null, createdDate = when0, updatedDate = null, state = State.OPEN
+            )
+            val posting3 = Posting(
+                id = 820L, title = "게시글3", body = "본문", project = project3, number = 3L,
+                authorId = null, createdDate = when0, updatedDate = when0
+            )
+            // id가 없는(아직 저장 전) 최상위 댓글 — composeIssueCommentsJson/composePostingCommentsJson이
+            // topLevel에 추가하지 않고 조용히 걸러내야 한다(line 420/439 분기).
+            val unsavedIssueComment = IssueComment(
+                id = null, contents = "미저장 댓글", issue = issue3, authorId = null, createdDate = when0
+            )
+            val unsavedPostingComment = PostingComment(
+                id = null, contents = "미저장 게시글댓글", posting = posting3, authorId = null, createdDate = when0
+            )
+
+            every { issueRepository.findByProject(project3) } returns listOf(issue3)
+            every { postingRepository.findByProject(project3) } returns listOf(posting3)
+            every { milestoneRepository.findByProject(project3) } returns emptyList()
+            every { issueLabelRepository.findByProject(project3) } returns emptyList()
+            every { projectUserRepository.findByProjectId(202L) } returns project3.projectUsers
+            every { assigneeRepository.findByProjectId(202L) } returns emptyList()
+            every { pullRequestRepository.findByToProject(project3) } returns emptyList()
+            every { notificationUrlResolver.getUrl(ResourceType.ISSUE_POST, "720") } returns "http://localhost/acme/widget3/issue/3"
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "720") } returns emptyList()
+            every { attachmentRepository.findByContainerTypeAndContainerId(ResourceType.BOARD_POST, "820") } returns emptyList()
+            every { issueCommentRepository.findByIssueIdOrderByCreatedDateAsc(720L) } returns listOf(unsavedIssueComment)
+            every { postingCommentRepository.findByPostingIdOrderByCreatedDateAsc(820L) } returns listOf(unsavedPostingComment)
+
+            mockMvc.perform(get("/api/projects/acme/widget3/exports").principal(managerAuth))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.authors").isEmpty)
+                .andExpect(jsonPath("$.issues[0].author.loginId").doesNotExist())
+                .andExpect(jsonPath("$.issues[0].updatedAt").value(""))
+                .andExpect(jsonPath("$.issues[0].comments").doesNotExist())
+                .andExpect(jsonPath("$.posts[0].comments").doesNotExist())
+        }
+    }
+
+    describe("addProjectMembers() 잔여 분기 (P2-45)") {
+        val siteManager2 = User(id = 60L, loginId = "admin2", name = "관리자2", state = UserState.SITE_ADMIN)
+        val siteManagerAuth2 = UsernamePasswordAuthenticationToken("admin2", "password")
+        val sitemanagerRole2 = Role(id = RoleType.SITEMANAGER.roleType)
+
+        it("알 수 없는 role 값이 오면 경고만 남기고 조용히 건너뛰어야 한다") {
+            val someUser = User(id = 61L, loginId = "someone", name = "누군가", email = "someone@example.com")
+            every { userRepository.findByLoginId("admin2") } returns Optional.of(siteManager2)
+            every { projectRepository.findByOwnerAndName("admin2", "projA") } returns Optional.empty()
+            every { organizationRepository.findByName("admin2") } returns Optional.empty()
+            val projectSlot = slot<Project>()
+            every { projectRepository.save(capture(projectSlot)) } answers { projectSlot.captured.apply { id = 200L } }
+            every { roleRepository.findById(RoleType.SITEMANAGER.roleType) } returns Optional.of(sitemanagerRole2)
+            every { projectUserRepository.save(any()) } answers { firstArg() }
+            every { userRepository.findByEmail("someone@example.com") } returns Optional.of(someUser)
+            val playRepo = mockk<PlayRepository>(relaxed = true)
+            every { repositoryService.getRepository(any()) } returns playRepo
+
+            mockMvc.perform(
+                post("/api/projects/admin2")
+                    .principal(siteManagerAuth2)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """{"projectName": "projA", "members": [{"email": "someone@example.com", "role": "owner"}]}"""
+                    )
+            ).andExpect(status().isCreated)
+
+            // SITEMANAGER 역할 배정(1회) 외에 멤버 배정 저장이 없어야 한다.
+            verify(exactly = 1) { projectUserRepository.save(any()) }
+        }
+
+        it("역할 자체가 DB에 없으면(roleRepository 조회 실패) 조용히 건너뛰어야 한다") {
+            val someUser2 = User(id = 62L, loginId = "someone2", name = "누군가2", email = "someone2@example.com")
+            every { userRepository.findByLoginId("admin2") } returns Optional.of(siteManager2)
+            every { projectRepository.findByOwnerAndName("admin2", "projB") } returns Optional.empty()
+            every { organizationRepository.findByName("admin2") } returns Optional.empty()
+            val projectSlot = slot<Project>()
+            every { projectRepository.save(capture(projectSlot)) } answers { projectSlot.captured.apply { id = 201L } }
+            every { roleRepository.findById(RoleType.SITEMANAGER.roleType) } returns Optional.of(sitemanagerRole2)
+            every { roleRepository.findById(RoleType.MEMBER.roleType) } returns Optional.empty()
+            every { projectUserRepository.save(any()) } answers { firstArg() }
+            every { userRepository.findByEmail("someone2@example.com") } returns Optional.of(someUser2)
+            val playRepo = mockk<PlayRepository>(relaxed = true)
+            every { repositoryService.getRepository(any()) } returns playRepo
+
+            mockMvc.perform(
+                post("/api/projects/admin2")
+                    .principal(siteManagerAuth2)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """{"projectName": "projB", "members": [{"email": "someone2@example.com", "role": "member"}]}"""
+                    )
+            ).andExpect(status().isCreated)
+
+            verify(exactly = 1) { projectUserRepository.save(any()) }
+        }
+
+        it("이미 해당 프로젝트에 속한 멤버면 기존 행의 역할을 갱신해야 한다") {
+            val existingMember = User(id = 63L, loginId = "existing", name = "기존멤버", email = "existing@example.com")
+            val memberRole2 = Role(id = RoleType.MEMBER.roleType)
+            val managerRole2 = Role(id = RoleType.MANAGER.roleType)
+            every { userRepository.findByLoginId("admin2") } returns Optional.of(siteManager2)
+            every { projectRepository.findByOwnerAndName("admin2", "projC") } returns Optional.empty()
+            every { organizationRepository.findByName("admin2") } returns Optional.empty()
+            val projectSlot = slot<Project>()
+            every { projectRepository.save(capture(projectSlot)) } answers { projectSlot.captured.apply { id = 202L } }
+            every { roleRepository.findById(RoleType.SITEMANAGER.roleType) } returns Optional.of(sitemanagerRole2)
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole2)
+            every { projectUserRepository.save(any()) } answers { firstArg() }
+            every { userRepository.findByEmail("existing@example.com") } returns Optional.of(existingMember)
+            val existingProjectUser = ProjectUser(id = 950L, project = Project(id = 202L), user = existingMember, role = memberRole2)
+            every { projectUserRepository.findByProjectIdAndUserId(202L, 63L) } returns Optional.of(existingProjectUser)
+            val playRepo = mockk<PlayRepository>(relaxed = true)
+            every { repositoryService.getRepository(any()) } returns playRepo
+
+            mockMvc.perform(
+                post("/api/projects/admin2")
+                    .principal(siteManagerAuth2)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """{"projectName": "projC", "members": [{"email": "existing@example.com", "role": "manager"}]}"""
+                    )
+            ).andExpect(status().isCreated)
+
+            existingProjectUser.role shouldBe managerRole2
+            verify(exactly = 1) { projectUserRepository.save(existingProjectUser) }
         }
     }
 })
