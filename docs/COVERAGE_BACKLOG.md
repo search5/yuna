@@ -207,6 +207,12 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 이번 배치 신규 실버그/죽은코드 없음
 - 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분 30초)
 
+## 진행 현황 갱신 (2026-08-25, 40차 배치 완료 후)
+
+- 추가 완료([x], 5개): `LinkedAccount`, `UserIdent`, `Role`, `ReviewComment`, `PushedBranch` — 전부 LINE/BRANCH/METHOD 100% 완전 달성
+- 이번 배치 신규 실버그/죽은코드 없음
+- 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분 47초)
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -324,10 +330,10 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `PullRequest` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestSpec.kt`로 20개 프로퍼티(연관관계 포함) 접근자 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PullRequestMergeResult` | 100.0 | 100.0 | 92.3 | 0 | 0 | 1 | [ ] | |
 | `PullRequestTimelineItem` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
-| `ReviewComment` | 100.0 | 100.0 | 75.0 | 0 | 0 | 3 | [ ] | |
+| `ReviewComment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ReviewCommentSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PullRequestEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/role** | | | | | | | | |
-| `Role` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
+| `Role` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `RoleSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/site** | | | | | | | | |
 | `SiteService` | 41.2 | 18.6 | 41.7 | 60 | 57 | 7 | [x] | 2026-08-23: 27 tests 추가(총 33). 단독 측정 LINE 100%, METHOD 100%, BRANCH 95.7%(67/70) — 목표 달성. 도달 불가능 3건 확인(`getMailList`/`getNoAvatarUsers`의 `User.email`이 non-nullable `var email: String=""`이라 null 분기가 타입 시스템상 불가능) |
 | `DataBackupServiceImpl` | 86.1 | 72.7 | 100.0 | 14 | 15 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -370,8 +376,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `FavoriteIssue` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `FavoriteIssueSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `ReservedWordsValidator` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
 | `UserSetting` | 100.0 | 100.0 | 75.0 | 0 | 0 | 2 | [ ] | |
-| `UserIdent` | 100.0 | 100.0 | 66.7 | 0 | 0 | 3 | [ ] | |
-| `LinkedAccount` | 100.0 | 100.0 | 60.0 | 0 | 0 | 4 | [ ] | |
+| `UserIdent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `UserIdentSpec.kt`(User 보조 생성자 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `LinkedAccount` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `LinkedAccountSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/vcs** | | | | | | | | |
 | `GitRepository` | 42.5 | 24.8 | 59.6 | 230 | 155 | 23 | [i] | 2026-08-24: 신규 `GitRepositorySpec.kt`(실제 bare JGit 저장소+저수준 커밋, mock 최소화, 95 tests). 전체 회귀 확정치: LINE 99.5%, METHOD 100%, BRANCH 88.3% — 남은 분기는 전부 코드 근거로 도달 불가능/비현실적 확인(JGit API 계약상 항상 non-null인 지점들, close() 실패 분기 등 상세는 스펙 파일 참고). **실버그 발견(현재 호출부에선 미트리거, 미수정)**: `getParentCommitOf()`가 부모 커밋을 `parseCommit()` 없이 반환해 반환값의 `getMessage()`/`getAuthorName()` 등 호출 시 NPE — 유일한 실사용처 `CodeViewController.kt:481`은 `.id`만 참조해(템플릿 `code/svnDiff.html:103`) 현재는 트리거 안 됨, 향후 `.message` 등 참조 추가 시 위험 |
 | `FileDiff` | 9.6 | 0.0 | 37.0 | 132 | 130 | 29 | [x] | 2026-08-23: 신규 60 tests, `FileDiffSpec.kt`. 단독 측정 LINE/BRANCH/METHOD/CLASS 전부 100%. **실버그 발견(수정은 별도 판단 필요)**: `updateRange(lineA, lineB)`가 lineA/lineB 조건을 독립된 `if`로 처리해 두 조건이 동시에 매치되면 같은 edit이 EditList에 중복 추가됨 — 테스트로 명시 문서화, 의도된 동작인지 불확실해 별도 수정 없이 사실만 기록 |
@@ -382,7 +388,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `RepositoryService` | 67.5 | 36.7 | 66.7 | 13 | 19 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `SvnCommit` | 39.1 | 7.1 | 37.5 | 14 | 13 | 10 | [i] | 2026-08-25: `getMessage`/`getAuthor`(리졸버 미호출 포함)/`getAuthorName`/`getId`/`getShortId`/`getShortMessage`(null/빈문자열/한줄/여러줄/앞뒤공백/공백만)/`getAuthorDate`/`getParentCount`(revision 0/1/2 분기) 등 전 메서드 보강(LINE 100%, METHOD 100%, BRANCH 85.7%). 잔여 미달은 `getShortMessage()`의 `if (lines.isNotEmpty())`로, `trim()` 결과 문자열에 대한 `split("\n")`은 Kotlin에서 항상 원소 1개 이상인 리스트를 반환하므로(빈 문자열도 `listOf("")`) else 분기가 도달 불가로 판단 |
 | `GitCommit` | 64.7 | 25.0 | 60.0 | 6 | 15 | 6 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `PushedBranch` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
+| `PushedBranch` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PushedBranchSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `GitBranch` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
 | **domain/watch** | | | | | | | | |
 | `WatchServiceImpl` | 98.2 | 73.9 | 100.0 | 1 | 12 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
