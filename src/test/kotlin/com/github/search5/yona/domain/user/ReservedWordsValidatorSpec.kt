@@ -21,5 +21,10 @@ class ReservedWordsValidatorSpec : DescribeSpec({
             ReservedWordsValidator.isReserved("gildong") shouldBe false
             ReservedWordsValidator.isReserved("my-cool-project") shouldBe false
         }
+
+        it("RESERVED_WORDS 프로퍼티 자체를 직접 읽을 수 있어야 한다") {
+            ReservedWordsValidator.RESERVED_WORDS shouldBe ReservedWordsValidator.RESERVED_WORDS
+            ReservedWordsValidator.RESERVED_WORDS.contains("api") shouldBe true
+        }
     }
 })
