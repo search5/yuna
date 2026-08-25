@@ -31,6 +31,18 @@
 
 **미검토(다음 배치 대상)**: 나머지 1934건(HIGH 외 영역 — models/controllers/utils/data/mailbox/actions 등), 아직 자동 2차 필터의 "파일 자체 미인용" 단계까지만 거쳤고 사람 검토 전.
 
+## NORMAL 우선순위 검토 결과 (진행 중, K1~K3 완료분)
+
+템플릿 관련 194건은 TEMPLATE_BACKLOG.md가 이미 레거시-yuna 줄 단위 대조로 더 엄밀하게 검증해뒀으므로 제외. 백엔드 1744건(201개 파일)을 K1~K7 7개 그룹으로 나눠 검토 중.
+
+| 그룹 | 대상 | 결과 |
+|---|---|---|
+| K1 | actors/controllers/data 일부 (29개 파일) | **전부 해소(미대응 0건)**. `GlobalApi.hello()`는 Spring Boot Actuator `/actuator/health`로 표준 대체(P3-01). `DataService`/`DefaultExchanger`/`Exchanger`+DataExchanger 4개는 `domain/site/DataBackupServiceImpl.kt`로 통합(아래 참고) |
+| K2 | data/exchangers 전체 패턴 검증 (29개 파일) | **전부 해소(미대응 0건)**. legacy는 엔티티별 전용 Exchanger 47개, yuna는 `domain/site/DataBackupServiceImpl.kt` 하나가 `DatabaseMetaData.getTables()`로 전체 테이블을 자동 탐지해 export/import — 엔티티별 화이트리스트 없이 스키마의 모든 테이블을 포괄해 legacy보다 일반화된 형태로 이식됨(코드 주석에 "44개 Exchanger 대응" 명시) |
+| K3 | data/exchangers+mailbox+models 일부 (29개 파일) | **거의 전부 해소, 경미 사항 1건**. DataExchanger 14개는 K2와 동일 패턴. mailbox 5개는 P0-02로 `domain/mail/*.kt`에 메서드 단위까지 확인. models 5개(AbstractPosting/Assignee/AuthInfo/CandidateUser/CodeComment)도 전부 대응 확인(AuthInfo/CandidateUser는 별도 클래스 없이 Spring Security formLogin/LdapUserProvisioningService에 흡수). **경미**: `mailbox/exceptions`의 커스텀 예외 5종(`IllegalDetailException`/`IssueNotFound`/`MailHandlerException`/`PermissionDenied`/`PostingNotFound`)이 yuna에서는 `IncomingMailOutcome.Rejected(reason: String)` 하나로 통합됨 — 기능(거부 사유 판별)은 동등하나 예외 타입이 세분화되지 않아 호출부에서 타입 기반 분기가 불가능(현재 필요하지도 않아 실사용 영향은 낮음으로 판단) |
+
+**미검토**: K4~K7(약 115개 파일, models 대량/enumeration/resource/support/utils) 진행 중.
+
 ## 알려진 방법론적 한계 (2026-08-26 Sanity Check 중 발견)
 
 2단계 정규식(`yona X.java:NNN ... 대응`)은 **줄번호가 명시된 인용만** 매치한다. 그런데 yuna 주석 중 상당수는
