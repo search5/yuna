@@ -213,6 +213,13 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 이번 배치 신규 실버그/죽은코드 없음
 - 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분 47초)
 
+## 진행 현황 갱신 (2026-08-25, 41차 배치 완료 후)
+
+- 추가 완료([x], 5개): `Property`, `ProjectUser`, `NotificationMail`, `Label`, `IssueComment` — 전부 LINE/BRANCH/METHOD 100% 완전 달성
+- 검증 방식: 배치40 전체 스위트 실행 시점에 배치41 신규 스펙 파일들이 이미 디스크에 존재해 같은 실행에 포함되어 검증됨(추가 전체 스위트 불필요)
+- 사용자 지시로 42차 배치부터는 배치 크기를 5개→10개로 확대(잔여 항목 대부분이 단순 프로퍼티 접근자 패턴이라 처리 부담이 낮음)
+- 이번 배치 신규 실버그/죽은코드 없음
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -268,7 +275,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `RecentIssueService` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: `deleteOldestIfOverflow`의 정렬·초과분 삭제 분기 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueEventRecorderKt` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueEventRecorderKtSpec.kt`로 이벤트 기록 전 분기 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%). mockk 유출 방지용 `beforeTest { clearMocks }` + `repository.delete()` 기본 스텁 필요했음 |
 | `IssueSharer` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueSharerSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `IssueComment` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
+| `IssueComment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueCommentSpec.kt`(`Comment` 상속 프로퍼티 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Issue` | 100.0 | 100.0 | 90.9 | 0 | 0 | 2 | [ ] | |
 | `IssueEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueLabel` | 100.0 | 100.0 | 83.3 | 0 | 0 | 2 | [ ] | |
@@ -299,7 +306,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `NotificationMailBodyProcessor` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: `noreferrerEnabled=true`+img/src 속성 분기, 상대경로(`/`로 시작하지 않는 href) 분기 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `NotificationMailRenderer` | 100.0 | 75.0 | 100.0 | 0 | 3 | 0 | [i] | 2026-08-25: 도달 가능한 분기는 이미 기존 테스트로 전부 커버됨을 확인. 잔여 3건은 `MessageSource.getMessage(code, args, locale)` 3-인자 오버로드가 Kotlin에서 non-null 반환 타입으로 선언돼 있어 null 반환을 mockk로 스텁하려 시도하면 컴파일 에러("Null cannot be a value of a non-null type")가 발생함을 직접 확인 — 구조적으로 도달 불가능한 방어적 null 분기로 판단 |
 | `NotificationCleanupScheduler` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 잔여 분기 보강(beforeTest clearMocks 누락 수정 포함)하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `NotificationMail` | 100.0 | 100.0 | 50.0 | 0 | 0 | 3 | [ ] | |
+| `NotificationMail` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `NotificationMailSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `NotificationEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `NotificationEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/organization** | | | | | | | | |
 | `OrganizationServiceImpl` | 94.1 | 69.4 | 40.6 | 10 | 19 | 19 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -314,10 +321,10 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `TitleHeadServiceImpl` | 100.0 | 95.0 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-25: `beforeTest { clearMocks(titleHeadRepository) }` 누락 수정 및 잔여 분기 보강하여 확보 완료(LINE 100%, BRANCH 95.0%, METHOD 100%) |
 | `UpdateProjectParam` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `UpdateProjectParamSpec.kt`로 data class 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `TitleHead` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `TitleHeadSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `ProjectUser` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
+| `ProjectUser` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ProjectUserSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `RecentProject` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `RecentProjectSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `ProjectTransfer` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ProjectTransferSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `Label` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
+| `Label` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `LabelSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/pullrequest** | | | | | | | | |
 | `PullRequestServiceImpl` | 95.2 | 64.5 | 72.1 | 25 | 66 | 17 | [x] | 2026-08-25: 6개 테스트 추가하여 커버리지 95% 이상 확보 완료. |
 | `CodeReviewServiceImpl` | 93.5 | 56.0 | 79.3 | 16 | 51 | 6 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -354,7 +361,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `DiffUtil` | 100.0 | 85.7 | 100.0 | 0 | 4 | 0 | [i] | 2026-08-25: 기존 테스트가 DELETE/INSERT/EQUAL 전 분기를 이미 커버함을 확인, 신규 테스트 불필요. 잔여 4건은 `HistoryUtil`과 동일한 `diff_match_patch.Diff.operation`(Java 라이브러리의 platform 타입) 방어적 null 체크 패턴으로, `javap` 바이트코드 확인 결과 Kotlin이 자동 삽입한 `checkNotNullExpressionValue` 안전망이라 도달 불가 |
 | `AbstractPosting` | 95.7 | 100.0 | 96.9 | 1 | 0 | 1 | [x] | 2026-08-25: 신규 `AbstractPostingSpec.kt`(구체 서브클래스 `Posting` 경유, `@MappedSuperclass` 추상 클래스라 직접 인스턴스화 불가)로 확보 완료(LINE 95.7%, BRANCH 100%, METHOD 96.9% — 목표 달성) |
 | `DatabaseInitializer` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `DatabaseInitializerSpec.kt`로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `Property` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
+| `Property` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PropertySpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `ReviewSearchCondition` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ReviewSearchConditionSpec.kt`(fluent setter/clone()/data class 자동생성 메서드 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Comment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `CommentSpec.kt`(`@MappedSuperclass` 추상 클래스라 구체 서브클래스 `PostingComment` 경유)로 상속 프로퍼티 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/user** | | | | | | | | |
