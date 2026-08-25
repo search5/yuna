@@ -86,6 +86,24 @@ class MentionServiceImplSpec @Autowired constructor(
 
                 mentionService.getMentioningIssueIds(user.id!!) shouldBe emptyList()
             }
+
+            // getMentioningIssueIds()의 resourceId.toLongOrNull()?.let{} — resourceId가 숫자가 아니면
+            // 무시하고 건너뛰어야 한다(방어 코드, 정상 흐름에서는 항상 숫자 문자열이 저장됨).
+            it("5. resourceId가 숫자가 아닌 멘션 행은 무시해야 한다") {
+                val user = userRepository.save(User(loginId = "mention-badid", name = "BadId"))
+                mentionRepository.save(Mention(resourceType = ResourceType.ISSUE_POST, resourceId = "not-a-number", user = user))
+
+                mentionService.getMentioningIssueIds(user.id!!) shouldBe emptyList()
+            }
+
+            // ISSUE_COMMENT 쪽의 resourceId.toLongOrNull()?.let{} null 분기 — 위 5번 테스트는
+            // ISSUE_POST쪽만 커버했으므로 별도로 확인한다.
+            it("6. 댓글 멘션의 resourceId가 숫자가 아니면 무시해야 한다") {
+                val user = userRepository.save(User(loginId = "mention-badcommentid", name = "BadCommentId"))
+                mentionRepository.save(Mention(resourceType = ResourceType.ISSUE_COMMENT, resourceId = "not-a-number", user = user))
+
+                mentionService.getMentioningIssueIds(user.id!!) shouldBe emptyList()
+            }
         }
     }
 }

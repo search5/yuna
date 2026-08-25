@@ -50,6 +50,15 @@ class SvnServletRequestWrapperSpec : DescribeSpec({
             wrapper.pathInfo shouldBe request.pathInfo
         }
 
+        // URI가 접두사와 정확히 일치해(뒤에 남는 부분이 없어) substring 결과가 빈 문자열이면
+        // "/"로 시작하지 않으므로 앞에 "/"를 붙여야 한다(else 분기).
+        it("URI가 접두사와 정확히 일치하면(남는 경로 없음) pathInfo는 슬래시 하나여야 한다") {
+            val request = MockHttpServletRequest("GET", "/svn/gildong")
+            val wrapper = SvnServletRequestWrapper(request, "gildong")
+
+            wrapper.pathInfo shouldBe "/"
+        }
+
         it("owner 이름이 다른 프로젝트 경로와 섞이지 않고 정확히 해당 owner의 접두사만 제거해야 한다") {
             // gildong 소유 프로젝트의 svn 요청을 cheolsu 래퍼로 잘못 만들면(방어적 확인) 접두사가
             // 안 맞아 폴백 경로로 빠져야 한다 — SvnController가 URL의 owner 세그먼트로 래퍼를 만드는

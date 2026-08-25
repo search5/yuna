@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delet
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.view
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import java.util.Optional
 import com.github.search5.yona.domain.organization.OrganizationRepository
@@ -131,6 +132,57 @@ class BranchApiControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { playRepository.setDefaultBranch(any()) }
             }
+
+            it("존재하지 않는 프로젝트면 error/404 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/owner/nosuch/code/feature-a/setAsDefault").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { playRepository.setDefaultBranch(any()) }
+            }
+
+            it("vcs가 null이면 Git이 아닌 것으로 취급해 400을 반환해야 한다") {
+                val noVcsProject = Project(id = 4L, name = "NoVcsProject", owner = "owner", vcs = null, projectScope = ProjectScope.PUBLIC)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoVcsProject") } returns Optional.of(noVcsProject)
+
+                mockMvc.perform(
+                    post("/owner/NoVcsProject/code/feature-a/setAsDefault").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/badrequest"))
+
+                verify(exactly = 0) { playRepository.setDefaultBranch(any()) }
+            }
+
+            it("비로그인 사용자는 error/forbidden 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+
+                mockMvc.perform(
+                    post("/owner/TestProject/code/feature-a/setAsDefault")
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { playRepository.setDefaultBranch(any()) }
+            }
+
+            it("로그인했지만 멤버도 그룹멤버도 아니면 error/forbidden 뷰를 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 99L) } returns false
+
+                mockMvc.perform(
+                    post("/owner/TestProject/code/feature-a/setAsDefault").principal(strangerAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { playRepository.setDefaultBranch(any()) }
+            }
         }
 
         describe("DELETE /{owner}/{projectName}/code/{branch}") {
@@ -184,6 +236,41 @@ class BranchApiControllerSpec : DescribeSpec({
 
                 mockMvc.perform(
                     delete("/owner/SvnProject2/code/feature-a").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { playRepository.deleteBranch(any()) }
+            }
+
+            it("존재하지 않는 프로젝트면 error/404 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/owner/nosuch/code/feature-a").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 0) { playRepository.deleteBranch(any()) }
+            }
+
+            it("vcs가 null이면 Git이 아닌 것으로 취급해 400을 반환해야 한다") {
+                val noVcsProject = Project(id = 5L, name = "NoVcsProject2", owner = "owner", vcs = null, projectScope = ProjectScope.PUBLIC)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoVcsProject2") } returns Optional.of(noVcsProject)
+
+                mockMvc.perform(
+                    delete("/owner/NoVcsProject2/code/feature-a").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("error/badrequest"))
+
+                verify(exactly = 0) { playRepository.deleteBranch(any()) }
+            }
+
+            it("비로그인 사용자는 error/forbidden 뷰를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+
+                mockMvc.perform(
+                    delete("/owner/TestProject/code/feature-a")
                 )
                     .andExpect(status().isOk)
 

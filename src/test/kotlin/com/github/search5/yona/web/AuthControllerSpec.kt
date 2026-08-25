@@ -44,6 +44,12 @@ class AuthControllerSpec : DescribeSpec({
                     .andExpect(status().is3xxRedirection)
                     .andExpect(redirectedUrl("/users/loginform?error=true"))
             }
+
+            it("로그아웃 파라미터가 있을 경우 로그아웃 파라미터를 담아 리다이렉트되어야 한다") {
+                mockMvc.perform(get("/login").param("logout", "true"))
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/users/loginform?logout=true"))
+            }
         }
 
         describe("GET /users/loginform") {
@@ -59,11 +65,33 @@ class AuthControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("loginError"))
                     .andExpect(view().name("login"))
             }
+
+            it("로그아웃 파라미터가 있을 경우 로그아웃 메시지가 모델에 적재되어야 한다") {
+                mockMvc.perform(get("/users/loginform").param("logout", "true"))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attributeExists("logoutMessage"))
+                    .andExpect(view().name("login"))
+            }
+        }
+
+        describe("GET /users/logout") {
+            it("/logout으로 리다이렉트되어야 한다") {
+                mockMvc.perform(get("/users/logout"))
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/logout"))
+            }
         }
 
         describe("GET /signup") {
             it("회원가입 페이지가 정상 반환되어야 한다") {
                 mockMvc.perform(get("/signup"))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attributeExists("user"))
+                    .andExpect(view().name("signup"))
+            }
+
+            it("대체 경로(/users/signupform)도 동일하게 회원가입 페이지를 반환해야 한다") {
+                mockMvc.perform(get("/users/signupform"))
                     .andExpect(status().isOk)
                     .andExpect(model().attributeExists("user"))
                     .andExpect(view().name("signup"))
@@ -219,6 +247,41 @@ class AuthControllerSpec : DescribeSpec({
                     .andExpect(view().name("signup"))
 
                 verify(exactly = 0) { userService.createUser(any()) }
+            }
+
+            it("이미 존재하는 아이디면 회원가입이 거부되어야 한다") {
+                every { userService.isLoginIdExist("gildong") } returns true
+
+                mockMvc.perform(
+                    post("/signup")
+                        .param("loginId", "gildong")
+                        .param("name", "홍길동")
+                        .param("email", "gildong@example.com")
+                        .param("password", "pass123")
+                        .param("retypedPassword", "pass123")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(view().name("signup"))
+
+                verify(exactly = 0) { userService.createUser(any()) }
+            }
+
+            it("대체 경로(/users/signup)로도 정상 가입되어야 한다") {
+                every { userService.isLoginIdExist("gildong") } returns false
+                every { userService.createUser(any()) } returns User(loginId = "gildong", name = "홍길동")
+
+                mockMvc.perform(
+                    post("/users/signup")
+                        .param("loginId", "gildong")
+                        .param("name", "홍길동")
+                        .param("email", "gildong@example.com")
+                        .param("password", "pass123")
+                        .param("retypedPassword", "pass123")
+                )
+                    .andExpect(status().is3xxRedirection)
+                    .andExpect(redirectedUrl("/users/loginform?signupSuccess"))
+
+                verify(exactly = 1) { userService.createUser(any()) }
             }
 
             it("아이디 형식이 올바르면(영문/숫자/한글/하이픈) 회원가입이 정상 진행되어야 한다") {

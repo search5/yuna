@@ -74,6 +74,55 @@ class NotificationControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isUnauthorized)
             }
+
+            // getLoginUser()의 orElseThrow — 인증 정보는 있지만 DB에 해당 로그인ID의 유저가 없는 경우.
+            it("인증은 됐지만 DB에 사용자가 없으면 401을 반환해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.empty()
+
+                mockMvc.perform(
+                    get("/api/notifications")
+                        .param("from", "0")
+                        .param("size", "10")
+                        .principal(auth)
+                )
+                    .andExpect(status().isUnauthorized)
+            }
+
+            // size<=0이면 pageIndex=0, pageSize=10 기본값으로 폴백해야 한다.
+            it("size가 0 이하이면 기본 페이지 크기(10)로 조회해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                val pageable = PageRequest.of(0, 10)
+                every { notificationEventRepository.findByReceiver(testUser, pageable) } returns PageImpl(emptyList())
+
+                mockMvc.perform(
+                    get("/api/notifications")
+                        .param("from", "5")
+                        .param("size", "0")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+            }
+
+            // event.id가 null이면 응답 DTO의 id는 기본값 0L이어야 한다.
+            it("이벤트 id가 없으면 응답 id는 0이어야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                val event = NotificationEvent(
+                    id = null,
+                    title = "제목", senderId = 2L, created = Instant.now(),
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "1", eventType = EventType.NEW_ISSUE
+                )
+                val pageable = PageRequest.of(0, 10)
+                every { notificationEventRepository.findByReceiver(testUser, pageable) } returns PageImpl(listOf(event))
+
+                mockMvc.perform(
+                    get("/api/notifications")
+                        .param("from", "0")
+                        .param("size", "10")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0].id").value(0))
+            }
         }
     }
 })

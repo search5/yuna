@@ -56,6 +56,23 @@ class RecentIssueServiceSpec : DescribeSpec({
             verify(exactly = 1) { recentIssueRepository.save(any()) }
         }
 
+        it("user.id가 없으면 아무 작업도 하지 않고 반환해야 한다") {
+            val noIdUser = User(id = null, loginId = "noid", name = "아이디없음")
+            val issue = Issue(id = 100L, title = "버그 리포트", project = project, number = 7L)
+
+            service.recordIssueVisit(noIdUser, issue)
+
+            verify(exactly = 0) { recentIssueRepository.save(any()) }
+        }
+
+        it("issue.id가 없으면 아무 작업도 하지 않고 반환해야 한다") {
+            val noIdIssue = Issue(id = null, title = "미저장 이슈", project = project, number = 8L)
+
+            service.recordIssueVisit(user, noIdIssue)
+
+            verify(exactly = 0) { recentIssueRepository.save(any()) }
+        }
+
         it("사용자당 100개를 초과하면 가장 오래된 항목부터 삭제해야 한다") {
             val issue = Issue(id = 999L, title = "새 이슈", project = project, number = 50L)
             every { recentIssueRepository.findByUserIdAndIssueId(10L, 999L) } returns Optional.empty()
@@ -102,6 +119,23 @@ class RecentIssueServiceSpec : DescribeSpec({
             verify(exactly = 1) { recentIssueRepository.delete(existing) }
             verify(exactly = 1) { recentIssueRepository.save(any()) }
         }
+
+        it("user.id가 없으면 아무 작업도 하지 않고 반환해야 한다") {
+            val noIdUser = User(id = null, loginId = "noid", name = "아이디없음")
+            val posting = Posting(id = 200L, title = "공지사항", project = project, number = 3L)
+
+            service.recordPostingVisit(noIdUser, posting)
+
+            verify(exactly = 0) { recentIssueRepository.save(any()) }
+        }
+
+        it("posting.id가 없으면 아무 작업도 하지 않고 반환해야 한다") {
+            val noIdPosting = Posting(id = null, title = "미저장 게시글", project = project, number = 4L)
+
+            service.recordPostingVisit(user, noIdPosting)
+
+            verify(exactly = 0) { recentIssueRepository.save(any()) }
+        }
     }
 
     describe("RecentIssueService.getRecentIssues") {
@@ -114,6 +148,12 @@ class RecentIssueServiceSpec : DescribeSpec({
 
             service.getRecentIssues(user) shouldBe list
         }
+
+        it("user.id가 없으면 빈 목록을 반환해야 한다") {
+            val noIdUser = User(id = null, loginId = "noid", name = "아이디없음")
+
+            service.getRecentIssues(noIdUser) shouldBe emptyList()
+        }
     }
 
     describe("RecentIssueService.deleteAll (P1-41)") {
@@ -123,6 +163,14 @@ class RecentIssueServiceSpec : DescribeSpec({
             service.deleteAll(user)
 
             verify(exactly = 1) { recentIssueRepository.deleteByUserId(10L) }
+        }
+
+        it("user.id가 없으면 아무 작업도 하지 않고 반환해야 한다") {
+            val noIdUser = User(id = null, loginId = "noid", name = "아이디없음")
+
+            service.deleteAll(noIdUser)
+
+            verify(exactly = 0) { recentIssueRepository.deleteByUserId(any()) }
         }
     }
 })

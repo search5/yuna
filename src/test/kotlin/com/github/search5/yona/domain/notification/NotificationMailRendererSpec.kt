@@ -54,6 +54,13 @@ class NotificationMailRendererSpec : DescribeSpec({
             html shouldContain "resource.type=BOARD_POST"
             html shouldContain "resource.id=42"
         }
+
+        // getMessage(code, args, locale) ?: "Unwatch" / ?: "Notification settings" 두 엘비스는
+        // 구조적으로 도달 불가능하다: MockK로 `every { messageSource.getMessage(...) } answers { null }`
+        // (와 `returns null`)을 시도했더니 Kotlin 컴파일러가 "Null cannot be a value of a non-null
+        // type 'String'"로 거부했다 — Spring MessageSource의 이 3-인자 오버로드는 Kotlin이 보는
+        // 시그니처상 non-null String을 반환하도록 선언돼 있어(누락 시 NoSuchMessageException을
+        // 던짐, null을 반환하지 않음), 실제로 null을 만들어낼 방법이 없다.
     }
 
     describe("renderPlain") {

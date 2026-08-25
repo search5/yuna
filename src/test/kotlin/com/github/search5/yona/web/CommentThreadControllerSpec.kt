@@ -140,5 +140,39 @@ class CommentThreadControllerSpec : DescribeSpec({
                 codeReviewService.updateThreadState(any(), any(), any())
             }
         }
+
+        // authentication?.let{}?.orElse(null) ?: return 401 — 인증 정보는 있지만 DB에서 사용자를
+        // 찾지 못하는 경우(탈퇴 등)도 401이어야 한다. 위쪽 "비로그인" 테스트는 authentication 자체가
+        // 없는 경우만 다뤘다.
+        it("인증 정보는 있지만 DB에 사용자가 없으면 401을 반환해야 한다") {
+            every { authentication.name } returns "ghost"
+            every { userRepository.findByLoginId("ghost") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/threads/100/open").principal(authentication)
+            )
+                .andExpect(status().isUnauthorized)
+
+            verify(exactly = 0) {
+                codeReviewService.updateThreadState(any(), any(), any())
+            }
+        }
+
+        // thread.project ?: return 404 — 스레드는 존재하지만 project가 없으면(연관관계 끊김 등) 404여야 한다.
+        it("스레드는 존재하지만 project가 없으면 404를 반환해야 한다") {
+            every { authentication.name } returns "mockuser"
+            every { userRepository.findByLoginId("mockuser") } returns Optional.of(user)
+            every { commentThreadRepository.findById(100L) } returns Optional.of(thread)
+            every { thread.project } returns null
+
+            mockMvc.perform(
+                post("/threads/100/open").principal(authentication)
+            )
+                .andExpect(status().isNotFound)
+
+            verify(exactly = 0) {
+                codeReviewService.updateThreadState(any(), any(), any())
+            }
+        }
     }
 })

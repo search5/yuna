@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -98,6 +99,97 @@ class NotificationEventRecorderSpec @Autowired constructor(
 
                 second shouldBe null
                 notificationEventRepository.count() shouldBe 0
+            }
+
+            // skipWaypoint=false의 else-if 조건이 false인 경우(정확한 원상복구가 아닌 중간 지점) —
+            // 병합/상쇄 없이 두 이벤트가 그대로 각각 저장돼야 한다.
+            it("skipWaypoint=false이고 정확히 되돌아오는 게 아니면 두 이벤트 모두 남아야 한다") {
+                val sender = userRepository.save(User(loginId = "sender6", name = "발신자6", email = "s6@yona.io"))
+                val receiver = userRepository.save(User(loginId = "receiver6", name = "수신자6", email = "r6@yona.io"))
+
+                recorder.record(eventOf(sender, receiver, "6", "", "sharer1"), skipWaypoint = false)
+                val second = recorder.record(eventOf(sender, receiver, "6", "sharer1", "sharer2"), skipWaypoint = false)
+
+                second shouldNotBe null
+                notificationEventRepository.count() shouldBe 2
+            }
+
+            // 직전 이벤트가 있어도(lastEvent != null) eventType이 다르면 무관한 이벤트로 취급해
+            // 병합/상쇄 없이 별도로 저장돼야 한다 — 3항 AND 조건의 두 번째 피연산자 false 분기.
+            it("직전 이벤트가 있어도 eventType이 다르면 병합하지 않고 각각 저장해야 한다") {
+                val sender = userRepository.save(User(loginId = "sender7", name = "발신자7", email = "s7@yona.io"))
+                val receiver = userRepository.save(User(loginId = "receiver7", name = "수신자7", email = "r7@yona.io"))
+
+                recorder.record(eventOf(sender, receiver, "7", "OPEN", "CLOSED"))
+                val differentTypeEvent = NotificationEvent(
+                    title = "다른 타입 이벤트", senderId = sender.id, created = Instant.now(),
+                    resourceType = ResourceType.ISSUE_POST, resourceId = "7",
+                    eventType = EventType.ISSUE_ASSIGNEE_CHANGED, oldValue = "a", newValue = "b",
+                    receivers = mutableSetOf(receiver)
+                )
+                val second = recorder.record(differentTypeEvent)
+
+                second shouldNotBe null
+                notificationEventRepository.count() shouldBe 2
+            }
+
+            // 직전 이벤트가 있고 eventType은 같아도 senderId가 다르면 무관한 이벤트로 취급해야 한다 —
+            // 3항 AND 조건의 세 번째 피연산자 false 분기.
+            it("직전 이벤트가 있어도 senderId가 다르면 병합하지 않고 각각 저장해야 한다") {
+                val sender1 = userRepository.save(User(loginId = "sender8a", name = "발신자8a", email = "s8a@yona.io"))
+                val sender2 = userRepository.save(User(loginId = "sender8b", name = "발신자8b", email = "s8b@yona.io"))
+                val receiver = userRepository.save(User(loginId = "receiver8", name = "수신자8", email = "r8@yona.io"))
+
+                recorder.record(eventOf(sender1, receiver, "8", "OPEN", "CLOSED"))
+                val second = recorder.record(eventOf(sender2, receiver, "8", "CLOSED", "REJECTED"))
+
+                second shouldNotBe null
+                notificationEventRepository.count() shouldBe 2
+            }
+
+            // skipWaypoint=true 병합 시 findByNotificationEvent(lastEvent)?.let{} 의 null 분기 —
+            // lastEvent에 연결된 메일이 이미 삭제돼 없는 상태에서 병합이 일어나도 예외 없이 진행돼야 한다.
+            it("skipWaypoint=true 병합 시 직전 이벤트의 메일이 이미 없어도 예외 없이 병합해야 한다") {
+                val sender = userRepository.save(User(loginId = "sender9", name = "발신자9", email = "s9@yona.io"))
+                val receiver = userRepository.save(User(loginId = "receiver9", name = "수신자9", email = "r9@yona.io"))
+
+                recorder.record(eventOf(sender, receiver, "9", "OPEN", "CLOSED"))
+                notificationMailRepository.deleteAll()
+
+                val second = recorder.record(eventOf(sender, receiver, "9", "CLOSED", "REJECTED"))
+
+                second shouldNotBe null
+                notificationEventRepository.count() shouldBe 1
+            }
+
+            // 원상복구(skipWaypoint=true, A->B->A) 상쇄 시 findByNotificationEvent(lastEvent)?.let{}
+            // 의 null 분기 — 마찬가지로 메일이 이미 없어도 예외 없이 상쇄돼야 한다.
+            it("정확히 원상복구되어 상쇄될 때 직전 이벤트의 메일이 이미 없어도 예외 없이 상쇄해야 한다") {
+                val sender = userRepository.save(User(loginId = "sender10", name = "발신자10", email = "s10@yona.io"))
+                val receiver = userRepository.save(User(loginId = "receiver10", name = "수신자10", email = "r10@yona.io"))
+
+                recorder.record(eventOf(sender, receiver, "10", "OPEN", "CLOSED"))
+                notificationMailRepository.deleteAll()
+
+                val second = recorder.record(eventOf(sender, receiver, "10", "CLOSED", "OPEN"))
+
+                second shouldBe null
+                notificationEventRepository.count() shouldBe 0
+            }
+
+            // skipWaypoint=false의 else-if 복합조건(event.oldValue == lastEvent.newValue &&
+            // event.newValue == lastEvent.oldValue)에서 좌변부터 이미 false인 경우(단락평가) —
+            // 위쪽 "정확히 되돌아오는 게 아니면" 테스트는 좌변이 true인 채로 우변만 false였으므로
+            // 좌변 자체가 false인 조합은 이 테스트에서 별도로 커버한다.
+            it("skipWaypoint=false이고 첫 값부터 직전 이벤트와 이어지지 않으면 두 이벤트 모두 남아야 한다") {
+                val sender = userRepository.save(User(loginId = "sender11", name = "발신자11", email = "s11@yona.io"))
+                val receiver = userRepository.save(User(loginId = "receiver11", name = "수신자11", email = "r11@yona.io"))
+
+                recorder.record(eventOf(sender, receiver, "11", "", "sharer1"), skipWaypoint = false)
+                val second = recorder.record(eventOf(sender, receiver, "11", "unrelated", "sharer3"), skipWaypoint = false)
+
+                second shouldNotBe null
+                notificationEventRepository.count() shouldBe 2
             }
         }
     }

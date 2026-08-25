@@ -3,7 +3,12 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.vcs.SvnRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpMethod
+import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockServletContext
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers
@@ -87,6 +92,25 @@ class SvnControllerSpec : DescribeSpec({
             result.response.status shouldBe 500
         }
 
+        // catch 블록의 `if (!response.isCommitted)` — DAVServlet이 예외를 던지기 전에 이미
+        // 응답을 커밋해버린 경우엔 sendError()를 또 호출하면 IllegalStateException이 나므로
+        // 건너뛰어야 한다. 실제 DAVServlet으로 이 순서를 자연스럽게 재현하기 어려워, 응답 객체를
+        // mock으로 대체해 isCommitted=true를 강제하고 controller.service()를 MockMvc 없이 직접
+        // 호출해서 검증한다.
+        it("예외 발생 시점에 응답이 이미 커밋되어 있으면 sendError를 다시 호출하지 않아야 한다") {
+            val baseDir = newTempBaseDir()
+            val controller = buildController(baseDir)
+
+            val request = MockHttpServletRequest("PROPFIND", "/svn/nouser/noproject")
+            request.addHeader("Depth", "0")
+            val response = mockk<HttpServletResponse>(relaxed = true)
+            every { response.isCommitted } returns true
+
+            controller.service(request, response)
+
+            verify(exactly = 0) { response.sendError(any()) }
+        }
+
         it("owner별로 DAVServlet 인스턴스를 캐시하면서도 서로 다른 owner의 저장소를 모두 정상 서빙해야 한다") {
             val baseDir = newTempBaseDir()
             val repoA = SvnRepository("ownerA", "projA", baseDir) { null }
@@ -150,6 +174,26 @@ class SvnControllerSpec : DescribeSpec({
 
             result.response.status shouldBe 207
             result.response.contentAsString.contains("hello.txt") shouldBe true
+        }
+
+        // serviceOptions()는 OPTIONS 요청을 service()로 그대로 위임하기만 한다 — 직접 호출로
+        // 위임 자체를 검증한다(MockMvc의 dispatchOptions 기본값이 false라 실제 라우팅으로는
+        // 도달시키기 어렵다는 점은 클래스 상단 주석 참고).
+        it("serviceOptions()는 service()로 그대로 위임해야 한다") {
+            val baseDir = newTempBaseDir()
+            val repo = SvnRepository("gildong4", "myproject4", baseDir) { null }
+            repo.create()
+            val controller = buildController(baseDir)
+
+            val request = MockHttpServletRequest("OPTIONS", "/svn/gildong4/myproject4")
+            request.addHeader("Depth", "0")
+            val response = org.springframework.mock.web.MockHttpServletResponse()
+
+            controller.serviceOptions(request, response)
+
+            // OPTIONS는 PROPFIND가 아니므로 207(Multi-Status)이 아니라 200으로 응답한다 —
+            // service()로 실제 위임됐다는 사실 자체가 검증 대상이다(오류 없이 정상 완료).
+            response.status shouldBe 200
         }
     }
 })

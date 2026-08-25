@@ -2,9 +2,13 @@ package com.github.search5.yona.domain.user
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import javax.naming.directory.Attribute
 import javax.naming.directory.Attributes
 import javax.naming.directory.BasicAttribute
 import javax.naming.directory.BasicAttributes
+import javax.naming.NamingException
 
 class LdapQueryBuilderSpec : DescribeSpec({
     describe("LdapQueryBuilder.guessUser") {
@@ -93,6 +97,63 @@ class LdapQueryBuilderSpec : DescribeSpec({
 
             result.displayName shouldBe ""
             result.email shouldBe ""
+        }
+
+        // englishNameProperty가 설정돼 있어도 값 자체가 공백뿐이면(첫 번째 takeIf) englishName은 null이어야 한다.
+        it("englishNameProperty가 공백 문자열이면 englishName을 채우지 않아야 한다") {
+            val result = LdapQueryBuilder.parseLdapUser(
+                attrs("displayName" to "홍길동", "mail" to "gildong@example.com", "sAMAccountName" to "gildong"),
+                displayNameProperty = "displayName", emailProperty = "mail",
+                loginProperty = "sAMAccountName", departmentProperty = "department", englishNameProperty = "   "
+            )
+
+            result.englishName shouldBe null
+        }
+
+        // englishNameProperty는 유효하지만 해당 속성의 실제 값이 공백이면(두 번째 takeIf) englishName은 null이어야 한다.
+        it("englishNameProperty에 대응하는 속성값이 공백이면 englishName을 채우지 않아야 한다") {
+            val result = LdapQueryBuilder.parseLdapUser(
+                attrs("displayName" to "홍길동", "mail" to "gildong@example.com", "sAMAccountName" to "gildong", "givenName" to "   "),
+                displayNameProperty = "displayName", emailProperty = "mail",
+                loginProperty = "sAMAccountName", departmentProperty = "department", englishNameProperty = "givenName"
+            )
+
+            result.englishName shouldBe null
+        }
+
+        // attributeString()의 attribute.get() ?: "" 엘비스 — 속성은 존재하지만 값 자체가 null인 경우.
+        it("속성은 존재하지만 값이 null이면 빈 문자열로 처리해야 한다") {
+            val nullValueAttribute = mockk<Attribute>()
+            every { nullValueAttribute.get() } returns null
+            val attributes = mockk<Attributes>()
+            every { attributes.get("displayName") } returns nullValueAttribute
+            every { attributes.get(any()) } returns null
+            every { attributes.get("displayName") } returns nullValueAttribute
+
+            val result = LdapQueryBuilder.parseLdapUser(
+                attributes,
+                displayNameProperty = "displayName", emailProperty = "mail",
+                loginProperty = "sAMAccountName", departmentProperty = "department", englishNameProperty = null
+            )
+
+            result.displayName shouldBe ""
+        }
+
+        // attributeString()의 try/catch — 값을 읽는 도중 예외가 발생하면 빈 문자열로 처리해야 한다.
+        it("속성값을 읽는 도중 예외가 발생하면 빈 문자열로 처리해야 한다") {
+            val throwingAttribute = mockk<Attribute>()
+            every { throwingAttribute.get() } throws NamingException("boom")
+            val attributes = mockk<Attributes>()
+            every { attributes.get(any()) } returns null
+            every { attributes.get("displayName") } returns throwingAttribute
+
+            val result = LdapQueryBuilder.parseLdapUser(
+                attributes,
+                displayNameProperty = "displayName", emailProperty = "mail",
+                loginProperty = "sAMAccountName", departmentProperty = "department", englishNameProperty = null
+            )
+
+            result.displayName shouldBe ""
         }
     }
 

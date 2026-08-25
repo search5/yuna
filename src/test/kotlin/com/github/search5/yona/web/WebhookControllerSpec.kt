@@ -70,6 +70,29 @@ class WebhookControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("webhooks"))
                     .andExpect(model().attributeExists("project"))
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+                mockMvc.perform(
+                    get("/projects/owner/nosuch/webhooks").principal(userAuth)
+                ).andExpect(status().isNotFound)
+            }
+
+            // project.id가 없으면(project.id ?: 0L) 0L로 조회해야 한다.
+            it("프로젝트 id가 없으면 0L로 웹훅을 조회한다") {
+                val noIdProject = Project(id = null, owner = "owner", name = "no-id-project")
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "no-id-project") } returns Optional.of(noIdProject)
+                every { accessControl.isAllowed(managerUser, noIdProject, Operation.UPDATE) } returns true
+                every { webhookService.findByProject(0L) } returns emptyList()
+
+                mockMvc.perform(
+                    get("/projects/owner/no-id-project/webhooks").principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { webhookService.findByProject(0L) }
+            }
         }
 
         describe("POST /projects/{owner}/{projectName}/webhooks") {
@@ -159,6 +182,85 @@ class WebhookControllerSpec : DescribeSpec({
 
                 verify(exactly = 0) { webhookService.createWebhook(any(), any(), any(), any(), any()) }
             }
+
+            // secret을 아예 생략하면(null) `!secret.isNullOrEmpty()`가 false가 되어 길이 검증
+            // 자체를 건너뛰는 분기를 태운다 — 기존 성공 테스트는 secret이 항상 비어있지 않았다.
+            it("secret을 생략해도(null) 정상적으로 웹훅을 등록한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
+                every {
+                    webhookService.createWebhook(project, "http://localhost:8080/hook", null, false, WebhookType.SIMPLE)
+                } returns webhook
+
+                mockMvc.perform(
+                    post("/projects/owner/test-project/webhooks")
+                        .param("payloadUrl", "http://localhost:8080/hook")
+                        .param("gitPush", "false")
+                        .param("webhookType", "SIMPLE")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify(exactly = 1) {
+                    webhookService.createWebhook(project, "http://localhost:8080/hook", null, false, WebhookType.SIMPLE)
+                }
+            }
+
+            // secret이 null이 아니라 명시적 빈 문자열이면 !secret.isNullOrEmpty()의 isEmpty() 쪽
+            // 하위 분기(null과는 다른 코드 경로)를 태운다 — 위쪽 "생략" 테스트는 null만 사용했다.
+            it("secret이 빈 문자열이면(null 아님) 길이 검증을 건너뛰고 정상 등록한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
+                every {
+                    webhookService.createWebhook(project, "http://localhost:8080/hook", "", false, WebhookType.SIMPLE)
+                } returns webhook
+
+                mockMvc.perform(
+                    post("/projects/owner/test-project/webhooks")
+                        .param("payloadUrl", "http://localhost:8080/hook")
+                        .param("secret", "")
+                        .param("gitPush", "false")
+                        .param("webhookType", "SIMPLE")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify(exactly = 1) {
+                    webhookService.createWebhook(project, "http://localhost:8080/hook", "", false, WebhookType.SIMPLE)
+                }
+            }
+
+            // webhookTypeStr이 WebhookType enum에 없는 값이면 catch로 떨어져 기본값 SIMPLE로
+            // 대체되는 분기를 태운다 — 기존 테스트는 항상 유효한 "SIMPLE" 값만 사용했다.
+            it("webhookType이 잘못된 값이면 기본값 SIMPLE로 대체해 등록한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
+                every {
+                    webhookService.createWebhook(project, "http://localhost:8080/hook", "secret", false, WebhookType.SIMPLE)
+                } returns webhook
+
+                mockMvc.perform(
+                    post("/projects/owner/test-project/webhooks")
+                        .param("payloadUrl", "http://localhost:8080/hook")
+                        .param("secret", "secret")
+                        .param("gitPush", "false")
+                        .param("webhookType", "NOT_A_REAL_TYPE")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().is3xxRedirection)
+
+                verify(exactly = 1) {
+                    webhookService.createWebhook(project, "http://localhost:8080/hook", "secret", false, WebhookType.SIMPLE)
+                }
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/projects/owner/nosuch/webhooks")
+                        .param("payloadUrl", "http://localhost:8080/hook")
+                        .param("webhookType", "SIMPLE")
+                        .principal(userAuth)
+                ).andExpect(status().isNotFound)
+            }
         }
 
         describe("DELETE /projects/{owner}/{projectName}/webhooks/{id}") {
@@ -173,6 +275,14 @@ class WebhookControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
 
                 verify(exactly = 1) { webhookService.deleteWebhook(10L) }
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+                mockMvc.perform(
+                    delete("/projects/owner/nosuch/webhooks/10").principal(userAuth)
+                ).andExpect(status().isNotFound)
             }
         }
 

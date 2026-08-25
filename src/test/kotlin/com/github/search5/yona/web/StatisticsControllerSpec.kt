@@ -64,6 +64,25 @@ class StatisticsControllerSpec : DescribeSpec({
                 .andExpect(jsonPath("$.issue").value(10))
                 .andExpect(jsonPath("$.posting").value(5))
         }
+
+        it("존재하지 않는 프로젝트면 error/404 뷰를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+            mockMvc.perform(
+                get("/projects/owner/nosuch/statistics")
+            )
+                .andExpect(status().isOk)
+                .andExpect(view().name("error/404"))
+        }
+
+        it("존재하지 않는 로그인ID면 404를 반환해야 한다") {
+            every { userRepository.findByLoginId("nosuch") } returns Optional.empty()
+
+            mockMvc.perform(
+                get("/-_-api/v1/users/nosuch/statistics")
+            )
+                .andExpect(status().isNotFound)
+        }
     }
 })
 

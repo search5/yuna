@@ -59,6 +59,27 @@ class RecentProjectRepositorySpec @Autowired constructor(
                 recent.size shouldBe 30
                 recent.none { it.projectName == "project-0" } shouldBe true
             }
+
+            // user.id ?: return — 아직 영속화되지 않아 id가 없는 User는 조용히 무시해야 한다
+            // (예외를 던지지 않고, 아무 기록도 남기지 않아야 한다).
+            it("user.id가 없으면(미영속) 아무 기록도 남기지 않고 조용히 무시해야 한다") {
+                val unsavedUser = User(loginId = "novisitor", name = "미영속유저", email = "novisitor@yona.io")
+                val project = projectRepository.save(Project(name = "project-noiduser", owner = "someone4"))
+
+                recentProjectRepository.recordVisit(unsavedUser, project)
+
+                recentProjectRepository.findAll().size shouldBe 0
+            }
+
+            // project.id ?: return — 아직 영속화되지 않아 id가 없는 Project는 조용히 무시해야 한다.
+            it("project.id가 없으면(미영속) 아무 기록도 남기지 않고 조용히 무시해야 한다") {
+                val user = userRepository.save(User(loginId = "visitor5", name = "방문자5", email = "visitor5@yona.io"))
+                val unsavedProject = Project(name = "unsaved-project", owner = "someone5")
+
+                recentProjectRepository.recordVisit(user, unsavedProject)
+
+                recentProjectRepository.findByUserId(user.id!!).size shouldBe 0
+            }
         }
     }
 }
