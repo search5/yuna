@@ -8,8 +8,13 @@ import io.mockk.mockk
 import io.mockk.mockkConstructor
 import io.mockk.unmockkConstructor
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.context.TestPropertySource
 import org.springframework.transaction.annotation.Transactional
+import org.testcontainers.containers.GenericContainer
+import org.testcontainers.containers.wait.strategy.Wait
+import org.testcontainers.images.builder.Transferable
 import javax.naming.AuthenticationException
 import javax.naming.CommunicationException
 import javax.naming.NamingException
@@ -18,18 +23,70 @@ import javax.naming.directory.InitialDirContext
 import javax.naming.directory.SearchResult
 import javax.naming.NamingEnumeration
 
+// LdapService.kt의 클래스 KDoc은 "이 저장소에 LDAP 테스트 서버가 없어 실제 바인딩 경로는
+// 단위테스트 대상에서 제외한다"고 적혀 있었으나, 2026-08-25 podman으로 실제 OpenLDAP을 띄워
+// 재현한 뒤 Testcontainers(GenericContainer)로 자동화했다 — 이제 실제 바인딩(InitialDirContext
+// 생성자의 LDAP simple bind)까지 커버한다. 생성자 자체는 mockkConstructor로 가로챌 수 없어서
+// (JNDI가 생성자 안에서 즉시 실제 bind를 수행) 실제 서버가 반드시 필요했다 — search() 결과만
+// 시나리오별로 mockkConstructor로 오버라이드해 세부 분기(검색결과 0/1/2건)를 만든다.
 @Transactional
 @TestPropertySource(properties = [
     "yuna.ldap.enabled=true",
-    "yuna.ldap.host=127.0.0.1",
-    "yuna.ldap.port=389",
     "yuna.ldap.protocol=ldap",
-    "yuna.ldap.base-dn=dc=yona,dc=io"
+    "yuna.ldap.base-dn=dc=yona,dc=io",
+    "yuna.ldap.dn-postfix=dc=yona,dc=io",
+    "yuna.ldap.login-property=uid",
+    "yuna.ldap.user-name-property=uid"
 ])
 class LdapServiceSpec @Autowired constructor(
     private val ldapService: LdapService,
     private val userRepository: UserRepository
 ) : AbstractIntegrationTest() {
+
+    companion object {
+        private val ldapContainer = GenericContainer("osixia/openldap:1.5.0").apply {
+            withExposedPorts(389)
+            withEnv("LDAP_ORGANISATION", "Yona")
+            withEnv("LDAP_DOMAIN", "yona.io")
+            withEnv("LDAP_ADMIN_PASSWORD", "admin")
+            withCopyToContainer(
+                Transferable.of(
+                    """
+                    dn: uid=testuser,dc=yona,dc=io
+                    objectClass: inetOrgPerson
+                    objectClass: posixAccount
+                    objectClass: shadowAccount
+                    uid: testuser
+                    cn: Test User
+                    sn: User
+                    givenName: Test
+                    mail: test@yona.io
+                    userPassword: password
+                    uidNumber: 10001
+                    gidNumber: 10001
+                    homeDirectory: /home/testuser
+                    """.trimIndent()
+                ),
+                "/tmp/testuser.ldif"
+            )
+            waitingFor(Wait.forListeningPort())
+        }
+
+        init {
+            ldapContainer.start()
+            val addResult = ldapContainer.execInContainer(
+                "ldapadd", "-x", "-D", "cn=admin,dc=yona,dc=io", "-w", "admin", "-f", "/tmp/testuser.ldif"
+            )
+            check(addResult.exitCode == 0) { "LDAP 테스트 유저 등록 실패: ${addResult.stderr}" }
+        }
+
+        @JvmStatic
+        @DynamicPropertySource
+        fun registerLdapProperties(registry: DynamicPropertyRegistry) {
+            registry.add("yuna.ldap.host") { ldapContainer.host }
+            registry.add("yuna.ldap.port") { ldapContainer.getMappedPort(389).toString() }
+        }
+    }
 
     init {
         describe("LdapService") {
@@ -97,7 +154,7 @@ class LdapServiceSpec @Autowired constructor(
                 val attrs = BasicAttributes()
                 attrs.put("displayName", "Test User")
                 attrs.put("mail", "test@yona.io")
-                attrs.put("sAMAccountName", "testuser")
+                attrs.put("uid", "testuser")
                 val mockResult = SearchResult("cn=test", null, attrs)
 
                 every { anyConstructed<InitialDirContext>().search(any<String>(), any<String>(), any()) } answers {

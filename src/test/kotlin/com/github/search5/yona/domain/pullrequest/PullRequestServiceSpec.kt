@@ -1689,22 +1689,27 @@ class PullRequestServiceSpec @Autowired constructor(
                 }.message shouldContain "Target branch"
             }
 
+            // 2026-08-25: 아래 3개는 원래 "IllegalArgumentException(Fetched source branch not found)"을
+            // 기대했으나, 위 1155~1161행 주석에서 이미 실험적으로 확인했듯 존재하지 않는 source ref로
+            // fetch를 시도하면 JGit FetchCommand가 그 자리에서 TransportException을 던져 즉시 실패하고
+            // (attemptMerge/previewMerge/merge 전부 동일 fetch 흐름 공유) IllegalArgumentException 분기
+            // 자체에 도달하지 못한다 — 기대 예외 타입이 처음부터 틀렸던 테스트라 실제 동작에 맞게 수정.
             it("attemptMerge - Source branch not found throws exception") {
                 val pr = pullRequestRepository.save(PullRequest(title = "Title", body = "Body", toProject = toProject, fromProject = fromProject, toBranch = "refs/heads/master", fromBranch = "refs/heads/invalid-source", contributor = contributor, receiver = receiver, created = Instant.now(), state = State.OPEN))
                 val toBareDir = repositoryService.getRepository(toProject).getDirectory()
                 val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
                 createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
 
-                io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                io.kotest.assertions.throwables.shouldThrow<org.eclipse.jgit.api.errors.TransportException> {
                     pullRequestService.attemptMerge(pr.id!!)
-                }.message shouldContain "Fetched source branch not found"
+                }
             }
 
             it("previewMerge - Source branch not found throws exception") {
                 val toBareDir = repositoryService.getRepository(toProject).getDirectory()
                 createCommit(toBareDir, "master", "test.txt", "hello", "init")
 
-                io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                io.kotest.assertions.throwables.shouldThrow<org.eclipse.jgit.api.errors.TransportException> {
                     pullRequestService.previewMerge(fromProject, toProject, "invalid-source", "refs/heads/master")
                 }
             }
@@ -1714,9 +1719,9 @@ class PullRequestServiceSpec @Autowired constructor(
                 val toBareDir = repositoryService.getRepository(toProject).getDirectory()
                 createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
 
-                io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                io.kotest.assertions.throwables.shouldThrow<org.eclipse.jgit.api.errors.TransportException> {
                     pullRequestService.merge(pr.id!!, receiver)
-                }.message shouldContain "Source head ref not found"
+                }
             }
 
             it("updatePullRequest - throws DuplicatedPullRequestException when duplicate exists") {

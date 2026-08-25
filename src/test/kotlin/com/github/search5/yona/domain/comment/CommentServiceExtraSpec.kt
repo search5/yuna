@@ -62,7 +62,7 @@ class CommentServiceExtraSpec @Autowired constructor(
             it("답글 생성 시 지정한 parentCommentId의 부모 댓글이 다른 자식이 없고 자기 자신만 있을 때") {
                 val author = userRepository.save(User(loginId = "exta1", name = "작성자"))
                 val replier = userRepository.save(User(loginId = "replier1", name = "답글러"))
-                val project = projectRepository.save(Project(name = "p1", owner = "exta1"))
+                val project = projectRepository.save(Project(name = "p1", owner = "exta1", projectScope = ProjectScope.PUBLIC))
                 val issue = issueRepository.save(Issue(title = "t1", project = project, authorId = author.id))
                 
                 val parentComment = commentService.createIssueComment(issue.id!!, "parent", author, null)
@@ -76,8 +76,8 @@ class CommentServiceExtraSpec @Autowired constructor(
             it("게시글에 두번째 최상위 댓글 달기") {
                 val author = userRepository.save(User(loginId = "exta2", name = "작성자"))
                 val author2 = userRepository.save(User(loginId = "exta22", name = "작성자2"))
-                val project = projectRepository.save(Project(name = "p2", owner = "exta2"))
-                val posting = postingRepository.save(Posting(title = "t2", project = project, number = 1L))
+                val project = projectRepository.save(Project(name = "p2", owner = "exta2", projectScope = ProjectScope.PUBLIC))
+                val posting = postingRepository.save(Posting(title = "t2", project = project, number = 1L, authorId = author.id))
                 
                 commentService.createPostingComment(posting.id!!, "first", author, null)
                 commentService.createPostingComment(posting.id!!, "second", author2, null)
@@ -90,8 +90,8 @@ class CommentServiceExtraSpec @Autowired constructor(
             it("게시글 답글 생성 시 지정한 parentCommentId의 부모 댓글이 다른 자식이 없고 자기 자신만 있을 때") {
                 val author = userRepository.save(User(loginId = "exta3", name = "작성자"))
                 val replier = userRepository.save(User(loginId = "replier3", name = "답글러"))
-                val project = projectRepository.save(Project(name = "p3", owner = "exta3"))
-                val posting = postingRepository.save(Posting(title = "t3", project = project, number = 1L))
+                val project = projectRepository.save(Project(name = "p3", owner = "exta3", projectScope = ProjectScope.PUBLIC))
+                val posting = postingRepository.save(Posting(title = "t3", project = project, number = 1L, authorId = author.id))
                 
                 val parentComment = commentService.createPostingComment(posting.id!!, "parent", author, null)
                 val reply = commentService.createPostingComment(posting.id!!, "reply", replier, parentComment.id)
@@ -164,15 +164,17 @@ class CommentServiceExtraSpec @Autowired constructor(
             }
             
             it("멘션에 게스트 계정이 포함된 경우 제외되어야 한다") {
-                val author = userRepository.save(User(loginId = "exta10", name = "작성자"))
-                val guest = userRepository.save(User(loginId = "guest1", name = "게스트", isGuest = true))
-                val project = projectRepository.save(Project(name = "p10", owner = "exta10"))
-                val issue = issueRepository.save(Issue(title = "t10", project = project, authorId = author.id))
-                
-                val c = commentService.createIssueComment(issue.id!!, "@guest1 님", author, null)
-                
-                val event = notificationEventRepository.findAll().maxByOrNull { it.id!! }
-                event?.receivers?.any { it.loginId == "guest1" } shouldBe false
+                // 2026-08-25: 기존엔 issue 작성자 본인이 직접 댓글을 달아 notificationEvent를 통해
+                // 검증하려 했으나, createIssueComment의 receivers.removeIf { it.id == author.id }가
+                // 댓글쓴이 본인을 항상 제거하기 때문에(baseWatchers가 issue 작성자=댓글쓴이 자기 자신뿐)
+                // 멘션이 게스트뿐이면 receivers가 완전히 비어 notificationEventRecorder.record()가
+                // null을 반환해(receivers.isEmpty() 분기) 이벤트 자체가 생성되지 않아 검증이 불가능했다
+                // — extractMentionedUsers()를 직접 호출해 게스트 제외 로직만 순수하게 검증한다.
+                userRepository.save(User(loginId = "guest1", name = "게스트", isGuest = true))
+
+                val mentioned = commentService.extractMentionedUsers("@guest1 님")
+
+                mentioned.any { it.loginId == "guest1" } shouldBe false
             }
             
             it("멘션된 owner/project에서 프로젝트가 존재하지 않는 경우 무시되어야 한다") {
@@ -186,9 +188,9 @@ class CommentServiceExtraSpec @Autowired constructor(
             it("이슈 이전 내용 인용 시 날짜 형식이 올바르게 처리되어야 한다 (formatShortDate)") {
                 val author = userRepository.save(User(loginId = "exta12", name = "작성자"))
                 val replier = userRepository.save(User(loginId = "replier12", name = "답글러"))
-                val project = projectRepository.save(Project(name = "p12", owner = "exta12"))
+                val project = projectRepository.save(Project(name = "p12", owner = "exta12", projectScope = ProjectScope.PUBLIC))
                 // updatedDate가 null인 이슈 강제 세팅
-                val issue = Issue(title = "t12", project = project, authorId = author.id, body = "body")
+                val issue = Issue(title = "t12", project = project, authorId = author.id, authorLoginId = author.loginId, body = "body")
                 issue.updatedDate = null
                 val savedIssue = issueRepository.save(issue)
                 

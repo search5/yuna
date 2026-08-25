@@ -58,12 +58,16 @@ class PasswordResetServiceSpec @Autowired constructor(
                 passwordResetService.addHashToResetTable(user.loginId, hash)
 
                 // 리플렉션으로 시간을 과거로 돌림
+                // Spring이 @Transactional 때문에 CGLIB 프록시를 Objenesis로 생성해(생성자/필드
+                // 초기화가 실행되지 않음) passwordResetService 자체에 리플렉션하면 프록시 껍데기의
+                // 초기화 안 된(null) 필드를 읽게 된다 — AopTestUtils로 실제 타겟 인스턴스를 언랩해야 한다.
+                val realService = org.springframework.test.util.AopTestUtils.getUltimateTargetObject<PasswordResetServiceImpl>(passwordResetService)
                 val serviceKClass = PasswordResetServiceImpl::class
                 val timetableField = serviceKClass.memberProperties.find { it.name == "resetHashTimetable" }
                 timetableField?.isAccessible = true
-                
+
                 @Suppress("UNCHECKED_CAST")
-                val timetable = timetableField?.getter?.call(passwordResetService) as ConcurrentHashMap<String, Long>
+                val timetable = timetableField?.getter?.call(realService) as ConcurrentHashMap<String, Long>
                 timetable[hash] = System.currentTimeMillis() - (3600 * 1000 + 1) // 1시간 초과
 
                 passwordResetService.isValidResetHash(hash) shouldBe false
