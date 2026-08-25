@@ -12,6 +12,24 @@
 - 버킷 D (INTENTIONAL_EXCLUDED): 4건
 - **버킷 A-보조(파일 단위, 라인범위 없음): 78건 중 69건 legacy 파일 존재 확인** — 아래 "알려진 방법론적 한계" 참고
 - **5단계 완료(2026-08-26)**: 버킷 A 중 GL-ID가 매치된 183건(86개 파일) 전부에 `[GL-NNNNN]` 병기 완료 — 182건 실제 삽입 + 1건 동일 위치 중복행이라 스킵. 컴파일(`compileKotlin`+`compileTestKotlin`) 확인 통과.
+- **버킷 B 사람 검토 완료(2026-08-26)**: 17건 전부 가짜 경보 확인 — 원인은 매칭 스크립트가 `PARITY_BACKLOG.md`의 `P0-P2` 티켓만 조회하고 `TEMPLATE_BACKLOG.md`의 `TASK-NNNN`/`그룹N #NNN` 형식 티켓은 조회하지 않았기 때문(TASK-0244/TASK-0263/그룹7 #119,125,127/그룹2 #39/그룹11 #168 전부 TEMPLATE_BACKLOG.md에서 `[x]` 완료 확인), 나머지 `P2-12`는 이후 `P1-86`으로 재분류된 옛 번호(완료). **실제 문제 0건.**
+- **버킷 C 자동 2차 필터링 + HIGH 영역 사람 검토 완료(2026-08-26)**: 1차로 "파일 자체가 yuna 어디에도 전혀 인용되지 않은" 429개 파일/2204개 심볼로 압축(부분 인용 파일의 나머지 1421개는 이미 그 클래스가 참조되고 있어 대부분 이식됐을 가능성이 높다고 보고 후순위로 미룸). 그중 계획 문서가 지정한 HIGH 우선순위(playRepository/validation/errors/service, 23개 파일 233개 심볼)를 3개 에이전트로 병렬 심볼 대조 검증. 결과는 아래 "HIGH 우선순위 검토 결과" 참고. 나머지 1934개(HIGH 외 영역)는 미검토.
+
+## HIGH 우선순위(playRepository/validation/errors/service) 사람 검토 결과 (233건 중 23개 클래스)
+
+**결론: 진짜 조치 검토 가치가 있는 건 2~3건뿐, 나머지는 이미 다른 구조로 이식됐거나 레거시 자체의 죽은 코드.**
+
+| Legacy | yuna 대응 | 판정 | 비고 |
+|---|---|---|---|
+| `ExConstraints.java` | 없음 | **진짜 공백** | 프로젝트명에 `.`/`..`/`.git` 등 예약 패턴을 막는 검증이 yuna에 전혀 없음(현재는 중복명 체크만 존재) — 파일시스템 경로 문제 소지 있어 실사용 영향 가능 |
+| `PullRequestCheck.java` | `GitPushHooks.kt`(삭제)+`PullRequestMergeEventListener`(재병합) | **부분 공백** | 브랜치 삭제 시 PR 정리는 이식됐으나, "브랜치 갱신→관련 PR 재검사" 트리거(`RelatedPullRequestMergeEvent` 발행)가 `src/main` 전체에 0건 — 핸들러는 있지만 실제 git push 경로에서 절대 호출 안 됨(테스트만 직접 호출하는 죽은 트리거) |
+| `BareRepository.java` | 없음(우회 구현만) | 공백(낮은 심각도) | README 탐색 전용 메서드들은 없지만 `getRawFile`로 기능적 우회 구현 존재 |
+| `GitBranch.java`(pullRequest 필드) | `GitBranch.kt`에 pullRequest 연결 없음 | 확인 필요 | 다른 항목보다 신뢰도 낮음(추가 검증 권장) |
+| `GitRepository.java`(35개 메서드) | **재검증으로 대부분 기각** | 신뢰 불가 | 담당 에이전트가 `GitRepository.kt` 파일 하나만 보고 전체 코드베이스를 검색하지 않아 생긴 오탐 — 직접 재확인한 `deleteFromBranch`/`cloneRepository` 2건이 이미 `PullRequestServiceImpl.kt`/`GitServiceImpl.kt`에 존재함을 확인. 나머지 33개도 같은 이유로 대부분 다른 파일에 흩어져 있을 가능성이 높아 이 목록 자체는 폐기, 재조사 필요 시 전체 코드베이스 검색으로 다시 수행할 것 |
+| `GitRef.java`/`VCSRef.java` | 없음 | 무시 가능 | legacy 자체에서도 정의 외 참조 0건(레거시 죽은 코드) — 이식 누락의 실무 영향 없음 |
+| `SVNRepository.java`,`RepositoryService.java`(분산: `GitService.kt`+`GitServletConfig.kt`),`PlayRepository.java`,`FileDiff.java`,`GitCommit.java`,`SvnCommit.java`,`Hunk.java`,`DiffLine.java`,`DiffLineType.java`,`IssueReferredFromCommitEvent.java`,`NotifyPushedCommits.java`,`ReceiveCommandUtil.java`,`RejectPushToReservedRefs.java`,`UpdateLastPushedDate.java`,`YonaUserServicePlugin.java`,`PullRequestException.java` | 각각 확인됨 | 완전/거의완전 대응 | 개별 상세 비고는 세션 기록 참고. `PullRequestException`은 전용 예외 타입 대신 `IOException`을 재사용(기능은 동일, 타입 구분만 약함 — 경미) |
+
+**미검토(다음 배치 대상)**: 나머지 1934건(HIGH 외 영역 — models/controllers/utils/data/mailbox/actions 등), 아직 자동 2차 필터의 "파일 자체 미인용" 단계까지만 거쳤고 사람 검토 전.
 
 ## 알려진 방법론적 한계 (2026-08-26 Sanity Check 중 발견)
 
