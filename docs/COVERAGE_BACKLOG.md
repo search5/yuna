@@ -193,6 +193,13 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 이번 배치 신규 실버그/죽은코드 없음
 - 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 5분 51초)
 
+## 진행 현황 갱신 (2026-08-25, 38차 배치 완료 후)
+
+- 추가 완료([x], 5개): `ImportForm`, `PostingForm`, `ReviewSearchCondition`, `Milestone`, `Mention` — 전부 LINE/BRANCH/METHOD 100% 완전 달성
+- 작업 방식: 배치37 검증 대기 중 배치38 포크를 동시 착수하는 파이프라이닝 계속. `ImportForm`/`PostingForm`은 각각 `ImportViewController.kt`/`BoardViewController.kt` 파일 안에 정의된 별개 최상위 클래스임을 확인 후 처리
+- 이번 배치 신규 실버그/죽은코드 없음
+- 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분 3초)
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -265,10 +272,10 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `OriginalEmail` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `OriginalEmailSpec.kt`로 프로퍼티 접근자(handledDate null 허용 포함) 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/mention** | | | | | | | | |
 | `MentionServiceImpl` | 100.0 | 90.5 | 100.0 | 0 | 2 | 0 | [i] | 2026-08-25: ISSUE_COMMENT 타입의 `resourceId.toLongOrNull()` null 분기 등 보강(LINE 100%, METHOD 100%, BRANCH 90.5%, 19/21). 잔여 미달 2건은 구조적 도달 불가 — (1) `when`문의 else 분기는 DB 조회가 이미 2개 리소스 타입(ISSUE_POST/ISSUE_COMMENT)으로만 필터링해 반환하므로 도달 불가, (2) `comment.issue.id?.let{}`의 null 분기는 실제 서비스에서 IssueComment가 항상 영속화된(id 존재) Issue를 참조해 실통합 테스트로 구성하기 비현실적으로 판단 |
-| `Mention` | 100.0 | 100.0 | 50.0 | 0 | 0 | 5 | [ ] | |
+| `Mention` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `MentionSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/milestone** | | | | | | | | |
 | `MilestoneServiceImpl` | 34.2 | 21.4 | 30.0 | 25 | 11 | 7 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `Milestone` | 100.0 | 100.0 | 64.3 | 0 | 0 | 5 | [ ] | |
+| `Milestone` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `MilestoneSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/notification** | | | | | | | | |
 | `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [x] | 2026-08-24: `NotificationMailDigestSchedulerSpec.kt`에 54 tests 추가(12→66). 전체 회귀 확정치: LINE 98.8%, BRANCH 98.3%, METHOD 100% — 목표 달성. 도달 불가능 3건 코드 근거 확정(User.name/Issue.project/Posting.project non-null 타입) |
 | `NotificationMessageResolver` | 40.2 | 41.4 | 60.0 | 67 | 92 | 4 | [x] | 2026-08-23: `NotificationMessageResolverSpec.kt`에 총 64 tests(246줄+잔여 15건). 단독 측정 LINE 100%, BRANCH 96.8%(152/157), METHOD 100% — 목표 달성. 도달 불가능 5건 확정(`ReviewComment.contents`/`User.name` non-null이라 elvis null분기 불가) |
@@ -335,7 +342,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `AbstractPosting` | 95.7 | 100.0 | 96.9 | 1 | 0 | 1 | [x] | 2026-08-25: 신규 `AbstractPostingSpec.kt`(구체 서브클래스 `Posting` 경유, `@MappedSuperclass` 추상 클래스라 직접 인스턴스화 불가)로 확보 완료(LINE 95.7%, BRANCH 100%, METHOD 96.9% — 목표 달성) |
 | `DatabaseInitializer` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `DatabaseInitializerSpec.kt`로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Property` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
-| `ReviewSearchCondition` | 100.0 | 100.0 | 75.0 | 0 | 0 | 5 | [ ] | |
+| `ReviewSearchCondition` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ReviewSearchConditionSpec.kt`(fluent setter/clone()/data class 자동생성 메서드 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Comment` | 100.0 | 100.0 | 68.8 | 0 | 0 | 5 | [ ] | |
 | **domain/user** | | | | | | | | |
 | `UserServiceImpl` | 21.3 | 9.4 | 31.6 | 74 | 29 | 13 | [x] | 2026-08-25: 비즈니스 로직 분기 테스트 확보 완료. |
@@ -449,6 +456,6 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `GlobalModelAttributeAdvice` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `GlobalModelAttributeAdviceSpec.kt`, `UsernamePasswordAuthenticationToken` 2-인자(authenticated=false 기본값) 대신 3-인자(authorities 포함) 생성자로 수정하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `MarkdownRenderRequest` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: `MarkdownControllerSpec.kt`에 data class 접근자 describe 블록 추가하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueMassUpdateForm` | 100.0 | 100.0 | 61.5 | 0 | 0 | 5 | [ ] | |
-| `ImportForm` | 100.0 | 100.0 | 77.4 | 0 | 0 | 7 | [ ] | |
+| `ImportForm` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ImportFormSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueForm` | 100.0 | 100.0 | 72.2 | 0 | 0 | 5 | [ ] | |
-| `PostingForm` | 100.0 | 100.0 | 72.7 | 0 | 0 | 6 | [ ] | |
+| `PostingForm` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PostingFormSpec.kt`(data class 자동생성 메서드 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
