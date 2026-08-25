@@ -179,6 +179,13 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 이번 배치 신규 실버그/죽은코드 없음
 - 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 5분 57초)
 
+## 진행 현황 갱신 (2026-08-25, 36차 배치 완료 후)
+
+- 추가 완료([x], 5개): `NotificationEvent`, `RecentProject`, `WebhookThread`, `Webhook`, `RecentIssue` — 전부 LINE/BRANCH/METHOD 100% 완전 달성. 잔여 `[ ]` 항목 대부분이 LINE/BRANCH는 이미 100%이고 METHOD만 낮은(Kotlin data/entity 클래스의 자동생성 getter/setter 미실행) 단순 패턴으로 확인돼, 이후 배치는 미실행 라인+분기 합계 대신 METHOD 미실행 개수 기준으로 우선순위를 재조정
+- 작업 방식: 포크 5개 병렬 위임(프로퍼티 접근자 테스트만 작성, gradle 미실행) → 메인 세션이 타겟 실행(RED/GREEN)+전체 스위트 검증
+- 이번 배치 신규 실버그/죽은코드 없음
+- 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 5분 49초)
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -239,7 +246,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `IssueEvent` | 100.0 | 100.0 | 61.1 | 0 | 0 | 7 | [ ] | |
 | `IssueLabel` | 100.0 | 100.0 | 83.3 | 0 | 0 | 2 | [ ] | |
 | `Assignee` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
-| `RecentIssue` | 100.0 | 100.0 | 56.2 | 0 | 0 | 7 | [ ] | |
+| `RecentIssue` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `RecentIssueSpec.kt`로 프로퍼티 접근자 및 nullable 필드(issueId/postingId) 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueLabelCategory` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [ ] | |
 | **domain/mail** | | | | | | | | |
 | `ImapMailboxPoller` | 32.4 | 44.0 | 35.0 | 121 | 65 | 13 | [i] | 2026-08-24: `ImapMailboxPollerSpec.kt`에 49 tests 추가(13→62). 전체 회귀 확정치: LINE 94.4%(근소 미달), BRANCH 100%, METHOD 100%. `start()`/`connect()`/`reopenFolder()`의 "실제 IMAP 접속 성공" 경로는 GreenMail류 임베디드 IMAP 서버 의존성이 없어 재현 불가(클래스 자체 KDoc에도 "순수 글루 코드라 단위테스트 제외" 명시) — 프로덕션 코드에 포트/팩토리 주입을 추가해야 가능하나 범위 밖 리팩터라 보류. 구조적 최대치로 인정 |
@@ -266,7 +273,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `NotificationMailRenderer` | 100.0 | 75.0 | 100.0 | 0 | 3 | 0 | [i] | 2026-08-25: 도달 가능한 분기는 이미 기존 테스트로 전부 커버됨을 확인. 잔여 3건은 `MessageSource.getMessage(code, args, locale)` 3-인자 오버로드가 Kotlin에서 non-null 반환 타입으로 선언돼 있어 null 반환을 mockk로 스텁하려 시도하면 컴파일 에러("Null cannot be a value of a non-null type")가 발생함을 직접 확인 — 구조적으로 도달 불가능한 방어적 null 분기로 판단 |
 | `NotificationCleanupScheduler` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 잔여 분기 보강(beforeTest clearMocks 누락 수정 포함)하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `NotificationMail` | 100.0 | 100.0 | 50.0 | 0 | 0 | 3 | [ ] | |
-| `NotificationEvent` | 100.0 | 100.0 | 58.3 | 0 | 0 | 10 | [ ] | |
+| `NotificationEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `NotificationEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/organization** | | | | | | | | |
 | `OrganizationServiceImpl` | 94.1 | 69.4 | 40.6 | 10 | 19 | 19 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `Organization` | 100.0 | 100.0 | 75.0 | 0 | 0 | 4 | [ ] | |
@@ -281,7 +288,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `UpdateProjectParam` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `UpdateProjectParamSpec.kt`로 data class 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `TitleHead` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `TitleHeadSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `ProjectUser` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
-| `RecentProject` | 100.0 | 100.0 | 35.7 | 0 | 0 | 9 | [ ] | |
+| `RecentProject` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `RecentProjectSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `ProjectTransfer` | 100.0 | 100.0 | 61.1 | 0 | 0 | 7 | [ ] | |
 | `Label` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
 | **domain/pullrequest** | | | | | | | | |
@@ -364,8 +371,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `WebhookServiceImpl` | 86.0 | 57.0 | 90.5 | 35 | 117 | 2 | [x] | 2026-08-23: WebhookServiceSpec.kt에 총 91 tests(24→60→91). 단독 측정 LINE 100%, BRANCH 95.2%(259/272), METHOD 100% — 목표 달성. javap 바이트코드 역어셈블로 도달 불가능 13건 확정(String.valueOf(long)/문자열템플릿/TuplesKt.to() 등 JDK/Kotlin 표준 라이브러리가 non-null을 보장하는 지점). non-null 타입 필드의 방어적 분기는 reflection으로 null을 강제 주입해 실제로 커버 |
 | `WebhookNotificationEventListener` | 96.7 | 77.8 | 100.0 | 1 | 8 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `WebhookRepository` | 33.3 | 100.0 | 50.0 | 2 | 0 | 1 | [i] | 2026-08-25: 신규 `WebhookRepositorySpec.kt`, mockk `callOriginal()`로 `existsByHash()` default 구현 자체(인터페이스 own 엔트리)는 LINE/METHOD 100% 확보. `javap`로 바이트코드 확인 결과 `existsByHash()`의 실제 구현은 인터페이스 자신에 컴파일된 default 메서드이고, `WebhookRepository$DefaultImpls.existsByHash()`는 구버전 바이너리 호환용으로만 생성되는 미러 메서드(`Interface.DefaultImpls.method(receiver, args)` 명시 호출 문법으로만 도달 가능)라 일반적인 `repository.existsByHash(...)` 호출로는 절대 실행되지 않음 — JaCoCo가 이 미러 클래스를 별도 집계해 결합 수치가 낮게 나오나 구조적으로 도달 불가로 인정 |
-| `Webhook` | 100.0 | 100.0 | 50.0 | 0 | 0 | 8 | [ ] | |
-| `WebhookThread` | 100.0 | 100.0 | 42.9 | 0 | 0 | 8 | [ ] | |
+| `Webhook` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `WebhookSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `WebhookThread` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `WebhookThreadSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **service** | | | | | | | | |
 | `MigrationService` | 8.0 | 0.0 | 9.1 | 219 | 130 | 20 | [x] | 2026-08-23: 신규 33 tests, `MigrationServiceSpec.kt`. 단독 측정 LINE 100%, METHOD 100%, BRANCH 97.7%(127/130). 나머지 3개는 `User.name`/`User.email`/`Assignee.user`가 non-null 타입이라 도달 불가능(구조적). **실버그 3건 발견(미수정, 별도 검토 필요)**: (1) `getMigrationProjects`가 owner null일 때 `full_name`에 문자열 템플릿으로 리터럴 "null/..."이 그대로 들어감(owner 필드 자체는 ""로 처리되는 것과 불일치), (2) `relativeLinksToWikiCommitPath`가 정규식 치환 람다에서 매치별 상대경로 대신 클로저로 캡처한 원본 `text` 전체를 위키링크 경로에 그대로 박아넣음, (3) `exportPosts`가 각 export 맵 엔트리 키로 "post" 대신 "issue"를 재사용하고 "id" 필드가 누락됨(exportIssues 복붙 흔적으로 보임) |
 | **util** | | | | | | | | |
