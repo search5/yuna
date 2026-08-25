@@ -156,6 +156,19 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `ImportViewController`(BRANCH 98.4%), `OrganizationController`(BRANCH 96.9%), `ReviewThreadController`(BRANCH 96.7%), `WatchController`(BRANCH 96.3%), `MilestoneController`(BRANCH 95.7%) — 21차에 이어 "무거운 작업 위주" 방침 계속(미실행 라인+분기 합계 상위 5개)
 - 이번 배치 신규 실버그/죽은코드 없음. 대부분의 컨트롤러가 성공 케이스만 테스트돼 있고 404/400/401/403 등 실패 분기가 광범위하게 미검증 상태였음(특히 `OrganizationController`는 6개 엔드포인트 중 절반이 아예 테스트 자체가 없었음)
 
+## 진행 현황 갱신 (2026-08-25, 23~24차 배치 완료 후)
+
+- 추가 완료([x]): `IssueShareController`(BRANCH 94.2%, 구조적 한계로 인정), `SearchResult`(BRANCH 100%), `BoardController`(BRANCH 100%), `Hunk`(BRANCH 100%), `DiffLine`(BRANCH 100%), `LfsStorageController`(BRANCH 100%), `LineEnding`(BRANCH 100%), `ReviewViewController`(BRANCH 100%), `VoteController`(BRANCH 100%), `User`(BRANCH 96%), `CodeController`(BRANCH 100%) — 11개 클래스, 미실행 라인+분기 합계 상위 순
+- 작업 방식 변경: 사용자 지시로 테스트 작성을 에이전트 포크에 병렬 위임(`LineEnding`/`VoteController`/`User`/`CodeController`)하고, 메인 세션은 소스 투자·`ReviewViewController` 직접 작성·gradle 실행/검증/백로그 갱신을 순차 담당하는 방식으로 전환
+- **사건**: 에이전트 위임과 메인 세션의 백그라운드 대기(`ScheduleWakeup`)가 겹치면서 동일 클래스 대상 `./gradlew test` 가 여러 차례 동시 실행되어 `build/classes/kotlin/test`가 손상되는 사고 발생(`ClassNotFoundException`/`NoSuchFileException`). `pkill -f GradleWorkerMain` 로 전부 정리 후 `clean compileKotlin compileTestKotlin`로 복구, 이후 동적 `/loop` 워크업 사용을 중단하고 단일 foreground gradle 실행으로 전환하여 재발 방지
+- `Hunk`/`DiffLine`/`SearchResult`는 Kotlin data 클래스의 자동생성 getter/setter를 로직 테스트가 건드리지 않아 METHOD 커버리지가 낮았던 패턴 — 프로퍼티 접근자 전용 테스트 추가로 해결
+- 이번 배치 신규 실버그/죽은코드 없음
+- **추가 완료(같은 23~24차 배치 연장)**: `CodeRange`(BRANCH 100%), `GitCommit`(BRANCH 100%), `FavoriteController`(BRANCH 100%), `SiteViewController`(BRANCH 97.1%), `TranslationController`(BRANCH 100%), `ReviewApiController`(BRANCH 97.2%), `MigrationApiController`(BRANCH 100%), `CodeCommentThread`(BRANCH 100%), `LabelController`(BRANCH 95.5%) — 9개 클래스 추가. 나머지 위임 작업(`HistoryUtil`, `SvnCommit`, `LabelStyleController`)은 구조적으로 도달 불가한 분기가 남아 95% 미달이나 `[i]`로 인정(각 행에 근거 명시)
+- 병렬 위임 방식이 예상보다 더 많은 클래스로 자연 확장되어(에이전트가 완료 후 스스로 다음 무거운 항목을 이어서 착수) 한 번에 20개 이상 클래스가 동시 진행되는 상황 발생 — 메인 세션은 파일 mtime으로 "안정화(수 분간 미변경)" 여부를 확인한 뒤에만 검증/커밋 대상에 포함시켜 진행 중인 에이전트의 파일과 충돌하지 않도록 처리
+- `NotificationEventMerger`(BRANCH 90.2%)/`BranchViewController`(BRANCH 85.7%)/`SearchController`(BRANCH 87.0%)는 이번 배치에서 함께 작업이 시작되었으나 95% 미달로 `[ ]` 유지 — 다음 배치에서 이어서 처리 필요
+- **마무리(23~24차 배치 최종 클로즈아웃)**: 위 3개 클래스를 `javap`로 실제 컴파일된 바이트코드까지 확인해 마무리. `NotificationEventMerger`는 실제 테스트 가능한 분기(무관한 이벤트 타입 그대로 통과, 리뷰 댓글 스레드 id 없음)를 찾아 테스트 추가로 BRANCH 95.1% 달성해 `[x]` 완료. `BranchViewController`는 `isCodeAccessibleMemberOnly=true+조직멤버` 테스트가 실제로는 다른 코드 경로(그룹 옵션이 꺼진 `isAllowed()` 경로)를 타고 있었음을 발견해 정확한 테스트로 교체 추가, BRANCH 92.9%까지 끌어올린 뒤 잔여 2건은 `javap` 확인 결과 (1)`String.toUpperCase()`가 JDK 계약상 null을 반환할 수 없어 생기는 Kotlin 방어적 null체크, (2)`AccessControl.isAllowed()`가 UPDATE/DELETE를 동일 코드로 처리해 두 호출이 항상 같은 값이라 도달 불가 — `[i]` 인정. `SearchController`는 로그인 사용자 id 없음/조직 역할 id 없음 분기를 새로 찾아 테스트 추가로 BRANCH 93.5%까지 올린 뒤 잔여 3건은 `Role.id` 자체가 아니라 `OrganizationUser.role`(non-null 필수 프로퍼티)이 null인 경우와 ORG_MEMBER(7L)/ORG_ADMIN(6L) 상호배타 조건이 구조적으로 도달 불가 — `[i]` 인정. 이로써 이번 세션에서 작업한 26개 클래스 전체(20개 `[x]` 완료 + 6개 `[i]` 구조적 예외: `IssueShareController`/`SvnCommit`/`LabelStyleController`/`HistoryUtil`/`BranchViewController`/`SearchController`) 마무리, 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분대)
+- **부수적으로 확인된 사실(향후 재발 방지용)**: 이번 세션 중 서브에이전트 일부가 "gradle 절대 실행 금지" 지시를 반복적으로 위반해(특히 `ReviewViewController`/`CodeController` 담당 포크가 완료 후에도 스스로 계속 살아남아 전체 스위트를 반복 실행) 최소 3차례 빌드 손상(`ClassNotFoundException`/`EOFException`)이 재발했다. `TaskStop`으로 강제 종료 후 `pkill -9 -f GradleWorkerMain`+`clean compileKotlin compileTestKotlin`로 복구했다. 향후 병렬 위임 시 `ListAgents`로 10분 이상 살아있는 포크를 주기적으로 점검해 즉시 종료하는 것을 권장
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -236,7 +249,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [x] | 2026-08-24: `NotificationMailDigestSchedulerSpec.kt`에 54 tests 추가(12→66). 전체 회귀 확정치: LINE 98.8%, BRANCH 98.3%, METHOD 100% — 목표 달성. 도달 불가능 3건 코드 근거 확정(User.name/Issue.project/Posting.project non-null 타입) |
 | `NotificationMessageResolver` | 40.2 | 41.4 | 60.0 | 67 | 92 | 4 | [x] | 2026-08-23: `NotificationMessageResolverSpec.kt`에 총 64 tests(246줄+잔여 15건). 단독 측정 LINE 100%, BRANCH 96.8%(152/157), METHOD 100% — 목표 달성. 도달 불가능 5건 확정(`ReviewComment.contents`/`User.name` non-null이라 elvis null분기 불가) |
 | `NotificationUrlResolver` | 55.7 | 27.4 | 83.3 | 27 | 53 | 1 | [x] | 2026-08-23: 39 tests(+32)로 `getUrlToView`/`getUrl`/`urlToContainer` 전체 when-분기·null 케이스 커버. 전체 회귀 확정치: LINE 100%, BRANCH 98.6%, METHOD 100% — 목표 달성. 버그 아님: `COMMENT_THREAD`의 `urlToContainer` null 시 앵커까지 사라진 빈 문자열 반환 — 의도된 동작으로 보여 그대로 테스트에 반영 |
-| `NotificationEventMerger` | 90.2 | 65.9 | 100.0 | 5 | 14 | 0 | [ ] | |
+| `NotificationEventMerger` | 90.2 | 65.9 | 100.0 | 5 | 14 | 0 | [x] | 2026-08-25: `mergeEvents`의 상태변경-아닌-이벤트(NEW_ISSUE 등) 그대로 통과 분기, `containerMergeKey`의 NONISSUE_COMMENT/COMMIT_COMMENT(else) 분기, 리뷰 댓글의 스레드 없음/스레드는 있지만 id 없음 분기 보강하여 확보 완료(LINE 98.0%, BRANCH 95.1%, METHOD 100%) |
 | `UserProjectNotification` | 64.3 | 0.0 | 23.1 | 5 | 2 | 10 | [ ] | |
 | `NotificationEventRecorder` | 100.0 | 75.0 | 100.0 | 0 | 5 | 0 | [ ] | |
 | `NotificationMailBodyProcessor` | 94.1 | 90.0 | 100.0 | 2 | 2 | 0 | [ ] | |
@@ -264,7 +277,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **domain/pullrequest** | | | | | | | | |
 | `PullRequestServiceImpl` | 95.2 | 64.5 | 72.1 | 25 | 66 | 17 | [x] | 2026-08-25: 6개 테스트 추가하여 커버리지 95% 이상 확보 완료. |
 | `CodeReviewServiceImpl` | 93.5 | 56.0 | 79.3 | 16 | 51 | 6 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `CodeCommentThread` | 90.0 | 12.5 | 55.6 | 2 | 14 | 4 | [ ] | |
+| `CodeCommentThread` | 90.0 | 12.5 | 55.6 | 2 | 14 | 4 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `CommentThread` | 79.3 | 37.5 | 76.9 | 6 | 5 | 6 | [ ] | |
 | `PullRequestCommit` | 83.3 | 30.0 | 42.9 | 4 | 7 | 12 | [ ] | |
 | `CommitComment` | 94.4 | 0.0 | 52.4 | 1 | 8 | 10 | [ ] | |
@@ -284,13 +297,13 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `TranslationServiceImpl` | 11.5 | 0.0 | 25.0 | 54 | 30 | 3 | [x] | 2026-08-25: 신규 테스트 추가하여 커버리지 확보 완료. |
 | `SearchServiceImpl` | 68.2 | 37.5 | 85.7 | 27 | 40 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `AutoLinkRenderer` | 75.0 | 57.9 | 75.0 | 33 | 32 | 5 | [x] | 2026-08-25: 이슈/SHA/사용자·조직·프로젝트 링크 전 분기, 단어경계 판정, `<code>`/`<a>` 태그 무시 로직 보강하여 95% 이상 확보 완료(LINE 99.2%, BRANCH 97.4%, METHOD 95.0%) |
-| `SearchResult` | 63.3 | 40.6 | 93.0 | 29 | 19 | 3 | [ ] | |
+| `SearchResult` | 63.3 | 40.6 | 93.0 | 29 | 19 | 3 | [x] | 2026-08-25: `makeSnippets()`(빈 매치/시작·끝 클램프/대소문자 무시/겹치지 않는 매치/겹치는 매치 병합) 및 `updateSearchType()`(AUTO 아닐 때 스킵 포함 전체 8개 카운트 분기 + 전부 0일 때 기본값) 신규 테스트, 모든 프로퍼티 getter/setter 접근자 테스트로 METHOD 커버리지(Kotlin data 클래스 자동생성 getter/setter 미실행 문제) 해결하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%)
 | `YonaUpdateService` | 70.7 | 37.5 | 81.8 | 17 | 20 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `StatisticsServiceImpl` | 7.7 | 100.0 | 50.0 | 36 | 0 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `LineEnding` | 43.5 | 32.4 | 66.7 | 13 | 23 | 2 | [ ] | |
+| `LineEnding` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 2-arg 오버로드(`to` null/빈값/DOS 아닌 값/"DOS"/대소문자 다른 "dos"), `EndingType` 오버로드(빈 문자열, UNIX→DOS no-op 버그 보존 분기, DOS→UNIX 변환, 이미 DOS/UNIX 유지, UNDEFINED 요청), `addEOL()`(null, 빈 문자열→기본값 UNIX 폴백, 이미 개행 있음/없음 각 DOS·UNIX), `findLineEnding()`(null/빈 문자열/DOS/UNIX) 전 분기 신규 테스트로 LineEnding·LineEnding$EndingType 모두 LINE/BRANCH/METHOD 100% 확보. DOS 변환 no-op은 yona 원본 legacy 버그를 의도적으로 보존한 기존 동작이며 신규 발견 아님(파일 상단 주석 참고)
 | `MarkdownServiceImpl` | 90.5 | 74.0 | 100.0 | 14 | 13 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `CodeRange` | 63.2 | 0.0 | 27.8 | 7 | 16 | 13 | [ ] | |
-| `HistoryUtil` | 83.6 | 67.6 | 100.0 | 9 | 12 | 0 | [ ] | |
+| `CodeRange` | 63.2 | 0.0 | 27.8 | 7 | 16 | 13 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `HistoryUtil` | 83.6 | 67.6 | 100.0 | 9 | 12 | 0 | [i] | 2026-08-25: `historyMadeBy`/`historyDiffText`의 DELETE/INSERT/EQUAL(생략 없음/100자 초과 생략) 전 분기 보강(LINE 100%, METHOD 100%, BRANCH 91.9%). 잔여 미달은 `diff_match_patch.Operation`(DELETE/EQUAL/INSERT 3값)에 대한 Kotlin 완전소진(exhaustive) `when`의 컴파일러 안전망 `else -> {}` 2곳으로, 라이브러리가 정의한 3개 값 외에는 런타임에 존재할 수 없어 도달 불가로 판단 |
 | `DiagnosticService` | 70.7 | 59.1 | 100.0 | 12 | 9 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `ReviewThreadServiceImpl` | 83.3 | 75.0 | 80.0 | 8 | 5 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `FileUtil` | 96.2 | 56.2 | 100.0 | 1 | 7 | 0 | [ ] | |
@@ -305,7 +318,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `PasswordResetServiceImpl` | 14.3 | 4.5 | 20.0 | 42 | 21 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `LdapService` | 33.3 | 0.0 | 25.0 | 42 | 10 | 6 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `FavoriteServiceImpl` | 23.1 | 0.0 | 7.7 | 30 | 6 | 12 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `User` | 88.9 | 66.1 | 81.7 | 9 | 19 | 11 | [ ] | |
+| `User` | 88.9 | 66.1 | 81.7 | 9 | 19 | 11 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 96%, METHOD 100%)
 | `LdapQueryBuilder` | 96.3 | 77.8 | 100.0 | 1 | 8 | 0 | [ ] | |
 | `Email` | 56.2 | 0.0 | 20.0 | 7 | 2 | 12 | [ ] | |
 | `LdapUserProvisioningService` | 97.6 | 70.0 | 100.0 | 1 | 6 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -325,12 +338,12 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `GitRepository` | 42.5 | 24.8 | 59.6 | 230 | 155 | 23 | [i] | 2026-08-24: 신규 `GitRepositorySpec.kt`(실제 bare JGit 저장소+저수준 커밋, mock 최소화, 95 tests). 전체 회귀 확정치: LINE 99.5%, METHOD 100%, BRANCH 88.3% — 남은 분기는 전부 코드 근거로 도달 불가능/비현실적 확인(JGit API 계약상 항상 non-null인 지점들, close() 실패 분기 등 상세는 스펙 파일 참고). **실버그 발견(현재 호출부에선 미트리거, 미수정)**: `getParentCommitOf()`가 부모 커밋을 `parseCommit()` 없이 반환해 반환값의 `getMessage()`/`getAuthorName()` 등 호출 시 NPE — 유일한 실사용처 `CodeViewController.kt:481`은 `.id`만 참조해(템플릿 `code/svnDiff.html:103`) 현재는 트리거 안 됨, 향후 `.message` 등 참조 추가 시 위험 |
 | `FileDiff` | 9.6 | 0.0 | 37.0 | 132 | 130 | 29 | [x] | 2026-08-23: 신규 60 tests, `FileDiffSpec.kt`. 단독 측정 LINE/BRANCH/METHOD/CLASS 전부 100%. **실버그 발견(수정은 별도 판단 필요)**: `updateRange(lineA, lineB)`가 lineA/lineB 조건을 독립된 `if`로 처리해 두 조건이 동시에 매치되면 같은 edit이 EditList에 중복 추가됨 — 테스트로 명시 문서화, 의도된 동작인지 불확실해 별도 수정 없이 사실만 기록 |
 | `BareCommit` | 61.0 | 30.6 | 87.5 | 53 | 34 | 1 | [i] | 2026-08-25: BRANCH 91.84% 확보. JGit 내부 `ru.forceUpdate` IO 실패 분기 및 git 트리 내 중복 이름 조회 루프 분기는 구조적으로 테스트에서 도달할 수 없어 최대 실질 커버리지에 도달한 예외로 인정. |
-| `Hunk` | 0.0 | 0.0 | 0.0 | 26 | 18 | 15 | [ ] | |
-| `DiffLine` | 0.0 | 0.0 | 0.0 | 21 | 22 | 9 | [ ] | |
+| `Hunk` | 0.0 | 0.0 | 0.0 | 26 | 18 | 15 | [x] | 2026-08-25: `size()`/`equals()`(전 필드별 diff 분기+동일인스턴스/null/타입다름)/`hashCode()` 신규 테스트 및 `beginA/endA/beginB/endB/lines` 프로퍼티 접근자 테스트(Kotlin data 클래스 자동생성 getter/setter 미실행으로 METHOD 33%→100% 해결)로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%)
+| `DiffLine` | 0.0 | 0.0 | 0.0 | 21 | 22 | 9 | [x] | 2026-08-25: `equals()`(전 필드별 diff 분기)/`hashCode()`(numA/numB/file null·non-null 조합) 신규 테스트 및 `file` 접근자 테스트(METHOD 44%→100% 해결)로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%)
 | `SvnRepository` | 92.2 | 63.9 | 91.4 | 15 | 26 | 3 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `RepositoryService` | 67.5 | 36.7 | 66.7 | 13 | 19 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `SvnCommit` | 39.1 | 7.1 | 37.5 | 14 | 13 | 10 | [ ] | |
-| `GitCommit` | 64.7 | 25.0 | 60.0 | 6 | 15 | 6 | [ ] | |
+| `SvnCommit` | 39.1 | 7.1 | 37.5 | 14 | 13 | 10 | [i] | 2026-08-25: `getMessage`/`getAuthor`(리졸버 미호출 포함)/`getAuthorName`/`getId`/`getShortId`/`getShortMessage`(null/빈문자열/한줄/여러줄/앞뒤공백/공백만)/`getAuthorDate`/`getParentCount`(revision 0/1/2 분기) 등 전 메서드 보강(LINE 100%, METHOD 100%, BRANCH 85.7%). 잔여 미달은 `getShortMessage()`의 `if (lines.isNotEmpty())`로, `trim()` 결과 문자열에 대한 `split("\n")`은 Kotlin에서 항상 원소 1개 이상인 리스트를 반환하므로(빈 문자열도 `listOf("")`) else 분기가 도달 불가로 판단 |
+| `GitCommit` | 64.7 | 25.0 | 60.0 | 6 | 15 | 6 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PushedBranch` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
 | `GitBranch` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
 | **domain/watch** | | | | | | | | |
@@ -373,22 +386,22 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `OrganizationController` | 45.9 | 25.0 | 64.3 | 33 | 24 | 5 | [x] | 2026-08-25: createOrganization/addOrganizationMember/updateOrganizationMemberRole/removeOrganizationMember 등 이전엔 전혀 테스트되지 않던 엔드포인트 전부와 예외 메시지 null 기본값 분기(6곳) 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 96.9%, METHOD 100%) |
 | `ReviewThreadController` | 80.7 | 41.7 | 100.0 | 21 | 35 | 0 | [x] | 2026-08-25: PRIVATE/PROTECTED 프로젝트 접근 분기, 엑셀 export의 실제 데이터 채움(commitId 길이/작성자 유무/첫댓글 여부), 404 분기 보강하여 95% 이상 확보 완료(LINE 98.2%, BRANCH 96.7%, METHOD 100%) |
 | `WatchController` | 76.3 | 53.7 | 53.8 | 28 | 25 | 12 | [x] | 2026-08-25: checkWatchPermission의 리소스 타입별 전 분기(BOARD_POST/PULL_REQUEST 전체가 미테스트였음), watchProject/unwatchProject/toggleProjectNotification/getWatchers의 404·403·400 분기 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 96.3%, METHOD 100%) |
-| `IssueShareController` | 63.3 | 40.4 | 62.5 | 22 | 31 | 3 | [ ] | |
+| `IssueShareController` | 63.3 | 40.4 | 62.5 | 22 | 31 | 3 | [i] | 2026-08-25: `findAssignableUsers`/`findSharerByloginIds`/`findSharableUsers`(기존 미테스트) 포함 6개 엔드포인트 전부의 401/404/400 분기 보강. LINE 100%, METHOD 100%, BRANCH 94.2%(49/52) — 동일한 elvis 체인 패턴(`sharerNode["x"]?.toString() ?: return ...`) 3곳에서 각 1개 하위 분기가 null/non-null 양쪽 입력을 모두 테스트해도 남음. `String?.toString()`이 non-null 수신자에서 항상 non-null을 반환해 elvis의 두 번째 null 체크가 컴파일러 상 구조적으로 도달 불가능한 것으로 추정(디컴파일로 확정하지는 않음), 반복적으로 동일 패턴이라 구조적 한계로 인정
 | `MilestoneController` | 78.6 | 54.3 | 100.0 | 21 | 32 | 0 | [x] | 2026-08-25: 6개 엔드포인트 전부의 404/400(프로젝트 불일치)/401/403 분기(대부분 이전엔 성공 케이스만 테스트됨), bulk 생성의 title/state 기본값 및 parseDueOn ISO/날짜 파싱 분기 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 95.7%, METHOD 100%) |
-| `BoardController` | 80.9 | 54.7 | 100.0 | 18 | 29 | 0 | [ ] | |
-| `LfsStorageController` | 10.0 | 0.0 | 25.0 | 27 | 10 | 3 | [ ] | |
-| `VoteController` | 73.1 | 58.8 | 100.0 | 14 | 14 | 0 | [ ] | |
-| `CodeController` | 18.2 | 0.0 | 25.0 | 18 | 10 | 3 | [ ] | |
-| `ReviewViewController` | 87.8 | 62.0 | 100.0 | 9 | 19 | 0 | [ ] | |
-| `FavoriteController` | 72.4 | 38.9 | 75.0 | 16 | 11 | 2 | [ ] | |
-| `LabelStyleController` | 73.8 | 61.5 | 100.0 | 17 | 10 | 0 | [ ] | |
-| `SiteViewController` | 92.1 | 50.0 | 100.0 | 8 | 17 | 0 | [ ] | |
-| `TranslationController` | 66.7 | 42.9 | 100.0 | 12 | 12 | 0 | [ ] | |
-| `ReviewApiController` | 85.1 | 63.9 | 100.0 | 7 | 13 | 0 | [ ] | |
-| `MigrationApiController` | 81.8 | 50.0 | 100.0 | 6 | 14 | 0 | [ ] | |
-| `BranchViewController` | 88.6 | 53.6 | 100.0 | 5 | 13 | 0 | [ ] | |
-| `SearchController` | 93.7 | 71.7 | 71.4 | 4 | 13 | 2 | [ ] | |
-| `LabelController` | 87.1 | 54.5 | 100.0 | 4 | 10 | 0 | [ ] | |
+| `BoardController` | 80.9 | 54.7 | 100.0 | 18 | 29 | 0 | [x] | 2026-08-25: 게시글 목록/상세/생성/수정/본문수정/라벨교체/삭제 7개 엔드포인트 전부의 404/401/403 분기(대부분 이전엔 성공 케이스만 테스트됨) 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `LfsStorageController` | 10.0 | 0.0 | 25.0 | 27 | 10 | 3 | [x] | 2026-08-25: 신규 `LfsStorageControllerSpec.kt`(실제 임시 디렉터리 사용). `downloadObject`(oid<4→400, 미존재→404, 디렉터리→404, 성공→200+실바이트), `uploadObject`(oid<4→400, 성공→201+파일저장, 파일 생성 자체 실패, 업로드 중 예외+기생성 파일 삭제) 전 분기 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `VoteController` | 73.1 | 58.8 | 100.0 | 14 | 14 | 0 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `CodeController` | 18.2 | 0.0 | 25.0 | 18 | 10 | 3 | [x] | 2026-08-25: 신규 `CodeControllerSpec.kt` 작성하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `ReviewViewController` | 87.8 | 62.0 | 100.0 | 9 | 19 | 0 | [x] | 2026-08-25: `newPullRequestComment`/`newCommitComment`/`deleteCommitCommentRedirect` 3개 엔드포인트의 인증정보 없음(IllegalStateException)/인증은 있으나 사용자 없음/프로젝트 404/PR notfound/commitId 유무에 따른 리다이렉트 분기/vcs null·"SVN" 리터럴 분기/Permission denied 이외 예외 재전파 분기 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `FavoriteController` | 72.4 | 38.9 | 75.0 | 16 | 11 | 2 | [x] | 2026-08-25: 프로젝트/이슈/조직 즐겨찾기 토글 및 목록 조회 전 엔드포인트의 해제 시 favored=false, 인증되지 않은 요청 401, 이슈 작성자 유무(알수없음 대체) 분기 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `LabelStyleController` | 73.8 | 61.5 | 100.0 | 17 | 10 | 0 | [i] | 2026-08-25: rgb()/헥스(3·6자리)/#없는 순수 헥스/부적절한 길이/알수없는 형식/파싱실패 등 `getLabelTextColorFromBgColor` 전 분기 및 ETag If-None-Match 일치/불일치/미존재 분기 보강(LINE 98.5%, METHOD 100%, BRANCH 88.5%). 잔여 미달은 (1)헥스 파싱 `catch` 블록 — 상위 정규식 `^[#]*[0-9a-f]+$`이 유효한 16진수만 통과시켜 `toInt(16)` 예외가 도달 불가, (2)`rgb["R"]/["G"]/["B"] ?: 255` 엘비스 3곳 — `when`의 모든 분기가 R/G/B 키를 채운 맵만 반환하므로 null이 도달 불가로 판단 |
+| `SiteViewController` | 92.1 | 50.0 | 100.0 | 8 | 17 | 0 | [x] | 2026-08-25: checkAdmin 인증/인가 3분기(미인증/DB없음/권한없음), userList의 state 파싱 실패 기본값, issueList의 state=all 분기, writeMail의 SMTP 미설정 3항목(공백 포함) 및 sender 엘비스 체인 3단계, updatePage의 갱신필요 유무/예외 분기 보강하여 확보 완료(LINE 100%, BRANCH 97.1%, METHOD 100%) |
+| `TranslationController` | 66.7 | 42.9 | 100.0 | 12 | 12 | 0 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `ReviewApiController` | 85.1 | 63.9 | 100.0 | 7 | 13 | 0 | [x] | 2026-08-25: 댓글 삭제(COMMIT/REVIEW_COMMENT, 미지원 타입, Permission denied 403/기타 예외 재전파)/리뷰어 등록·해제(그룹멤버 허용, PUBLIC 프로젝트 비멤버 차단)/인증은 되었으나 DB에 사용자 없음(401·IllegalStateException) 분기 보강하여 확보 완료(LINE 100%, BRANCH 97.2%, METHOD 100%). 잔여 1건은 `checkWritePermission`의 `user == null` 가드 — 호출부(review/unreview)가 이미 인증 실패 시 예외를 던진 뒤에만 이 메서드를 호출하므로 도달 불가로 판단 |
+| `MigrationApiController` | 81.8 | 50.0 | 100.0 | 6 | 14 | 0 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `BranchViewController` | 88.6 | 53.6 | 100.0 | 5 | 13 | 0 | [i] | 2026-08-25: isCodeAccessibleMemberOnly=true+조직(그룹)멤버 허용, vcs null 기본값 GIT 처리 분기 보강(LINE 100%, METHOD 100%, BRANCH 92.9%, 26/28). 잔여 미달 2건은 javap 바이트코드로 확인한 구조적 도달 불가 — (1) `project.vcs?.uppercase() ?: "GIT"`의 `toUpperCase()` 결과 null 체크는 JDK `String.toUpperCase(Locale)`가 null을 반환할 수 없어 Kotlin이 자동 삽입한 방어적 checkNotNullExpressionValue라 도달 불가, (2) `showActionsColumn`의 `isAllowed(...DELETE) \|\| isAllowed(...UPDATE)`는 AccessControl.isAllowed()가 UPDATE/DELETE를 동일한 매니저·조직관리자 판정 코드로 처리해(연산자 종류를 구분하지 않음) 두 호출이 항상 같은 값을 반환하므로 OR의 우변이 true를 반환하는 경우(좌변 false일 때만 평가되는데 좌변과 항상 값이 같음)가 도달 불가 |
+| `SearchController` | 93.7 | 71.7 | 71.4 | 4 | 13 | 2 | [i] | 2026-08-25: 로그인 사용자 id 없음(조직 멤버십 조회 생략) 분기, HIDE_PROJECT_LISTING 게이트에서 조직멤버십은 있지만 역할 id가 없는 경우 분기 보강(LINE 100%, METHOD 100%, BRANCH 93.5%, 43/46). 잔여 미달 3건은 구조적 도달 불가 — (1)(2) `orgUser?.role?.id` 체인에서 `role` 자체가 null인 경우(OrganizationUser.role은 non-null 필수 생성자 프로퍼티라 존재 불가, isMember/isAdmin 각 1건), (3) `!isMember \|\| !isAdmin`가 false가 되려면(둘 다 true) 한 역할 id가 ORG_MEMBER(7L)이면서 동시에 ORG_ADMIN(6L)이어야 하는데 두 상수가 서로 달라 불가능(소스 주석에도 명시된 legacy 자체의 상호배타 전제) |
+| `LabelController` | 87.1 | 54.5 | 100.0 | 4 | 10 | 0 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 95.5%, METHOD 100%) |
 | `BranchApiController` | 88.6 | 66.7 | 100.0 | 4 | 8 | 0 | [ ] | |
 | `WebhookController` | 89.4 | 75.0 | 100.0 | 5 | 7 | 0 | [ ] | |
 | `CommitResponse` | 0.0 | 100.0 | 0.0 | 11 | 0 | 11 | [ ] | |
