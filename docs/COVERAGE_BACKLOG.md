@@ -186,6 +186,13 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 이번 배치 신규 실버그/죽은코드 없음
 - 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 5분 49초)
 
+## 진행 현황 갱신 (2026-08-25, 37차 배치 완료 후)
+
+- 추가 완료([x], 5개): `PullRequestEvent`, `PullRequest`, `ProjectTransfer`, `OriginalEmail`, `IssueEvent` — 전부 LINE/BRANCH/METHOD 100% 완전 달성
+- 작업 방식: 포크 5개 병렬 위임(프로퍼티 접근자 테스트만 작성, gradle 미실행) → 메인 세션이 타겟 실행(RED/GREEN)+전체 스위트 검증. 배치36 검증 대기 중 배치37 포크를 동시에 착수하는 방식으로 파이프라이닝
+- 이번 배치 신규 실버그/죽은코드 없음
+- 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 5분 51초)
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -243,7 +250,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `IssueSharer` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueSharerSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueComment` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
 | `Issue` | 100.0 | 100.0 | 90.9 | 0 | 0 | 2 | [ ] | |
-| `IssueEvent` | 100.0 | 100.0 | 61.1 | 0 | 0 | 7 | [ ] | |
+| `IssueEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `IssueLabel` | 100.0 | 100.0 | 83.3 | 0 | 0 | 2 | [ ] | |
 | `Assignee` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
 | `RecentIssue` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `RecentIssueSpec.kt`로 프로퍼티 접근자 및 nullable 필드(issueId/postingId) 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
@@ -255,7 +262,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `EventNotificationMimeMessage` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [ ] | |
 | `InboundEmailMessage` | 100.0 | 100.0 | 91.7 | 0 | 0 | 1 | [ ] | |
 | `InboundAttachment` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
-| `OriginalEmail` | 100.0 | 100.0 | 41.7 | 0 | 0 | 7 | [ ] | |
+| `OriginalEmail` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `OriginalEmailSpec.kt`로 프로퍼티 접근자(handledDate null 허용 포함) 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/mention** | | | | | | | | |
 | `MentionServiceImpl` | 100.0 | 90.5 | 100.0 | 0 | 2 | 0 | [i] | 2026-08-25: ISSUE_COMMENT 타입의 `resourceId.toLongOrNull()` null 분기 등 보강(LINE 100%, METHOD 100%, BRANCH 90.5%, 19/21). 잔여 미달 2건은 구조적 도달 불가 — (1) `when`문의 else 분기는 DB 조회가 이미 2개 리소스 타입(ISSUE_POST/ISSUE_COMMENT)으로만 필터링해 반환하므로 도달 불가, (2) `comment.issue.id?.let{}`의 null 분기는 실제 서비스에서 IssueComment가 항상 영속화된(id 존재) Issue를 참조해 실통합 테스트로 구성하기 비현실적으로 판단 |
 | `Mention` | 100.0 | 100.0 | 50.0 | 0 | 0 | 5 | [ ] | |
@@ -289,7 +296,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `TitleHead` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `TitleHeadSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `ProjectUser` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
 | `RecentProject` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `RecentProjectSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `ProjectTransfer` | 100.0 | 100.0 | 61.1 | 0 | 0 | 7 | [ ] | |
+| `ProjectTransfer` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ProjectTransferSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Label` | 100.0 | 100.0 | 70.0 | 0 | 0 | 3 | [ ] | |
 | **domain/pullrequest** | | | | | | | | |
 | `PullRequestServiceImpl` | 95.2 | 64.5 | 72.1 | 25 | 66 | 17 | [x] | 2026-08-25: 6개 테스트 추가하여 커버리지 95% 이상 확보 완료. |
@@ -300,11 +307,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `CommitComment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `CommitCommentSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `NonRangedCodeCommentThread` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `NonRangedCodeCommentThreadSpec.kt`로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PullRequestEventRecorderKt` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestEventRecorderKtSpec.kt`로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%). mockk 유출 방지용 `beforeTest { clearMocks }` + `repository.delete()` 기본 스텁 필요했음 |
-| `PullRequest` | 100.0 | 100.0 | 83.3 | 0 | 0 | 7 | [ ] | |
+| `PullRequest` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestSpec.kt`로 20개 프로퍼티(연관관계 포함) 접근자 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PullRequestMergeResult` | 100.0 | 100.0 | 92.3 | 0 | 0 | 1 | [ ] | |
 | `PullRequestTimelineItem` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
 | `ReviewComment` | 100.0 | 100.0 | 75.0 | 0 | 0 | 3 | [ ] | |
-| `PullRequestEvent` | 100.0 | 100.0 | 56.2 | 0 | 0 | 7 | [ ] | |
+| `PullRequestEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/role** | | | | | | | | |
 | `Role` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
 | **domain/site** | | | | | | | | |
