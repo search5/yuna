@@ -31,6 +31,9 @@ import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.organization.OrganizationUser
 import com.github.search5.yona.domain.role.Role
 import com.github.search5.yona.domain.role.RoleType
+import com.github.search5.yona.domain.pullrequest.NonRangedCodeCommentThread
+import com.github.search5.yona.domain.pullrequest.ReviewComment
+import com.github.search5.yona.domain.user.UserIdent
 
 class ReviewThreadControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
@@ -142,6 +145,108 @@ class ReviewThreadControllerSpec : DescribeSpec({
             mockMvc.perform(
                 get("/owner/GroupProject/reviews").principal(userAuth)
             )
+                .andExpect(status().isOk)
+                .andExpect(view().name("reviewthread/list"))
+        }
+
+        it("존재하지 않는 프로젝트면 error/404 뷰를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuch") } returns Optional.empty()
+
+            mockMvc.perform(get("/owner/NoSuch/reviews"))
+                .andExpect(status().isOk)
+                .andExpect(view().name("error/404"))
+        }
+
+        it("PRIVATE 프로젝트는 비인증 사용자에게 error/forbidden 뷰를 반환해야 한다") {
+            val privateProject = Project(id = 20L, name = "PrivateProject", owner = "owner", projectScope = ProjectScope.PRIVATE)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProject") } returns Optional.of(privateProject)
+
+            mockMvc.perform(get("/owner/PrivateProject/reviews"))
+                .andExpect(status().isOk)
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("PRIVATE 프로젝트는 멤버인 인증 사용자에게 정상적으로 목록을 반환해야 한다") {
+            val privateProject = Project(id = 21L, name = "PrivateProject2", owner = "owner", projectScope = ProjectScope.PRIVATE)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProject2") } returns Optional.of(privateProject)
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(21L, 10L) } returns true
+            every { reviewThreadService.getReviewThreads(eq(privateProject), any(), any()) } returns PageImpl(emptyList())
+            every { reviewThreadService.countReviewThreads(eq(privateProject), any()) } returns 0L
+
+            mockMvc.perform(get("/owner/PrivateProject2/reviews").principal(userAuth))
+                .andExpect(status().isOk)
+                .andExpect(view().name("reviewthread/list"))
+        }
+
+        it("PUBLIC이지만 memberOnly고 인증 사용자가 멤버도 조직멤버도 아니면 error/forbidden 뷰를 반환해야 한다") {
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MemberOnlyProject") } returns Optional.of(memberOnlyProject)
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(2L, 10L) } returns false
+
+            mockMvc.perform(get("/owner/MemberOnlyProject/reviews").principal(userAuth))
+                .andExpect(status().isOk)
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("엑셀 다운로드 시 리뷰 스레드/댓글 데이터를 실제로 셀에 채워야 한다(작성자 유무, 첫댓글 여부, 커밋ID 길이 분기 포함)") {
+            val threadAuthorA = UserIdent(id = 100L, loginId = "threadauthora", name = "ThreadAuthorA")
+            val commenterA2 = UserIdent(id = 101L, loginId = "commentera2", name = "CommenterA2")
+            val commentA1 = ReviewComment(id = 1L, contents = "first msg", author = UserIdent(id = 102L, name = "CommenterA1"))
+            val commentA2 = ReviewComment(id = 2L, contents = "reply msg", author = commenterA2)
+            val threadA = NonRangedCodeCommentThread(
+                id = 1L, author = threadAuthorA, commitId = "abcdefgh12345",
+                reviewComments = mutableListOf(commentA1, commentA2)
+            )
+
+            val commentB1 = ReviewComment(id = 3L, contents = "only", author = null)
+            val threadB = NonRangedCodeCommentThread(
+                id = 2L, author = null, commitId = "ab",
+                reviewComments = mutableListOf(commentB1)
+            )
+
+            // commitId가 아예 null인 경우(line136 ?: "" 분기) + 저자 UserIdent는 있으나 name 필드 자체가 null인 경우
+            val commentC1 = ReviewComment(id = 4L, contents = "c-only", author = UserIdent(id = 103L, name = null))
+            val threadC = NonRangedCodeCommentThread(
+                id = 3L, author = UserIdent(id = 104L, name = null), commitId = null,
+                reviewComments = mutableListOf(commentC1)
+            )
+
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+            every { reviewThreadService.getReviewThreads(eq(project), any()) } returns listOf(threadA, threadB, threadC)
+
+            mockMvc.perform(get("/owner/TestProject/reviews").param("format", "xls"))
+                .andExpect(status().isOk)
+                .andExpect(header().exists("Content-Disposition"))
+        }
+
+        it("PRIVATE 프로젝트에서 멤버도 아니고 조직 그룹멤버도 아니면 error/forbidden 뷰를 반환해야 한다") {
+            val privateProject = Project(id = 22L, name = "PrivateProject3", owner = "owner", projectScope = ProjectScope.PRIVATE)
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "PrivateProject3") } returns Optional.of(privateProject)
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(22L, 10L) } returns false
+
+            mockMvc.perform(get("/owner/PrivateProject3/reviews").principal(userAuth))
+                .andExpect(status().isOk)
+                .andExpect(view().name("error/forbidden"))
+        }
+
+        it("PUBLIC이지만 memberOnly인 프로젝트에서 직접 멤버가 아니어도 조직 그룹멤버면 정상적으로 목록을 반환해야 한다") {
+            val groupOrg2 = Organization(id = 2L, name = "org2")
+            groupOrg2.organizationUsers.add(
+                OrganizationUser(id = 2L, user = user, organization = groupOrg2, role = Role(id = RoleType.ORG_MEMBER.roleType))
+            )
+            val memberOnlyGroupProject = Project(
+                id = 23L, name = "MemberOnlyGroupProject", owner = "owner",
+                projectScope = ProjectScope.PUBLIC, isCodeAccessibleMemberOnly = true, organization = groupOrg2
+            )
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "MemberOnlyGroupProject") } returns Optional.of(memberOnlyGroupProject)
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+            every { projectUserRepository.existsByProjectIdAndUserId(23L, 10L) } returns false
+            every { reviewThreadService.getReviewThreads(eq(memberOnlyGroupProject), any(), any()) } returns PageImpl(emptyList())
+            every { reviewThreadService.countReviewThreads(eq(memberOnlyGroupProject), any()) } returns 0L
+
+            mockMvc.perform(get("/owner/MemberOnlyGroupProject/reviews").principal(userAuth))
                 .andExpect(status().isOk)
                 .andExpect(view().name("reviewthread/list"))
         }

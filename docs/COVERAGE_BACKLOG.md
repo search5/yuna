@@ -151,6 +151,11 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 진행 원칙: 이번 배치는 사용자 지시로 "무거운 작업 위주"로 진행 — 잔여 `[ ]` 항목 중 미실행 라인+분기 합계가 큰 순(`AutoLinkRenderer` 65, `ProjectApiController` 61)으로 선정
 - 이번 배치 신규 실버그/죽은코드 없음. 도달 불가 2건은 `ProjectApiController` 행에 근거 명시
 
+## 진행 현황 갱신 (2026-08-25, 22차 배치 완료 후)
+
+- 추가 완료([x]): `ImportViewController`(BRANCH 98.4%), `OrganizationController`(BRANCH 96.9%), `ReviewThreadController`(BRANCH 96.7%), `WatchController`(BRANCH 96.3%), `MilestoneController`(BRANCH 95.7%) — 21차에 이어 "무거운 작업 위주" 방침 계속(미실행 라인+분기 합계 상위 5개)
+- 이번 배치 신규 실버그/죽은코드 없음. 대부분의 컨트롤러가 성공 케이스만 테스트돼 있고 404/400/401/403 등 실패 분기가 광범위하게 미검증 상태였음(특히 `OrganizationController`는 6개 엔드포인트 중 절반이 아예 테스트 자체가 없었음)
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -363,13 +368,13 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `SiteApiController` | 75.6 | 41.1 | 81.2 | 29 | 33 | 3 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `CodeHistoryController` | 47.4 | 35.3 | 71.4 | 40 | 22 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `ImportApiController` | 74.4 | 37.1 | 60.0 | 23 | 39 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `ImportViewController` | 76.6 | 45.3 | 75.0 | 26 | 35 | 2 | [ ] | |
+| `ImportViewController` | 76.6 | 45.3 | 75.0 | 26 | 35 | 2 | [x] | 2026-08-25: validateImportForm/addTransportError 잔여 분기(owner 검증 4종, 인증정보 null/빈문자열 조합, 메시지 null, 상태코드 파싱, clone 성공 후 실패 시 디렉터리 정리) 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 98.4%, METHOD 100%) |
 | `ProjectApiController` | 94.1 | 61.5 | 100.0 | 14 | 47 | 0 | [x] | 2026-08-25: addProjectMembers 잔여 분기(알 수 없는 role/역할 미존재/기존 멤버 갱신), exports()의 담당자·마일스톤·라벨·마감일·중첩댓글·null 저자 등 잔여 분기 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 95.9%, METHOD 100%). 도달 불가 2건 확인(`isGlobalResourceCreatable`는 currentUser!=null 가드 이후라 구조적으로 false 불가, `PullRequest.contributor`는 non-null 타입이라 안전호출 null분기 불가) |
-| `OrganizationController` | 45.9 | 25.0 | 64.3 | 33 | 24 | 5 | [ ] | |
-| `ReviewThreadController` | 80.7 | 41.7 | 100.0 | 21 | 35 | 0 | [ ] | |
-| `WatchController` | 76.3 | 53.7 | 53.8 | 28 | 25 | 12 | [ ] | |
+| `OrganizationController` | 45.9 | 25.0 | 64.3 | 33 | 24 | 5 | [x] | 2026-08-25: createOrganization/addOrganizationMember/updateOrganizationMemberRole/removeOrganizationMember 등 이전엔 전혀 테스트되지 않던 엔드포인트 전부와 예외 메시지 null 기본값 분기(6곳) 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 96.9%, METHOD 100%) |
+| `ReviewThreadController` | 80.7 | 41.7 | 100.0 | 21 | 35 | 0 | [x] | 2026-08-25: PRIVATE/PROTECTED 프로젝트 접근 분기, 엑셀 export의 실제 데이터 채움(commitId 길이/작성자 유무/첫댓글 여부), 404 분기 보강하여 95% 이상 확보 완료(LINE 98.2%, BRANCH 96.7%, METHOD 100%) |
+| `WatchController` | 76.3 | 53.7 | 53.8 | 28 | 25 | 12 | [x] | 2026-08-25: checkWatchPermission의 리소스 타입별 전 분기(BOARD_POST/PULL_REQUEST 전체가 미테스트였음), watchProject/unwatchProject/toggleProjectNotification/getWatchers의 404·403·400 분기 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 96.3%, METHOD 100%) |
 | `IssueShareController` | 63.3 | 40.4 | 62.5 | 22 | 31 | 3 | [ ] | |
-| `MilestoneController` | 78.6 | 54.3 | 100.0 | 21 | 32 | 0 | [ ] | |
+| `MilestoneController` | 78.6 | 54.3 | 100.0 | 21 | 32 | 0 | [x] | 2026-08-25: 6개 엔드포인트 전부의 404/400(프로젝트 불일치)/401/403 분기(대부분 이전엔 성공 케이스만 테스트됨), bulk 생성의 title/state 기본값 및 parseDueOn ISO/날짜 파싱 분기 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 95.7%, METHOD 100%) |
 | `BoardController` | 80.9 | 54.7 | 100.0 | 18 | 29 | 0 | [ ] | |
 | `LfsStorageController` | 10.0 | 0.0 | 25.0 | 27 | 10 | 3 | [ ] | |
 | `VoteController` | 73.1 | 58.8 | 100.0 | 14 | 14 | 0 | [ ] | |

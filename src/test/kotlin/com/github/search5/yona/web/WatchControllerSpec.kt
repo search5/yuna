@@ -16,6 +16,7 @@ import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.enumeration.Operation
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.*
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -284,6 +285,337 @@ class WatchControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("project"))
                     .andExpect(model().attributeExists("watchers"))
                     .andExpect(view().name("project/watchers"))
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuch") } returns Optional.empty()
+
+                mockMvc.perform(get("/owner/NoSuch/watchers")).andExpect(status().isNotFound)
+            }
+        }
+
+        describe("getLoginUser 잔여 분기") {
+            it("로그인 사용자를 찾을 수 없으면 401을 반환해야 한다") {
+                every { auth.name } returns "ghost"
+                every { userRepository.findByLoginId("ghost") } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "PROJECT").param("resource.id", "1")
+                ).andExpect(status().isUnauthorized)
+            }
+        }
+
+        describe("checkWatchPermission 리소스 타입별 잔여 분기") {
+            it("PROJECT: 리소스 ID가 숫자가 아니면 400을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "PROJECT").param("resource.id", "notanumber")
+                ).andExpect(status().isBadRequest)
+            }
+
+            it("PROJECT: 존재하지 않으면 404를 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "PROJECT").param("resource.id", "999")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("ISSUE_POST: 리소스 ID가 숫자가 아니면 400을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "ISSUE_POST").param("resource.id", "notanumber")
+                ).andExpect(status().isBadRequest)
+            }
+
+            it("ISSUE_POST: 존재하지 않으면 404를 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { issueRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "ISSUE_POST").param("resource.id", "999")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("BOARD_POST: 정상적으로 게시글의 프로젝트를 찾아 감시 등록해야 한다") {
+                val posting = Posting(id = 300L, number = 1L, title = "게시글", project = project)
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { postingRepository.findById(300L) } returns Optional.of(posting)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
+                every { watchService.watch(user1, ResourceType.BOARD_POST, "300") } just Runs
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "BOARD_POST").param("resource.id", "300")
+                ).andExpect(status().isOk)
+            }
+
+            it("BOARD_POST: 리소스 ID가 숫자가 아니면 400을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "BOARD_POST").param("resource.id", "notanumber")
+                ).andExpect(status().isBadRequest)
+            }
+
+            it("BOARD_POST: 존재하지 않으면 404를 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { postingRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "BOARD_POST").param("resource.id", "999")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("PULL_REQUEST: 정상적으로 toProject를 찾아 감시 등록해야 한다") {
+                val pr = com.github.search5.yona.domain.pullrequest.PullRequest(
+                    id = 400L, number = 1L, toProject = project, fromProject = project,
+                    contributor = user1
+                )
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { pullRequestRepository.findById(400L) } returns Optional.of(pr)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
+                every { watchService.watch(user1, ResourceType.PULL_REQUEST, "400") } just Runs
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "PULL_REQUEST").param("resource.id", "400")
+                ).andExpect(status().isOk)
+            }
+
+            it("PULL_REQUEST: 리소스 ID가 숫자가 아니면 400을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "PULL_REQUEST").param("resource.id", "notanumber")
+                ).andExpect(status().isBadRequest)
+            }
+
+            it("PULL_REQUEST: 존재하지 않으면 404를 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { pullRequestRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "PULL_REQUEST").param("resource.id", "999")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("COMMIT: 합성 키에 콜론이 없으면 400을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "COMMIT").param("resource.id", "nocolonhere")
+                ).andExpect(status().isBadRequest)
+            }
+
+            it("지원하지 않는 리소스 타입이면 400을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+
+                mockMvc.perform(
+                    post("/watch").principal(auth).param("resource.type", "COMMENT_THREAD").param("resource.id", "1")
+                ).andExpect(status().isBadRequest)
+            }
+        }
+
+        describe("watchProject/unwatchProject 잔여 분기") {
+            it("watchProject: 존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuch") } returns Optional.empty()
+
+                mockMvc.perform(post("/owner/NoSuch/watch").principal(auth)).andExpect(status().isNotFound)
+            }
+
+            it("watchProject: 권한이 없으면 403을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns false
+
+                mockMvc.perform(post("/owner/TestProj/watch").principal(auth)).andExpect(status().isForbidden)
+            }
+
+            it("unwatchProject: 존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuch") } returns Optional.empty()
+
+                mockMvc.perform(post("/owner/NoSuch/unwatch").principal(auth)).andExpect(status().isNotFound)
+            }
+
+            it("unwatchProject: 권한이 없으면 403을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns false
+
+                mockMvc.perform(post("/owner/TestProj/unwatch").principal(auth)).andExpect(status().isForbidden)
+            }
+        }
+
+        describe("toggleProjectNotification 잔여 분기") {
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(post("/watch/toggle/999/NEW_ISSUE").principal(auth)).andExpect(status().isNotFound)
+            }
+
+            it("권한이 없으면 403을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns false
+
+                mockMvc.perform(post("/watch/toggle/1/NEW_ISSUE").principal(auth)).andExpect(status().isForbidden)
+            }
+
+            it("프로젝트를 감시하고 있지 않으면 400을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
+                every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns false
+
+                mockMvc.perform(post("/watch/toggle/1/NEW_ISSUE").principal(auth)).andExpect(status().isBadRequest)
+            }
+
+            it("잘못된 알림 타입이면 400을 반환해야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
+                every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns true
+
+                mockMvc.perform(post("/watch/toggle/1/NOT_A_REAL_TYPE").principal(auth)).andExpect(status().isBadRequest)
+            }
+
+            it("NEW_COMMENT 타입은 기본적으로 알림이 꺼져있어야(isNotifiedByDefault=false) 새 설정 생성 시 allowed=true로 저장되어야 한다") {
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
+                every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns true
+                every {
+                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, com.github.search5.yona.domain.enumeration.EventType.NEW_COMMENT)
+                } returns null
+                val savedSlot = slot<com.github.search5.yona.domain.notification.UserProjectNotification>()
+                every { userProjectNotificationRepository.save(capture(savedSlot)) } returns mockk()
+
+                mockMvc.perform(post("/watch/toggle/1/NEW_COMMENT").principal(auth)).andExpect(status().isOk)
+
+                savedSlot.captured.allowed shouldBe true
+            }
+
+            it("기존 알림 설정 토글 후 allowed가 기본값과 같아지면 설정을 삭제해야 한다") {
+                val existing = com.github.search5.yona.domain.notification.UserProjectNotification(
+                    id = 500L, user = user1, project = project,
+                    notificationType = com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE, allowed = false
+                )
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
+                every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns true
+                every {
+                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE)
+                } returns existing
+                every { userProjectNotificationRepository.delete(existing) } just Runs
+
+                mockMvc.perform(post("/watch/toggle/1/NEW_ISSUE").principal(auth)).andExpect(status().isOk)
+
+                verify(exactly = 1) { userProjectNotificationRepository.delete(existing) }
+            }
+
+            it("기존 알림 설정 토글 후 allowed가 기본값과 달라지면 설정을 저장해야 한다") {
+                val existing = com.github.search5.yona.domain.notification.UserProjectNotification(
+                    id = 501L, user = user1, project = project,
+                    notificationType = com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE, allowed = true
+                )
+                every { auth.name } returns "user1"
+                every { userRepository.findByLoginId("user1") } returns Optional.of(user1)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { accessControl.isAllowed(user1, project, Operation.WATCH) } returns true
+                every { watchService.isWatching(user1, ResourceType.PROJECT, "1") } returns true
+                every {
+                    userProjectNotificationRepository.findByUserAndProjectAndNotificationType(user1, project, com.github.search5.yona.domain.enumeration.EventType.NEW_ISSUE)
+                } returns existing
+                every { userProjectNotificationRepository.save(existing) } returns existing
+
+                mockMvc.perform(post("/watch/toggle/1/NEW_ISSUE").principal(auth)).andExpect(status().isOk)
+
+                verify(exactly = 1) { userProjectNotificationRepository.save(existing) }
+                existing.allowed shouldBe false
+            }
+        }
+
+        describe("getWatchers 잔여 분기") {
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NoSuch") } returns Optional.empty()
+
+                mockMvc.perform(
+                    get("/-_-api/v1/owners/owner/projects/NoSuch/posts/1/watchers").param("type", "issues")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("type이 issues인데 이슈가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { issueRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(
+                    get("/-_-api/v1/owners/owner/projects/TestProj/posts/999/watchers").param("type", "issues")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("type이 posts인데 게시글이 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { postingRepository.findByProjectAndNumber(project, 999L) } returns null
+
+                mockMvc.perform(
+                    get("/-_-api/v1/owners/owner/projects/TestProj/posts/999/watchers").param("type", "posts")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("지원하지 않는 type이면 빈 감시자 목록을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+
+                mockMvc.perform(
+                    get("/-_-api/v1/owners/owner/projects/TestProj/posts/1/watchers").param("type", "unknown")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.totalWatchers").value(0))
+            }
+
+            it("게시글 작성자가 있으면 감시자 baseWatchers에 포함되어야 한다") {
+                val postAuthor = User(id = 40L, loginId = "postauthor1", name = "글쓴이1")
+                val posting = Posting(id = 201L, number = 4L, title = "글", project = project, authorId = 40L)
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                every { postingRepository.findByProjectAndNumber(project, 4L) } returns posting
+                every { userRepository.findById(40L) } returns Optional.of(postAuthor)
+                val baseSlot = slot<Set<User>>()
+                every {
+                    watchService.findActualWatchers(capture(baseSlot), ResourceType.BOARD_POST, "201", project.id)
+                } answers { baseSlot.captured }
+
+                mockMvc.perform(
+                    get("/-_-api/v1/owners/owner/projects/TestProj/posts/4/watchers").param("type", "posts")
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.watchers[0].name").value("글쓴이1"))
             }
         }
     }

@@ -102,6 +102,24 @@ class MilestoneControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$[0].title").value("마일스톤 1"))
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/milestones"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("읽기 권한이 없으면(비공개 프로젝트의 비멤버) 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 99L) } returns false
+
+                mockMvc.perform(get("/api/projects/1/milestones").principal(strangerAuth))
+                    .andExpect(status().isForbidden)
+            }
         }
 
         describe("GET /api/projects/{projectId}/milestones/{milestoneId}") {
@@ -114,6 +132,43 @@ class MilestoneControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/projects/1/milestones/30").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.title").value("마일스톤 1"))
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/milestones/30"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 마일스톤이면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(999L) } returns null
+
+                mockMvc.perform(get("/api/projects/1/milestones/999").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("마일스톤이 해당 프로젝트 소속이 아니면 400을 반환해야 한다") {
+                val otherProject = Project(id = 2L, name = "Other", projectScope = ProjectScope.PRIVATE)
+                val otherMilestone = Milestone(id = 31L, title = "다른 프로젝트 마일스톤", project = otherProject)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(31L) } returns otherMilestone
+
+                mockMvc.perform(get("/api/projects/1/milestones/31").principal(userAuth))
+                    .andExpect(status().isBadRequest)
+            }
+
+            it("읽기 권한이 없으면 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(30L) } returns milestone
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 99L) } returns false
+
+                mockMvc.perform(get("/api/projects/1/milestones/30").principal(strangerAuth))
+                    .andExpect(status().isForbidden)
             }
         }
 
@@ -183,6 +238,26 @@ class MilestoneControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isForbidden)
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/projects/999/milestones")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "title": "마일스톤" }""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    post("/api/projects/1/milestones")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "title": "마일스톤" }""")
+                ).andExpect(status().isUnauthorized)
+            }
         }
 
         // yona controllers/api/MilestoneApi.java:29-50 newMilestone() 대응 (P1-129).
@@ -239,6 +314,58 @@ class MilestoneControllerSpec : DescribeSpec({
                 verify(exactly = 1) { milestoneRepository.save(any()) }
                 savedSlot.captured.state shouldBe State.CLOSED
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/projects/999/milestones/bulk")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "milestones": [] }""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    post("/api/projects/1/milestones/bulk")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "milestones": [] }""")
+                ).andExpect(status().isUnauthorized)
+            }
+
+            it("title이 없으면 'No title'을 기본값으로, state가 없으면 OPEN을 기본값으로, due_on은 ISO 전체 일시와 날짜만 온 경우 모두 파싱해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { milestoneRepository.findByProjectAndTitle(project, "No title") } returns null
+                every { milestoneRepository.findByProjectAndTitle(project, "날짜만있음") } returns null
+                val savedSlot = slot<Milestone>()
+                every { milestoneRepository.save(capture(savedSlot)) } answers { savedSlot.captured.apply { id = 50L } }
+
+                val jsonContent = """
+                    {
+                        "milestones": [
+                            { "due_on": "2026-01-15T00:00:00+09:00" },
+                            { "title": "날짜만있음", "due_on": "2026-02-20" }
+                        ]
+                    }
+                """.trimIndent()
+
+                mockMvc.perform(
+                    post("/api/projects/1/milestones/bulk")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+                    .andExpect(jsonPath("$[0].title").value("No title"))
+                    .andExpect(jsonPath("$[0].state").value("open"))
+                    .andExpect(jsonPath("$[0].due_on").exists())
+                    .andExpect(jsonPath("$[1].due_on").exists())
+
+                verify(exactly = 2) { milestoneRepository.save(any()) }
+            }
         }
 
         describe("PUT /api/projects/{projectId}/milestones/{milestoneId}") {
@@ -266,6 +393,67 @@ class MilestoneControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
             }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/999/milestones/30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "title": "수정" }""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 마일스톤이면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(999L) } returns null
+
+                mockMvc.perform(
+                    put("/api/projects/1/milestones/999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "title": "수정" }""")
+                ).andExpect(status().isNotFound)
+            }
+
+            it("마일스톤이 해당 프로젝트 소속이 아니면 400을 반환해야 한다") {
+                val otherProject = Project(id = 2L, name = "Other", projectScope = ProjectScope.PRIVATE)
+                val otherMilestone = Milestone(id = 32L, title = "다른 프로젝트 마일스톤", project = otherProject)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(32L) } returns otherMilestone
+
+                mockMvc.perform(
+                    put("/api/projects/1/milestones/32")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "title": "수정" }""")
+                ).andExpect(status().isBadRequest)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(30L) } returns milestone
+
+                mockMvc.perform(
+                    put("/api/projects/1/milestones/30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "title": "수정" }""")
+                ).andExpect(status().isUnauthorized)
+            }
+
+            it("수정 권한이 없으면 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(30L) } returns milestone
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 99L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/1/milestones/30")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{ "title": "수정" }""")
+                        .principal(strangerAuth)
+                ).andExpect(status().isForbidden)
+            }
         }
 
         describe("DELETE /api/projects/{projectId}/milestones/{milestoneId}") {
@@ -279,6 +467,51 @@ class MilestoneControllerSpec : DescribeSpec({
                 mockMvc.perform(delete("/api/projects/1/milestones/30").principal(managerAuth))
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.status").value("success"))
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/999/milestones/30"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("존재하지 않는 마일스톤이면 404를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(999L) } returns null
+
+                mockMvc.perform(delete("/api/projects/1/milestones/999"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("마일스톤이 해당 프로젝트 소속이 아니면 400을 반환해야 한다") {
+                val otherProject = Project(id = 2L, name = "Other", projectScope = ProjectScope.PRIVATE)
+                val otherMilestone = Milestone(id = 33L, title = "다른 프로젝트 마일스톤", project = otherProject)
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(33L) } returns otherMilestone
+
+                mockMvc.perform(delete("/api/projects/1/milestones/33"))
+                    .andExpect(status().isBadRequest)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(30L) } returns milestone
+
+                mockMvc.perform(delete("/api/projects/1/milestones/30"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("삭제 권한이 없으면 403을 반환해야 한다") {
+                val stranger = User(id = 99L, loginId = "stranger", name = "외부인")
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { milestoneService.getMilestone(30L) } returns milestone
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 99L) } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/projects/1/milestones/30").principal(strangerAuth))
+                    .andExpect(status().isForbidden)
             }
         }
     }
