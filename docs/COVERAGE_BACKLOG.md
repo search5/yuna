@@ -200,6 +200,13 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 이번 배치 신규 실버그/죽은코드 없음
 - 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분 3초)
 
+## 진행 현황 갱신 (2026-08-25, 39차 배치 완료 후)
+
+- 추가 완료([x], 5개): `IssueMassUpdateForm`, `IssueForm`, `Comment`, `OrganizationUser`, `Organization` — 전부 LINE/BRANCH/METHOD 100% 완전 달성
+- 부수 확인: `IssueMassUpdateFormSpec.kt`에 같은 파일의 `IssueIdForm` 접근자도 함께 보강(백로그 279개 원본 목록에는 없던 클래스라 별도 행 없음)
+- 이번 배치 신규 실버그/죽은코드 없음
+- 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분 30초)
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -290,8 +297,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `NotificationEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `NotificationEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/organization** | | | | | | | | |
 | `OrganizationServiceImpl` | 94.1 | 69.4 | 40.6 | 10 | 19 | 19 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `Organization` | 100.0 | 100.0 | 75.0 | 0 | 0 | 4 | [ ] | |
-| `OrganizationUser` | 100.0 | 100.0 | 60.0 | 0 | 0 | 4 | [ ] | |
+| `Organization` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `OrganizationSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `OrganizationUser` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `OrganizationUserSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/project** | | | | | | | | |
 | `ProjectServiceImpl` | 70.7 | 50.0 | 40.5 | 84 | 64 | 22 | [x] | 2026-08-24: ProjectServiceImplSpec.kt에 57 tests 추가(25→82). 단독 측정 LINE 100%, BRANCH 96.9%, METHOD 100% — 목표 달성. forkProject/cloneHardLinkedRepository는 실제 임시 파일시스템으로 하드링크 복제까지 검증. 도달 불가능 4건 코드/바이트코드 근거 확정 |
 | `ProjectUserServiceImpl` | 72.9 | 72.7 | 25.0 | 39 | 6 | 21 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -343,7 +350,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `DatabaseInitializer` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `DatabaseInitializerSpec.kt`로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Property` | 100.0 | 100.0 | 62.5 | 0 | 0 | 3 | [ ] | |
 | `ReviewSearchCondition` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ReviewSearchConditionSpec.kt`(fluent setter/clone()/data class 자동생성 메서드 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `Comment` | 100.0 | 100.0 | 68.8 | 0 | 0 | 5 | [ ] | |
+| `Comment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `CommentSpec.kt`(`@MappedSuperclass` 추상 클래스라 구체 서브클래스 `PostingComment` 경유)로 상속 프로퍼티 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/user** | | | | | | | | |
 | `UserServiceImpl` | 21.3 | 9.4 | 31.6 | 74 | 29 | 13 | [x] | 2026-08-25: 비즈니스 로직 분기 테스트 확보 완료. |
 | `PasswordResetServiceImpl` | 14.3 | 4.5 | 20.0 | 42 | 21 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -455,7 +462,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `MigrationViewController` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `MigrationViewControllerSpec.kt`, 리다이렉트 응답(`status().isOk`→`is3xxRedirection`) 수정하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `GlobalModelAttributeAdvice` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `GlobalModelAttributeAdviceSpec.kt`, `UsernamePasswordAuthenticationToken` 2-인자(authenticated=false 기본값) 대신 3-인자(authorities 포함) 생성자로 수정하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `MarkdownRenderRequest` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: `MarkdownControllerSpec.kt`에 data class 접근자 describe 블록 추가하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `IssueMassUpdateForm` | 100.0 | 100.0 | 61.5 | 0 | 0 | 5 | [ ] | |
+| `IssueMassUpdateForm` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueMassUpdateFormSpec.kt`로 프로퍼티 접근자 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%). 같은 파일의 `IssueIdForm` 접근자도 함께 보강(별도 백로그 행 없음) |
 | `ImportForm` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ImportFormSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `IssueForm` | 100.0 | 100.0 | 72.2 | 0 | 0 | 5 | [ ] | |
+| `IssueForm` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `IssueFormSpec.kt`(data class 자동생성 메서드 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PostingForm` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PostingFormSpec.kt`(data class 자동생성 메서드 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
