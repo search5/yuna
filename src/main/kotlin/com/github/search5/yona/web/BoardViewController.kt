@@ -400,7 +400,7 @@ class BoardViewController(
                 return "error/forbidden"
             }
 
-        // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113). 공개 프로젝트의
+        // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113). 공개 프로젝트의 [GL-controllers_BoardApp-009]
         // 비멤버 로그인 사용자도 게시글을 쓸 수 있는데, 여기서는 프로젝트 멤버/그룹멤버로만 좁게
         // 검사해 yona보다 과도하게 제한하고 있었다 — createPostForm과 동일한 정답 패턴으로 교체.
         if (!accessControl.isProjectResourceCreatable(loginUser, project, ResourceType.BOARD_POST)) {
@@ -515,7 +515,7 @@ data class PostingForm(
     var sendNotificationMail: Boolean? = false,
     // yona Posting.java:37 issueTemplate 대응 (P1-110) — "true"일 때 게시글 대신 ISSUE_TEMPLATE.md로 커밋.
     var issueTemplate: String? = null,
-    // yona Posting.java:39-49 path/branch/lineEnding(@Transient) 대응 (P1-111) — 코드브라우저 "편집"에서
+    // yona Posting.java:39-49 path/branch/lineEnding(@Transient) 대응 (P1-111) — 코드브라우저 "편집"에서 [GL-models_Posting-005;GL-models_Posting-006;GL-models_Posting-007]
     // 넘어오는 온라인 커밋 전용 필드. path가 채워지면 게시글 DB 행 대신 지정 브랜치에 텍스트 파일을 커밋한다.
     var path: String? = null,
     var branch: String? = null,

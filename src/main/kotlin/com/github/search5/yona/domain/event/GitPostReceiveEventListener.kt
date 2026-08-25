@@ -130,7 +130,7 @@ class GitPostReceiveEventListener(
             newValue = title
         )
 
-        // yona NotificationEvent.java:604-680(push 메일 경로) 대응 (P1-46). 수신자를 계산해야
+        // yona NotificationEvent.java:604-680(push 메일 경로) 대응 (P1-46). 수신자를 계산해야 [GL-models_NotificationEvent-038;GL-models_NotificationEvent-039;GL-models_NotificationEvent-040;GL-models_NotificationEvent-041;GL-models_NotificationEvent-042;GL-models_NotificationEvent-043;GL-models_NotificationEvent-044;GL-models_NotificationEvent-045;GL-models_NotificationEvent-046]
         // NotificationEventRecorder(P1-27)가 NotificationMail 대기열에 올리고, WebhookNotificationEventListener가
         // publish된 이벤트를 구독해 웹훅도 즉시 보낼 수 있다.
         val receivers = watchService.findActualWatchers(

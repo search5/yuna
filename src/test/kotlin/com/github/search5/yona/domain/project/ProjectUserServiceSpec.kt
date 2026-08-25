@@ -63,7 +63,7 @@ class ProjectUserServiceSpec @Autowired constructor(
                 // 관리자 멤버 관계 등록
                 projectUserRepository.save(ProjectUser(project = project, user = manager, role = roleManager))
 
-                // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 매니저가
+                // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 매니저가 [GL-models_NotificationEvent-100]
                 // 가입요청/취소 알림을 받으려면 프로젝트를 감시(Watch) 중이어야 한다. 대부분의 시나리오는
                 // "매니저가 감시 중"인 일반적인 경우를 검증하므로 기본으로 감시 상태를 만들어 둔다
                 // (감시하지 않는 매니저는 알림을 못 받는다는 사실 자체는 별도 테스트로 검증).
@@ -171,7 +171,7 @@ class ProjectUserServiceSpec @Autowired constructor(
                 requestEvents.size shouldBe 1
             }
 
-            // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 프로젝트를
+            // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 프로젝트를 [GL-models_NotificationEvent-100]
             // 감시(Watch)하지 않는 매니저는 가입요청/취소 알림 수신자에서 빠져야 한다.
             it("8. 프로젝트를 감시하지 않는 매니저는 가입요청 알림을 받지 않아야 한다 (P2-20)") {
                 watchService.unwatch(manager, ResourceType.PROJECT, project.id.toString())
@@ -188,7 +188,7 @@ class ProjectUserServiceSpec @Autowired constructor(
                 requestEvents.size shouldBe 0
             }
 
-            // yona EnrollProjectApp.java:55-71 대응 (P1-142, P1-123과 대칭인 신규 발견). 대기 중인
+            // yona EnrollProjectApp.java:55-71 대응 (P1-142, P1-123과 대칭인 신규 발견). 대기 중인 [GL-controllers_EnrollProjectApp-003]
             // 가입 신청이 실제로 없으면 취소 알림을 발행하지 않고, 이미 정식 멤버라면 취소 자체를
             // 거부해야 한다.
             it("7. 대기 중인 가입 신청이 없는 상태에서 취소를 호출하면 알림을 발행하지 않아야 한다") {

@@ -295,7 +295,7 @@ class OrganizationViewController(
         return "organization/pullRequestList"
     }
 
-    // yona OrganizationApp.java:287-311 leave()/validateForLeave() 대응.
+    // yona OrganizationApp.java:287-311 leave()/validateForLeave() 대응. [GL-controllers_OrganizationApp-014]
     @ResponseBody
     @DeleteMapping(value = ["/org/{orgName}/leave", "/organizations/{orgName}/leave"])
     fun leave(
@@ -338,7 +338,7 @@ class OrganizationViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "error/403"
 
-        // yona OrganizationApp.java:90-91 @GuestProhibit 대응 (P1-121).
+        // yona OrganizationApp.java:90-91 @GuestProhibit 대응 (P1-121). [GL-controllers_OrganizationApp-005]
         if (loginUser.isGuest) {
             return "redirect:/"
         }
@@ -448,7 +448,7 @@ class OrganizationViewController(
             return "error/forbidden_organization"
         }
 
-        // yona OrganizationApp.java:409-420 validateForUpdate()의 LogoUtil.isImageFile()/
+        // yona OrganizationApp.java:409-420 validateForUpdate()의 LogoUtil.isImageFile()/ [GL-controllers_OrganizationApp-022]
         // LOGO_FILE_LIMIT_SIZE 검증 대응 (P1-124). 로고가 유효하지 않으면 이름/설명 변경을
         // 포함해 갱신 자체를 아무 것도 반영하지 않는다(legacy가 badRequest(setting.render(...))로
         // 응답하는 것과 동일).

@@ -53,7 +53,7 @@ class IndexController(
         return userRepository.findByLoginId(authentication.name).orElse(null)
     }
 
-    // yona Application.java:45-52 index()의 loginDefaultPage 리다이렉트 대응 (P2-11)
+    // yona Application.java:45-52 index()의 loginDefaultPage 리다이렉트 대응 (P2-11) [GL-controllers_Application-009;GL-controllers_Application-010;GL-controllers_Application-011;GL-controllers_Application-012]
     @GetMapping("/")
     fun index(authentication: Authentication?, model: Model): String {
         val user = getLoginUser(authentication)

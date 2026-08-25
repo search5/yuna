@@ -36,10 +36,10 @@ class WebhookServiceImpl(
     // 이미 동일 목적으로 쓰는 설정값을 그대로 재사용한다.
     @Value("\${yuna.base-url:}")
     private val baseUrl: String,
-    // yona Webhook.java:182-192 buildRequestMessage()(리소스 링크) 대응 (P1-132) — 이슈/게시글/PR/댓글
+    // yona Webhook.java:182-192 buildRequestMessage()(리소스 링크) 대응 (P1-132) — 이슈/게시글/PR/댓글 [GL-models_Webhook-017;GL-models_Webhook-018]
     // URL 계산 로직을 새로 만들지 않고, 알림메일 경로에서 이미 쓰는 것과 동일한 리졸버를 재사용한다.
     private val notificationUrlResolver: NotificationUrlResolver,
-    // yona Webhook.java:622-658 sendRequest(payload, webhookId, resource) 대응 (P1-143) — Hangout Chat
+    // yona Webhook.java:622-658 sendRequest(payload, webhookId, resource) 대응 (P1-143) — Hangout Chat [GL-models_Webhook-046;GL-models_Webhook-047]
     // 응답의 thread.name을 저장하는 쓰기 경로. 비동기 HTTP 콜백 스레드에서도 트랜잭션이 걸리도록 별도
     // Spring 빈으로 분리했다(자세한 이유는 WebhookThreadRecorder 주석 참고).
     private val webhookThreadRecorder: WebhookThreadRecorder
@@ -123,7 +123,7 @@ class WebhookServiceImpl(
                 val root = objectMapper.createObjectNode()
                 root.put("text", textMessage)
 
-                // yona Webhook.java:299-317 Posting 오버로드 대응 (P2-36) — 다른 리소스 타입과
+                // yona Webhook.java:299-317 Posting 오버로드 대응 (P2-36) — 다른 리소스 타입과 [GL-models_Webhook-025]
                 // 달리 Posting(게시글) 오버로드에는 DETAIL_SLACK 전용 분기 자체가 없어, SLACK
                 // 웹훅이어도 attachments 없이 텍스트만 보낸다(buildTextPropertyOnlyJSON로 귀결).
                 if (resource !is Posting) {

@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 
-// yona Search.java:707-715 reviewsEL()의 equalsUserTemplate() 대응 (P1-83). ReviewComment는
+// yona Search.java:707-715 reviewsEL()의 equalsUserTemplate() 대응 (P1-83). ReviewComment는 [GL-models_Search-061;GL-models_Search-062]
 // authorId 단일 필드가 아니라 author.id(임베디드 UserIdent)를 쓴다.
 @Transactional
 class ReviewCommentRepositorySpec @Autowired constructor(

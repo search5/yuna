@@ -81,7 +81,7 @@ class BareCommit(project: Project, user: User, gitBaseDir: String) {
         return commitId
     }
 
-    // yona BareCommit.java:249-286 (Bare commit, https://gist.github.com/porcelli/3882505 인용) 대응
+    // yona BareCommit.java:249-286 (Bare commit, https://gist.github.com/porcelli/3882505 인용) 대응 [GL-playRepository_BareCommit-024;GL-playRepository_BareCommit-025;GL-playRepository_BareCommit-026;GL-playRepository_BareCommit-027]
     // (P1-135). 위 3-인자 commitTextFile()과 달리 1) branchName으로 지정한 refs/heads/<branchName>에만
     // 커밋을 반영하고, 2) DirCache+재귀 TreeWalk로 기존 트리의 모든 하위 경로(nested path) 파일을 보존한 채
     // path(중첩 경로 가능) 위치에 새 파일을 반영한다. GitUtil.commitTextFile()가 setRefName(branchName)을

@@ -382,7 +382,7 @@ class IncomingMailProcessingService(
 
     private fun createComment(thread: ResolvedThread, sender: User, body: String): IncomingMailOutcome {
         return when (thread.resourceType) {
-            // yona IssueApp.java:1004-1011 newReferComment() 대응 (P2-34). isResourceCreatable()의
+            // yona IssueApp.java:1004-1011 newReferComment() 대응 (P2-34). isResourceCreatable()의 [GL-controllers_IssueApp-049]
             // ISSUE_COMMENT 케이스로 판단해, 발신자가 프로젝트 READ 권한이 없어도 그 이슈의
             // 작성자/담당자/공유대상이면 메일 답장으로 댓글을 달 수 있다(legacy와 동일하게 거부 시
             // 조용히 Rejected로 회신 — 메일 인바운드 발신자 이메일 노출 방지).

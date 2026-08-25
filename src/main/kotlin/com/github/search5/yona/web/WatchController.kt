@@ -240,7 +240,7 @@ class WatchController(
             else -> emptySet()
         }
 
-        // yona WatcherApi.java:26-58의 LIMIT=100 대응.
+        // yona WatcherApi.java:26-58의 LIMIT=100 대응. [GL-controllers_api_WatcherApi-002]
         val limited = watchers.take(100)
         val watcherDtos = limited.map {
             WatcherDto(name = it.name, url = "/user/${it.loginId}")

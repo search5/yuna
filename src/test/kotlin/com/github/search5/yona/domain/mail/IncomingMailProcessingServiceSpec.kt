@@ -179,7 +179,7 @@ class IncomingMailProcessingServiceSpec : DescribeSpec({
             verify(exactly = 0) { issueService.createIssue(any(), any(), any(), any(), any()) }
         }
 
-        // yona IssueApp.java:1004-1011 newReferComment()의 isResourceCreatable() 거부 분기 대응
+        // yona IssueApp.java:1004-1011 newReferComment()의 isResourceCreatable() 거부 분기 대응 [GL-controllers_IssueApp-049]
         // (P2-34) — 비공개 프로젝트에서 발신자가 그 이슈의 작성자/담당자/공유대상도 아니고 프로젝트
         // 멤버도 아니면, 메일 답장으로도 댓글을 달 수 없고 조용히 Rejected를 반환한다(legacy도 forbidden
         // 대신 로그만 남기고 조용히 무시).

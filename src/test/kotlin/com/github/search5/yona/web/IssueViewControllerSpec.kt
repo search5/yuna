@@ -202,7 +202,7 @@ class IssueViewControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("project"))
             }
 
-            // yona IssueApp.java:46,166-177 getItemsPerPage() 대응 (P1-105).
+            // yona IssueApp.java:46,166-177 getItemsPerPage() 대응 (P1-105). [GL-controllers_IssueApp-010]
             it("itemsPerPage를 지정하지 않으면 기본 페이지 크기는 15여야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)

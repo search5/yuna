@@ -11,6 +11,7 @@
 - 버킷 C (GAP_CANDIDATE, trivial 제외): 3625개 심볼 (trivial 1414개는 부록에서 별도 집계만)
 - 버킷 D (INTENTIONAL_EXCLUDED): 4건
 - **버킷 A-보조(파일 단위, 라인범위 없음): 78건 중 69건 legacy 파일 존재 확인** — 아래 "알려진 방법론적 한계" 참고
+- **5단계 완료(2026-08-26)**: 버킷 A 중 GL-ID가 매치된 183건(86개 파일) 전부에 `[GL-NNNNN]` 병기 완료 — 182건 실제 삽입 + 1건 동일 위치 중복행이라 스킵. 컴파일(`compileKotlin`+`compileTestKotlin`) 확인 통과.
 
 ## 알려진 방법론적 한계 (2026-08-26 Sanity Check 중 발견)
 

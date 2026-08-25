@@ -32,7 +32,7 @@ import java.net.URISyntaxException
 class MarkdownServiceImpl(
     private val autoLinkRenderer: AutoLinkRenderer,
     private val repositoryService: RepositoryService,
-    // yona utils/Markdown.java:132-211 transformIssueLink()/extractIssueLink() 대응 (P2-33)에
+    // yona utils/Markdown.java:132-211 transformIssueLink()/extractIssueLink() 대응 (P2-33)에 [GL-utils_Markdown-010;GL-utils_Markdown-011]
     // 필요한 의존성.
     private val projectRepository: ProjectRepository,
     private val issueRepository: IssueRepository,
@@ -106,7 +106,7 @@ class MarkdownServiceImpl(
         return autoLinkRenderer.render(sanitized, project, lang)
     }
 
-    // yona utils/Markdown.java:218-270 renderWithHighlight() 대응 (P2-43). 사용자 지시로 원본의
+    // yona utils/Markdown.java:218-270 renderWithHighlight() 대응 (P2-43). 사용자 지시로 원본의 [GL-utils_Markdown-012;GL-utils_Markdown-013]
     // 캐시 로직을 구조 그대로 포팅했다 — source.hashCode()만 캐시 키로 쓰고 breaks는 키에 포함되지
     // 않으며(동일 source를 breaks만 바꿔 렌더링하면 캐시가 이전 breaks 결과를 돌려줄 수 있음, 원본과
     // 동일한 특성), 캐시 히트 시에도 전체 파이프라인을 다시 계산해 캐시는 갱신하되 반환값은 히트
@@ -144,7 +144,7 @@ class MarkdownServiceImpl(
         return sanitize(issueLinkTransformed)
     }
 
-    // yona utils/Markdown.java:103-130 checkReferrer() 대응 (P2-32). noreferrer 설정이 켜져 있으면
+    // yona utils/Markdown.java:103-130 checkReferrer() 대응 (P2-32). noreferrer 설정이 켜져 있으면 [GL-utils_Markdown-009]
     // 이 사이트 호스트명으로 "시작하지 않는"(legacy `!uri.getHost().startsWith(hostname)`, equals가
     // 아님 — 원본 그대로) 외부 링크의 href에 rel="... noreferrer"를 붙인다. 잘못된 형식의 링크는
     // legacy와 동일하게 조용히 건너뛴다.
@@ -167,7 +167,7 @@ class MarkdownServiceImpl(
         return doc.body().html()
     }
 
-    // yona utils/Markdown.java:132-159 transformIssueLink() 대응 (P2-33). 이 사이트로 향하는(상대경로
+    // yona utils/Markdown.java:132-159 transformIssueLink() 대응 (P2-33). 이 사이트로 향하는(상대경로 [GL-utils_Markdown-010]
     // 또는 이 호스트명으로 시작하는) "순수 URL" 링크(commonmark AutolinkExtension이 자동으로 앵커화한,
     // 즉 링크 텍스트가 href와 동일한 것)만 이슈 링크 변환 대상으로 삼는다 — 사용자가 `[텍스트](url)`로
     // 직접 텍스트를 지정한 링크는 건드리지 않는다.
@@ -197,7 +197,7 @@ class MarkdownServiceImpl(
         return doc.body().html()
     }
 
-    // yona utils/Markdown.java:161-211 extractIssueLink() 대응 (P2-33). 이슈 READ 권한이 없으면
+    // yona utils/Markdown.java:161-211 extractIssueLink() 대응 (P2-33). 이슈 READ 권한이 없으면 [GL-utils_Markdown-011]
     // true를 반환해 호출부의 `break`로 문서 전체 스캔을 중단시킨다 — 이후 이슈 링크는 검사되지 않는
     // legacy 원본의 동작을 그대로 재현(의도적 최적화가 아니라 원본에 있는 그대로의 동작).
     private fun extractIssueLink(el: Element, uri: URI): Boolean {
@@ -280,14 +280,14 @@ override fun renderFileInCodeBrowser(source: String, project: Project): String {
         }
     }
 
-    // yona Markdown.java:358-365 replaceImageLinkPath() 대응.
+    // yona Markdown.java:358-365 replaceImageLinkPath() 대응. [GL-utils_Markdown-019]
     private fun replaceImageLinkPath(project: Project, text: String, defaultBranch: String): String {
         return IMAGE_LINK_PATTERN.replace(text) { m ->
             "![${m.groups["text"]!!.value}](/${project.owner}/${project.name}/files/$defaultBranch/${m.groups["link"]!!.value})"
         }
     }
 
-    // yona Markdown.java:367-377 replaceContentsLinkToCodeBrowerPath() 대응.
+    // yona Markdown.java:367-377 replaceContentsLinkToCodeBrowerPath() 대응. [GL-utils_Markdown-021]
     private fun replaceContentsLinkToCodeBrowserPath(project: Project, text: String, defaultBranch: String): String {
         val imageFiltered = replaceImageLinkPath(project, text, defaultBranch)
         return NORMAL_LOCAL_LINK_PATTERN.replace(imageFiltered) { m ->

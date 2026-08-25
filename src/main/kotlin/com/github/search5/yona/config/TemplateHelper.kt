@@ -276,7 +276,7 @@ class TemplateHelper(
         return formatter.format(instant)
     }
 
-    // yona models/User.java:247-250 getDateString() 대응(search/partial_users.scala.html의
+    // yona models/User.java:247-250 getDateString() 대응(search/partial_users.scala.html의 [GL-models_User-044]
     // "userinfo.since" 가입일 표시에서 사용). "MMM dd, yyyy" 포맷을 Locale.US로 고정하는 legacy
     // 원본을 그대로 재현 — TemplateHelper.getDateString(instant)(yyyy-MM-dd h:mm:ss a, 로컬 로케일)와는
     // 포맷이 달라 별도 메서드로 분리했다.
@@ -514,7 +514,7 @@ class TemplateHelper(
         return organization.organizationUsers.any { it.user.id == user.id && it.role.id == RoleType.ORG_MEMBER.roleType }
     }
 
-    // yona models/OrganizationUser.java:70-72 isGuest(Organization, User) 대응. 사이트매니저와
+    // yona models/OrganizationUser.java:70-72 isGuest(Organization, User) 대응. 사이트매니저와 [GL-models_OrganizationUser-010]
     // 조직 내 역할(관리자/멤버)이 있는 사용자는 게스트가 아니다 — 비로그인 사용자도 게스트가 아니다
     // (legacy roleTypeOf()가 비로그인이면 ANONYMOUS를 반환하지 GUEST를 반환하지 않음).
     fun isOrganizationGuest(organization: Organization?, user: User?): Boolean {
@@ -522,7 +522,7 @@ class TemplateHelper(
         return organization.organizationUsers.none { it.user.id == user.id }
     }
 
-    // yona models/User.java:677-683 enrolled(Organization) 대응.
+    // yona models/User.java:677-683 enrolled(Organization) 대응. [GL-models_User-078]
     fun isEnrolledOrganization(organization: Organization?, user: User?): Boolean {
         if (organization == null || user == null) return false
         return user.enrolledOrganizations.any { it.id == organization.id }

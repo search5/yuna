@@ -667,7 +667,7 @@ class PullRequestViewController(
     }
 
     // yona PullRequest.java:1063-1103 getCodeCommentThreadsForChanges() + git/viewChanges.scala.html:142
-    // renderNonRangedThreads(pull.commentThreads.toList, commitId, ...) 대응 (P1-114). yona는 diff에
+    // renderNonRangedThreads(pull.commentThreads.toList, commitId, ...) 대응 (P1-114). yona는 diff에 [GL-models_PullRequest-100]
     // 라인 단위로 붙는 CodeCommentThread(ranged)는 getCodeCommentThreadsForChanges()로 outdated/커밋
     // 필터링해 노출하고, PR 전체에 붙는 NonRangedCodeCommentThread는 필터링 없이(단 commitId 지정 시
     // 그 커밋 것만) 그대로 노출한다 — 서로 다른 두 목록이다. yuna 템플릿(pullrequest/view.html,

@@ -309,7 +309,7 @@ class WebhookServiceSpec : DescribeSpec({
             }
         }
 
-        // yona Webhook.java:182-192 buildRequestMessage() 대응 (P1-132) — 텍스트 메시지에 리소스 링크가
+        // yona Webhook.java:182-192 buildRequestMessage() 대응 (P1-132) — 텍스트 메시지에 리소스 링크가 [GL-models_Webhook-017;GL-models_Webhook-018]
         // 전혀 없던 것을 Slack 링크 문법(" <url|text>")으로 붙이도록 수정.
         describe("buildPayload - 텍스트 메시지 리소스 링크 (P1-132)") {
             it("SIMPLE 웹훅은 텍스트 메시지 끝에 이슈 링크를 붙여야 한다") {
@@ -393,7 +393,7 @@ class WebhookServiceSpec : DescribeSpec({
             }
         }
 
-        // yona Webhook.java:284-298 buildIssueDetails() / :502-515 buildJsonWithPullReqtuestDetails() 대응
+        // yona Webhook.java:284-298 buildIssueDetails() / :502-515 buildJsonWithPullReqtuestDetails() 대응 [GL-models_Webhook-024]
         // (P1-133) — DETAIL_SLACK attachment의 이슈 필드(마일스톤/담당자/상태)가 "State" 하나로 축소돼
         // 있었고, PR attachment는 아예 미지원이었다.
         describe("buildPayload - DETAIL_SLACK attachment 필드 (P1-133)") {

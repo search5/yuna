@@ -57,7 +57,7 @@ class ProjectServiceImpl(
     private val pullRequestRepository: PullRequestRepository,
     private val pullRequestEventRepository: PullRequestEventRepository,
     private val pullRequestCommitRepository: PullRequestCommitRepository,
-    // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27).
+    // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27). [GL-models_FavoriteProject-008]
     private val favoriteProjectRepository: FavoriteProjectRepository
 ) : ProjectService {
 
@@ -364,7 +364,7 @@ class ProjectServiceImpl(
         project.organization = organizationRepository.findByName(newOwner).orElse(null)
         projectRepository.save(project)
 
-        // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27) — 이 프로젝트를
+        // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27) — 이 프로젝트를 [GL-models_FavoriteProject-008]
         // 즐겨찾기한 모든 사용자의 비정규화된 owner/projectName도 함께 갱신한다. yona는 이 동기화를
         // 동일 소유자 내 개명(ProjectApp.settingProject())에서만 호출하고 소유권 이전(acceptTransfer())
         // 에서는 호출하지 않는데, 즐겨찾기 표시가 이관 후에도 옛 owner/projectName으로 남는 yona

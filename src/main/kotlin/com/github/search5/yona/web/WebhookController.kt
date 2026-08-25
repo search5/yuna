@@ -80,7 +80,7 @@ class WebhookController(
             throw ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden")
         }
 
-        // yona Webhook.java:74-81 @Required/@Size(payloadUrl<=2000, secret<=250) 대응 (P2-28).
+        // yona Webhook.java:74-81 @Required/@Size(payloadUrl<=2000, secret<=250) 대응 (P2-28). [GL-models_Webhook-006]
         // Play는 폼 바인딩 단계에서 이 검증에 걸리면 DB에 닿기도 전에 400을 반환하는데, 이 사전
         // 검증이 없으면 그대로 저장을 시도하다 DB 컬럼 길이 제약 위반으로 처리되지 않은 500이
         // 노출될 수 있다(엔티티 컬럼 길이는 이미 동일하게 2000/250으로 맞춰져 있음).

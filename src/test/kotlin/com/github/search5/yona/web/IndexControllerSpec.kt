@@ -115,7 +115,7 @@ class IndexControllerSpec : DescribeSpec({
                     .andExpect(model().attributeDoesNotExist("notifications"))
             }
 
-            // yona Application.java:45-52 index()의 loginDefaultPage 리다이렉트 대응 (P2-11)
+            // yona Application.java:45-52 index()의 loginDefaultPage 리다이렉트 대응 (P2-11) [GL-controllers_Application-009;GL-controllers_Application-010;GL-controllers_Application-011;GL-controllers_Application-012]
             it("기본 페이지가 설정된 로그인 유저가 접속하면 해당 경로로 리다이렉트해야 한다") {
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
                 every { userSettingRepository.findByUserId(10L) } returns Optional.of(

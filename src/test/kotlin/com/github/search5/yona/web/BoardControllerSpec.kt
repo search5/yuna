@@ -209,7 +209,7 @@ class BoardControllerSpec : DescribeSpec({
                     .andExpect(status().isCreated)
             }
 
-            // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113) — 공개
+            // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113) — 공개 [GL-controllers_BoardApp-009]
             // 프로젝트의 비멤버 로그인 사용자도 게시글을 쓸 수 있어야 한다(회귀 수정 검증).
             it("공개 프로젝트의 비멤버 로그인 사용자도 게시글을 작성할 수 있어야 한다") {
                 val publicProject = Project(id = 2L, name = "PublicProject", projectScope = ProjectScope.PUBLIC)
@@ -413,7 +413,7 @@ class BoardControllerSpec : DescribeSpec({
             }
         }
 
-        // yona BoardApi.java:128-159 updatePostingContent() 대응 (P1-107).
+        // yona BoardApi.java:128-159 updatePostingContent() 대응 (P1-107). [GL-controllers_api_BoardApi-006]
         describe("PATCH /api/projects/{projectId}/posts/{postId}/content") {
             it("original이 현재 본문과 일치하면 정상적으로 갱신해야 한다") {
                 val editablePosting = Posting(id = 52L, title = "포스트3", body = "원본 내용", project = project, authorId = user.id, number = 3L)

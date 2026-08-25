@@ -42,7 +42,7 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
     fun findFirstByToProjectOrderByNumberDesc(toProject: Project): PullRequest?
     fun findByContributor(contributor: User): List<PullRequest>
 
-    // yona PullRequest.java:219-225 findOpendPullRequestsByDaysAgo(user, days) 대응 (P2-38) —
+    // yona PullRequest.java:219-225 findOpendPullRequestsByDaysAgo(user, days) 대응 (P2-38) — [GL-models_PullRequest-036]
     // (legacy 메서드명과 달리 실제로는 state 필터가 없다, 원문 그대로 이식) 최근 daysAgo일 안에
     // 갱신된 PR만 updated desc/state asc 순으로 반환한다.
     fun findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(

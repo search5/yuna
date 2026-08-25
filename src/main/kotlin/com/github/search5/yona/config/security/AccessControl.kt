@@ -188,7 +188,7 @@ class AccessControl(
     // (legacy `!user.isAnonymous()` — user==null이 yuna의 익명 상태에 대응).
     fun isGlobalResourceCreatable(user: User?): Boolean = user != null
 
-    // yona AccessControl.java:100-118 isResourceCreatable()의 ISSUE_COMMENT 케이스 대응 (P2-34).
+    // yona AccessControl.java:100-118 isResourceCreatable()의 ISSUE_COMMENT 케이스 대응 (P2-34). [GL-utils_AccessControl-006;GL-utils_AccessControl-007]
     // 댓글을 달 대상 Issue의 작성자/담당자/공유대상이면(legacy isAllowedIfAuthor/isAllowedIfAssignee/
     // isAllowedIfSharer) 프로젝트 멤버 여부와 무관하게 항상 허용되고, 그 외에는 프로젝트 기준
     // 생성권한(isProjectResourceCreatable)으로 위임한다(legacy가 container.getProject()로 project를
@@ -203,7 +203,7 @@ class AccessControl(
         return isProjectResourceCreatable(user, project, ResourceType.ISSUE_COMMENT)
     }
 
-    // yona AccessControl.java:100-118 isResourceCreatable()의 NONISSUE_COMMENT 케이스 대응 (P2-34).
+    // yona AccessControl.java:100-118 isResourceCreatable()의 NONISSUE_COMMENT 케이스 대응 (P2-34). [GL-utils_AccessControl-006;GL-utils_AccessControl-007]
     // 댓글을 달 대상 Posting은 legacy isAllowedIfAssignee/isAllowedIfSharer의 분기 대상이 아니므로
     // (BOARD_POST case 없음) 작성자 우회만 적용된다.
     fun isPostingCommentCreatable(user: User?, project: Project, posting: Posting): Boolean {
@@ -254,7 +254,7 @@ class AccessControl(
         return result.sortedBy { it.name }
     }
 
-    // yona AccessControl.java:250-259,274-279,368-383 isAllowedIfSharer() 대응 (P1-82). ISSUE_POST의
+    // yona AccessControl.java:250-259,274-279,368-383 isAllowedIfSharer() 대응 (P1-82). ISSUE_POST의 [GL-utils_AccessControl-013]
     // READ 권한 판단에서 프로젝트 멤버 여부와 무관하게, 해당 이슈의 IssueSharer로 등록된 사용자
     // (또는 대상이 하위 이슈일 경우 그 부모 이슈의 IssueSharer)에게는 READ를 허용한다.
     fun isAllowedIfSharer(issue: Issue, user: User): Boolean {
@@ -304,7 +304,7 @@ class AccessControl(
     // `yuna.access.allows-anonymous-access` 프로퍼티(기본값 true)로 이식, 아래 모든 isAllowed(...)
     // 오버로드 + isAllowedAttachment() 시작부에 동일하게 배선했다.
 
-    // yona AccessControl.java:119-203 isGlobalResourceAllowed()의 PROJECT 리소스 케이스 대응.
+    // yona AccessControl.java:119-203 isGlobalResourceAllowed()의 PROJECT 리소스 케이스 대응. [GL-utils_AccessControl-008]
     fun isAllowed(user: User?, project: Project, operation: Operation): Boolean {
         if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
@@ -337,7 +337,7 @@ class AccessControl(
         return user?.isManagerOf(project) == true || isOrganizationAdmin(project.organization, user)
     }
 
-    // yona AccessControl.java:119-203 isGlobalResourceAllowed()의 ORGANIZATION 리소스 케이스 대응.
+    // yona AccessControl.java:119-203 isGlobalResourceAllowed()의 ORGANIZATION 리소스 케이스 대응. [GL-utils_AccessControl-008]
     // READ는 (프로젝트가 아닌 리소스는 누구나 읽을 수 있다는 legacy 규칙에 따라) 익명 포함 항상 true,
     // 그 외 모든 연산은 조직 관리자만 허용된다.
     fun isAllowed(user: User?, organization: Organization, operation: Operation): Boolean {
@@ -347,7 +347,7 @@ class AccessControl(
         return isOrganizationAdmin(organization, user)
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 ISSUE_POST 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 ISSUE_POST 리소스 케이스 대응. [GL-utils_AccessControl-009]
     // isAllowedIfAuthor/isAllowedIfAssignee가 적용되는 리소스 타입 — 작성자 또는 담당자는 연산 종류와
     // 무관하게 항상 허용된다(legacy AccessControl.java:225-227).
     fun isAllowed(user: User?, project: Project, issue: Issue, operation: Operation): Boolean {
@@ -376,7 +376,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 ISSUE_COMMENT 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 ISSUE_COMMENT 리소스 케이스 대응. [GL-utils_AccessControl-009]
     fun isAllowed(user: User?, project: Project, issueComment: IssueComment, operation: Operation): Boolean {
         if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
@@ -402,7 +402,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 BOARD_POST 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 BOARD_POST 리소스 케이스 대응. [GL-utils_AccessControl-009]
     fun isAllowed(user: User?, project: Project, posting: Posting, operation: Operation): Boolean {
         if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
@@ -427,7 +427,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 NONISSUE_COMMENT 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 NONISSUE_COMMENT 리소스 케이스 대응. [GL-utils_AccessControl-009]
     fun isAllowed(user: User?, project: Project, postingComment: PostingComment, operation: Operation): Boolean {
         if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
@@ -452,7 +452,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 PULL_REQUEST 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 PULL_REQUEST 리소스 케이스 대응. [GL-utils_AccessControl-009]
     // PULL_REQUEST는 legacy isAllowedIfAuthor/isAllowedIfAssignee 스위치에 없는 타입이라(작성자/담당자
     // 자동 승격이 없다) contributor 여부는 이 중앙 함수가 아니라 각 컨트롤러의 별도 isManagerOrContributor류
     // 로직이 추가로 처리한다 — legacy도 동일하게 컨트롤러 액션 단에서 별도 체크한다(P1-85_PLAN.md 참고).
@@ -478,7 +478,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 COMMIT_COMMENT 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 COMMIT_COMMENT 리소스 케이스 대응. [GL-utils_AccessControl-009]
     fun isAllowed(user: User?, project: Project, commitComment: CommitComment, operation: Operation): Boolean {
         if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
@@ -503,7 +503,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 COMMENT_THREAD 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 COMMENT_THREAD 리소스 케이스 대응. [GL-utils_AccessControl-009]
     fun isAllowed(user: User?, project: Project, commentThread: CommentThread, operation: Operation): Boolean {
         if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
@@ -528,7 +528,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 REVIEW_COMMENT 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 REVIEW_COMMENT 리소스 케이스 대응. [GL-utils_AccessControl-009]
     fun isAllowed(user: User?, project: Project, reviewComment: ReviewComment, operation: Operation): Boolean {
         if (isAnonymousNotAllowed() && user == null) return false
         if (user?.isSiteManager == true) return true
@@ -553,7 +553,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 MILESTONE 리소스 케이스 대응.
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 MILESTONE 리소스 케이스 대응. [GL-utils_AccessControl-009]
     // MILESTONE은 isAllowedIfAuthor 대상이 아니다(legacy 스위치에 없음) — 작성자 개념이 없는 리소스.
     fun isAllowed(user: User?, project: Project, milestone: Milestone, operation: Operation): Boolean {
         if (isAnonymousNotAllowed() && user == null) return false
@@ -577,7 +577,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 WEBHOOK 리소스 케이스 대응(P1-87 최우선
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 WEBHOOK 리소스 케이스 대응(P1-87 최우선 [GL-utils_AccessControl-009]
     // 항목이 참조할 함수). WEBHOOK도 작성자 개념이 없는 리소스라 매니저/관리자 우회 외에는 일반 연산
     // 스위치를 그대로 따른다 — legacy 규칙상 프로젝트 멤버라면 누구나 webhook을 UPDATE할 수 있다는 점에
     // 유의(매니저 전용이 아님, legacy 원본 그대로).
@@ -630,7 +630,7 @@ class AccessControl(
         }
     }
 
-    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 PROJECT_TRANSFER 특수 케이스 대응
+    // yona AccessControl.java:205-301 isProjectResourceAllowed()의 PROJECT_TRANSFER 특수 케이스 대응 [GL-utils_AccessControl-009]
     // (다른 모든 리소스 타입과 달리 매니저/조직관리자 우회보다도 먼저 체크되며, ACCEPT 연산만 정의돼
     // 있고 그 외는 항상 false다 — legacy AccessControl.java:217-227).
     fun isAllowed(user: User?, projectTransfer: ProjectTransfer, operation: Operation): Boolean {

@@ -34,7 +34,7 @@ class MentionServiceImplSpec @Autowired constructor(
                 mentionRepository.deleteAll()
             }
 
-            // yona Mention.java:33-49 update()의 diff-sync 대응.
+            // yona Mention.java:33-49 update()의 diff-sync 대응. [GL-models_Mention-004;GL-models_Mention-005;GL-models_Mention-006;GL-models_Mention-007;GL-models_Mention-008]
             it("1. update()는 새 멘션은 추가하고 빠진 멘션은 삭제하는 diff-sync여야 한다") {
                 val userA = userRepository.save(User(loginId = "mention-a", name = "A"))
                 val userB = userRepository.save(User(loginId = "mention-b", name = "B"))

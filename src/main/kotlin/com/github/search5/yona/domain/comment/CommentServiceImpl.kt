@@ -92,7 +92,7 @@ class CommentServiceImpl(
         return "\n\n<br />\n\n--- $title from @${authorLoginId ?: ""}  ${formatShortDate(date)} ---\n\n<br />\n\n$contents"
     }
 
-    // yona utils/JodaDateUtil.java:127-142 getOptionalShortDate() 대응.
+    // yona utils/JodaDateUtil.java:127-142 getOptionalShortDate() 대응. [GL-utils_JodaDateUtil-019;GL-utils_JodaDateUtil-020]
     private fun formatShortDate(date: Instant?): String {
         if (date == null) return ""
         val zone = ZoneId.systemDefault()
@@ -237,7 +237,7 @@ class CommentServiceImpl(
         return savedComment
     }
 
-    // yona NotificationEvent.java:1517-1528 getMentionedUsers() 대응 (P1-126). 개별 사용자 멘션뿐
+    // yona NotificationEvent.java:1517-1528 getMentionedUsers() 대응 (P1-126). 개별 사용자 멘션뿐 [GL-models_NotificationEvent-107;GL-models_NotificationEvent-108]
     // 아니라 조직 이름(@orgname → 조직 멤버 전원)과 owner/project 형식(@owner/project → 프로젝트
     // 멤버 전원)도 확장한다. 기존 게스트 계정 제외 정책은 확장된 멤버에도 동일하게 적용한다.
     // 조직/프로젝트 멤버는 엔티티의 in-memory 컬렉션(org.organizationUsers 등) 대신 리포지토리로

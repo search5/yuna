@@ -110,7 +110,7 @@ class MilestoneController(
         return ResponseEntity.status(HttpStatus.CREATED).body(saved)
     }
 
-    // yona controllers/api/MilestoneApi.java:29-50 newMilestone() 대응 (P1-129). GitHub 이슈 임포트
+    // yona controllers/api/MilestoneApi.java:29-50 newMilestone() 대응 (P1-129). GitHub 이슈 임포트 [GL-controllers_api_MilestoneApi-001;GL-controllers_api_MilestoneApi-002]
     // 등에서 쓰는 벌크 마일스톤 생성 API 전체가 yuna에 없었음 — 단건 생성 API(createMilestone())만
     // 있었고, 그마저도 MilestoneServiceImpl.createMilestone()이 state를 항상 OPEN으로 강제해
     // 임포트 시 CLOSED 상태를 그대로 들여올 수 없어 리포지토리를 직접 써서 우회한다.
@@ -132,7 +132,7 @@ class MilestoneController(
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMilestones)
     }
 
-    // yona MilestoneApi.java:52-68 createMilestoneNode() 대응. 제목이 이미 존재하면(프로젝트 내
+    // yona MilestoneApi.java:52-68 createMilestoneNode() 대응. 제목이 이미 존재하면(프로젝트 내 [GL-controllers_api_MilestoneApi-003]
     // 유일해야 함) 생성하지 않고 입력값과 메시지를 그대로 돌려주고, 성공하면 MigrationApp.
     // getMilestoneNode()와 동일한 형식({id, title, state, description, due_on})으로 응답한다.
     private fun createMilestoneNode(item: BulkMilestoneItem, project: Project): Map<String, Any?> {
@@ -160,7 +160,7 @@ class MilestoneController(
         )
     }
 
-    // yona utils/JodaDateUtil.java:84-92 lastSecondOfDay() 대응. 날짜만 오든 전체 ISO 일시가 오든
+    // yona utils/JodaDateUtil.java:84-92 lastSecondOfDay() 대응. 날짜만 오든 전체 ISO 일시가 오든 [GL-utils_JodaDateUtil-015]
     // 유연하게 파싱해 그날의 23:59:59로 정규화한다.
     private fun parseDueOn(dueOn: String?): Instant? {
         if (dueOn.isNullOrBlank()) return null

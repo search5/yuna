@@ -489,7 +489,7 @@ class BoardViewControllerSpec : DescribeSpec({
             }
         }
 
-        // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113) — 공개 프로젝트의
+        // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113) — 공개 프로젝트의 [GL-controllers_BoardApp-009]
         // 비멤버 로그인 사용자도 게시글을 쓸 수 있어야 한다(회귀 수정 검증).
         describe("POST /{owner}/{projectName}/posts - 공개 프로젝트 비멤버 작성 권한 (P1-113)") {
             it("공개 프로젝트의 비멤버 로그인 사용자도 게시글을 작성할 수 있어야 한다") {

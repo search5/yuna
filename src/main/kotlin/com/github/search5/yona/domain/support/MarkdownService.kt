@@ -13,7 +13,7 @@ interface MarkdownService {
     // 수신자의 언어로 명시적으로 지정할 수 있게 한다.
     fun render(body: String, breaks: Boolean, project: Project?, lang: String?): String
 
-    // yona Markdown.java:346-356 renderFileInCodeBrowser()/renderFileInReadme() 대응 (P1-139).
+    // yona Markdown.java:346-356 renderFileInCodeBrowser()/renderFileInReadme() 대응 (P1-139). [GL-utils_Markdown-017;GL-utils_Markdown-018]
     // 렌더링 파이프라인은 render()와 동일하되, 렌더링 전에 소스 안의 상대경로 링크(`./path` 형태)를
     // 프로젝트 기본 브랜치 기준 절대경로(코드브라우저/파일 다운로드 경로)로 먼저 치환한다.
     fun renderFileInCodeBrowser(source: String, project: Project): String

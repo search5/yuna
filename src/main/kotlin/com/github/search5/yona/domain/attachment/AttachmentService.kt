@@ -5,7 +5,7 @@ import java.io.File
 import java.io.InputStream
 
 interface AttachmentService {
-    // yona Attachment.java:537-582 save()의 반환값(isCreated) 대응 (P2-24) — 두 번째 값은 동일
+    // yona Attachment.java:537-582 save()의 반환값(isCreated) 대응 (P2-24) — 두 번째 값은 동일 [GL-models_Attachment-039;GL-models_Attachment-040]
     // (name, hash, containerType, containerId)의 기존 첨부를 재사용했다면 false, 새로 만들었다면 true.
     fun store(
         inputStream: InputStream,

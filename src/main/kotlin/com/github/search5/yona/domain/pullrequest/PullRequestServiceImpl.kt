@@ -668,7 +668,7 @@ class PullRequestServiceImpl(
             eventType = notificationEvent.eventType
         ).toMutableSet()
         // yona NotificationEvent.java:1425-1428 getDefaultReceivers(pullRequest)의
-        // getMentionedUsers(body) 대응 (P1-127). 신규 PR 본문의 @멘션도 수신자에 포함한다.
+        // getMentionedUsers(body) 대응 (P1-127). 신규 PR 본문의 @멘션도 수신자에 포함한다. [GL-models_NotificationEvent-098]
         receivers.addAll(commentService.extractMentionedUsers(saved.body ?: ""))
         receivers.removeIf { it.id == contributor.id }
         notificationEvent.receivers = receivers

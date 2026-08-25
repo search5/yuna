@@ -150,7 +150,7 @@ class IssueServiceImpl(
             eventType = notificationEvent.eventType
         ).toMutableSet()
         // yona NotificationEvent.java:1380-1385 getReceivers(abstractPosting, except)의
-        // getMentionedUsers(body) 대응 (P1-127). 신규 이슈 본문의 @멘션도 수신자에 포함한다.
+        // getMentionedUsers(body) 대응 (P1-127). 신규 이슈 본문의 @멘션도 수신자에 포함한다. [GL-models_NotificationEvent-096]
         receivers.addAll(commentService.extractMentionedUsers(issue.body ?: ""))
         receivers.removeIf { it.id == sender.id }
         notificationEvent.receivers = receivers
@@ -597,7 +597,7 @@ class IssueServiceImpl(
     }
 
 
-    // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101).
+    // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101). [GL-controllers_api_IssueApi-064;GL-controllers_api_IssueApi-065]
     override fun upvoteWeight(issueId: Long): Issue {
         val issue = issueRepository.findById(issueId)
             .orElseThrow { IllegalArgumentException("Issue not found: $issueId") }

@@ -23,7 +23,7 @@ interface AttachmentRepository : JpaRepository<Attachment, Long> {
     // 의심스러운 비교 방향이지만, 사용자 지시로 레거시를 그대로 포팅한다. 백로그 P2-26 참고.
     fun findByContainerTypeAndCreatedDateGreaterThanEqual(containerType: ResourceType, createdDate: Instant): List<Attachment>
 
-    // yona Attachment.java:75-85 findBy(Attachment) 대응 (P2-24) — 동일 컨테이너에 동일 이름·내용으로
+    // yona Attachment.java:75-85 findBy(Attachment) 대응 (P2-24) — 동일 컨테이너에 동일 이름·내용으로 [GL-models_Attachment-013;GL-models_Attachment-014;GL-models_Attachment-015]
     // 재업로드된 첨부는 새 행을 만들지 않고 기존 행을 재사용(dedup)하기 위한 조회.
     fun findFirstByNameAndHashAndContainerTypeAndContainerId(
         name: String,

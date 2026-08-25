@@ -28,7 +28,7 @@ class YonaUpdateService(
     fun isUpdateRequired(): Boolean = isUpdateRequired
     fun getReleaseUrl(): String = "https://github.com/yona-projects/yona/releases/tag/v${latestVersion ?: ""}"
 
-    // yona YobiUpdate.java:40-41(interval 기본값 및 설정 가능), initdelay 기본 5초 대응.
+    // yona YobiUpdate.java:40-41(interval 기본값 및 설정 가능), initdelay 기본 5초 대응. [GL-models_YobiUpdate-002]
     @Scheduled(
         fixedDelayString = "\${yuna.update.interval-ms:21600000}",
         initialDelayString = "\${yuna.update.initial-delay-ms:5000}"

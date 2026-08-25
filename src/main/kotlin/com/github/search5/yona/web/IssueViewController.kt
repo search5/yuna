@@ -135,7 +135,7 @@ class IssueViewController(
         } else {
             Sort.by(Sort.Direction.DESC, orderBy)
         }
-        // yona IssueApp.java:46,166-177 getItemsPerPage() 대응 (P1-105) — 요청값이 45를 넘으면 clamp.
+        // yona IssueApp.java:46,166-177 getItemsPerPage() 대응 (P1-105) — 요청값이 45를 넘으면 clamp. [GL-controllers_IssueApp-010]
         val pageable = PageRequest.of(actualPage, minOf(itemsPerPage, ITEMS_PER_PAGE_MAX), sort)
 
         // Specification 생성 및 필터 적용

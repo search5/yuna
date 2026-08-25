@@ -44,7 +44,7 @@ class BoardController(
         return accessControl.isAllowed(user, project, Operation.READ)
     }
 
-    // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113). 공개 프로젝트의
+    // yona BoardApp.java:211 @IsCreatable(ResourceType.BOARD_POST) 대응 (P1-113). 공개 프로젝트의 [GL-controllers_BoardApp-009]
     // 비멤버 로그인 사용자도 게시글을 쓸 수 있는데, 여기서는 프로젝트 멤버/그룹멤버로만 좁게 검사해
     // yona보다 과도하게 제한하고 있었다. 이 함수는 createPosting()에서만 쓰이므로(UPDATE/DELETE는
     // 별도의 더 엄격한 규칙을 씀) 안전하게 생성 권한 규칙으로 교체한다.
@@ -156,7 +156,7 @@ class BoardController(
     }
 
 
-    // yona BoardApi.java:128-159 updatePostingContent() 대응 (P1-107). 게시글 본문만 인라인 수정하는
+    // yona BoardApi.java:128-159 updatePostingContent() 대응 (P1-107). 게시글 본문만 인라인 수정하는 [GL-controllers_api_BoardApi-006]
     // 경량 API — updateIssueContent(이슈, P1-102)와 동일하게 클라이언트가 저장 직전 화면 원문
     // (request.original)을 그대로 보내면, 서버가 그 원문과 현재 DB 값을 각각 해시해 비교해 다르면
     // (=그 사이 다른 사람이 이미 수정) 409로 거부한다. legacy와 동일하게 권한 확인이 충돌 검사보다 먼저다.

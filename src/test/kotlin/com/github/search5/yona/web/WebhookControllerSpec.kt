@@ -130,7 +130,7 @@ class WebhookControllerSpec : DescribeSpec({
                 }
             }
 
-            // yona Webhook.java:74-81 @Required/@Size(payloadUrl<=2000, secret<=250) 대응 (P2-28).
+            // yona Webhook.java:74-81 @Required/@Size(payloadUrl<=2000, secret<=250) 대응 (P2-28). [GL-models_Webhook-006]
             // yona는 Play 폼 바인딩 단계에서 이 검증을 통과 못하면 DB에 닿기도 전에 400을 반환하는데,
             // yuna는 이 사전 검증이 없어 그대로 DB에 넣으려다 컬럼 길이 제약 위반(500)이 노출될 수 있었다.
             it("payloadUrl이 비어있으면 400 Bad Request를 반환하고 저장을 시도하지 않는다 (P2-28)") {

@@ -23,7 +23,7 @@ class OrganizationServiceImpl(
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
     private val notificationEventRecorder: NotificationEventRecorder,
-    // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19).
+    // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19). [GL-models_FavoriteOrganization-007]
     private val favoriteOrganizationRepository: FavoriteOrganizationRepository
 ) : OrganizationService {
 
@@ -95,7 +95,7 @@ class OrganizationServiceImpl(
         organization.descr = descr
         organizationRepository.save(organization)
 
-        // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19) — 조직명이
+    // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19) — 조직명이 [GL-models_FavoriteOrganization-007]
         // 바뀌면 즐겨찾기 목록에 저장된 비정규화 organizationName도 함께 갱신한다(그대로 두면 즐겨찾기
         // 화면에 옛 조직명이 남는다).
         favoriteOrganizationRepository.findByOrganizationId(orgId).forEach {
@@ -258,7 +258,7 @@ class OrganizationServiceImpl(
             .orElseThrow { IllegalArgumentException("User not found: $userId") }
 
         // yona EnrollOrganizationApp.java:101-104 validateForCancelEnroll()의 OrganizationUser.isGuest()
-        // 가드 대응 (P1-123). 이미 조직의 정식 멤버(ORG_ADMIN/ORG_MEMBER)라면 가입 신청 취소 자체가
+        // 가드 대응 (P1-123). 이미 조직의 정식 멤버(ORG_ADMIN/ORG_MEMBER)라면 가입 신청 취소 자체가 [GL-controllers_EnrollOrganizationApp-005]
         // 성립하지 않는다.
         if (organizationUserRepository.existsByOrganizationIdAndUserId(organization.id!!, user.id!!)) {
             throw IllegalArgumentException("User is already a member of this organization")

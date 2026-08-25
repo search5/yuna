@@ -60,7 +60,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
         hostname = "yuna.example.com"
     )
 
-    // yona utils/Markdown.java:132-159 transformIssueLink()/:161-211 extractIssueLink() 대응
+    // yona utils/Markdown.java:132-159 transformIssueLink()/:161-211 extractIssueLink() 대응 [GL-utils_Markdown-010]
     // (P2-33). 본문에 순수 이슈 URL(예: https://호스트/owner/proj/issue/5)을 그대로 붙여넣으면(사용자가
     // 직접 [텍스트](url)로 감싸지 않은 raw link만 — commonmark AutolinkExtension이 이런 raw URL을
     // <a href="...">그대로의 URL 텍스트</a>로 자동 링크화해 두고, 이 함수가 그 앵커의 href==text인
@@ -121,7 +121,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
         }
     }
 
-    // yona utils/Markdown.java:103-130 checkReferrer() 대응 (P2-32). application.noreferrer가
+    // yona utils/Markdown.java:103-130 checkReferrer() 대응 (P2-32). application.noreferrer가 [GL-utils_Markdown-009]
     // 켜져 있으면 이 사이트 호스트명으로 시작하지 않는 외부 링크에 rel="noreferrer"를 붙인다 —
     // 지금까지는 알림메일 후처리(NotificationMailBodyProcessor, P1-27)에만 있고 일반 마크다운
     // 렌더링(이슈/댓글/위키 본문 등 전체)엔 없었다.
@@ -325,7 +325,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
         }
     }
 
-    // yona Markdown.java:346-356 renderFileInCodeBrowser()/renderFileInReadme() 대응 (P1-139).
+    // yona Markdown.java:346-356 renderFileInCodeBrowser()/renderFileInReadme() 대응 (P1-139). [GL-utils_Markdown-017;GL-utils_Markdown-018]
     describe("renderFileInCodeBrowser / renderFileInReadme - 상대경로 링크 치환") {
         val project = Project(id = 1L, name = "yobi", owner = "yobi", vcs = "GIT")
         val playRepoWithMain = object : PlayRepository by mockk<PlayRepository>(relaxed = true) {

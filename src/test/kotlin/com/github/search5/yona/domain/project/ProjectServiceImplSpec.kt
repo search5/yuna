@@ -162,7 +162,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             verify(exactly = 1) { projectTransferRepository.delete(pt) }
         }
 
-        // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27). yona 원본은 이
+        // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27). yona 원본은 이 [GL-models_FavoriteProject-008]
         // 동기화를 개명(ProjectApp.settingProject())에서만 호출하지만, yuna는 개명 전용 경로가
         // 없어 이름/소유자 변경이 실제로 일어나는 유일한 지점인 acceptTransfer에서 수행한다.
         it("이관이 완료되면 이 프로젝트를 즐겨찾기한 사용자들의 owner/projectName도 갱신해야 한다 (P2-27)") {

@@ -446,7 +446,7 @@ class AccessControlSpec : DescribeSpec({
     }
 
     // yona AccessControl.java:100-118 isResourceCreatable()의 ISSUE_COMMENT/NONISSUE_COMMENT
-    // 케이스 대응 (P2-34).
+    // 케이스 대응 (P2-34). [GL-utils_AccessControl-006;GL-utils_AccessControl-007]
     describe("isIssueCommentCreatable(user, project, issue) / isPostingCommentCreatable(user, project, posting)") {
         val issueAuthor = User(id = 200L, loginId = "issueAuthor", name = "issueAuthor")
         val issueAssignee = User(id = 201L, loginId = "issueAssignee", name = "issueAssignee")

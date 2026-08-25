@@ -260,7 +260,7 @@ class MilestoneControllerSpec : DescribeSpec({
             }
         }
 
-        // yona controllers/api/MilestoneApi.java:29-50 newMilestone() 대응 (P1-129).
+        // yona controllers/api/MilestoneApi.java:29-50 newMilestone() 대응 (P1-129). [GL-controllers_api_MilestoneApi-001;GL-controllers_api_MilestoneApi-002]
         describe("POST /api/projects/{projectId}/milestones/bulk") {
             it("프로젝트 멤버가 아니면 403 Forbidden을 반환해야 한다") {
                 val stranger = User(id = 99L, loginId = "stranger", name = "외부인")

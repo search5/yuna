@@ -23,7 +23,7 @@ import java.util.Optional
 import io.mockk.clearMocks
 
 // yona AccessControl.java:119-203 isGlobalResourceAllowed()의 ORGANIZATION 케이스
-// "user.isSiteManager() || isOrganizationAdmin" 대응 (P0-21). 조직 REST API가 조직 관리자
+// "user.isSiteManager() || isOrganizationAdmin" 대응 (P0-21). 조직 REST API가 조직 관리자 [GL-utils_AccessControl-008]
 // 여부만 검사하고 사이트매니저 전역 우회가 빠져 있던 회귀를 검증한다.
 class OrganizationControllerSpec : DescribeSpec({
     val organizationService = mockk<OrganizationService>()

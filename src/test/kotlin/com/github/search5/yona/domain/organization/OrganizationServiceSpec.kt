@@ -199,7 +199,7 @@ class OrganizationServiceSpec @Autowired constructor(
                 requestEvents.size shouldBe 1
             }
 
-            // yona EnrollOrganizationApp.java:82,101-104 대응 (P1-123). 대기 중인 가입 신청이
+            // yona EnrollOrganizationApp.java:82,101-104 대응 (P1-123). 대기 중인 가입 신청이 [GL-controllers_EnrollOrganizationApp-005]
             // 실제로 없으면 취소 알림을 발행하지 않고, 이미 정식 멤버라면 취소 자체를 거부해야 한다.
             it("8. 대기 중인 가입 신청이 없는 상태에서 취소를 호출하면 알림을 발행하지 않아야 한다") {
                 val org = organizationService.createOrganization("my-org", "설명", admin.id!!)
@@ -253,7 +253,7 @@ class OrganizationServiceSpec @Autowired constructor(
                 requestOrCancelEvents.size shouldBe 0
             }
 
-            // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19).
+            // yona FavoriteOrganization.java:38-46 updateFavoriteOrganization() 대응 (P2-19). [GL-models_FavoriteOrganization-007]
             it("11. 조직명을 변경하면 그 조직을 즐겨찾기한 모든 사용자의 비정규화된 organizationName도 갱신돼야 한다") {
                 val org = organizationService.createOrganization("old-org-name", "설명", admin.id!!)
                 val favoriter = userRepository.save(

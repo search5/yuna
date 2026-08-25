@@ -121,7 +121,7 @@ class OrganizationViewControllerSpec : DescribeSpec({
             roleRepository.findAllById(listOf(RoleType.ORG_ADMIN.roleType, RoleType.ORG_MEMBER.roleType))
         } returns listOf(roleAdmin, roleMember)
 
-        // yona OrganizationApp.java:90-91 @GuestProhibit 대응 (P1-121). orgList와 동일하게
+        // yona OrganizationApp.java:90-91 @GuestProhibit 대응 (P1-121). orgList와 동일하게 [GL-controllers_OrganizationApp-005]
         // isGuest 계정만 차단하고 비로그인 사용자는 (별도 @AnonymousCheck가 담당하는) error/403으로
         // 처리된다.
         describe("POST /organizations/new") {
@@ -153,7 +153,7 @@ class OrganizationViewControllerSpec : DescribeSpec({
             }
         }
 
-        // yona OrganizationApp.java:409-420 validateForUpdate()의 LogoUtil.isImageFile()/
+        // yona OrganizationApp.java:409-420 validateForUpdate()의 LogoUtil.isImageFile()/ [GL-controllers_OrganizationApp-022]
         // LOGO_FILE_LIMIT_SIZE 검증 대응 (P1-124). 검증 실패 시 이름/설명 변경을 포함해 전체
         // 갱신 자체가 거부되어야 한다(legacy가 badRequest(setting.render(...))로 아무 것도
         // 반영하지 않는 것과 동일).

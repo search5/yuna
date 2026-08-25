@@ -451,7 +451,7 @@ class ProjectApiControllerSpec : DescribeSpec({
         }
     }
 
-    // yona ProjectApi.java:46-72 exports() 대응 (P2-46).
+    // yona ProjectApi.java:46-72 exports() 대응 (P2-46). [GL-controllers_api_ProjectApi-002;GL-controllers_api_ProjectApi-003]
     describe("GET /api/projects/{owner}/{projectName}/exports (P2-46)") {
         val manager = User(id = 30L, loginId = "manager", name = "매니저", email = "manager@example.com")
         val managerAuth = UsernamePasswordAuthenticationToken("manager", "password")

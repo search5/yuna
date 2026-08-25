@@ -219,7 +219,7 @@ class UserViewController(
         // 목록을 전혀 보여주지 않는다(로그인 사용자는 이 화면에서는 영향 없음).
         val hideFromThisViewer = hideProjectListing && loginUser == null
 
-        // yona UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()/
+        // yona UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()/ [GL-controllers_UserApp-064]
         // collectProjects()+addProjectNotDupped() 대응 (P0-25). 대상 사용자가 작성한 이슈/PR/
         // 소속 프로젝트를 방문자(loginUser)가 READ 가능한 것만 남긴다 — 필터링이 전혀 없어
         // 비공개 프로젝트의 이슈/PR 제목이 그 프로젝트 멤버가 아닌 누구에게나(익명 포함)
@@ -231,7 +231,7 @@ class UserViewController(
                 .filter { accessControl.isAllowedToReadProject(loginUser, it) }
         }
 
-        // yona UserApp.java:740-743 "daysAgo < 0이면 1로 보정" 대응 (P2-38).
+        // yona UserApp.java:740-743 "daysAgo < 0이면 1로 보정" 대응 (P2-38). [GL-controllers_UserApp-059]
         val effectiveDaysAgo = if (daysAgo < 0) 1 else daysAgo
         val since = Instant.now().minus(effectiveDaysAgo.toLong(), ChronoUnit.DAYS)
 
@@ -250,7 +250,7 @@ class UserViewController(
             emptyList()
         } else {
             // yona UserApp.java:757-759 PullRequest.findOpendPullRequestsByDaysAgo(user, daysAgo)
-            // 대응 (P2-38).
+            // 대응 (P2-38). [GL-controllers_UserApp-060]
             pullRequestRepository.findByContributorAndUpdatedGreaterThanEqualOrderByUpdatedDescStateAsc(user, since)
                 .filter { accessControl.isAllowedToReadProject(loginUser, it.toProject) }
         }
@@ -295,7 +295,7 @@ class UserViewController(
         return "user/verified"
     }
 
-    // yona UserApp.java:1101-1114 confirmEmail() 대응. 성공 시 editUserInfoForm으로 리다이렉트,
+    // yona UserApp.java:1101-1114 confirmEmail() 대응. 성공 시 editUserInfoForm으로 리다이렉트, [GL-controllers_UserApp-079;GL-controllers_UserApp-080]
     // 실패 시 ErrorViews.NotFound(404)를 반환한다. Play의 addUserInfoToSession(자동 세션 갱신)은
     // Spring Security 인증 모델과 근본적으로 다른 메커니즘이라 이식 범위에서 제외했다.
     @GetMapping("/user/email/confirm/{emailId}/{token}")

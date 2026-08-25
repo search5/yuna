@@ -12,7 +12,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
-// yona Search.java:594-602 issueCommentsEL()의 equalsUserTemplate() 대응 (P1-83).
+// yona Search.java:594-602 issueCommentsEL()의 equalsUserTemplate() 대응 (P1-83). [GL-models_Search-046]
 @Transactional
 class IssueCommentRepositorySpec @Autowired constructor(
     private val issueCommentRepository: IssueCommentRepository,

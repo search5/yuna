@@ -371,7 +371,7 @@ class PullRequestViewControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("project", "pr", "diffs", "mergeResult"))
             }
 
-            // yona PullRequest.java:1063-1103 getCodeCommentThreadsForChanges() 대응 (P1-114).
+            // yona PullRequest.java:1063-1103 getCodeCommentThreadsForChanges() 대응 (P1-114). [GL-models_PullRequest-100]
             // commitId 없이 조회하는 "전체 변경사항"에서는 커밋 단위 스레드(isCommitComment)와
             // outdated 스레드를 제외하고, NonRangedCodeCommentThread는 필터링 없이 그대로 포함해야 한다.
             it("commentThreads는 커밋단위/outdated 스레드를 제외하고 non-ranged 스레드는 그대로 포함해야 한다") {

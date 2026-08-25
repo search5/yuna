@@ -19,7 +19,7 @@ class AttachmentCleanupScheduler(
     @Scheduled(cron = "0 0 * * * *")
     fun cleanupTemporaryFiles() {
         log.info("Starting cleanup of temporary attachment files...")
-        // yona Attachment.java:438-477 cleanupTemporaryUploadFilesWithSchedule() 대응 (P2-26).
+        // yona Attachment.java:438-477 cleanupTemporaryUploadFilesWithSchedule() 대응 (P2-26). [GL-models_Attachment-035]
         // 원본은 "오래된" 파일이 아니라 .ge("createdDate", now-keepAlive) — 즉 keepAlive 이내에
         // "최근" 업로드된 파일을 정리 대상으로 삼는다. 스케줄러의 취지(방치된 임시파일 정리)와
         // 반대로 보이는 비교 방향이라 yona 자체의 버그로 의심되지만, 사용자 지시에 따라 레거시

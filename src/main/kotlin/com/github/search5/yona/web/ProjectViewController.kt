@@ -443,7 +443,7 @@ class ProjectViewController(
         val decodedPath = URLDecoder.decode(path, "UTF-8")
 
         // yona CodeApp.java:135-164 download()의 getMetaDataFromAncestorDirectories() 존재 검증
-        // 대응 (P2-30) — 응답 헤더를 쓰고 스트리밍을 시작하기 전에 브랜치/경로가 실제로 존재하는지
+        // 대응 (P2-30) — 응답 헤더를 쓰고 스트리밍을 시작하기 전에 브랜치/경로가 실제로 존재하는지 [GL-controllers_CodeApp-006]
         // 먼저 확인해, 존재하지 않는 브랜치를 요청했을 때 스트리밍 도중 예외가 나는 대신 깔끔한
         // 404를 반환한다. yona 원본도 이 조회 결과의 path는 getArchive()에 전달하지 않고 항상
         // 브랜치 전체를 아카이브한다(UI의 "Download ZIP" 버튼도 path를 절대 넘기지 않는다) — 그
@@ -497,7 +497,7 @@ class ProjectViewController(
         val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
             ?: return "redirect:/users/loginform"
 
-        // yona ProjectApp.java:168-178 newProject()의 권한 가드 대응 (P2-34) —
+        // yona ProjectApp.java:168-178 newProject()의 권한 가드 대응 (P2-34) — [GL-controllers_ProjectApp-016;GL-controllers_ProjectApp-017]
         // isGlobalResourceCreatable(항상 true, 위에서 이미 로그인 확인함)과 별개로, owner가 기존
         // 조직명과 같으면 그 조직의 admin만 그 조직 아래 프로젝트를 생성할 수 있다.
         val trimmedOwner = owner.trim()
@@ -522,7 +522,7 @@ class ProjectViewController(
                 this.isMilestoneEnabled = milestone
                 this.isBoardEnabled = board
                 // yona ProjectApp.java:184-186 "Organization.isNameExist(owner)면 project.organization
-                // 연동" 대응 (P2-34) — 지금까지는 owner가 조직명이어도 project.organization이 채워지지
+                // 연동" 대응 (P2-34) — 지금까지는 owner가 조직명이어도 project.organization이 채워지지 [GL-controllers_ProjectApp-018]
                 // 않아, 조직 소속 프로젝트인데도 조직 관리자 권한/조직 프로젝트 목록에서 누락되고 있었다.
                 if (organization != null) {
                     this.organization = organization

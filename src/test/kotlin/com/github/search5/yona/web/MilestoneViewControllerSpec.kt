@@ -158,7 +158,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                     .andExpect(view().name("error/forbidden"))
             }
 
-            // yona MilestoneApp.java:50-73 MilestoneCondition(orderBy/orderDir 파라미터) 대응 (P1-128).
+            // yona MilestoneApp.java:50-73 MilestoneCondition(orderBy/orderDir 파라미터) 대응 (P1-128). [GL-controllers_MilestoneApp-002;GL-controllers_MilestoneApp-003]
             it("orderBy/orderDir 파라미터를 서비스 호출에 그대로 전달해야 한다") {
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 902L, user = memberUser, project = project, role = Role(id = RoleType.MEMBER.roleType)))
@@ -179,7 +179,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                     .andExpect(model().attribute("orderDir", "desc"))
             }
 
-            // yona Milestone.java:214-227 findMilestones()의 completionRate Comparator 대응 (P1-128).
+            // yona Milestone.java:214-227 findMilestones()의 completionRate Comparator 대응 (P1-128). [GL-models_Milestone-029]
             // completionRate는 DB 컬럼이 아니라 계산 필드라, 서비스에서 반환된 순서와 무관하게 컨트롤러가
             // 완료율 기준으로 다시 정렬해야 한다.
             it("orderBy=completionRate면 완료율 기준으로 재정렬해야 한다") {
@@ -234,7 +234,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
                     .andExpect(model().attributeExists("project", "milestoneDto"))
             }
 
-            // yona Milestone.java:99-108 sortedByNumberOfIssue()(이슈 번호 내림차순) 대응 (P2-22).
+            // yona Milestone.java:99-108 sortedByNumberOfIssue()(이슈 번호 내림차순) 대응 (P2-22). [GL-models_Milestone-014;GL-models_Milestone-015]
             // 리포지토리 조회에는 정렬이 없으므로, 컨트롤러가 open/closed 이슈 목록을 번호 내림차순으로
             // 재정렬해야 한다.
             it("이슈 목록은 번호 내림차순으로 정렬돼 있어야 한다 (P2-22)") {
@@ -321,7 +321,7 @@ class MilestoneViewControllerSpec : DescribeSpec({
         }
 
         // yona MilestoneApp.java:100-125 validateDueDate()(Play 폼 바인딩 실패 시 hasErrors()로 전체
-        // 제출을 막고 경고 플래시) 대응 (P2-23). dueDate 형식이 잘못되면 조용히 null로 저장하지 말고
+        // 제출을 막고 경고 플래시) 대응 (P2-23). dueDate 형식이 잘못되면 조용히 null로 저장하지 말고 [GL-controllers_MilestoneApp-006]
         // 저장 자체를 막아야 한다.
         describe("POST /{owner}/{projectName}/milestones - dueDate 형식 오류 (P2-23)") {
             it("dueDate 파싱에 실패하면 저장하지 않고 오류와 함께 생성 폼을 다시 보여줘야 한다") {

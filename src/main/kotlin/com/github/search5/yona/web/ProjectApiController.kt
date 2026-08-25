@@ -61,7 +61,7 @@ class ProjectApiController(
     private val roleRepository: RoleRepository,
     private val repositoryService: RepositoryService,
     private val accessControl: AccessControl,
-    // yona ProjectApi.java:46-72 exports() 대응 (P2-46)에 필요한 의존성.
+    // yona ProjectApi.java:46-72 exports() 대응 (P2-46)에 필요한 의존성. [GL-controllers_api_ProjectApi-002;GL-controllers_api_ProjectApi-003]
     private val issueRepository: IssueRepository,
     private val postingRepository: PostingRepository,
     private val issueCommentRepository: IssueCommentRepository,
@@ -80,7 +80,7 @@ class ProjectApiController(
         return userRepository.findByLoginId(authentication.name).orElse(null)
     }
 
-    // yona ProjectApi.java:111-161 newProject() 대응 (P2-45).
+    // yona ProjectApi.java:111-161 newProject() 대응 (P2-45). [GL-controllers_api_ProjectApi-007]
     @PostMapping("/api/projects/{owner}")
     fun newProject(
         @PathVariable owner: String,
@@ -133,7 +133,7 @@ class ProjectApiController(
             if (organization != null) {
                 this.organization = organization
             }
-            // yona ProjectApi.java:230-243 saveMenuSettingsToDefault() 대응 — 전체 메뉴 활성화가
+            // yona ProjectApi.java:230-243 saveMenuSettingsToDefault() 대응 — 전체 메뉴 활성화가 [GL-controllers_api_ProjectApi-012]
             // Project 엔티티의 isCodeEnabled 등 기본값(전부 true)과 이미 동일해 별도 호출이 필요 없다.
         }
         val savedProject = projectRepository.save(project)
@@ -159,7 +159,7 @@ class ProjectApiController(
         return ResponseEntity.status(HttpStatus.CREATED).body(createdProjectNode(savedProject))
     }
 
-    // yona ProjectApi.java:163-179 parseProjectScope() 대응.
+    // yona ProjectApi.java:163-179 parseProjectScope() 대응. [GL-controllers_api_ProjectApi-008]
     private fun parseProjectScope(scope: String?): ProjectScope {
         return when (scope) {
             "PRIVATE" -> ProjectScope.PRIVATE
@@ -182,7 +182,7 @@ class ProjectApiController(
         }
     }
 
-    // yona ProjectApi.java:189-210 addProjectMembers() 대응.
+    // yona ProjectApi.java:189-210 addProjectMembers() 대응. [GL-controllers_api_ProjectApi-009;GL-controllers_api_ProjectApi-010]
     private fun addProjectMembers(members: List<NewProjectApiMember>?, project: Project) {
         if (members == null) return
 
@@ -208,7 +208,7 @@ class ProjectApiController(
             }
         }
 
-        // yona Project.java:637-655 cleanEnrolledUsers() 대응 — 이 프로젝트에 대해 이미 "가입 신청"을
+        // yona Project.java:637-655 cleanEnrolledUsers() 대응 — 이 프로젝트에 대해 이미 "가입 신청"을 [GL-models_Project-083;GL-models_Project-084]
         // 해둔 사용자가 여기서 멤버로 추가되면 그 신청을 자동 수락 처리하고 알림을 보낸다. newProject()는
         // 항상 새로 만드는 프로젝트라 이 시점엔 project.enrolledUsers가 구조적으로 항상 비어있어(방금
         // 막 생성돼 아직 아무도 가입 신청을 할 수 없었음) 실질적으로 항상 아무 일도 하지 않는 no-op이므로
@@ -217,7 +217,7 @@ class ProjectApiController(
         // 있다면 그 경로에서는 별도로 검토가 필요할 수 있음).
     }
 
-    // yona ProjectApi.java:220-228 createdProjectNode() 대응.
+    // yona ProjectApi.java:220-228 createdProjectNode() 대응. [GL-controllers_api_ProjectApi-011]
     private fun createdProjectNode(project: Project): Map<String, Any?> {
         return mapOf(
             "id" to project.id,
@@ -228,7 +228,7 @@ class ProjectApiController(
         )
     }
 
-    // yona ProjectApi.java:46-72 exports() 대응 (P2-46) — 프로젝트를 이슈/게시글/댓글/마일스톤/라벨까지
+    // yona ProjectApi.java:46-72 exports() 대응 (P2-46) — 프로젝트를 이슈/게시글/댓글/마일스톤/라벨까지 [GL-controllers_api_ProjectApi-002;GL-controllers_api_ProjectApi-003]
     // 포함해 JSON으로 전체 직렬화한다. legacy `@IsAllowed(Operation.DELETE)`(프로젝트 매니저/조직관리자
     // 전용)와 동일하게 accessControl.isAllowed(user, project, Operation.DELETE)로 게이트한다.
     @GetMapping("/api/projects/{owner}/{projectName}/exports")
@@ -275,7 +275,7 @@ class ProjectApiController(
         return ResponseEntity.ok(result)
     }
 
-    // yona Project.java:182-212 findAuthors()/getIssueUsers()/getPostingUsers()/getPullRequestUsers()
+    // yona Project.java:182-212 findAuthors()/getIssueUsers()/getPostingUsers()/getPullRequestUsers() [GL-models_Project-040;GL-models_Project-041]
     // 대응 — 이슈 작성자 + 게시글 작성자 + (이 프로젝트로 들어온) PR 기여자를 순서대로 합쳐 중복
     // 제거한다(legacy도 LinkedHashSet<User>로 등장 순서를 보존하며 중복 제거).
     private fun findAuthors(project: Project, issues: List<Issue>, postings: List<Posting>): List<User> {
@@ -290,7 +290,7 @@ class ProjectApiController(
         return authors.values.toList()
     }
 
-    // yona ProjectApi.java:87-109 getAssginees()/getAuthors() + composeAuthorJson()/composeAssigneeJson()
+    // yona ProjectApi.java:87-109 getAssginees()/getAuthors() + composeAuthorJson()/composeAssigneeJson() [GL-controllers_api_ProjectApi-005;GL-controllers_api_ProjectApi-006]
     // 대응 — 네 메서드 모두 {loginId,name,email} 동일한 형태를 만들어 하나로 합친다(출력 결과가
     // 완전히 동일해 legacy의 중복 코드 4벌을 그대로 옮기지 않고 공유 — 로직/출력 분기 자체가 없어
     // "행동을 단순화"하는 게 아니라 순수 중복 제거).
@@ -298,7 +298,7 @@ class ProjectApiController(
         return mapOf("loginId" to user?.loginId, "name" to user?.name, "email" to user?.email)
     }
 
-    // yona ProjectApi.java:350-364 composeMembersJson() 대응.
+    // yona ProjectApi.java:350-364 composeMembersJson() 대응. [GL-controllers_api_ProjectApi-020]
     private fun composeMemberJson(projectUser: ProjectUser): Map<String, Any?> {
         return mapOf(
             "loginId" to projectUser.user.loginId,
@@ -308,13 +308,13 @@ class ProjectApiController(
         )
     }
 
-    // yona ProjectApi.java:366-376 composeLabelJson() 대응 — 이슈 안에 포함되는 라벨 표현(isExclusive
+    // yona ProjectApi.java:366-376 composeLabelJson() 대응 — 이슈 안에 포함되는 라벨 표현(isExclusive [GL-controllers_api_ProjectApi-021]
     // 없음). getAllLabels()(project 최상위 labels 필드용, isExclusive 포함)와는 필드가 달라 별도로 둔다.
     private fun composeLabelJson(label: IssueLabel): Map<String, Any?> {
         return mapOf("labelName" to label.name, "labelColor" to label.color, "category" to label.category.name)
     }
 
-    // yona ProjectApi.java:378-389 getAllLabels() 대응.
+    // yona ProjectApi.java:378-389 getAllLabels() 대응. [GL-controllers_api_ProjectApi-022]
     private fun composeAllLabelsJson(label: IssueLabel): Map<String, Any?> {
         return mapOf(
             "labelName" to label.name,
@@ -324,7 +324,7 @@ class ProjectApiController(
         )
     }
 
-    // yona ProjectApi.java:441-450 getMilestoneNode() 대응.
+    // yona ProjectApi.java:441-450 getMilestoneNode() 대응. [GL-controllers_api_ProjectApi-025]
     private fun getMilestoneNode(milestone: Milestone): Map<String, Any?> {
         val node = linkedMapOf<String, Any?>(
             "id" to milestone.id,
@@ -336,7 +336,7 @@ class ProjectApiController(
         return node
     }
 
-    // yona ProjectApi.java:276-320 getResult(AbstractPosting)의 ISSUE_POST 케이스 대응.
+    // yona ProjectApi.java:276-320 getResult(AbstractPosting)의 ISSUE_POST 케이스 대응. [GL-controllers_api_ProjectApi-016;GL-controllers_api_ProjectApi-017]
     private fun getIssueResult(issue: Issue): Map<String, Any?> {
         val result = linkedMapOf<String, Any?>(
             "number" to issue.number,
@@ -376,7 +376,7 @@ class ProjectApiController(
         return result
     }
 
-    // yona ProjectApi.java:276-320 getResult(AbstractPosting)의 그 외(BOARD_POST) 케이스 대응 —
+    // yona ProjectApi.java:276-320 getResult(AbstractPosting)의 그 외(BOARD_POST) 케이스 대응 — [GL-controllers_api_ProjectApi-016;GL-controllers_api_ProjectApi-017]
     // ISSUE_POST 전용 필드(assignees/state/labels/milestone*/dueDate/refUrl)는 legacy의
     // `if (type == ISSUE_POST)` 분기 밖이라 전혀 나오지 않는다.
     private fun getPostingResult(posting: Posting): Map<String, Any?> {
@@ -406,7 +406,7 @@ class ProjectApiController(
         return result
     }
 
-    // yona ProjectApi.java:391-421 composePlainCommentsJson()의 ISSUE_COMMENT 케이스 대응 —
+    // yona ProjectApi.java:391-421 composePlainCommentsJson()의 ISSUE_COMMENT 케이스 대응 — [GL-controllers_api_ProjectApi-023;GL-controllers_api_ProjectApi-024]
     // yuna는 IssueComment/PostingComment가 parentComment 필드 타입이 서로 달라(자기 자신 타입만
     // 부모가 될 수 있음) 공통 상위타입으로 일반화할 수 없어 타입별로 나눠 이식한다(순수 아키텍처 차이,
     // 트리 조립 알고리즘 자체는 동일).
@@ -428,7 +428,7 @@ class ProjectApiController(
         return topLevel.values.toList()
     }
 
-    // yona ProjectApi.java:391-421 composePlainCommentsJson()의 NONISSUE_COMMENT 케이스 대응.
+    // yona ProjectApi.java:391-421 composePlainCommentsJson()의 NONISSUE_COMMENT 케이스 대응. [GL-controllers_api_ProjectApi-023;GL-controllers_api_ProjectApi-024]
     private fun composePostingCommentsJson(comments: List<PostingComment>): List<Map<String, Any?>> {
         val topLevel = LinkedHashMap<Long, MutableMap<String, Any?>>()
         val children = LinkedHashMap<Long, MutableList<Map<String, Any?>>>()

@@ -636,7 +636,7 @@ class CodeReviewServiceSpec @Autowired constructor(
                 exception.message shouldBe "Permission denied"
             }
 
-            // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). 삭제 권한이
+            // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). 삭제 권한이 [GL-utils_AccessControl-009]
             // "작성자 또는 프로젝트 role==MANAGER"로만 좁게 구현돼 있었으나, yona는 사이트매니저/조직관리자도
             // 항상 우회할 수 있다 — 이 우회가 yuna에는 빠져 있어 사이트관리자조차 타인의 리뷰/커밋 댓글을
             // 지울 수 없는 과도한 제한이었다.

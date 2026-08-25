@@ -118,7 +118,7 @@ class AttachmentServiceSpec @Autowired constructor(
                 list.any { it.name == "file2.txt" } shouldBe true
             }
 
-            // yona Attachment.java:438-477 cleanupTemporaryUploadFilesWithSchedule() 대응 (P2-26).
+            // yona Attachment.java:438-477 cleanupTemporaryUploadFilesWithSchedule() 대응 (P2-26). [GL-models_Attachment-035]
             // 원본은 .ge("createdDate", now-keepAlive) — "오래된" 파일이 아니라 keepAlive 이내에
             // "최근" 업로드된 파일을 정리 대상으로 삼는다(스케줄러 취지와 반대로 보이는 yona 자체의
             // 버그로 의심되지만, 사용자 지시로 레거시 비교 방향을 그대로 포팅했다 — 백로그 P2-26 TODO).
@@ -219,7 +219,7 @@ class AttachmentServiceSpec @Autowired constructor(
                 unchanged.containerId shouldBe "1"
             }
 
-            // yona Attachment.java:75-85 findBy(Attachment) 대응 (P2-24). 이전에는 매번 새 행을
+            // yona Attachment.java:75-85 findBy(Attachment) 대응 (P2-24). 이전에는 매번 새 행을 [GL-models_Attachment-013;GL-models_Attachment-014;GL-models_Attachment-015]
             // 저장해 재업로드마다 DB에 중복 행이 쌓였다 — 동일 컨테이너에 동일 이름·내용으로
             // 재업로드하면 새 행을 만들지 않고 기존 행을 재사용해야 한다.
             it("8. 동일 이름·내용·컨테이너로 재업로드하면 새 행을 만들지 않고 기존 첨부를 재사용해야 한다 (P2-24)") {
@@ -240,7 +240,7 @@ class AttachmentServiceSpec @Autowired constructor(
                 attachmentRepository.count() shouldBe 1
             }
 
-            // yona FileUtil.java:113-142 detectMediaType() 대응 (P2-25). 실제 저장 파일은 해시
+            // yona FileUtil.java:113-142 detectMediaType() 대응 (P2-25). 실제 저장 파일은 해시 [GL-utils_FileUtil-007;GL-utils_FileUtil-008]
             // 이름(확장자 없음)이므로, JDK Files.probeContentType()은 사실상 항상 감지에 실패해
             // application/octet-stream만 반환했다 — Tika로 실제 콘텐츠(매직 바이트)를 감지해야 한다.
             it("9. 물리 저장 파일명이 확장자 없는 해시여도 실제 콘텐츠(매직 바이트)로 MIME 타입을 정확히 감지해야 한다 (P2-25)") {

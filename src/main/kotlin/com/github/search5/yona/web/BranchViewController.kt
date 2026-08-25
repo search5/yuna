@@ -57,7 +57,7 @@ class BranchViewController(
 
         val vcsType = project.vcs?.uppercase() ?: "GIT"
         if (vcsType != "GIT") {
-            // yona actions/IsOnlyGitAvailableAction.java:44-45
+            // yona actions/IsOnlyGitAvailableAction.java:44-45 [GL-actions_IsOnlyGitAvailableAction-002]
             // badRequest(ErrorViews.BadRequest.render("error.badrequest.only.available.for.git"))
             // 대응 — BadRequest의 (String) 1-arg 오버로드는 ErrorViews.java:134-137에서 보듯
             // badrequest_default.render(messageKey)(제네릭)로 귀결된다(컨텍스트 인지형

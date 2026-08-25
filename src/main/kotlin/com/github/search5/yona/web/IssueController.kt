@@ -330,7 +330,7 @@ class IssueController(
     }
 
 
-    // yona IssueApi.java:1176-1191 upvoteWeight() 대응 (P1-101). Issue.voters(공감 투표)와는 별개로
+    // yona IssueApi.java:1176-1191 upvoteWeight() 대응 (P1-101). Issue.voters(공감 투표)와는 별개로 [GL-controllers_api_IssueApi-064;GL-controllers_api_IssueApi-065]
     // 이슈 자체에 +1 가중치를 매기는 정수 카운터. legacy는 AccessControl.isAllowed(user, issue.asResource(),
     // Operation.UPDATE)로 권한을 확인한다.
     @PostMapping("/{number}/upvoteWeight")
@@ -375,7 +375,7 @@ class IssueController(
     }
 
 
-    // yona IssueApi.java:551-584 detectChange() 대응 (P1-102). 클라이언트가 화면에 표시된 시점의
+    // yona IssueApi.java:551-584 detectChange() 대응 (P1-102). 클라이언트가 화면에 표시된 시점의 [GL-controllers_api_IssueApi-030;GL-controllers_api_IssueApi-031]
     // body 체크섬(클라이언트가 직접 SHA-1 계산)과 댓글 수를 보내면, 서버 현재 상태와 비교해 "다른
     // 사용자가 이미 수정했는지"를 폴링으로 감지한다. 저장 시점 충돌 차단(409)은 별도 — updateIssue의
     // 원본 대조 검사(아래) 참고.
@@ -414,7 +414,7 @@ class IssueController(
         return ResponseEntity.ok(result)
     }
 
-    // yona IssueApi.java:319-349 updateIssueContent() 대응 (P1-102). 이슈 본문만 인라인 수정하는
+    // yona IssueApi.java:319-349 updateIssueContent() 대응 (P1-102). 이슈 본문만 인라인 수정하는 [GL-controllers_api_IssueApi-020]
     // 경량 API — 클라이언트가 "저장 직전에 화면에 있던 원문 전체"를 그대로 보내면, 서버가 그 원문의
     // 체크섬과 현재 DB 값의 체크섬을 비교해 다르면(=그 사이에 다른 사람이 이미 수정) 409로 거부한다
     // (detectChange의 "클라이언트가 체크섬을 계산해 보냄"과 반대로, 여기는 서버가 두 원문을 각각 해시).

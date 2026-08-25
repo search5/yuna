@@ -57,7 +57,7 @@ class AttachmentServiceImpl(
             tempFile.delete()
         }
 
-        // yona Attachment.java:537-582 save()의 dedup 대응 (P2-24) — 동일 컨테이너에 동일
+        // yona Attachment.java:537-582 save()의 dedup 대응 (P2-24) — 동일 컨테이너에 동일 [GL-models_Attachment-039;GL-models_Attachment-040]
         // 이름·내용(name+hash+containerType+containerId)으로 이미 첨부된 기록이 있으면 새 행을
         // 만들지 않고 기존 행을 재사용한다. 이전에는 이 조회 없이 매번 새 Attachment를 저장해,
         // 재업로드마다 DB에 중복 행이 쌓였다.

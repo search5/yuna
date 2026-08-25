@@ -198,7 +198,7 @@ class CommentServiceSpec @Autowired constructor(
                 postingRepository.findById(posting.id!!).orElseThrow().numOfComments shouldBe 1
             }
 
-            // yona IssueApp.java:1020-1057 AddPreviousContent()+getPrevious() 대응 (P2-17) — 새 댓글
+            // yona IssueApp.java:1020-1057 AddPreviousContent()+getPrevious() 대응 (P2-17) — 새 댓글 [GL-controllers_IssueApp-050]
             // 알림의 oldValue("인용 이전 내용")가 항상 null로 방치되던 것을 채운다.
             it("이슈의 첫 댓글이면 알림 oldValue에 원본 이슈 본문이 인용되어야 한다 (P2-17)") {
                 val author = userRepository.save(User(loginId = "quoteauthor", name = "작성자", email = "quoteauthor@yona.io"))

@@ -210,7 +210,7 @@ class CodeReviewServiceImpl(
 
         val thread = comment.thread ?: throw IllegalStateException("Comment has no associated thread.")
         val threadId = thread.id ?: throw IllegalStateException("Thread has no id.")
-        // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). 작성자 또는
+        // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). 작성자 또는 [GL-utils_AccessControl-009]
         // 프로젝트 role==MANAGER로만 좁게 검사하던 것을, 사이트매니저/조직관리자 우회까지 포함하는
         // AccessControl.isAllowed(user, project, reviewComment, Operation)로 교체.
         val project = thread.project ?: thread.pullRequest?.toProject
@@ -290,7 +290,7 @@ class CodeReviewServiceImpl(
         val comment = commitCommentRepository.findById(commentId)
             .orElseThrow { IllegalArgumentException("CommitComment not found for id: $commentId") }
 
-        // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). deleteReviewComment와
+        // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). deleteReviewComment와 [GL-utils_AccessControl-009]
         // 동일하게 사이트매니저/조직관리자 우회를 포함하는 AccessControl.isAllowed()로 교체.
         val project = comment.project ?: throw IllegalStateException("Comment has no associated project.")
         if (!accessControl.isAllowed(currentUser, project, comment, Operation.DELETE)) {

@@ -309,7 +309,7 @@ class UserViewControllerSpec : DescribeSpec({
     }
 
     // yona UserApp.java:811-846 getAclValidatedIssues()/getAclValidatedPullRequests()/
-    // collectProjects() 대응 (P0-25). 대상 사용자가 작성한 이슈/PR/소속 프로젝트 중 방문자가
+    // collectProjects() 대응 (P0-25). 대상 사용자가 작성한 이슈/PR/소속 프로젝트 중 방문자가 [GL-controllers_UserApp-064]
     // READ 권한이 없는 것은 프로필에서 감춰져야 한다.
     describe("GET /user/{loginId} - 방문자의 프로젝트 READ 권한에 따른 필터링") {
         it("방문자가 READ 권한이 없는 프로젝트의 이슈/PR/소속 프로젝트는 감춰져야 한다") {
@@ -344,7 +344,7 @@ class UserViewControllerSpec : DescribeSpec({
     }
 
     // yona UserApp.java:754-759 Issue.findRecentlyIssuesByDaysAgo/PullRequest.findOpendPullRequestsByDaysAgo
-    // 대응 (P2-38) — daysAgo 파라미터가 실제 쿼리에 반영되어야 한다.
+    // 대응 (P2-38) — daysAgo 파라미터가 실제 쿼리에 반영되어야 한다. [GL-controllers_UserApp-060]
     describe("GET /user/{loginId}?daysAgo=... (P2-38)") {
         it("daysAgo 파라미터로 지정한 기간을 findRecentlyByUser/findByContributorAndUpdatedGreaterThanEqual...에 전달해야 한다") {
             val viewedUser = User(id = 20L, loginId = "viewed", name = "대상유저")

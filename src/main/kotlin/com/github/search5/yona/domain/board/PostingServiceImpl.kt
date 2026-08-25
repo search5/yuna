@@ -70,7 +70,7 @@ class PostingServiceImpl(
             eventType = eventType
         ).toMutableSet()
         // yona NotificationEvent.java:1380-1385 getReceivers(abstractPosting, except)의
-        // getMentionedUsers(body) 대응 (P1-127). 신규 게시글 본문의 @멘션도 수신자에 포함한다.
+        // getMentionedUsers(body) 대응 (P1-127). 신규 게시글 본문의 @멘션도 수신자에 포함한다. [GL-models_NotificationEvent-096]
         receivers.addAll(commentService.extractMentionedUsers(posting.body ?: ""))
         receivers.removeIf { it.id == actor.id }
         notificationEvent.receivers = receivers

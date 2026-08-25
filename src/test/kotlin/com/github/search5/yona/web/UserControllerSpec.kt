@@ -789,7 +789,7 @@ class UserControllerSpec : DescribeSpec({
             }
         }
 
-        // yona UserApi.java:218-241 newUser() 대응 (P1-118).
+        // yona UserApi.java:218-241 newUser() 대응 (P1-118). [GL-controllers_api_UserApi-014]
         describe("POST /api/users") {
             val siteManager = User(id = 2L, loginId = "admin", name = "관리자", email = "admin@example.com", state = UserState.SITE_ADMIN)
             val adminAuth = UsernamePasswordAuthenticationToken("admin", "password")
@@ -898,7 +898,7 @@ class UserControllerSpec : DescribeSpec({
             }
         }
 
-        // yona UserApi.java:244-265 newToken() 대응 (P1-118).
+        // yona UserApi.java:244-265 newToken() 대응 (P1-118). [GL-controllers_api_UserApi-015]
         describe("POST /api/users/token") {
             it("존재하지 않는 아이디/이메일이면 401과 No valid user by id를 반환해야 한다") {
                 every { userRepository.findByLoginId("nobody") } returns Optional.empty()
@@ -973,7 +973,7 @@ class UserControllerSpec : DescribeSpec({
             }
         }
 
-        // yona UserApi.java:320-339 users() 대응 (P1-118).
+        // yona UserApi.java:320-339 users() 대응 (P1-118). [GL-controllers_api_UserApi-018;GL-controllers_api_UserApi-019]
         describe("GET /api/admin/users") {
             val siteManager = User(id = 2L, loginId = "admin", name = "관리자", email = "admin@example.com", state = UserState.SITE_ADMIN)
             val adminAuth = UsernamePasswordAuthenticationToken("admin", "password")
@@ -1000,7 +1000,7 @@ class UserControllerSpec : DescribeSpec({
             }
         }
 
-        // yona UserApi.java:341-379 updateUserState() 대응 (P1-118).
+        // yona UserApi.java:341-379 updateUserState() 대응 (P1-118). [GL-controllers_api_UserApi-020;GL-controllers_api_UserApi-021]
         describe("PATCH /api/admin/users/{loginId}") {
             val siteManager = User(id = 2L, loginId = "admin", name = "관리자", email = "admin@example.com", state = UserState.SITE_ADMIN)
             val adminAuth = UsernamePasswordAuthenticationToken("admin", "password")

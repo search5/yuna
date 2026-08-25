@@ -380,7 +380,7 @@ class ProjectViewControllerSpec : DescribeSpec({
         }
 
         // yona ProjectApp.java:168-186 newProject()의 "owner가 기존 조직명이면 그 조직 admin만
-        // 생성 가능" 가드 + "그 조직에 project.organization 연동" 대응 (P2-34).
+        // 생성 가능" 가드 + "그 조직에 project.organization 연동" 대응 (P2-34). [GL-controllers_ProjectApp-016;GL-controllers_ProjectApp-017;GL-controllers_ProjectApp-018]
         describe("POST /projectform (프로젝트 생성)") {
             fun newProjectRequest(owner: String) =
                 MockMvcRequestBuilders.post("/projectform")
@@ -464,7 +464,7 @@ class ProjectViewControllerSpec : DescribeSpec({
             }
 
             // yona CodeApp.java:135-164 download()의 getMetaDataFromAncestorDirectories() 존재
-            // 검증 대응 (P2-30) — 존재하지 않는 브랜치를 요청하면 아카이브 스트리밍을 시도하기 전에
+            // 검증 대응 (P2-30) — 존재하지 않는 브랜치를 요청하면 아카이브 스트리밍을 시도하기 전에 [GL-controllers_CodeApp-006]
             // 404로 명확히 거부해야 한다(응답 헤더를 이미 써버린 뒤 스트리밍 도중 예외가 나는 것을
             // 방지).
             it("존재하지 않는 브랜치면 아카이브를 생성하지 않고 404를 반환해야 한다 (P2-30)") {

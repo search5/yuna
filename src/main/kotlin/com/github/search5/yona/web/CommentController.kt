@@ -47,7 +47,7 @@ class CommentController(
     }
 
     // 이슈 댓글 생성
-    // yona IssueApp.java:959-973 newComment() 대응 (P2-34) — 프로젝트 READ 권한이 아니라
+    // yona IssueApp.java:959-973 newComment() 대응 (P2-34) — 프로젝트 READ 권한이 아니라 [GL-controllers_IssueApp-046;GL-controllers_IssueApp-047]
     // AccessControl.isResourceCreatable()(ISSUE_COMMENT 케이스)로 판단한다. 프로젝트 멤버가 아니어도
     // 그 이슈의 작성자/담당자/공유대상이면 댓글을 달 수 있다(legacy isAllowedIfAuthor/isAllowedIfAssignee/
     // isAllowedIfSharer 우회) — 이 판단에 이슈 자체가 필요해 이슈 조회를 권한체크보다 먼저 한다(legacy와 동일 순서).
@@ -75,7 +75,7 @@ class CommentController(
     }
 
     // 이슈 댓글 수정
-    // yona IssueApi.java:594-634 updateIssueComment() 대응 (P1-102). request.original이 전달되면
+    // yona IssueApi.java:594-634 updateIssueComment() 대응 (P1-102). request.original이 전달되면 [GL-controllers_api_IssueApi-032;GL-controllers_api_IssueApi-033]
     // 저장 직전 화면 원문과 현재 DB 값을 비교해 그 사이 다른 사용자가 이미 수정했는지 확인, 다르면
     // 409(conflicted)로 거부한다 — updateIssueContent(이슈 본문)와 동일한 패턴.
     @PutMapping("/api/projects/{projectId}/issues/{number}/comments/{commentId}")
@@ -147,7 +147,7 @@ class CommentController(
     }
 
     // 게시판 댓글 생성
-    // yona BoardApp.java:396-425 newComment() 대응 (P2-34) — 프로젝트 READ 권한이 아니라
+    // yona BoardApp.java:396-425 newComment() 대응 (P2-34) — 프로젝트 READ 권한이 아니라 [GL-controllers_BoardApp-019]
     // AccessControl.isResourceCreatable()(NONISSUE_COMMENT 케이스)로 판단한다. 프로젝트 멤버가
     // 아니어도 그 게시글의 작성자면 댓글을 달 수 있다(legacy isAllowedIfAuthor 우회) — 이 판단에
     // 게시글 자체가 필요해 게시글 조회를 권한체크보다 먼저 한다(legacy와 동일 순서).
@@ -175,7 +175,7 @@ class CommentController(
     }
 
     // 게시판 댓글 수정
-    // yona BoardApi.java:198-238 updatePostingComment() 대응 (P1-107). request.original이 전달되면
+    // yona BoardApi.java:198-238 updatePostingComment() 대응 (P1-107). request.original이 전달되면 [GL-controllers_api_BoardApi-008]
     // 저장 직전 화면 원문과 현재 DB 값을 비교해 그 사이 다른 사용자가 이미 수정했는지 확인, 다르면
     // 409(conflicted)로 거부한다 — updateIssueComment(P1-102)와 동일한 패턴.
     @PutMapping("/api/projects/{projectId}/posts/{number}/comments/{commentId}")
@@ -248,7 +248,7 @@ class CommentController(
 
     data class CommentRequest(
         val contents: String = "",
-        // yona IssueApi.java:594-634 updateIssueComment()의 isModifiedByOthers() 대응 (P1-102).
+        // yona IssueApi.java:594-634 updateIssueComment()의 isModifiedByOthers() 대응 (P1-102). [GL-controllers_api_IssueApi-032;GL-controllers_api_IssueApi-033]
         // 클라이언트가 저장 직전 화면에 있던 원문을 함께 보내면 동시편집 충돌을 감지한다 — null이면
         // 기존 호출자(원문을 안 보내는 클라이언트)와의 하위호환을 위해 충돌 검사를 건너뛴다.
         val original: String? = null,

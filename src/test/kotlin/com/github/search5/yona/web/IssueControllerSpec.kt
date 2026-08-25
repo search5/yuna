@@ -213,7 +213,7 @@ class IssueControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.title").value("이슈 제목"))
             }
 
-            // yona AccessControl.java:274-279,368-383 isAllowedIfSharer() 대응 (P1-82)
+            // yona AccessControl.java:274-279,368-383 isAllowedIfSharer() 대응 (P1-82) [GL-utils_AccessControl-013]
             it("프로젝트 멤버가 아니어도 이슈 공유자(IssueSharer)면 상세 조회를 허용해야 한다") {
                 val sharedIssue = Issue(
                     id = 6L, number = 6L, title = "공유된 이슈", body = "본문", project = project,
@@ -1061,7 +1061,7 @@ class IssueControllerSpec : DescribeSpec({
             }
         }
 
-        // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101).
+        // yona IssueApi.java:1176-1210 upvoteWeight()/downvoteWeight() 대응 (P1-101). [GL-controllers_api_IssueApi-064;GL-controllers_api_IssueApi-065]
         describe("POST /api/projects/{projectId}/issues/{issueId}/upvoteWeight") {
             it("프로젝트 멤버가 이슈 가중치를 +1 하면 갱신된 weight를 반환해야 한다") {
                 every { projectRepository.findById(1L) } returns Optional.of(project)
@@ -1145,7 +1145,7 @@ class IssueControllerSpec : DescribeSpec({
             }
         }
 
-        // yona IssueApi.java:551-584 detectChange() 대응 (P1-102). 폴링으로 다른 사용자의 변경을 감지.
+        // yona IssueApi.java:551-584 detectChange() 대응 (P1-102). 폴링으로 다른 사용자의 변경을 감지. [GL-controllers_api_IssueApi-030;GL-controllers_api_IssueApi-031]
         describe("POST /api/projects/{projectId}/issues/{issueId}/detectChange") {
             it("body와 댓글 수가 그대로면 issueBodyChanged=false를 반환해야 한다") {
                 val checksum = MessageDigest.getInstance("SHA-1")
@@ -1332,7 +1332,7 @@ class IssueControllerSpec : DescribeSpec({
             }
         }
 
-        // yona IssueApi.java:319-349 updateIssueContent()의 isModifiedByOthers() 충돌 감지 대응 (P1-102).
+        // yona IssueApi.java:319-349 updateIssueContent()의 isModifiedByOthers() 충돌 감지 대응 (P1-102). [GL-controllers_api_IssueApi-020]
         describe("PATCH /api/projects/{projectId}/issues/{issueId}/content") {
             it("원본이 현재 body와 일치하면 정상적으로 갱신해야 한다") {
                 val contentIssue = Issue(id = 15L, number = 15L, title = "이슈 제목", body = "이슈 내용", project = project, authorId = user.id, state = State.OPEN)

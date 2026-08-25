@@ -235,7 +235,7 @@ class ProjectUserServiceImpl(
         projectUserRepository.deleteByProjectIdAndUserId(projectId, userId)
     }
 
-    // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 프로젝트 매니저
+    // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 프로젝트 매니저 [GL-models_NotificationEvent-100]
     // 전원이 아니라 그중 실제로 이 프로젝트를 감시(Watch) 중인 매니저만 가입요청/취소 알림을 받는다.
     private fun getProjectManagers(projectId: Long): List<User> {
         return projectUserRepository.findByProjectId(projectId)
