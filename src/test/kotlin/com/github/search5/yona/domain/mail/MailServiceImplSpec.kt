@@ -101,6 +101,23 @@ class MailServiceImplSpec : DescribeSpec({
             captured.captured.messageID shouldNotBe "   "
         }
 
+        // isBlank()는 내부적으로 isEmpty() || indices.all { isWhitespace() }로 구성돼, 위
+        // "   "(공백만) 테스트는 isEmpty()==false 쪽만 태운다 — 진짜 빈 문자열로 isEmpty()==true
+        // 쪽 서브 분기까지 닫는다.
+        it("messageId가 진짜 빈 문자열이면 JavaMail이 자동 생성한 Message-ID를 그대로 둔다") {
+            val captured = slot<MimeMessage>()
+            every { mailSender.send(capture(captured)) } answers { captured.captured.saveChanges() }
+
+            service.sendNotificationMail(
+                toList = listOf(MailRecipient("to@yona.io", "받는사람")), bccList = emptyList(),
+                fromName = "발신자", subject = "제목", htmlBody = "<p>내용</p>", plainBody = "내용",
+                replyTo = null, messageId = "", references = null, sentDate = Date()
+            )
+
+            captured.captured.messageID shouldNotBe null
+            captured.captured.messageID shouldNotBe ""
+        }
+
         it("messageId를 지정하지 않으면 JavaMail이 자동 생성한 Message-ID를 그대로 둔다") {
             val captured = slot<MimeMessage>()
             every { mailSender.send(capture(captured)) } answers { captured.captured.saveChanges() }
