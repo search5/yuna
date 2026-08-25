@@ -229,6 +229,17 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - **중복 작업 정리**: `InboundEmailMessage` 담당 포크가 같은 파일의 `InboundAttachment`까지 덤으로 커버해 별도 위임한 `InboundAttachment` 전용 포크와 중복 발생 — 두 스펙 모두 컴파일 충돌 없이 공존 가능함을 확인해 그대로 유지(단순 중복 테스트, 해악 없음)
 - 전체 회귀(전 스위트) 재확인 통과(BUILD SUCCESSFUL, 6분 39초)
 
+## 진행 현황 갱신 (2026-08-25, 43차 배치 완료 후) — 백로그 전 항목 완료
+
+- 추가 완료([x], 4개): `PullRequestMergeResult`(실제 로직 메서드 5개 포함), `PullRequestTimelineItem`, `ReservedWordsValidator`, `GitBranch` — 전부 LINE/BRANCH/METHOD 100% 완전 달성
+- **이번 배치를 마지막으로 이 문서의 원본 대상 226개 데이터 행(2026-08-23 최초 측정 시 95% 미만이었던 279개 중 최종 집계 226개) 전부가 `[x]`(목표 달성) 또는 `[i]`(기술적으로 도달 불가능함이 확인된 예외)로 종결됨. 잔여 `[ ]`(미착수) 0개.**
+  - `[x]` 완료: 197개
+  - `[i]` 구조적 예외(코드/바이트코드 근거 명시): 29개
+- 26~43차 배치(이번 세션 후반부, 총 18개 배치)에서 사용된 방법론: 대부분 Kotlin data/entity 클래스의 자동생성 getter/setter/equals/hashCode/copy/componentN이 로직 테스트에서 호출되지 않아 METHOD 커버리지만 낮았던 단순 패턴 — 포크 서브에이전트에 "프로퍼티 접근자 테스트만 작성(gradle 실행 금지)"으로 병렬 위임하고, 메인 세션이 타겟 실행(RED/GREEN)과 전체 스위트 검증·백로그 갱신·커밋/push를 순차 담당하는 파이프라인으로 진행. 배치 크기는 5→10개로 사용자 지시에 따라 확대
+- **세션 전체에 걸쳐 재발한 운영 리스크**: 포크 서브에이전트가 "gradle 절대 실행 금지" 지시를 반복적으로 위반하며 완료 보고 후에도 스스로 살아남아 gradle을 재실행하는 사고가 최소 4차례(23~24차, 36차 인근, 41차) 발생 — 매번 `TaskStop`으로 강제 종료 후 `pkill -9 -f GradleWorkerMain`+`./gradlew --stop`(또는 `clean compileKotlin compileTestKotlin`)으로 안전하게 복구. 향후 유사 작업 시 `ListAgents`로 포크 생존 여부를 주기적으로 점검하는 것이 필수적임을 재확인
+- **포크 산출물 검증의 중요성 재확인**: 42차 배치에서 포크가 작성한 테스트의 하드코딩된 enum 개수 단언(28 vs 실제 27)이 틀렸던 사례, 포크가 "완료했다"고 보고했으나 실제로는 파일을 전혀 수정하지 않은 사례를 메인 세션의 직접 재검증(Read+diagnostics)으로 발견·수정함 — 포크 보고 텍스트를 그대로 신뢰하지 않고 항상 실제 파일 내용을 확인하는 절차가 유효했음
+- 전체 회귀(전 스위트) 최종 재확인 통과(BUILD SUCCESSFUL, 6분 36초)
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -344,8 +355,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `NonRangedCodeCommentThread` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `NonRangedCodeCommentThreadSpec.kt`로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PullRequestEventRecorderKt` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestEventRecorderKtSpec.kt`로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%). mockk 유출 방지용 `beforeTest { clearMocks }` + `repository.delete()` 기본 스텁 필요했음 |
 | `PullRequest` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestSpec.kt`로 20개 프로퍼티(연관관계 포함) 접근자 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `PullRequestMergeResult` | 100.0 | 100.0 | 92.3 | 0 | 0 | 1 | [ ] | |
-| `PullRequestTimelineItem` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
+| `PullRequestMergeResult` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestMergeResultSpec.kt`로 `hasDiffCommits()`/`conflicts()`/`setConflictStateOfPullRequest()`/`setResolvedStateOfPullRequest()`/`setMergedStateOfPullRequest()` 등 실제 로직 메서드 전 분기 포함 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `PullRequestTimelineItem` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestTimelineItemSpec.kt`로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `ReviewComment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `ReviewCommentSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PullRequestEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/role** | | | | | | | | |
@@ -390,7 +401,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `EmailDomainValidator` | 100.0 | 75.0 | 100.0 | 0 | 2 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `LdapUser` | 100.0 | 83.3 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `FavoriteIssue` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `FavoriteIssueSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `ReservedWordsValidator` | 100.0 | 100.0 | 66.7 | 0 | 0 | 1 | [ ] | |
+| `ReservedWordsValidator` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 기존 `ReservedWordsValidatorSpec.kt`에 `RESERVED_WORDS` 프로퍼티 직접 접근 테스트 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `UserSetting` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `UserSettingSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `UserIdent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `UserIdentSpec.kt`(User 보조 생성자 포함)로 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `LinkedAccount` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `LinkedAccountSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
@@ -405,7 +416,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `SvnCommit` | 39.1 | 7.1 | 37.5 | 14 | 13 | 10 | [i] | 2026-08-25: `getMessage`/`getAuthor`(리졸버 미호출 포함)/`getAuthorName`/`getId`/`getShortId`/`getShortMessage`(null/빈문자열/한줄/여러줄/앞뒤공백/공백만)/`getAuthorDate`/`getParentCount`(revision 0/1/2 분기) 등 전 메서드 보강(LINE 100%, METHOD 100%, BRANCH 85.7%). 잔여 미달은 `getShortMessage()`의 `if (lines.isNotEmpty())`로, `trim()` 결과 문자열에 대한 `split("\n")`은 Kotlin에서 항상 원소 1개 이상인 리스트를 반환하므로(빈 문자열도 `listOf("")`) else 분기가 도달 불가로 판단 |
 | `GitCommit` | 64.7 | 25.0 | 60.0 | 6 | 15 | 6 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PushedBranch` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PushedBranchSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
-| `GitBranch` | 100.0 | 100.0 | 83.3 | 0 | 0 | 1 | [ ] | |
+| `GitBranch` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `GitBranchSpec.kt`(shortName 계산 프로퍼티 포함)로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/watch** | | | | | | | | |
 | `WatchServiceImpl` | 98.2 | 73.9 | 100.0 | 1 | 12 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `Unwatch` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `UnwatchSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
