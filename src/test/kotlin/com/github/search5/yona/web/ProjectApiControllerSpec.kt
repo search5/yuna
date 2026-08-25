@@ -154,6 +154,22 @@ class ProjectApiControllerSpec : DescribeSpec({
                 .andExpect(jsonPath("$.message").value("User creation with api is allowed by Site admin only."))
         }
 
+        // yona models/Project.java:62 @ExConstraints.Restricted({".", "..", ".git"}) 대응 (P1-145).
+        it("프로젝트명이 예약 패턴(.,..,.git)과 일치하면 400을 반환해야 한다") {
+            every { userRepository.findByLoginId("admin") } returns Optional.of(siteManager)
+
+            mockMvc.perform(
+                post("/api/projects/admin")
+                    .principal(siteManagerAuth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"projectName": ".git"}""")
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.message").value("Project name is restricted: .git"))
+
+            verify(exactly = 0) { projectRepository.save(any()) }
+        }
+
         it("이미 같은 owner/projectName 프로젝트가 있으면 HTTP 400에 status:409 바디를 담아 반환해야 한다(legacy 원문 그대로)") {
             val existed = Project(id = 50L, owner = "someowner", name = "newproj", overview = "기존", vcs = "GIT")
             every { userRepository.findByLoginId("admin") } returns Optional.of(siteManager)

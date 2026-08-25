@@ -1,6 +1,8 @@
 package com.github.search5.yona.domain.project
 
 import com.github.search5.yona.domain.attachment.AttachmentService
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.watch.WatchService
 import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.board.PostingService
@@ -74,6 +76,7 @@ class ProjectServiceImplSpec : DescribeSpec({
     val pullRequestEventRepository = mockk<PullRequestEventRepository>()
     val pullRequestCommitRepository = mockk<PullRequestCommitRepository>()
     val favoriteProjectRepository = mockk<FavoriteProjectRepository>(relaxed = true)
+    val watchService = mockk<WatchService>(relaxed = true)
 
     val projectService = ProjectServiceImpl(
         projectRepository,
@@ -98,7 +101,8 @@ class ProjectServiceImplSpec : DescribeSpec({
         pullRequestRepository,
         pullRequestEventRepository,
         pullRequestCommitRepository,
-        favoriteProjectRepository
+        favoriteProjectRepository,
+        watchService
     )
 
     describe("ProjectServiceImpl.acceptTransfer") {
@@ -1270,6 +1274,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { commentThreadRepository.deleteAll(listOf(thread)) } returns Unit
 
             val pr = mockk<PullRequest>(relaxed = true)
+            every { pr.id } returns 77L
             every { pullRequestRepository.findByFromProject(project) } returns listOf(pr)
             every { pullRequestRepository.findByToProject(project) } returns emptyList()
             // P2-37: PR 단위 CommentThread 정리 — 이 PR엔 project 단위 정리(위 findByProject)로
@@ -1331,6 +1336,9 @@ class ProjectServiceImplSpec : DescribeSpec({
             verify(exactly = 1) { postingService.deletePostingCascade(posting) }
             verify(exactly = 1) { projectUserRepository.deleteAll(listOf(projectUser)) }
             verify(exactly = 1) { projectRepository.delete(project) }
+            // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
+            verify(exactly = 1) { watchService.deleteAll(ResourceType.PULL_REQUEST, "77") }
+            verify(exactly = 1) { watchService.deleteAll(ResourceType.PROJECT, "1") }
         }
 
         it("이 프로젝트를 fork한 자식 프로젝트는 삭제하지 않고, 그 fork의 PR만 정리한 뒤 원본 연결을 끊어야 한다") {
@@ -1442,6 +1450,40 @@ class ProjectServiceImplSpec : DescribeSpec({
             result shouldBe newProject
             result.projectUsers.size shouldBe 0
             verify(exactly = 0) { projectUserRepository.save(any()) }
+        }
+
+        // yona models/Project.java:62 @ExConstraints.Restricted({".", "..", ".git"}) 대응 (P1-145).
+        // RestrictedValidator.isValid()가 ignoreCase=false(기본값)일 때 오히려 equalsIgnoreCase로 비교하는
+        // legacy 버그를 그대로 재현 — 즉 대소문자 무관하게 ".", "..", ".git"과 일치하면 거부된다.
+        it("프로젝트명이 예약 패턴(.,..,.git)과 대소문자 무관하게 일치하면 예외가 발생해야 한다") {
+            val creator = User(id = 904L, loginId = "creator5", name = "생성자5")
+            // projectRepository는 스펙 전역 공유 mock이라 이전 it들의 save() 호출 이력이 누적돼 있다.
+            // exactly=0 단언이 오염되지 않도록 스텁(answers)은 남기고 호출 이력만 초기화한다.
+            clearMocks(projectRepository, answers = false)
+
+            listOf(".", "..", ".git", ".GIT", ".Git").forEach { restrictedName ->
+                val newProject = Project(name = restrictedName, owner = "creator5")
+
+                shouldThrow<IllegalArgumentException> {
+                    projectService.createProject(newProject, creator)
+                }
+            }
+
+            verify(exactly = 0) { projectRepository.save(any()) }
+        }
+
+        it("프로젝트명이 예약 패턴을 포함만 하고 정확히 일치하지 않으면 정상 생성돼야 한다") {
+            val creator = User(id = 905L, loginId = "creator6", name = "생성자6")
+            val newProject = Project(name = "my.git-project", owner = "creator6")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            every { projectRepository.findByOwnerAndName("creator6", "my.git-project") } returns Optional.empty()
+            every { projectRepository.save(newProject) } returns newProject
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+
+            val result = projectService.createProject(newProject, creator)
+
+            result shouldBe newProject
         }
 
         // exists(project.owner ?: "", project.name) — owner가 null인 프로젝트 생성 시도(엘비스 분기).

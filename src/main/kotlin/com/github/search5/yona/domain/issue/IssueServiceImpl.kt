@@ -622,6 +622,8 @@ class IssueServiceImpl(
             attachmentService.deleteAll(ResourceType.ISSUE_COMMENT, comment.id.toString())
         }
         attachmentService.deleteAll(ResourceType.ISSUE_POST, issue.id.toString())
+        // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
+        watchService.deleteAll(ResourceType.ISSUE_POST, issue.id.toString())
         titleHeadService.deleteTitleHeadKeyword(issue.project, issue.title)
 
         favoriteIssueRepository.deleteAll(favoriteIssueRepository.findByIssueId(issue.id!!))

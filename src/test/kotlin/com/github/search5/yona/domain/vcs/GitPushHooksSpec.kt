@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.vcs
 
 import com.github.search5.yona.domain.event.GitPostReceiveEvent
+import com.github.search5.yona.domain.event.RelatedPullRequestMergeEvent
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.PullRequest
@@ -122,6 +123,51 @@ class GitPushHooksSpec : DescribeSpec({
             newHook().onPostReceive(mockk(relaxed = true), listOf(updateCommand))
 
             verify(exactly = 0) { pullRequestRepository.findRelatedPullRequests(any(), any()) }
+        }
+
+        // yona playRepository/hooks/PullRequestCheck.java의 onPostReceive() 첫 번째 루프
+        // (getUpdatedBranches→RelatedPullRequestMergingActor) 대응 (P1-146). 브랜치 삭제 시
+        // PR 정리(위 테스트들)만 이식돼 있었고, 브랜치 갱신 시 관련 PR을 재검사하는 트리거 자체가
+        // 실제 push 경로에 배선되지 않아 PullRequestMergeEventListener.handleRelatedPullRequestMergeEvent()가
+        // 죽어있었다.
+        describe("브랜치 갱신 시 관련 PR 재검사 트리거 (P1-146)") {
+            it("브랜치가 갱신(UPDATE)되면 RelatedPullRequestMergeEvent가 발행되어야 한다") {
+                val updateCommand = ReceiveCommand(sha1, sha2, "refs/heads/main")
+                val captured = slot<RelatedPullRequestMergeEvent>()
+                every { eventPublisher.publishEvent(capture(captured)) } returns Unit
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(updateCommand))
+
+                captured.captured.project shouldBe project
+                captured.captured.branch shouldBe "main"
+                captured.captured.sender shouldBe pusher
+            }
+
+            it("브랜치가 갱신(UPDATE_NONFASTFORWARD)되어도 RelatedPullRequestMergeEvent가 발행되어야 한다") {
+                val forceUpdateCommand = ReceiveCommand(sha1, sha2, "refs/heads/main", ReceiveCommand.Type.UPDATE_NONFASTFORWARD)
+                val captured = slot<RelatedPullRequestMergeEvent>()
+                every { eventPublisher.publishEvent(capture(captured)) } returns Unit
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(forceUpdateCommand))
+
+                captured.captured.branch shouldBe "main"
+            }
+
+            it("새 브랜치 생성(CREATE)은 RelatedPullRequestMergeEvent를 발행하지 않아야 한다") {
+                val createCommand = ReceiveCommand(zero, sha1, "refs/heads/feature/new")
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(createCommand))
+
+                verify(exactly = 0) { eventPublisher.publishEvent(match { it is RelatedPullRequestMergeEvent }) }
+            }
+
+            it("브랜치 삭제(DELETE)는 RelatedPullRequestMergeEvent를 발행하지 않아야 한다") {
+                val deleteCommand = ReceiveCommand(sha1, zero, "refs/heads/feature/x")
+
+                newHook().onPostReceive(mockk(relaxed = true), listOf(deleteCommand))
+
+                verify(exactly = 0) { eventPublisher.publishEvent(match { it is RelatedPullRequestMergeEvent }) }
+            }
         }
 
         describe("최근 push된 브랜치 추적 (P1-24, yona UpdateRecentlyPushedBranch 대응)") {

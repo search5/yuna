@@ -25,6 +25,8 @@ import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.webhook.WebhookRepository
 import com.github.search5.yona.domain.webhook.WebhookThreadRepository
+import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.watch.WatchService
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -58,7 +60,9 @@ class ProjectServiceImpl(
     private val pullRequestEventRepository: PullRequestEventRepository,
     private val pullRequestCommitRepository: PullRequestCommitRepository,
     // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27). [GL-models_FavoriteProject-008]
-    private val favoriteProjectRepository: FavoriteProjectRepository
+    private val favoriteProjectRepository: FavoriteProjectRepository,
+    // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
+    private val watchService: WatchService
 ) : ProjectService {
 
     // yona Project.findByOwnerAndProjectName()의 예전 위치(previousOwnerLoginId/previousName) 폴백
@@ -74,6 +78,10 @@ class ProjectServiceImpl(
 
     @Transactional
     override fun createProject(project: Project, creator: User): Project {
+        // yona models/Project.java:62 @ExConstraints.Restricted({".", "..", ".git"}) 대응 (P1-145).
+        if (ProjectNameValidator.isRestricted(project.name)) {
+            throw IllegalArgumentException("Project name is restricted: ${project.name}")
+        }
         if (exists(project.owner ?: "", project.name)) {
             throw IllegalArgumentException("Already exists project name: ${project.owner}/${project.name}")
         }
@@ -230,6 +238,9 @@ class ProjectServiceImpl(
         val members = projectUserRepository.findByProjectId(projectId)
         projectUserRepository.deleteAll(members)
 
+        // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
+        watchService.deleteAll(ResourceType.PROJECT, projectId.toString())
+
         projectRepository.delete(project)
     }
 
@@ -245,6 +256,8 @@ class ProjectServiceImpl(
         commentThreadRepository.deleteAll(commentThreadRepository.findByPullRequest(pullRequest))
         pullRequestEventRepository.deleteAll(pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pullRequest))
         pullRequestCommitRepository.deleteAll(pullRequestCommitRepository.findByPullRequest(pullRequest))
+        // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
+        watchService.deleteAll(ResourceType.PULL_REQUEST, pullRequest.id.toString())
         pullRequestRepository.delete(pullRequest)
     }
 

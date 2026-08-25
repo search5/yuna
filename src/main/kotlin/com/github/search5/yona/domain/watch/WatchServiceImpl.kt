@@ -31,6 +31,13 @@ class WatchServiceImpl(
         }
     }
 
+    // yona models/resource/ResourcePersistAdapter.java의 postDelete()(deleteRelatedWatch/
+    // deleteRelatedUnwatch) 대응 (P1-147).
+    override fun deleteAll(resourceType: ResourceType, resourceId: String) {
+        watchRepository.deleteAll(watchRepository.findByResourceTypeAndResourceId(resourceType, resourceId))
+        unwatchRepository.deleteAll(unwatchRepository.findByResourceTypeAndResourceId(resourceType, resourceId))
+    }
+
     override fun unwatch(user: User, resourceType: ResourceType, resourceId: String) {
         val unwatch = unwatchRepository.findByUserAndResourceTypeAndResourceId(user, resourceType, resourceId)
         if (unwatch == null) {

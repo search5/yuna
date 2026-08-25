@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import com.github.search5.yona.domain.attachment.AttachmentService
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.watch.WatchService
 
 @Service
 @Transactional(readOnly = true)
@@ -16,7 +17,8 @@ class MilestoneServiceImpl(
     private val milestoneRepository: MilestoneRepository,
     private val projectRepository: ProjectRepository,
     private val issueRepository: IssueRepository,
-    private val attachmentService: AttachmentService
+    private val attachmentService: AttachmentService,
+    private val watchService: WatchService
 ) : MilestoneService {
 
     override fun getMilestones(projectId: Long, state: State, orderBy: String, orderDir: String): List<Milestone> {
@@ -89,6 +91,8 @@ class MilestoneServiceImpl(
         issueRepository.removeMilestoneFromIssues(milestone)
         
         attachmentService.deleteAll(ResourceType.MILESTONE, milestone.id.toString())
+        // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
+        watchService.deleteAll(ResourceType.MILESTONE, milestone.id.toString())
         milestoneRepository.delete(milestone)
     }
 }

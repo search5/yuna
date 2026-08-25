@@ -7,6 +7,12 @@ import com.github.search5.yona.domain.user.User
 interface WatchService {
     fun watch(user: User, resourceType: ResourceType, resourceId: String)
     fun unwatch(user: User, resourceType: ResourceType, resourceId: String)
+
+    // yona models/resource/ResourcePersistAdapter.java의 postDelete()(deleteRelatedWatch/
+    // deleteRelatedUnwatch) 대응 (P1-147). Ebean의 전역 BeanPersistAdapter 훅과 달리 JPA에는
+    // 동등한 범용 엔티티 삭제 리스너가 없어, 리소스 삭제 시 attachmentService.deleteAll()과
+    // 동일한 위치에서 명시적으로 호출한다.
+    fun deleteAll(resourceType: ResourceType, resourceId: String)
     fun isWatching(user: User, resourceType: ResourceType, resourceId: String): Boolean
     fun findWatchers(resourceType: ResourceType, resourceId: String): Set<User>
     fun findUnwatchers(resourceType: ResourceType, resourceId: String): Set<User>

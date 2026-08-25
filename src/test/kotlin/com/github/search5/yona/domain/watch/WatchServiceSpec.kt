@@ -347,6 +347,21 @@ class WatchServiceSpec @Autowired constructor(
                     val watchers = watchService.findActualWatchers(emptySet(), ResourceType.ISSUE_POST, "999", null, true)
                     watchers.map { it.loginId }.contains("user2") shouldBe true
                 }
+
+                // yona models/resource/ResourcePersistAdapter.java의 postDelete() 대응 (P1-147).
+                it("deleteAll 호출 시 해당 리소스의 Watch/Unwatch가 모두 삭제되어야 한다") {
+                    watchService.watch(user1, ResourceType.ISSUE_POST, "12345")
+                    watchService.watch(user2, ResourceType.ISSUE_POST, "12345")
+                    watchService.unwatch(user3, ResourceType.ISSUE_POST, "12345")
+                    // 다른 리소스는 영향받지 않아야 한다.
+                    watchService.watch(user1, ResourceType.ISSUE_POST, "99999")
+
+                    watchService.deleteAll(ResourceType.ISSUE_POST, "12345")
+
+                    watchRepository.findByResourceTypeAndResourceId(ResourceType.ISSUE_POST, "12345") shouldBe emptyList()
+                    unwatchRepository.findByResourceTypeAndResourceId(ResourceType.ISSUE_POST, "12345") shouldBe emptyList()
+                    watchRepository.findByResourceTypeAndResourceId(ResourceType.ISSUE_POST, "99999").size shouldBe 1
+                }
             }
         }
     }

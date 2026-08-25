@@ -260,6 +260,8 @@ class PostingServiceImpl(
         }
 
         attachmentService.deleteAll(ResourceType.BOARD_POST, posting.id.toString())
+        // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
+        watchService.deleteAll(ResourceType.BOARD_POST, posting.id.toString())
         // yona AbstractPosting.delete()의 TitleHead.deleteTitleHeadKeyword() 대응 (P1-103).
         titleHeadService.deleteTitleHeadKeyword(posting.project, posting.title)
         // 답글(parentComment)이 원 댓글보다 항상 나중에 생성되므로, 생성일 역순으로 지우면

@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.vcs
 
 import com.github.search5.yona.domain.event.GitPostReceiveEvent
+import com.github.search5.yona.domain.event.RelatedPullRequestMergeEvent
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
@@ -53,8 +54,25 @@ class YunaPostReceiveHook(
     override fun onPostReceive(rp: ReceivePack, commands: Collection<ReceiveCommand>) {
         updateLastPushedDate()
         notifyPushedCommits(commands)
+        notifyRelatedPullRequestsForUpdatedBranches(commands)
         cleanupPullRequestsForDeletedBranches(commands)
         updateRecentlyPushedBranches(commands)
+    }
+
+    // yona playRepository/hooks/PullRequestCheck.java의 onPostReceive() 첫 번째 루프
+    // (ReceiveCommandUtil.getUpdatedBranches→RelatedPullRequestMergingActor) 대응 (P1-146).
+    // 새 커밋이 갱신된(생성이 아닌) 브랜치를 fromBranch로 하는 PR들의 병합/충돌 상태를 재검사해야
+    // 하므로, UPDATE/UPDATE_NONFASTFORWARD 커맨드에 대해서만 이벤트를 발행한다.
+    private fun notifyRelatedPullRequestsForUpdatedBranches(commands: Collection<ReceiveCommand>) {
+        commands
+            .filter {
+                (it.type == ReceiveCommand.Type.UPDATE || it.type == ReceiveCommand.Type.UPDATE_NONFASTFORWARD) &&
+                    it.refName.startsWith(BRANCH_PREFIX)
+            }
+            .map { it.refName.removePrefix(BRANCH_PREFIX) }
+            .forEach { branch ->
+                eventPublisher.publishEvent(RelatedPullRequestMergeEvent(project, branch, pusher))
+            }
     }
 
     private fun updateLastPushedDate() {

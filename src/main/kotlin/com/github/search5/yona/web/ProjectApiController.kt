@@ -22,6 +22,7 @@ import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.notification.NotificationUrlResolver
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.project.ProjectNameValidator
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUser
@@ -94,6 +95,12 @@ class ProjectApiController(
         if (!currentUser.isSiteManager) {
             return ResponseEntity.badRequest()
                 .body(mapOf("message" to "User creation with api is allowed by Site admin only."))
+        }
+
+        // yona models/Project.java:62 @ExConstraints.Restricted({".", "..", ".git"}) 대응 (P1-145).
+        if (ProjectNameValidator.isRestricted(request.projectName)) {
+            return ResponseEntity.badRequest()
+                .body(mapOf("message" to "Project name is restricted: ${request.projectName}"))
         }
 
         // yona ProjectApi.java:125-131 대응 — 중복 시 legacy는 실제 HTTP 상태는 400(badRequest)이고
