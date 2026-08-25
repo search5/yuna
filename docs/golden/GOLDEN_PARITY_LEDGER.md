@@ -41,7 +41,32 @@
 | K2 | data/exchangers 전체 패턴 검증 (29개 파일) | **전부 해소(미대응 0건)**. legacy는 엔티티별 전용 Exchanger 47개, yuna는 `domain/site/DataBackupServiceImpl.kt` 하나가 `DatabaseMetaData.getTables()`로 전체 테이블을 자동 탐지해 export/import — 엔티티별 화이트리스트 없이 스키마의 모든 테이블을 포괄해 legacy보다 일반화된 형태로 이식됨(코드 주석에 "44개 Exchanger 대응" 명시) |
 | K3 | data/exchangers+mailbox+models 일부 (29개 파일) | **거의 전부 해소, 경미 사항 1건**. DataExchanger 14개는 K2와 동일 패턴. mailbox 5개는 P0-02로 `domain/mail/*.kt`에 메서드 단위까지 확인. models 5개(AbstractPosting/Assignee/AuthInfo/CandidateUser/CodeComment)도 전부 대응 확인(AuthInfo/CandidateUser는 별도 클래스 없이 Spring Security formLogin/LdapUserProvisioningService에 흡수). **경미**: `mailbox/exceptions`의 커스텀 예외 5종(`IllegalDetailException`/`IssueNotFound`/`MailHandlerException`/`PermissionDenied`/`PostingNotFound`)이 yuna에서는 `IncomingMailOutcome.Rejected(reason: String)` 하나로 통합됨 — 기능(거부 사유 판별)은 동등하나 예외 타입이 세분화되지 않아 호출부에서 타입 기반 분기가 불가능(현재 필요하지도 않아 실사용 영향은 낮음으로 판단) |
 
-**미검토**: K4~K7(약 115개 파일, models 대량/enumeration/resource/support/utils) 진행 중.
+| K4 | models 소형 클래스 (29개 파일) | **전부 해소(미대응 0건)**. History→HistoryDto+컨트롤러 인라인, LabelOwner(인터페이스)→직접 프로퍼티, NullUser→`User?` nullable, PageParam→Spring `Pageable`, ProjectMenuSetting→Project의 `isXxxEnabled` 필드로 흡수, PostReceiveMessage/PullRequestEventMessage→Spring 이벤트 클래스로 대체. 나머지 22개는 동일/유사명 Kotlin 클래스로 직접 대응 |
+| K5 | models 소형+enumeration+resource (29개 파일) | **26개 해소, 3개 불확실(낮은 신뢰도)**. 직접 포팅 19개+아키텍처 대체 6개(Direction→Sort.Direction, SiteAdmin→UserState.SITE_ADMIN, UserCredential→LinkedAccount+OAuth2, RequestState→분리된 EventType들, GlobalResource→AccessControl 메서드들, PullRequestReviewAction→문자열 값 — 전부 yuna 코드 주석에 명시적으로 언급됨)+UserAction(레거시 자체 데드코드). **불확실 3건**: `IssueFilterType`(enum 없이 파라미터 기반으로 재구현된 것으로 보이나 확정 못함), `Matching.java`(Ebean 동적쿼리 enum, JPA 전환 후 대체 근거 문서화 안 됨), `Resource.java`(추상 클래스, `asResource()` 패턴이 통합 추상화 없이 각 서비스에 산재) — 구조 변경으로 설명 가능성 높으나 검증 강도가 다른 항목보다 낮음 |
+| K6 | models/support+resource+utils 일부 (29개 파일) | **26개 해소, 3개 주목할 만한 발견**. 직접 포팅 20개+ORM/프레임워크 마이그레이션 6개(FinderTemplate/OrderParam(s)/SearchParam(s)/SearchCondition/IssueSearchCondition→JPA Repository/Specification, BasicAuthAction/ChunkedOutputStream/FastHttpDateFormat→Spring Security+JGit GitServlet)+데드코드 3개(Options/ModelLock/IssueLabelAggregate, 1회성 마이그레이션 도구 전용). **주목할 발견 3건**(아래 "K6에서 발견된 주목할 사항" 참고) |
+| K7 | utils 나머지 (27개 파일) | **전부 해소(미대응 0건)**. LdapService/PasswordReset/PullRequestCommit/diff_match_patch(원본 그대로 포팅)/RouteUtil/MD5Util+SHA256Util→ChecksumUtils/SimpleDiagnostic/SiteManagerAuthAction→AccessControl 직접 대응. Play 서블릿 어댑터 4종(PlayServletContext/Request/Response/Session)은 가설대로 Spring Boot 표준 `jakarta.servlet` API 직접 사용으로 구조적으로 불필요해짐(SvnController.kt에서 확인). SecurityManager는 레거시 원본이 이미 빈 클래스. 나머지도 Spring 표준 관용구로 대체 확인 |
+
+## K6에서 발견된 주목할 사항 (2026-08-26)
+
+| 항목 | 내용 | 심각도 |
+|---|---|---|
+| `ResourcePersistAdapter.java` | legacy는 Ebean `postDelete` 훅으로 이슈/게시글 등 리소스 삭제 시 관련 `Watch`/`Unwatch` row를 자동 정리한다. yuna의 `IssueServiceImpl.deleteIssueCascade()`/`PostingServiceImpl.deletePostingCascade()`/`ProjectServiceImpl.deleteProject()` 어디에도 `watchRepository`/`unwatchRepository` 삭제 호출이 없음 — **리소스 삭제 후 Watch/Unwatch에 고아 row가 남는 실질적 회귀 가능성** | 중간(데이터 정합성) |
+| `AccessLogger.java` | Apache Combined Log Format 방식 HTTP 접근 로그(사용자/referer/UA/응답시간)가 yuna 전체에 없음(필터/인터셉터/logback-access 설정 전무) | 낮음(운영/관측성) |
+| `AttachmentCache.java` | 첨부파일 목록 인메모리 캐싱이 yuna에 없음(`@Cacheable` 등 캐시 계층 부재) | 낮음(성능 최적화만, 기능 문제 없음) |
+
+## 버킷 C 최종 요약 (2026-08-26, HIGH+NORMAL 사람 검토 완료)
+
+원본 3625개 → 자동 필터로 429개 파일/2204개 심볼로 압축 → HIGH(233건)+NORMAL(1744건, 템플릿 제외) 총 1977개 심볼(201+23=224개 파일)에 대해 사람이 직접 심볼 대조 검증 완료. **최종적으로 조치를 검토할 가치가 있는 항목은 6~7건**:
+
+1. `ExConstraints.java` — 프로젝트명 예약패턴(`.`/`..`/`.git`) 검증 전혀 없음 (HIGH영역)
+2. `PullRequestCheck.java` — 브랜치 갱신→PR 재검사 이벤트가 프로덕션 경로에서 미배선 (HIGH영역)
+3. `ResourcePersistAdapter.java` — 리소스 삭제 시 Watch/Unwatch 고아 row 가능성 (NORMAL K6)
+4. `AccessLogger.java` — HTTP 접근 로깅 부재 (NORMAL K6, 낮은 우선순위)
+5. `AttachmentCache.java` — 캐싱 누락(성능만) (NORMAL K6, 낮은 우선순위)
+6. `BareRepository.java` — README 탐색 전용 대응 없음(우회 구현 존재, 낮은 심각도) (HIGH영역)
+7. (신뢰도 낮음, 필요시 재검증) `IssueFilterType`/`Matching`/`Resource.java` 구조 변경 여부 불확실 (NORMAL K5)
+
+나머지(경미 사항 포함)는 전부 다른 구조로 이식됐거나 프레임워크 마이그레이션(Ebean→JPA, Play→Spring Boot)으로 구조적으로 설명됨.
 
 ## 알려진 방법론적 한계 (2026-08-26 Sanity Check 중 발견)
 
