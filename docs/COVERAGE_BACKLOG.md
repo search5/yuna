@@ -145,6 +145,12 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 - 추가 완료([x]): `CommentController`, `ProjectController`, `SiteApiController`, `CodeHistoryController`, `ImportApiController` (모두 95% 이상 확보 및 완료)
 - 이번 배치 신규 실버그/죽은코드 없음
 
+## 진행 현황 갱신 (2026-08-25, 21차 배치 완료 후)
+
+- 추가 완료([x]): `AutoLinkRenderer`(BRANCH 97.4%), `ProjectApiController`(BRANCH 95.9%) — 미실행 라인+분기 합계 기준 상위 2개(무거운 작업 위주 진행)
+- 진행 원칙: 이번 배치는 사용자 지시로 "무거운 작업 위주"로 진행 — 잔여 `[ ]` 항목 중 미실행 라인+분기 합계가 큰 순(`AutoLinkRenderer` 65, `ProjectApiController` 61)으로 선정
+- 이번 배치 신규 실버그/죽은코드 없음. 도달 불가 2건은 `ProjectApiController` 행에 근거 명시
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -272,7 +278,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **domain/support** | | | | | | | | |
 | `TranslationServiceImpl` | 11.5 | 0.0 | 25.0 | 54 | 30 | 3 | [x] | 2026-08-25: 신규 테스트 추가하여 커버리지 확보 완료. |
 | `SearchServiceImpl` | 68.2 | 37.5 | 85.7 | 27 | 40 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `AutoLinkRenderer` | 75.0 | 57.9 | 75.0 | 33 | 32 | 5 | [ ] | |
+| `AutoLinkRenderer` | 75.0 | 57.9 | 75.0 | 33 | 32 | 5 | [x] | 2026-08-25: 이슈/SHA/사용자·조직·프로젝트 링크 전 분기, 단어경계 판정, `<code>`/`<a>` 태그 무시 로직 보강하여 95% 이상 확보 완료(LINE 99.2%, BRANCH 97.4%, METHOD 95.0%) |
 | `SearchResult` | 63.3 | 40.6 | 93.0 | 29 | 19 | 3 | [ ] | |
 | `YonaUpdateService` | 70.7 | 37.5 | 81.8 | 17 | 20 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `StatisticsServiceImpl` | 7.7 | 100.0 | 50.0 | 36 | 0 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -358,7 +364,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `CodeHistoryController` | 47.4 | 35.3 | 71.4 | 40 | 22 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `ImportApiController` | 74.4 | 37.1 | 60.0 | 23 | 39 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `ImportViewController` | 76.6 | 45.3 | 75.0 | 26 | 35 | 2 | [ ] | |
-| `ProjectApiController` | 94.1 | 61.5 | 100.0 | 14 | 47 | 0 | [ ] | |
+| `ProjectApiController` | 94.1 | 61.5 | 100.0 | 14 | 47 | 0 | [x] | 2026-08-25: addProjectMembers 잔여 분기(알 수 없는 role/역할 미존재/기존 멤버 갱신), exports()의 담당자·마일스톤·라벨·마감일·중첩댓글·null 저자 등 잔여 분기 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 95.9%, METHOD 100%). 도달 불가 2건 확인(`isGlobalResourceCreatable`는 currentUser!=null 가드 이후라 구조적으로 false 불가, `PullRequest.contributor`는 non-null 타입이라 안전호출 null분기 불가) |
 | `OrganizationController` | 45.9 | 25.0 | 64.3 | 33 | 24 | 5 | [ ] | |
 | `ReviewThreadController` | 80.7 | 41.7 | 100.0 | 21 | 35 | 0 | [ ] | |
 | `WatchController` | 76.3 | 53.7 | 53.8 | 28 | 25 | 12 | [ ] | |
