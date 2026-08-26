@@ -81,6 +81,8 @@ class ReviewThreadServiceImpl(
             params["filter"] = "%${condition.filter}%"
         }
 
+        // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): whereClauses는 메서드 시작부에서
+        // 조건 없이 "t.project = :project"를 항상 추가하므로 isNotEmpty()의 false 분기는 성립할 수 없다.
         val whereSection = if (whereClauses.isNotEmpty()) "where " + whereClauses.joinToString(" and ") else ""
 
         val orderSection = if (!isCount) {

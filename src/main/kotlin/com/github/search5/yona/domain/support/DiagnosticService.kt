@@ -49,6 +49,10 @@ class DiagnosticService(
                 errors.add("Git Repository Storage Directory is not writable: ${gitDir.absolutePath}")
             }
         } catch (e: Exception) {
+            // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): File.mkdirs()/exists()/canWrite()는
+            // 정상 파일시스템 호출에서 체크 예외를 던지지 않고 boolean만 반환한다. 강제로 예외를 일으키려면
+            // SecurityManager가 필요한데 Java 21(JEP 411)부터는 -Djava.security.manager=allow 없이
+            // setSecurityManager 호출 시 UnsupportedOperationException이 발생해 테스트로 재현 불가.
             errors.add("Git Storage Check Failed: ${e.message}")
         }
 
@@ -62,6 +66,8 @@ class DiagnosticService(
                 errors.add("SVN Repository Storage Directory is not writable: ${svnDir.absolutePath}")
             }
         } catch (e: Exception) {
+            // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): 위 Git 저장소 점검 catch와 동일한
+            // 이유 — File API가 정상 호출에서 예외를 던지지 않아 재현 불가.
             errors.add("SVN Storage Check Failed: ${e.message}")
         }
 

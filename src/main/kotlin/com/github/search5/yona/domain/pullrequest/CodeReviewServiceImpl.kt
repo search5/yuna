@@ -76,6 +76,10 @@ class CodeReviewServiceImpl(
                     try {
                         val commit = repositoryService.getRepository(project).getCommit(cid)
                         val codeAuthor = commit?.getAuthor()
+                        // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): RepositoryService의
+                        // userResolver는 userRepository.findByEmail() 결과만 반환하므로 codeAuthor가
+                        // non-null이면 항상 실제 영속 User(id 항상 존재)다 — codeAuthor.id != null은
+                        // 항상 참이라 이 조건의 null 분기는 성립할 수 없다.
                         if (codeAuthor != null && codeAuthor.id != null && !codeAuthor.isGuest) {
                             thread.codeAuthors.add(codeAuthor)
                         }
@@ -165,6 +169,9 @@ class CodeReviewServiceImpl(
             newValue = comment.contents,
             receivers = receivers
         )
+        // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): resourceId가 매번 새로 생성되는
+        // comment.id라 NotificationEventRecorder의 draft-window 병합 대상이 될 "같은 resourceId의
+        // 이전 이벤트"가 결코 존재할 수 없어 record()가 null을 반환하는 경로에 도달 불가.
         notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
     }
 
@@ -179,6 +186,8 @@ class CodeReviewServiceImpl(
 
         try {
             val author = repositoryService.getRepository(project).getCommit(commitId)?.getAuthor()
+            // 테스트 커버리지 도달 불가: createReviewComment의 codeAuthor 로딩과 동일한 이유
+            // (userResolver는 실제 영속 User만 반환)로 author.id != null은 항상 참이다.
             if (author != null && author.id != null && !author.isGuest) {
                 baseWatchers.add(author)
             }
@@ -209,6 +218,8 @@ class CodeReviewServiceImpl(
             .orElseThrow { IllegalArgumentException("ReviewComment not found for id: $commentId") }
 
         val thread = comment.thread ?: throw IllegalStateException("Comment has no associated thread.")
+        // 테스트 커버리지 도달 불가: thread.id는 @GeneratedValue(IDENTITY)라 영속화된(findById로
+        // 조회 가능한) 스레드는 id가 결코 null일 수 없다.
         val threadId = thread.id ?: throw IllegalStateException("Thread has no id.")
         // yona AccessControl.java:205-301 isProjectResourceAllowed() 대응 (P1-116). 작성자 또는 [GL-utils_AccessControl-009]
         // 프로젝트 role==MANAGER로만 좁게 검사하던 것을, 사이트매니저/조직관리자 우회까지 포함하는
@@ -283,6 +294,8 @@ class CodeReviewServiceImpl(
             newValue = comment.contents,
             receivers = receivers
         )
+        // 테스트 커버리지 도달 불가: publishNewReviewCommentNotification과 동일한 이유
+        // (resourceId=comment.id가 매번 새로 생성돼 draft-window 병합 대상이 존재할 수 없음).
         notificationEventRecorder.record(notificationEvent)?.let { eventPublisher.publishEvent(it) }
     }
 

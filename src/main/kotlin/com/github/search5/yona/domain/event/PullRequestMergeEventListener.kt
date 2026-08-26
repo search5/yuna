@@ -90,6 +90,9 @@ class PullRequestMergeEventListener(
 
         val issueNumbers = mutableSetOf<Long>()
         for (text in textsToSearch) {
+            // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): closePattern("#(\d+)")의 캡처
+            // 그룹이 선택적(optional)이 아니라 매치가 성립하면 그룹1도 항상 캡처되므로 아래 null 체크들은
+            // 성립할 수 없다.
             closePattern.findAll(text).forEach { matchResult ->
                 val numberStr = matchResult.groups[1]?.value
                 if (numberStr != null) {

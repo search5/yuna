@@ -238,6 +238,8 @@ class ProjectUserServiceImpl(
     // yona NotificationEvent.java:1468-1477 getReceivers(Project) 대응 (P2-20) — 프로젝트 매니저 [GL-models_NotificationEvent-100]
     // 전원이 아니라 그중 실제로 이 프로젝트를 감시(Watch) 중인 매니저만 가입요청/취소 알림을 받는다.
     private fun getProjectManagers(projectId: Long): List<User> {
+        // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md 참고): role.id는 타입상 Long?이지만 Role은
+        // 코드베이스 전역에서 RoleType 고정 ID로만 생성·영속화돼 실제로는 결코 null이 아니다.
         return projectUserRepository.findByProjectId(projectId)
             .filter { it.role.id == RoleType.MANAGER.roleType }
             .map { it.user }

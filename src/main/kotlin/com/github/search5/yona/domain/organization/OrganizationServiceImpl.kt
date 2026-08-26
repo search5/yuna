@@ -161,6 +161,8 @@ class OrganizationServiceImpl(
             .orElseThrow { IllegalArgumentException("User is not a member of this organization") }
 
         // 마지막 관리자(ORG_ADMIN)인 경우 삭제 불가
+        // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): role.id는 타입상 Long?이지만 Role은
+        // 코드베이스 전역에서 RoleType 고정 ID로만 생성·영속화돼 실제로는 결코 null이 아니다.
         if (targetOrgUser.role.id == RoleType.ORG_ADMIN.roleType) {
             val adminCount = organizationUserRepository.countByOrganizationIdAndRoleId(orgId, RoleType.ORG_ADMIN.roleType)
             if (adminCount <= 1) {
@@ -183,6 +185,7 @@ class OrganizationServiceImpl(
             .orElseThrow { IllegalArgumentException("Role with ID $newRoleId not found") }
 
         // 관리자 강등 시, 마지막 관리자(ORG_ADMIN)가 자신뿐인지 검사
+        // 테스트 커버리지 도달 불가: role.id null 분기는 위 removeOrganizationMember와 동일한 이유로 불가.
         if (targetOrgUser.role.id == RoleType.ORG_ADMIN.roleType && newRoleId != RoleType.ORG_ADMIN.roleType) {
             val adminCount = organizationUserRepository.countByOrganizationIdAndRoleId(orgId, RoleType.ORG_ADMIN.roleType)
             if (adminCount <= 1) {

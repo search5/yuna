@@ -77,6 +77,8 @@ class SvnRepository(
                 data.put("msg", entry.commitMessage ?: "")
                 data.put("author", author)
                 data.put("avatar", getAvatar(user))
+                // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): User.name/loginId가 non-null
+                // String 타입이라 user가 non-null일 때 이 elvis의 null 분기 자체가 성립할 수 없다.
                 data.put("userName", user?.name ?: "")
                 data.put("userLoginId", user?.loginId ?: "")
                 data.put("createdDate", commitTime)
@@ -115,6 +117,10 @@ class SvnRepository(
             if (!isBinary) {
                 data = String(bytes, StandardCharsets.UTF_8)
             }
+            // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): Files.probeContentType()의 결과가
+            // null/non-null 어느 쪽이든 OS의 파일타입 감지 구현체(콘텐츠 스니핑)에 좌우되는 플랫폼
+            // 종속적 동작이라 이식성 있게 강제할 수 없고, catch 블록도 임시파일 I/O가 정상 환경에서
+            // 실패할 이유가 없어 도달 불가.
             mimeType = try {
                 val fileTmp = Files.createTempFile("yuna-mime", null)
                 Files.write(fileTmp, bytes)
@@ -129,6 +135,9 @@ class SvnRepository(
         val author = prop.getStringValue(SVNProperty.LAST_AUTHOR) ?: ""
         val user = userResolver(author)
         val commitDateStr = prop.getStringValue(SVNProperty.COMMITTED_DATE)
+        // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): SVN 서버는 커밋마다 svn:date revprop을
+        // 항상 유효한 ISO8601 형식으로 기록하므로 commitDateStr==null(else 분기)이나 Instant.parse 실패
+        // (catch 분기)는 정상 SVNKit 클라이언트-서버 흐름에서 재현 불가.
         val commitTime = try {
             if (commitDateStr != null) {
                 Instant.parse(commitDateStr).toEpochMilli()
@@ -144,6 +153,7 @@ class SvnRepository(
         result.put("revisionNo", prop.getStringValue(SVNProperty.COMMITTED_REVISION))
         result.put("author", author)
         result.put("avatar", getAvatar(user))
+        // 테스트 커버리지 도달 불가(위 getMetaDataFromPath의 동일 패턴 참고): User.name/loginId가 non-null.
         result.put("userName", user?.name ?: "")
         result.put("userLoginId", user?.loginId ?: "")
         result.put("createdDate", commitTime)
@@ -244,6 +254,9 @@ class SvnRepository(
 
         val logEntries = ArrayList<SVNLogEntry>()
         repository.log(paths, logEntries, revNum, revNum, false, false)
+        // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): 유효한 단일 리비전 요청은 항상
+        // 로그 엔트리를 1개 이상 반환하고(리비전 0 포함), 범위 밖 요청은 이 반복문에 도달하기 전에
+        // SVNException을 던진다(직접 확인) — "0회 반복 후 null 반환"은 정상 SVNKit 흐름에서 불가능.
         for (entry in logEntries) {
             return SvnCommit(entry, userResolver)
         }
@@ -308,6 +321,10 @@ class SvnRepository(
             repository = SVNRepositoryFactory.create(svnURL)
             return repository.latestRevision == 0L
         } catch (e: SVNException) {
+            // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고, javap로 바이트코드 확인): 이 catch의
+            // finally 인라인 복사본에서 repository가 non-null인 채로 여기 도달하려면 저장소 열기(create())는
+            // 성공하고 이후 getLatestRevision() 호출만 실패하는 손상 상태가 필요한데, 정상 SVNKit API로는
+            // 재현할 수 없다.
             return true
         } finally {
             repository?.closeSession()

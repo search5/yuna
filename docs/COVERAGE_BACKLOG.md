@@ -278,7 +278,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `GithubOAuth2UserInfo` | 60.0 | 25.0 | 60.0 | 2 | 3 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `CustomOAuth2UserService` | 98.0 | 90.0 | 100.0 | 1 | 2 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `YonaOAuth2User` | 71.4 | 100.0 | 60.0 | 2 | 0 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `OAuth2UserInfoFactory` | 0.0 | 100.0 | 0.0 | 1 | 0 | 1 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 0.0%, BRANCH 100.0%, METHOD 0.0%, CLASS 0.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `OAuth2UserInfoFactory` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-26: 실제 비즈니스 로직은 전부 companion object($Companion 클래스)에 있어 기존 3개 테스트로 이미 100% 커버 중이었음 — LINE/METHOD 0%로 잡힌 원인은 Kotlin이 자동 생성하는 바깥 클래스의 사용되지 않는 기본 생성자가 별도 클래스(OAuth2UserInfoFactory, $Companion 제외)로 집계됐기 때문. 인스턴스화 테스트 1줄 추가로 해소 |
 | `OAuth2AccountMergeService` | 100.0 | 100.0 | 75.0 | 0 | 0 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **config/security** | | | | | | | | |
 | `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [x] | 2026-08-23~24: 4개 에이전트 걸쳐(헬퍼그룹 174 + IssuePosting 100 + PullRequest 97 + Final 60, 총 431 신규 테스트, 4개 파일). 전체 회귀 확정치: LINE 100%, BRANCH 95.3%, METHOD 100% — 목표 달성. 이 저장소 최대 미커버 클래스(1371개 분기)를 3차 배치에 걸쳐 완주 |

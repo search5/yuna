@@ -145,6 +145,9 @@ class PostingServiceImpl(
 
         val originalBody = posting.body
         val originalTitle = posting.title
+        // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): posting.authorId는 타입상 Long?이지만
+        // createPosting()이 항상 실제 author.id를 대입하므로 이 서비스를 거쳐 저장된 Posting은 authorId가
+        // 결코 null일 수 없다.
         val isAuthoredByUpdater = posting.authorId == authorId
         val updater = userRepository.findById(authorId).orElse(null)
 
@@ -182,6 +185,9 @@ class PostingServiceImpl(
         if (readme && updater != null) {
             try {
                 val bare = BareCommit(saved.project, updater, gitBaseDir)
+                // 테스트 커버리지 도달 불가(COVERAGE_BACKLOG.md [i] 참고): updatePosting()의 title/body
+                // 파라미터가 non-null String이고 바로 위에서 posting.title/body에 대입하므로 saved.title/
+                // saved.body는 이 경로에서 결코 null일 수 없다.
                 bare.commitTextFile("README.md", saved.body ?: "", saved.title ?: "")
             } catch (e: Exception) {
                 // yona commitReadmeFile()과 동일하게 커밋 실패를 게시글 수정 자체의 실패로 보지 않는다.
@@ -196,6 +202,7 @@ class PostingServiceImpl(
         }
 
         // yona AbstractPosting.update()의 updateMention() 대응 (P2-41).
+        // 테스트 커버리지 도달 불가: 위 BareCommit 호출부와 동일한 이유로 saved.body는 null일 수 없다.
         mentionService.update(ResourceType.BOARD_POST, saved.id.toString(), commentService.extractMentionedUsers(saved.body ?: ""))
 
         // yona AbstractPostingApp.editPosting()의 TitleHead.saveTitleHeadKeyword()/deleteTitleHeadKeyword()
