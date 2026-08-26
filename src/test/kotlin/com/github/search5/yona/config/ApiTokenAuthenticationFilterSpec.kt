@@ -50,6 +50,22 @@ class ApiTokenAuthenticationFilterSpec : DescribeSpec({
 
             ApiTokenAuthenticationFilter.extractToken(request) shouldBe null
         }
+
+        it("Authorization 헤더가 있지만 \"token \"을 포함하지 않으면 Yona-Token 헤더를 사용해야 한다") {
+            val request = MockHttpServletRequest()
+            request.addHeader("Authorization", "Bearer abc123")
+            request.addHeader("Yona-Token", "xyz789")
+
+            ApiTokenAuthenticationFilter.extractToken(request) shouldBe "xyz789"
+        }
+
+        it("\"token \" 뒤가 공백뿐이면 Yona-Token으로 폴백하지 않고 null을 반환해야 한다") {
+            val request = MockHttpServletRequest()
+            request.addHeader("Authorization", "token   ")
+            request.addHeader("Yona-Token", "xyz789")
+
+            ApiTokenAuthenticationFilter.extractToken(request) shouldBe null
+        }
     }
 
     describe("ApiTokenAuthenticationFilter.doFilter") {
@@ -135,6 +151,27 @@ class ApiTokenAuthenticationFilterSpec : DescribeSpec({
             // userRepository 호출이 없어야 함
             io.mockk.verify(exactly = 0) { userRepository.findByToken(any()) }
             SecurityContextHolder.getContext().authentication shouldBe auth
+        }
+
+        it("현재 인증이 있지만 isAuthenticated=false이면 재인증을 시도해야 한다") {
+            val unauthenticated = UsernamePasswordAuthenticationToken("someone", null)
+            SecurityContextHolder.getContext().authentication = unauthenticated
+
+            val user = User(id = 5L, loginId = "gildong", name = "길동", token = "valid-token")
+            val userDetails = YonaUserDetails(
+                id = 5L, loginId = "gildong", passwordVal = "x", passwordSalt = "y",
+                authoritiesVal = listOf(SimpleGrantedAuthority("ROLE_ACTIVE"))
+            )
+            every { userRepository.findByToken("valid-token") } returns Optional.of(user)
+            every { userDetailsService.loadUserByUsername("gildong") } returns userDetails
+
+            val request = MockHttpServletRequest()
+            request.addHeader("Yona-Token", "valid-token")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, filterChain)
+
+            SecurityContextHolder.getContext().authentication?.principal shouldBe userDetails
         }
 
         it("현재 인증이 AnonymousAuthenticationToken이면 재인증을 시도해야 한다") {

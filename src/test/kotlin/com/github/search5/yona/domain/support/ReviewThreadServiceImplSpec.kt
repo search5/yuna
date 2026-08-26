@@ -59,5 +59,29 @@ class ReviewThreadServiceImplSpec : DescribeSpec({
             val list = service.getReviewThreads(project, condition)
             list.size shouldBe 0
         }
+
+        // buildQuery()의 `if (condition.orderBy == "createdDate") "t.createdDate" else "t.createdDate"`는
+        // 양쪽이 동일한 값을 반환하는 중복 코드지만, if 분기 자체는 여전히 JaCoCo 상 별개의 조건으로
+        // 집계된다. 기존 두 테스트 모두 orderBy 기본값("createdDate")을 그대로 써서 false쪽이 비어있었다.
+        it("getReviewThreads (List) - orderBy가 createdDate가 아니어도 정렬 절을 생성해야 한다") {
+            val entityManager = mockk<EntityManager>()
+            val service = ReviewThreadServiceImpl(entityManager)
+            val project = mockk<Project>()
+            val condition = ReviewSearchCondition(
+                state = "open",
+                authorId = null,
+                participantId = null,
+                filter = "",
+                orderBy = "title",
+                orderDir = "desc"
+            )
+
+            val query = mockk<TypedQuery<CommentThread>>(relaxed = true)
+            every { entityManager.createQuery(any<String>(), CommentThread::class.java) } returns query
+            every { query.resultList } returns listOf()
+
+            val list = service.getReviewThreads(project, condition)
+            list.size shouldBe 0
+        }
     }
 })

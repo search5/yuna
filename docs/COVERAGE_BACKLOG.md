@@ -269,10 +269,10 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `YonaAuthenticationSuccessHandler` | 100.0 | 91.7 | 100.0 | 0 | 1 | 0 | [i] | 2026-08-26 재검증: 기존 스펙이 이미 도달 가능한 분기를 전부 커버 중이었음(코드 변경 없음, 백로그의 BRANCH 0.0% 기록 자체가 stale). LINE 100%, BRANCH 91.7%(11/12), METHOD 100%. 잔여 1건은 `savedRequest?.redirectUrl ?: "/"`에서 `getRedirectUrl()` 반환값에 대한 방어적 null 체크 — Kotlin이 non-null로 처리해 `every {...} returns null` 자체가 컴파일 에러(직접 확인), javap로 방어적 `ifnonnull` 확인 |
 | `YonaAuthenticationFailureHandler` | 9.1 | 0.0 | 50.0 | 10 | 8 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `BootstrapSetupInterceptor` | 100.0 | 59.1 | 100.0 | 0 | 9 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `ApiTokenAuthenticationFilter` | 100.0 | 81.2 | 100.0 | 0 | 3 | 0 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 93.8%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `ApiTokenAuthenticationFilter` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-26: fork 테스트로 LINE/BRANCH/METHOD 100% 확보 완료 |
 | `YonaAuthenticationProvider` | 97.7 | 94.4 | 100.0 | 1 | 1 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **config/git** | | | | | | | | |
-| `GitAuthorizationFilter` | 100.0 | 80.0 | 100.0 | 0 | 8 | 0 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 92.5%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `GitAuthorizationFilter` | 100.0 | 97.5 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-26: fork 테스트로 LINE/METHOD 100%, BRANCH 97.5%(39/40) 확보 완료 |
 | `GitProjectVisitRecorder` | 100.0 | 80.0 | 100.0 | 0 | 4 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | **config/oauth2** | | | | | | | | |
 | `GithubOAuth2UserInfo` | 60.0 | 25.0 | 60.0 | 2 | 3 | 2 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -283,7 +283,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **config/security** | | | | | | | | |
 | `AccessControl` | 60.9 | 38.4 | 87.2 | 146 | 844 | 5 | [x] | 2026-08-23~24: 4개 에이전트 걸쳐(헬퍼그룹 174 + IssuePosting 100 + PullRequest 97 + Final 60, 총 431 신규 테스트, 4개 파일). 전체 회귀 확정치: LINE 100%, BRANCH 95.3%, METHOD 100% — 목표 달성. 이 저장소 최대 미커버 클래스(1371개 분기)를 3차 배치에 걸쳐 완주 |
 | **config/svn** | | | | | | | | |
-| `SvnAuthorizationFilter` | 96.2 | 73.8 | 100.0 | 2 | 11 | 0 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 92.9%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `SvnAuthorizationFilter` | 100.0 | 97.6 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-26: fork 테스트(`SvnAuthorizationFilterExtraSpec.kt` 포함)로 LINE/METHOD 100%, BRANCH 97.6%(41/42) 확보 완료 |
 | **domain/attachment** | | | | | | | | |
 | `AttachmentServiceImpl` | 95.8 | 85.7 | 100.0 | 3 | 4 | 0 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 97.2%, BRANCH 92.9%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
 | `AttachmentCleanupScheduler` | 90.0 | 100.0 | 100.0 | 2 | 0 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
@@ -393,7 +393,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `CodeRange` | 63.2 | 0.0 | 27.8 | 7 | 16 | 13 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `HistoryUtil` | 83.6 | 67.6 | 100.0 | 9 | 12 | 0 | [i] | 2026-08-25: `historyMadeBy`/`historyDiffText`의 DELETE/INSERT/EQUAL(생략 없음/100자 초과 생략) 전 분기 보강(LINE 100%, METHOD 100%, BRANCH 91.9%). 잔여 미달은 `diff_match_patch.Operation`(DELETE/EQUAL/INSERT 3값)에 대한 Kotlin 완전소진(exhaustive) `when`의 컴파일러 안전망 `else -> {}` 2곳으로, 라이브러리가 정의한 3개 값 외에는 런타임에 존재할 수 없어 도달 불가로 판단 |
 | `DiagnosticService` | 90.2 | 100.0 | 100.0 | 4 | 0 | 0 | [i] | 2026-08-26: `baseUrl` 인자를 생략해 Kotlin 기본값 초기화(24행) 커버 추가, IMAP/DB/메일 전 분기 보강하여 BRANCH 100%(22/22)·METHOD 100%(3/3) 확보. 잔여 LINE 미달(37/41=90.2%)은 Git/SVN 저장소 점검 `catch(e: Exception)` 2개 블록(51-52행, 64-65행)뿐 — `File.mkdirs()`/`exists()`/`canWrite()`는 정상 파일시스템 호출에서 체크 예외를 던지지 않고 boolean만 반환하며, 예외를 강제하려면 `SecurityManager`가 필요한데 Java 21(JEP 411)에서는 `-Djava.security.manager=allow` 없이 `setSecurityManager` 호출 시 `UnsupportedOperationException`이 발생해 테스트에서 재현 불가 — 도달 불가로 판단
-| `ReviewThreadServiceImpl` | 83.3 | 75.0 | 80.0 | 8 | 5 | 1 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 85.0%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `ReviewThreadServiceImpl` | 100.0 | 90.0 | 100.0 | 0 | 2 | 0 | [i] | 2026-08-26: fork 테스트로 LINE/METHOD 100% 확보. 잔여 2개 분기는 `val whereSection = if (whereClauses.isNotEmpty()) ... else ""` — `whereClauses`는 메서드 시작부에서 조건 없이 `"t.project = :project"`를 항상 추가하므로 `isNotEmpty()`의 false 분기는 구조적으로 도달 불가 |
 | `FileUtil` | 96.2 | 81.2 | 100.0 | 1 | 3 | 0 | [i] | 2026-08-25: 신규 `FileUtilSpec.kt`로 도달 가능한 MIME 감지 분기 보강(LINE 96.2%, METHOD 100%, BRANCH 81.2%). 잔여 미달은 `detectMediaType()`의 `audio/ogg`+파일명 `.ogv` 보정 분기 — Apache Tika 2.9.2의 `tika-mimetypes.xml`을 직접 확인한 결과 `audio/ogg`는 매직바이트 패턴이 없고 오직 `*.oga` 파일명 글롭으로만 매칭되어(`.ogv`와 상호배타) 실제 바이트로 매직 감지되는 값은 `audio/vorbis`(하위 타입)뿐 — 이 분기 성립에 필요한 두 조건(감지값이 정확히 "audio/ogg" 문자열 AND 파일명이 .ogv)이 동시에 성립할 방법이 없어 구조적으로 도달 불가. 실제 OGG/Vorbis 매직바이트를 직접 구성해 시도했으나 `audio/vorbis`로 감지됨을 먼저 실증적으로 확인한 뒤 mimetypes.xml 근거로 최종 확정 |
 | `DiffUtil` | 100.0 | 85.7 | 100.0 | 0 | 4 | 0 | [i] | 2026-08-25: 기존 테스트가 DELETE/INSERT/EQUAL 전 분기를 이미 커버함을 확인, 신규 테스트 불필요. 잔여 4건은 `HistoryUtil`과 동일한 `diff_match_patch.Diff.operation`(Java 라이브러리의 platform 타입) 방어적 null 체크 패턴으로, `javap` 바이트코드 확인 결과 Kotlin이 자동 삽입한 `checkNotNullExpressionValue` 안전망이라 도달 불가 |
 | `AbstractPosting` | 95.7 | 100.0 | 96.9 | 1 | 0 | 1 | [x] | 2026-08-25: 신규 `AbstractPostingSpec.kt`(구체 서브클래스 `Posting` 경유, `@MappedSuperclass` 추상 클래스라 직접 인스턴스화 불가)로 확보 완료(LINE 95.7%, BRANCH 100%, METHOD 96.9% — 목표 달성) |

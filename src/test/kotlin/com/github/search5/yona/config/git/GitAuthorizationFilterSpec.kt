@@ -411,6 +411,60 @@ class GitAuthorizationFilterSpec : DescribeSpec({
             verify(exactly = 1) { filterChain.doFilter(any(), any()) }
         }
 
+        // requiresAuth=true 경로의 authentication==null||!isAuthenticated||isAnonymous(...) 3항 OR는
+        // 기존엔 전부 authentication==null(단락평가)로만 401을 태워, 뒤 두 서브 분기가 비어 있었다.
+        it("PRIVATE 프로젝트 요청 시 익명 토큰(AnonymousAuthenticationToken)이면 401을 응답해야 한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/private-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+
+            val project = Project(id = 1L, owner = "gildong", name = "private-repo", projectScope = ProjectScope.PRIVATE)
+            every { projectService.findByOwnerAndName("gildong", "private-repo") } returns project
+
+            val auth = AnonymousAuthenticationToken("key", "anonymous", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS"))
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_UNAUTHORIZED
+            verify(exactly = 0) { filterChain.doFilter(any(), any()) }
+        }
+
+        it("PRIVATE 프로젝트 요청 시 인증되지 않은(isAuthenticated=false) 토큰이면 401을 응답해야 한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/private-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+
+            val project = Project(id = 1L, owner = "gildong", name = "private-repo", projectScope = ProjectScope.PRIVATE)
+            every { projectService.findByOwnerAndName("gildong", "private-repo") } returns project
+
+            val auth = UsernamePasswordAuthenticationToken("chulsoo", "password")
+            auth.isAuthenticated = false
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_UNAUTHORIZED
+            verify(exactly = 0) { filterChain.doFilter(any(), any()) }
+        }
+
+        // isGuestUser()의 userRepository.findByLoginId(...).map{...}.orElse(false)는 기존엔 항상
+        // present(게스트/비게스트)만 다뤄서, empty(orElse) 쪽 서브 분기가 else/게스트체크 경로에서 비어 있었다.
+        it("PUBLIC 프로젝트 요청 시 인증된 유저가 userRepository에 없으면 게스트 아님으로 간주해 통과해야 한다") {
+            val request = MockHttpServletRequest("GET", "/git/gildong/public-repo.git/info/refs")
+            val response = MockHttpServletResponse()
+
+            val project = Project(owner = "gildong", name = "public-repo", projectScope = ProjectScope.PUBLIC)
+            every { projectService.findByOwnerAndName("gildong", "public-repo") } returns project
+            every { userRepository.findByLoginId("ghost") } returns Optional.empty()
+
+            val auth = UsernamePasswordAuthenticationToken("ghost", "password", AuthorityUtils.createAuthorityList("ROLE_ACTIVE"))
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_OK
+            verify(exactly = 1) { filterChain.doFilter(any(), any()) }
+        }
+
         it("PUBLIC 프로젝트 요청 시 인증되지 않은 authentication이면 통과되어야 한다") {
             val request = MockHttpServletRequest("GET", "/git/gildong/public-repo.git/info/refs")
             val response = MockHttpServletResponse()

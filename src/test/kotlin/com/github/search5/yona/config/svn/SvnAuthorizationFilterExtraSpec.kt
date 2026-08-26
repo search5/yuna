@@ -147,5 +147,59 @@ class SvnAuthorizationFilterExtraSpec : DescribeSpec({
             response.status shouldBe HttpServletResponse.SC_UNAUTHORIZED
             verify(exactly = 0) { filterChain.doFilter(any(), any()) }
         }
+
+        // svnUriPattern(^/svn/([^/]+)/([^/]+?)(?:/.*)?$)에 매치되지 않는 요청(SVN 경로가 아님)은
+        // projectService를 조회하지도 않고 그대로 필터 체인을 통과시켜야 한다 — 기존 테스트는 전부
+        // /svn/owner/name 형태만 다뤄서 "매치 안 됨" 분기가 한 번도 실행된 적 없었다.
+        it("SVN URI 패턴에 매치되지 않는 요청은 프로젝트 조회 없이 그대로 통과시켜야 한다") {
+            val request = MockHttpServletRequest("GET", "/api/other/path")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, filterChain)
+
+            verify(exactly = 0) { projectService.findByOwnerAndName(any(), any()) }
+            verify(exactly = 1) { filterChain.doFilter(any(), any()) }
+        }
+
+        // requiresAuth=true 경로(PRIVATE/PROTECTED/쓰기요청)에서 authentication이 null도 아니고
+        // isAuthenticated=false도 아니지만 AnonymousAuthenticationToken인 경우 —
+        // `authentication == null || !authentication.isAuthenticated || isAnonymous(authentication)`의
+        // 세 번째 서브 분기(isAnonymous=true)가 이 경로에서는 한 번도 실행된 적 없었다(기존 익명
+        // 토큰 테스트는 전부 requiresAuth=false인 PUBLIC 읽기 경로에서만 쓰였음).
+        it("인증이 필요한 요청에서 AnonymousAuthenticationToken이면 401을 반환해야 한다") {
+            val request = MockHttpServletRequest("PROPFIND", "/svn/gildong/private-repo/trunk")
+            val response = MockHttpServletResponse()
+            val project = Project(owner = "gildong", name = "private-repo", vcs = "SVN", projectScope = ProjectScope.PRIVATE)
+            every { projectService.findByOwnerAndName("gildong", "private-repo") } returns project
+
+            val auth = org.springframework.security.authentication.AnonymousAuthenticationToken(
+                "key", "anonymous", org.springframework.security.core.authority.AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")
+            )
+            SecurityContextHolder.setContext(SecurityContextImpl(auth))
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_UNAUTHORIZED
+            verify(exactly = 0) { filterChain.doFilter(any(), any()) }
+        }
+
+        // requiresAuth=false 경로(PUBLIC 읽기)에서 authentication이 아예 null이면 —
+        // `authentication != null && ...`의 첫 서브 분기(false)가 이 경로에서는 한 번도 실행된
+        // 적 없었다(기존 PUBLIC 읽기 테스트는 전부 AnonymousAuthenticationToken을 명시적으로
+        // 설정해 authentication이 non-null이었음).
+        it("인증이 필요 없는 요청에서 authentication이 null이면 게스트 검사 없이 통과해야 한다") {
+            val request = MockHttpServletRequest("PROPFIND", "/svn/gildong/public-repo/trunk")
+            val response = MockHttpServletResponse()
+            val project = Project(owner = "gildong", name = "public-repo", vcs = "SUBVERSION", projectScope = ProjectScope.PUBLIC)
+            every { projectService.findByOwnerAndName("gildong", "public-repo") } returns project
+
+            SecurityContextHolder.getContext().authentication = null
+
+            filter.doFilter(request, response, filterChain)
+
+            response.status shouldBe HttpServletResponse.SC_OK
+            verify(exactly = 0) { userRepository.findByLoginId(any()) }
+            verify(exactly = 1) { filterChain.doFilter(any(), any()) }
+        }
     }
 })
