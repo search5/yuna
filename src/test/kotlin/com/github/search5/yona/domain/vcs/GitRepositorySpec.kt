@@ -33,7 +33,7 @@ import java.util.zip.ZipInputStream
 // GitRepository의 각 메서드가 그 커밋들에 대해 올바르게 동작하는지 end-to-end로 검증한다.
 class GitRepositorySpec : DescribeSpec({
 
-    fun newTempBaseDir(): String = Files.createTempDirectory("yuna-git-test").toFile().absolutePath
+    fun newTempBaseDir(): String = Files.createTempDirectory("yona-git-test").toFile().absolutePath
 
     val userResolver: (String?, String?) -> User? = { _, email ->
         if (email.isNullOrEmpty()) {

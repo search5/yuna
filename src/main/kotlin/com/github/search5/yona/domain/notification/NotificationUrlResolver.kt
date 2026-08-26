@@ -40,7 +40,7 @@ class NotificationUrlResolver(
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
     private val organizationRepository: OrganizationRepository,
-    @Value("\${yuna.base-url:}")
+    @Value("\${yona.base-url:}")
     private val baseUrl: String
 ) {
     private val logger = LoggerFactory.getLogger(NotificationUrlResolver::class.java)

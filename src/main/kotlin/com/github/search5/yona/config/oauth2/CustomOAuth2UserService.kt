@@ -32,7 +32,7 @@ class CustomOAuth2UserService(
     private val linkedAccountRepository: LinkedAccountRepository,
     private val accountMergeService: OAuth2AccountMergeService,
     private val delegate: DefaultOAuth2UserService = DefaultOAuth2UserService(),
-    @Value("\${yuna.signup.allowed-email-domains:}")
+    @Value("\${yona.signup.allowed-email-domains:}")
     private val allowedEmailDomains: String = ""
 ) : OAuth2UserService<OAuth2UserRequest, OAuth2User> {
 

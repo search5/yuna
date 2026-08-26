@@ -19,7 +19,7 @@ import java.time.Instant
 @Transactional
 class AttachmentServiceImpl(
     private val attachmentRepository: AttachmentRepository,
-    @Value("\${yuna.upload.base-dir:/tmp/yuna/uploads}")
+    @Value("\${yona.upload.base-dir:/tmp/yona/uploads}")
     private val baseDir: String
 ) : AttachmentService {
 
@@ -38,7 +38,7 @@ class AttachmentServiceImpl(
             uploadDir.mkdirs()
         }
 
-        val tempFile = File.createTempFile("yuna-upload-", null)
+        val tempFile = File.createTempFile("yona-upload-", null)
         val digest = MessageDigest.getInstance("SHA-256")
         var size: Long = 0
 

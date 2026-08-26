@@ -27,7 +27,7 @@ class FavoriteControllerSpec : DescribeSpec({
     val issueService = mockk<IssueService>()
     val userRepository = mockk<UserRepository>()
 
-    val favoriteController = FavoriteController(favoriteService, issueService, userRepository, "https://yuna.example.com")
+    val favoriteController = FavoriteController(favoriteService, issueService, userRepository, "https://yona.example.com")
     val mockMvc = MockMvcBuilders.standaloneSetup(favoriteController).build()
 
     beforeTest {
@@ -195,7 +195,7 @@ class FavoriteControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.result[0].project.id").value(10))
                     .andExpect(jsonPath("$.result[0].project.name").value("testproject"))
                     .andExpect(jsonPath("$.result[0].owner").value("testowner"))
-                    .andExpect(jsonPath("$.result[0].refUrl").value("https://yuna.example.com/testowner/testproject/issue/7"))
+                    .andExpect(jsonPath("$.result[0].refUrl").value("https://yona.example.com/testowner/testproject/issue/7"))
             }
 
             it("담당자가 없으면 assignee는 빈 객체여야 한다") {

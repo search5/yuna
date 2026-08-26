@@ -15,7 +15,7 @@ import java.io.FileOutputStream
 @RestController
 @RequestMapping("/git-lfs")
 class LfsStorageController(
-    @Value("\${yuna.lfs.base-dir:/tmp/yuna/lfs}")
+    @Value("\${yona.lfs.base-dir:/tmp/yona/lfs}")
     private val lfsBaseDir: String
 ) {
 

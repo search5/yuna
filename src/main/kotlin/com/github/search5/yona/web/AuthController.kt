@@ -22,10 +22,10 @@ import java.util.UUID
 @Controller
 class AuthController(
     private val userService: UserService,
-    @Value("\${yuna.signup.allowed-email-domains:}")
+    @Value("\${yona.signup.allowed-email-domains:}")
     private val allowedEmailDomains: String,
     // yona UserApp.java:1218-1224 isUsingSignUpConfirm()(signup.require.admin.confirm) 대응 (P1-77).
-    @Value("\${yuna.signup.require-admin-confirm:false}")
+    @Value("\${yona.signup.require-admin-confirm:false}")
     private val requireAdminConfirm: Boolean
 ) {
 

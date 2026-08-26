@@ -358,9 +358,9 @@ class ProjectServiceImpl(
 
         // 물리 저장소 폴더명 이동
         val baseDir = if (project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN") {
-            "/tmp/yuna/svn" // 기본경로 활용
+            "/tmp/yona/svn" // 기본경로 활용
         } else {
-            "/tmp/yuna/git"
+            "/tmp/yona/git"
         }
         val sourceDir = File(baseDir, "$originalOwner/$originalName.git")
         val targetDir = File(baseDir, "$newOwner/$newName.git")
@@ -478,9 +478,9 @@ class ProjectServiceImpl(
 
         // 물리 Bare 깃 저장소를 하드링크(Hard Link) 방식으로 무복사 복제
         val baseDir = if (original.vcs?.uppercase() == "SUBVERSION" || original.vcs?.uppercase() == "SVN") {
-            "/tmp/yuna/svn"
+            "/tmp/yona/svn"
         } else {
-            "/tmp/yuna/git"
+            "/tmp/yona/git"
         }
         val sourceDir = File(baseDir, "${original.owner}/${original.name}.git")
         val targetDir = File(baseDir, "$destOwner/$destName.git")

@@ -68,7 +68,7 @@ class ImportApiControllerSpec : DescribeSpec({
 
         describe("POST /api/new/import") {
             it("성공 시 200 OK와 함께 생성된 프로젝트 정보를 반환해야 한다") {
-                val mockRepoPath = File("/tmp/yuna/git/testuser/yona-imported.git")
+                val mockRepoPath = File("/tmp/yona/git/testuser/yona-imported.git")
                 val savedProject = Project(id = 100L, name = "yona-imported", owner = "testuser", overview = "프로젝트 설명")
 
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
@@ -106,7 +106,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("https://github.com/naver/yona.git", "testuser", "yona-imported", null, null) } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport.unauthorized", null, any()) } returns "인증 권한이 필요합니다."
 
                 val requestJson = """
@@ -200,7 +200,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://invalid", "testuser", "yona-imported", null, null) } throws InvalidRemoteException("invalid")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.wrong.url", null, any()) } returns "잘못된 URL"
                 val requestJson = """{"url": "http://invalid", "owner": "testuser", "name": "yona-imported"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
@@ -213,7 +213,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://invalid", "testuser", "yona-imported", null, null) } throws JGitInternalException("internal")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.wrong.url", null, any()) } returns "잘못된 URL"
                 val requestJson = """{"url": "http://invalid", "owner": "testuser", "name": "yona-imported"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
@@ -226,7 +226,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://auth", "testuser", "yona-imported", "id", "pw") } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport.failedToAuth", null, any()) } returns "인증 실패"
                 val requestJson = """{"url": "http://auth", "owner": "testuser", "name": "yona-imported", "authId": "id", "authPw": "pw"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
@@ -239,7 +239,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://forbidden", "testuser", "yona-imported", null, null) } throws TransportException(MessageFormat.format(JGitText.get().serviceNotPermitted, ""))
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport.forbidden", null, any()) } returns "접근 금지"
                 val requestJson = """{"url": "http://forbidden", "owner": "testuser", "name": "yona-imported"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
@@ -252,7 +252,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://other", "testuser", "yona-imported", null, null) } throws TransportException("some 404 error")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport", arrayOf("404"), any()) } returns "전송 에러"
                 val requestJson = """{"url": "http://other", "owner": "testuser", "name": "yona-imported"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
@@ -265,7 +265,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://error", "testuser", "yona-imported", null, null) } throws RuntimeException("Unknown error")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 val requestJson = """{"url": "http://error", "owner": "testuser", "name": "yona-imported"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
                     .andExpect(status().isBadRequest)
@@ -277,7 +277,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://error-nomsg", "testuser", "yona-imported", null, null) } throws RuntimeException()
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 val requestJson = """{"url": "http://error-nomsg", "owner": "testuser", "name": "yona-imported"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
                     .andExpect(status().isBadRequest)
@@ -289,7 +289,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://transport-nomsg", "testuser", "yona-imported", null, null) } throws TransportException(null as String?)
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport", arrayOf("Unknown"), any()) } returns "전송 에러"
                 val requestJson = """{"url": "http://transport-nomsg", "owner": "testuser", "name": "yona-imported"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
@@ -302,7 +302,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://nospace", "testuser", "yona-imported", null, null) } throws TransportException("NoSpaceInMessage")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport", arrayOf("Unknown"), any()) } returns "전송 에러"
                 val requestJson = """{"url": "http://nospace", "owner": "testuser", "name": "yona-imported"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
@@ -315,7 +315,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://auth-partial", "testuser", "yona-imported", "id", null) } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport.failedToAuth", null, any()) } returns "인증 실패"
                 val requestJson = """{"url": "http://auth-partial", "owner": "testuser", "name": "yona-imported", "authId": "id"}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
@@ -342,7 +342,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 val mockOrgUser = mockk<OrganizationUser>()
                 every { mockOrgUser.role.id } returns RoleType.ORG_ADMIN.roleType
 
-                val mockRepoPath = File("/tmp/yuna/git/myorg/yona-imported.git")
+                val mockRepoPath = File("/tmp/yona/git/myorg/yona-imported.git")
                 val savedProject = Project(id = 100L, name = "yona-imported", owner = "myorg", overview = "프로젝트 설명")
                 
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
@@ -378,8 +378,8 @@ class ImportApiControllerSpec : DescribeSpec({
             // 기존 테스트들이 전부 실제로 존재하지 않는 File 경로(mock 반환값)만 써서 항상 false만
             // 탔다 — 실제 임시 디렉터리를 만들어 true 쪽 분기(삭제 실행)를 닫는다.
             it("성공 시 clonedDir와 기존 저장소 디렉터리가 실제로 존재하면 finally에서 삭제해야 한다") {
-                val tempClonedDir = kotlin.io.path.createTempDirectory(prefix = "yuna-import-cloned-").toFile()
-                val tempRepoDir = kotlin.io.path.createTempDirectory(prefix = "yuna-import-repo-").toFile()
+                val tempClonedDir = kotlin.io.path.createTempDirectory(prefix = "yona-import-cloned-").toFile()
+                val tempRepoDir = kotlin.io.path.createTempDirectory(prefix = "yona-import-repo-").toFile()
                 val savedProject = Project(id = 101L, name = "yona-imported2", owner = "testuser", overview = null)
 
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
@@ -410,7 +410,7 @@ class ImportApiControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("http://auth-empty", "testuser", "yona-imported", "", "") } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { messageSource.getMessage("project.import.error.transport.unauthorized", null, any()) } returns "인증 권한이 필요합니다."
                 val requestJson = """{"url": "http://auth-empty", "owner": "testuser", "name": "yona-imported", "authId": "", "authPw": ""}"""
                 mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))

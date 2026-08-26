@@ -9,7 +9,7 @@ import java.io.File
 
 @Service
 class GitServiceImpl(
-    @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
+    @Value("\${yona.git.base-dir:/tmp/yona/git}")
     private val baseDir: String
 ) : GitService {
 

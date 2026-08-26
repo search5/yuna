@@ -42,7 +42,7 @@ class RejectPushToReservedRefsPreReceiveHook : PreReceiveHook {
  * yona의 UpdateLastPushedDate / NotifyPushedCommits / PullRequestCheck(브랜치 삭제 부분)를
  * 하나의 PostReceiveHook으로 통합 이식한 것.
  */
-class YunaPostReceiveHook(
+class YonaPostReceiveHook(
     private val project: Project,
     private val pusher: User,
     private val projectRepository: ProjectRepository,

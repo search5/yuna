@@ -110,7 +110,7 @@ class ImportViewControllerSpec : DescribeSpec({
             }
 
             it("성공적으로 Git 저장소를 복제하고 새 프로젝트를 생성해야 한다") {
-                val mockRepoPath = File("/tmp/yuna/git/testuser/yona-imported.git")
+                val mockRepoPath = File("/tmp/yona/git/testuser/yona-imported.git")
                 val savedProject = Project(id = 100L, name = "yona-imported", owner = "testuser")
 
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
@@ -143,7 +143,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("https://github.com/invalid/repo.git", "testuser", "yona-imported", null, null) } throws InvalidRemoteException("Invalid remote")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -164,7 +164,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("https://github.com/naver/yona.git", "testuser", "yona-imported", null, null) } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -186,7 +186,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository("https://github.com/naver/yona.git", "testuser", "yona-imported", "wrongId", "wrongPw") } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -283,7 +283,7 @@ class ImportViewControllerSpec : DescribeSpec({
 
             it("owner가 조직이고 호출자가 그 조직 관리자면 조직이 연동된 프로젝트가 생성되어야 한다") {
                 val org = Organization(id = 21L, name = "myorg")
-                val mockRepoPath = File("/tmp/yuna/git/myorg/orgproj.git")
+                val mockRepoPath = File("/tmp/yona/git/myorg/orgproj.git")
                 val savedProject = Project(id = 200L, name = "orgproj", owner = "myorg")
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
                 every { organizationUserRepository.findByUserIdAndRoleId(1L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
@@ -350,7 +350,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, null) } throws JGitInternalException("internal error")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -370,7 +370,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, null) } throws TransportException(forbiddenMessage)
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -389,7 +389,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, null) } throws TransportException("some 404 error")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -408,7 +408,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, null) } throws RuntimeException("boom")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -422,8 +422,8 @@ class ImportViewControllerSpec : DescribeSpec({
             }
 
             it("clone은 성공했지만 이후 단계에서 실패하면 clone된 디렉터리와 기본 저장소 경로를 모두 삭제해야 한다") {
-                val clonedTempDir = Files.createTempDirectory("yuna-import-cloned").toFile()
-                val defaultRepoTempDir = Files.createTempDirectory("yuna-import-default").toFile()
+                val clonedTempDir = Files.createTempDirectory("yona-import-cloned").toFile()
+                val defaultRepoTempDir = Files.createTempDirectory("yona-import-default").toFile()
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
                 every { organizationUserRepository.findByUserIdAndRoleId(1L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
@@ -445,13 +445,13 @@ class ImportViewControllerSpec : DescribeSpec({
             }
 
             it("clone된 디렉터리가 실제로는 존재하지 않으면 삭제를 시도하지 않아야 한다") {
-                val nonExistentClonedDir = File("/tmp/yuna-import-does-not-exist-${System.nanoTime()}")
+                val nonExistentClonedDir = File("/tmp/yona-import-does-not-exist-${System.nanoTime()}")
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
                 every { organizationUserRepository.findByUserIdAndRoleId(1L, RoleType.ORG_ADMIN.roleType) } returns emptyList()
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, null) } returns nonExistentClonedDir
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
                 every { projectService.createProject(any(), loginUser) } throws RuntimeException("save failed")
 
                 mockMvc.perform(
@@ -493,7 +493,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, null) } throws nullMessageException
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -512,7 +512,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", "onlyId", null) } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -532,7 +532,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", "", null) } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -552,7 +552,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, "onlyPw") } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -572,7 +572,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, "") } throws TransportException("not authorized")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")
@@ -592,7 +592,7 @@ class ImportViewControllerSpec : DescribeSpec({
                 every { organizationRepository.findByName("testuser") } returns Optional.empty()
                 every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
                 every { gitService.cloneRepository(validForm.url, "testuser", "yona-imported", null, null) } throws TransportException("NoSpacesAtAll")
-                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yona/git/testuser/yona-imported.git")
 
                 mockMvc.perform(
                     post("/new/import")

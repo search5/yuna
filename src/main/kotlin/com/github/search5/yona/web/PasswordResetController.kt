@@ -16,7 +16,7 @@ class PasswordResetController(
     private val userRepository: UserRepository,
     private val mailService: MailService,
     // yona utils.Config.getSiteName() 대응.
-    @Value("\${yuna.site-name:Yona}") private val siteName: String
+    @Value("\${yona.site-name:Yona}") private val siteName: String
 ) {
 
     private fun getServerUrl(request: HttpServletRequest): String {

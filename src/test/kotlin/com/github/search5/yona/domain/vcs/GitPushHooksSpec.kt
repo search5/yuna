@@ -53,7 +53,7 @@ class GitPushHooksSpec : DescribeSpec({
         }
     }
 
-    describe("YunaPostReceiveHook") {
+    describe("YonaPostReceiveHook") {
         val projectRepository = mockk<ProjectRepository>()
         val pullRequestRepository = mockk<PullRequestRepository>()
         val pushedBranchRepository = mockk<PushedBranchRepository>()
@@ -61,7 +61,7 @@ class GitPushHooksSpec : DescribeSpec({
         val project = Project(id = 1L, name = "yona-project", owner = "gildong")
         val pusher = User(id = 9L, loginId = "gildong", name = "길동")
 
-        fun newHook() = YunaPostReceiveHook(
+        fun newHook() = YonaPostReceiveHook(
             project, pusher, projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher
         )
 

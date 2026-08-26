@@ -31,13 +31,13 @@ import javax.naming.NamingEnumeration
 // 시나리오별로 mockkConstructor로 오버라이드해 세부 분기(검색결과 0/1/2건)를 만든다.
 @Transactional
 @TestPropertySource(properties = [
-    "yuna.ldap.enabled=true",
-    "yuna.ldap.protocol=ldap",
-    "yuna.ldap.base-dn=dc=yona,dc=io",
-    "yuna.ldap.dn-postfix=dc=yona,dc=io",
-    "yuna.ldap.login-property=uid",
-    "yuna.ldap.user-name-property=uid",
-    "yuna.ldap.use-email-base-login=true"
+    "yona.ldap.enabled=true",
+    "yona.ldap.protocol=ldap",
+    "yona.ldap.base-dn=dc=yona,dc=io",
+    "yona.ldap.dn-postfix=dc=yona,dc=io",
+    "yona.ldap.login-property=uid",
+    "yona.ldap.user-name-property=uid",
+    "yona.ldap.use-email-base-login=true"
 ])
 class LdapServiceSpec @Autowired constructor(
     private val ldapService: LdapService,
@@ -84,8 +84,8 @@ class LdapServiceSpec @Autowired constructor(
         @JvmStatic
         @DynamicPropertySource
         fun registerLdapProperties(registry: DynamicPropertyRegistry) {
-            registry.add("yuna.ldap.host") { ldapContainer.host }
-            registry.add("yuna.ldap.port") { ldapContainer.getMappedPort(389).toString() }
+            registry.add("yona.ldap.host") { ldapContainer.host }
+            registry.add("yona.ldap.port") { ldapContainer.getMappedPort(389).toString() }
         }
     }
 

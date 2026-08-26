@@ -122,7 +122,7 @@ class SvnRepository(
             // 종속적 동작이라 이식성 있게 강제할 수 없고, catch 블록도 임시파일 I/O가 정상 환경에서
             // 실패할 이유가 없어 도달 불가.
             mimeType = try {
-                val fileTmp = Files.createTempFile("yuna-mime", null)
+                val fileTmp = Files.createTempFile("yona-mime", null)
                 Files.write(fileTmp, bytes)
                 val detected = Files.probeContentType(fileTmp)
                 Files.delete(fileTmp)

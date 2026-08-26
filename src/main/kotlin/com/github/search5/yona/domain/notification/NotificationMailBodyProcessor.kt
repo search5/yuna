@@ -14,9 +14,9 @@ import java.net.URI
  */
 @Component
 class NotificationMailBodyProcessor(
-    @Value("\${yuna.hostname:localhost}")
+    @Value("\${yona.hostname:localhost}")
     private val hostname: String,
-    @Value("\${yuna.base-url:}")
+    @Value("\${yona.base-url:}")
     private val baseUrl: String,
     @Value("\${application.noreferrer:false}")
     private val noreferrerEnabled: Boolean

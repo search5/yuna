@@ -36,8 +36,8 @@ class SvnServletRequestWrapperSpec : DescribeSpec({
 
         it("컨텍스트패스가 있어도 정확히 접두사를 제거해야 한다") {
             val request = MockHttpServletRequest("GET", "/svn/gildong/myproject/trunk/a.txt")
-            request.contextPath = "/yuna"
-            request.requestURI = "/yuna/svn/gildong/myproject/trunk/a.txt"
+            request.contextPath = "/yona"
+            request.requestURI = "/yona/svn/gildong/myproject/trunk/a.txt"
             val wrapper = SvnServletRequestWrapper(request, "gildong")
 
             wrapper.pathInfo shouldBe "/myproject/trunk/a.txt"

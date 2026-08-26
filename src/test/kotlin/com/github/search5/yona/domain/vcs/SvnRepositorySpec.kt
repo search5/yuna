@@ -25,7 +25,7 @@ import java.nio.file.Files
 // SvnRepository의 각 메서드가 legacy SVNRepository.java와 동일한 결과를 내는지 end-to-end로 검증한다.
 class SvnRepositorySpec : DescribeSpec({
 
-    fun newTempBaseDir(): String = Files.createTempDirectory("yuna-svn-test").toFile().absolutePath
+    fun newTempBaseDir(): String = Files.createTempDirectory("yona-svn-test").toFile().absolutePath
 
     // legacy SVNRepository.java는 별도 커밋 헬퍼가 없지만(실제 커밋은 svn 클라이언트/DAVServlet을 통해
     // 일어남), 테스트에서는 SVNKit의 저수준 커밋 에디터로 동일한 결과(실제 리비전)를 만들어낸다.
@@ -375,9 +375,9 @@ class SvnRepositorySpec : DescribeSpec({
         it("확장자로 MIME 타입을 판별할 수 없는 파일은 기본 mimeType(application/octet-stream)으로 채워야 한다") {
             val repo = SvnRepository("owner48", "proj48", newTempBaseDir(), userResolver)
             repo.create()
-            commitFile(repo, "unknownext.yunatestunknown", "plain text content", "알 수 없는 확장자 커밋")
+            commitFile(repo, "unknownext.yonatestunknown", "plain text content", "알 수 없는 확장자 커밋")
 
-            val meta = repo.getMetaDataFromPath("unknownext.yunatestunknown")
+            val meta = repo.getMetaDataFromPath("unknownext.yonatestunknown")
 
             meta shouldNotBe null
             meta!!.get("mimeType").asString() shouldBe "application/octet-stream"

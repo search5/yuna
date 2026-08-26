@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 @RestController
 class SvnController(
-    @Value("\${yuna.svn.base-dir:/tmp/yuna/svn}")
+    @Value("\${yona.svn.base-dir:/tmp/yona/svn}")
     private val baseDir: String,
     private val servletContext: ServletContext
 ) {

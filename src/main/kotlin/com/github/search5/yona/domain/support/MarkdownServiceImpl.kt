@@ -43,7 +43,7 @@ class MarkdownServiceImpl(
     // NotificationMailBodyProcessor(P1-27)와 동일한 설정 키/hostname 프로퍼티를 공유한다.
     @Value("\${application.noreferrer:false}")
     private val noreferrerEnabled: Boolean = false,
-    @Value("\${yuna.hostname:localhost}")
+    @Value("\${yona.hostname:localhost}")
     private val hostname: String = "localhost"
 ) : MarkdownService {
     private val logger = LoggerFactory.getLogger(MarkdownServiceImpl::class.java)

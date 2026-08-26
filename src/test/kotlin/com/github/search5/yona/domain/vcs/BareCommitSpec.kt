@@ -39,7 +39,7 @@ private fun readTreeFiles(repository: Repository, commitId: ObjectId): Map<Strin
 }
 
 private fun seedInitialCommit(bareDir: File, branch: String, filePath: String, content: String) {
-    val tempWorkingDir = Files.createTempDirectory("yuna-barecommit-seed").toFile()
+    val tempWorkingDir = Files.createTempDirectory("yona-barecommit-seed").toFile()
     val git = Git.init().setDirectory(tempWorkingDir).call()
     try {
         val file = File(tempWorkingDir, filePath)
@@ -69,7 +69,7 @@ private fun seedInitialCommit(bareDir: File, branch: String, filePath: String, c
 class BareCommitSpec : DescribeSpec({
     describe("BareCommit.commitTextFile(branchName, path, text, message)") {
         it("지정한 브랜치에만 커밋을 반영하고 다른 브랜치(master)는 건드리지 않는다") {
-            val gitBaseDir = Files.createTempDirectory("yuna-barecommit-test").toFile()
+            val gitBaseDir = Files.createTempDirectory("yona-barecommit-test").toFile()
             val bareDir = File(gitBaseDir, "tester/repo.git")
             Git.init().setDirectory(bareDir).setBare(true).call().close()
 
@@ -114,7 +114,7 @@ class BareCommitSpec : DescribeSpec({
         // createTemporaryIndex()의 headId==null 분기(기존 트리 병합 생략)를 함께 검증한다 — 이전 커밋이
         // 전혀 없는 완전히 새 브랜치에 첫 커밋을 반영하는 케이스.
         it("커밋이 하나도 없는 새 브랜치에 첫 커밋을 반영하면 부모 없이 커밋해야 한다") {
-            val gitBaseDir = Files.createTempDirectory("yuna-barecommit-test").toFile()
+            val gitBaseDir = Files.createTempDirectory("yona-barecommit-test").toFile()
             val bareDir = File(gitBaseDir, "tester/repo.git")
             Git.init().setDirectory(bareDir).setBare(true).call().close()
             // seedInitialCommit()을 호출하지 않는다 -- "feature" 브랜치는 어떤 커밋도 존재하지 않는 상태다.
@@ -146,7 +146,7 @@ class BareCommitSpec : DescribeSpec({
         // createTemporaryIndex() 트리 순회 루프의 walkPath == path 분기(신규 blob으로 덮어쓰고 기존
         // 엔트리는 건너뜀) 검증 -- 같은 경로에 다시 커밋해 기존 파일을 덮어쓰는 케이스.
         it("이미 존재하는 경로에 다시 커밋하면 새 blob으로 덮어써야 한다(walkPath == path 분기)") {
-            val gitBaseDir = Files.createTempDirectory("yuna-barecommit-test").toFile()
+            val gitBaseDir = Files.createTempDirectory("yona-barecommit-test").toFile()
             val bareDir = File(gitBaseDir, "tester/repo.git")
             Git.init().setDirectory(bareDir).setBare(true).call().close()
 
@@ -176,7 +176,7 @@ class BareCommitSpec : DescribeSpec({
         // RefDirectoryUpdate가 락 획득에 실패(LOCK_FAILURE)하도록 강제로 재현한다(실제 동시 수정 충돌과
         // 동일한 저수준 메커니즘).
         it("ref lock을 동시에 선점당하면 ConcurrentRefUpdateException으로 감싼 RuntimeException을 던져야 한다") {
-            val gitBaseDir = Files.createTempDirectory("yuna-barecommit-test").toFile()
+            val gitBaseDir = Files.createTempDirectory("yona-barecommit-test").toFile()
             val bareDir = File(gitBaseDir, "tester/repo.git")
             Git.init().setDirectory(bareDir).setBare(true).call().close()
 
@@ -207,7 +207,7 @@ class BareCommitSpec : DescribeSpec({
     // 기존 루트 트리를 알파벳순으로 순회하면서 새/기존 파일을 병합한다(중첩 경로는 다루지 않는다 -- 파일명만 사용).
     describe("BareCommit.commitTextFile(fileNameWithPath, contents, message) - 레거시 3-인자 오버로드") {
         it("연속 커밋으로 createTreeWith()의 모든 병합 분기(신규 트리/중간 삽입/말미 삽입/덮어쓰기)를 거쳐야 한다") {
-            val gitBaseDir = Files.createTempDirectory("yuna-barecommit-legacy-test").toFile()
+            val gitBaseDir = Files.createTempDirectory("yona-barecommit-legacy-test").toFile()
             val bareDir = File(gitBaseDir, "tester/repo.git")
             Git.init().setDirectory(bareDir).setBare(true).call().close()
 
@@ -263,7 +263,7 @@ class BareCommitSpec : DescribeSpec({
         // 오버로드 자체는 항상 루트 파일만 커밋하므로 스스로 디렉터리 엔트리를 만들 수 없다 -- 대신
         // seedInitialCommit()으로 저장소를 미리 하위 디렉터리가 있는 상태로 만들어 재현한다.
         it("루트 트리에 디렉터리 엔트리가 있으면 TREE 파일모드로 인식해 그대로 보존해야 한다") {
-            val gitBaseDir = Files.createTempDirectory("yuna-barecommit-legacy-test").toFile()
+            val gitBaseDir = Files.createTempDirectory("yona-barecommit-legacy-test").toFile()
             val bareDir = File(gitBaseDir, "tester/repo.git")
             Git.init().setDirectory(bareDir).setBare(true).call().close()
 
@@ -290,7 +290,7 @@ class BareCommitSpec : DescribeSpec({
 
         describe("Coverage addition for BareCommit") {
             it("should handle null parentFile in commitTextFile (4-args)") {
-                val gitBaseDir = Files.createTempDirectory("yuna-barecommit-cov").toFile()
+                val gitBaseDir = Files.createTempDirectory("yona-barecommit-cov").toFile()
                 val bareDir = File(gitBaseDir, "tester/repo.git")
                 Git.init().setDirectory(bareDir).setBare(true).call().close()
                 
@@ -304,7 +304,7 @@ class BareCommitSpec : DescribeSpec({
             }
             
             it("should handle unreachable branches using reflection") {
-                val gitBaseDir = Files.createTempDirectory("yuna-barecommit-cov2").toFile()
+                val gitBaseDir = Files.createTempDirectory("yona-barecommit-cov2").toFile()
                 val bareDir = File(gitBaseDir, "tester/repo.git")
                 Git.init().setDirectory(bareDir).setBare(true).call().close()
                 
@@ -333,7 +333,7 @@ class BareCommitSpec : DescribeSpec({
 
         describe("Coverage addition for BareCommit - Constructor nulls") {
             it("should handle null name and email in constructor") {
-                val gitBaseDir = Files.createTempDirectory("yuna-barecommit-cov3").toFile()
+                val gitBaseDir = Files.createTempDirectory("yona-barecommit-cov3").toFile()
                 val bareDir = File(gitBaseDir, "tester/repo.git")
                 Git.init().setDirectory(bareDir).setBare(true).call().close()
                 

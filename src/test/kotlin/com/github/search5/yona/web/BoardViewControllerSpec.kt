@@ -99,7 +99,7 @@ class BoardViewControllerSpec : DescribeSpec({
         attachmentRepository,
         objectMapper,
         repositoryService,
-        "/tmp/yuna/git",
+        "/tmp/yona/git",
         recentIssueService,
         accessControl,
         attachmentService
@@ -442,14 +442,14 @@ class BoardViewControllerSpec : DescribeSpec({
 
         // yona BoardApp.newPost()의 path+isMemberOf(project) 온라인 커밋 분기 대응 (P1-111).
         // BareCommit의 branch+nested-path 지원 오버로드(P1-135)가 실제로 연결됐는지 검증하기 위해
-        // "/tmp/yuna/git"(테스트 전역 gitBaseDir) 아래 실제 bare 저장소를 만들어 커밋 결과를 직접 확인한다.
+        // "/tmp/yona/git"(테스트 전역 gitBaseDir) 아래 실제 bare 저장소를 만들어 커밋 결과를 직접 확인한다.
         describe("POST /{owner}/{projectName}/posts - 코드브라우저 편집 온라인 커밋 경로") {
             it("path가 채워지면 게시글 대신 지정 브랜치의 하위 경로에 커밋하고 코드브라우저로 리다이렉트해야 한다") {
                 val codeEditProject = Project(id = 99L, name = "CodeEditProj", owner = "owner", projectScope = ProjectScope.PRIVATE)
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저", email = "testuser@yona.io")
                 memberUser.projectUsers.add(ProjectUser(id = 955L, user = memberUser, project = codeEditProject, role = Role(id = RoleType.MEMBER.roleType)))
 
-                val gitBaseDir = File("/tmp/yuna/git")
+                val gitBaseDir = File("/tmp/yona/git")
                 val bareDir = File(gitBaseDir, "owner/CodeEditProj.git")
                 bareDir.deleteRecursively()
                 Git.init().setDirectory(bareDir).setBare(true).call().close()

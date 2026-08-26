@@ -41,7 +41,7 @@ class PostingServiceImpl(
     // 재검토, TASK-0263) — BoardViewController.editPost()(form POST 경로)에만 있던 로직을 REST 경로
     // (BoardController.updatePosting(), board/edit.html의 실제 제출 경로)에서도 쓸 수 있도록 서비스
     // 계층으로 옮겨왔다.
-    @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
+    @Value("\${yona.git.base-dir:/tmp/yona/git}")
     private val gitBaseDir: String
 ) : PostingService {
 

@@ -47,7 +47,7 @@ class PullRequestListTemplateEquivalenceSpec @Autowired constructor(
     private val pullRequestRepository: PullRequestRepository,
     private val templateEngine: SpringTemplateEngine,
     private val repositoryService: RepositoryService,
-    @Value("\${yuna.git.base-dir:/tmp/yuna/git}") private val gitBaseDir: String
+    @Value("\${yona.git.base-dir:/tmp/yona/git}") private val gitBaseDir: String
 ) : AbstractIntegrationTest() {
 
     override fun extensions() = listOf(SpringExtension)

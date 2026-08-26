@@ -23,7 +23,7 @@ import java.util.UUID
 class BootstrapSetupController(
     private val userRepository: UserRepository,
     private val userService: UserService,
-    @Value("\${yuna.site-name:Yona}") private val siteName: String
+    @Value("\${yona.site-name:Yona}") private val siteName: String
 ) {
 
     // 1. 최초 관리자 생성 화면 진입

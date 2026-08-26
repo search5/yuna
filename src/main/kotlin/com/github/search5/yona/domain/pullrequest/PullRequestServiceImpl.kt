@@ -48,7 +48,7 @@ class PullRequestServiceImpl(
     private val issueRepository: IssueRepository,
     private val issueEventRepository: IssueEventRepository,
     private val commentService: CommentService,
-    @Value("\${yuna.site-name:Yona}")
+    @Value("\${yona.site-name:Yona}")
     private val siteName: String
 ) : PullRequestService {
 
@@ -367,7 +367,7 @@ class PullRequestServiceImpl(
             }
 
             // 머지 성공: 머지 커밋 생성
-            val whoMerges = PersonIdent(updater.name, updater.email ?: "yuna@yuna.io")
+            val whoMerges = PersonIdent(updater.name, updater.email ?: "yona@yona.io")
             val diff = diffCommits(repo, leftParent, rightParent)
             val mergeCommitId = createMergeCommitAndUpdateRef(repo, pullRequest, leftParent, rightParent, merger, whoMerges, diff)
 
@@ -476,7 +476,7 @@ class PullRequestServiceImpl(
             val diff = diffCommits(repo, leftParent, rightParent)
 
             if (success) {
-                val whoMerges = PersonIdent(siteName, "yuna@yuna.io")
+                val whoMerges = PersonIdent(siteName, "yona@yona.io")
                 val mergeCommitId = createMergeCommitAndUpdateRef(repo, pullRequest, leftParent, rightParent, merger, whoMerges, diff)
                 result.setResolvedStateOfPullRequest()
                 pullRequest.mergedCommitIdFrom = leftParent.name

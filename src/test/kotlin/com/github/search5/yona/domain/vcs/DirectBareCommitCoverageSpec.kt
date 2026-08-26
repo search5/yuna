@@ -14,7 +14,7 @@ import java.nio.file.Files
 class DirectBareCommitCoverageSpec : DescribeSpec({
     describe("Direct method calls for BareCommit coverage") {
         it("covers line 50 and 92") {
-            val gitBaseDir = Files.createTempDirectory("yuna-barecommit-cov4").toFile()
+            val gitBaseDir = Files.createTempDirectory("yona-barecommit-cov4").toFile()
             val bareDir = File(gitBaseDir, "tester/repo.git")
             Git.init().setDirectory(bareDir).setBare(true).call().close()
             

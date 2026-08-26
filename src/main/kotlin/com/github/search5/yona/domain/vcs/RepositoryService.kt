@@ -13,9 +13,9 @@ import java.io.File
 class RepositoryService(
     private val userRepository: UserRepository,
     private val projectRepository: ProjectRepository,
-    @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
+    @Value("\${yona.git.base-dir:/tmp/yona/git}")
     private val gitBaseDir: String,
-    @Value("\${yuna.svn.base-dir:/tmp/yuna/svn}")
+    @Value("\${yona.svn.base-dir:/tmp/yona/svn}")
     private val svnBaseDir: String
 ) {
     private val objectMapper = ObjectMapper()

@@ -11,7 +11,7 @@ import java.time.Instant
 class AttachmentCleanupScheduler(
     private val attachmentRepository: AttachmentRepository,
     private val attachmentService: AttachmentService,
-    @Value("\${yuna.attachment.temporary-keep-alive-ms:86400000}")
+    @Value("\${yona.attachment.temporary-keep-alive-ms:86400000}")
     private val keepAliveMillis: Long
 ) {
     private val log = LoggerFactory.getLogger(AttachmentCleanupScheduler::class.java)

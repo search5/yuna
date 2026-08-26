@@ -40,7 +40,7 @@ class AsyncEventIntegrationSpec @Autowired constructor(
 
                 // Then
                 completed shouldBe true
-                threadName shouldStartWith "yuna-async-"
+                threadName shouldStartWith "yona-async-"
                 verify(exactly = 1) { mailService.sendHtmlMail("test@yona.io", "홍길동", any(), any()) }
             }
         }

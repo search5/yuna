@@ -44,17 +44,17 @@ import java.util.concurrent.ScheduledFuture
  * `toInboundEmailMessage`(본문/첨부파일 MIME 파싱, P1-29/P1-47)도 기존과 동일하게 커버된다.
  */
 @Component
-@ConditionalOnProperty(prefix = "yuna.mailbox.imap", name = ["enabled"], havingValue = "true")
+@ConditionalOnProperty(prefix = "yona.mailbox.imap", name = ["enabled"], havingValue = "true")
 class ImapMailboxPoller(
     private val incomingMailProcessingService: IncomingMailProcessingService,
     private val propertyService: PropertyService,
     private val taskScheduler: TaskScheduler,
-    @Value("\${yuna.mailbox.imap.host}") private val host: String,
-    @Value("\${yuna.mailbox.imap.user}") private val user: String,
-    @Value("\${yuna.mailbox.imap.password}") private val password: String,
-    @Value("\${yuna.mailbox.imap.ssl:true}") private val useSsl: Boolean,
-    @Value("\${yuna.mailbox.imap.folder:inbox}") private val folderName: String,
-    @Value("\${yuna.mailbox.imap.polling-interval-ms:300000}") private val pollingIntervalMs: Long
+    @Value("\${yona.mailbox.imap.host}") private val host: String,
+    @Value("\${yona.mailbox.imap.user}") private val user: String,
+    @Value("\${yona.mailbox.imap.password}") private val password: String,
+    @Value("\${yona.mailbox.imap.ssl:true}") private val useSsl: Boolean,
+    @Value("\${yona.mailbox.imap.folder:inbox}") private val folderName: String,
+    @Value("\${yona.mailbox.imap.polling-interval-ms:300000}") private val pollingIntervalMs: Long
 ) {
     private val logger = LoggerFactory.getLogger(ImapMailboxPoller::class.java)
 

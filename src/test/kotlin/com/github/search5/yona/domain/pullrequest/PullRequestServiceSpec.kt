@@ -108,7 +108,7 @@ class PullRequestServiceSpec @Autowired constructor(
                 // 시뮬레이션)하여 branch의 기존 커밋을 완전히 대체한다.
                 baseBranch: String = branch
             ) {
-                val tempWorkingDir = Files.createTempDirectory("yuna-test-work").toFile()
+                val tempWorkingDir = Files.createTempDirectory("yona-test-work").toFile()
                 try {
                     val git = Git.init().setDirectory(tempWorkingDir).call()
                     val config = git.repository.config
@@ -165,7 +165,7 @@ class PullRequestServiceSpec @Autowired constructor(
                 }
             }
             fun syncRepository(srcBareDir: File, destBareDir: File, branch: String) {
-                val tempWorkingDir = Files.createTempDirectory("yuna-test-sync").toFile()
+                val tempWorkingDir = Files.createTempDirectory("yona-test-sync").toFile()
                 try {
                     val git = Git.init().setDirectory(tempWorkingDir).call()
                     val config = git.repository.config

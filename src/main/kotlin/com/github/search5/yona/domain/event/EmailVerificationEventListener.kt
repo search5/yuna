@@ -17,7 +17,7 @@ class EmailVerificationEventListener(
     fun handleEmailVerificationEvent(event: EmailVerificationEvent) {
         logger.info("Handling EmailVerificationEvent asynchronously for ${event.email}")
         
-        val subject = "[Yuna] 이메일 주소 확인"
+        val subject = "[Yona] 이메일 주소 확인"
         val htmlContent = """
             <pre>아래 링크를 클릭하면 이메일 주소 확인이 완료됩니다.</pre>
             <hr>

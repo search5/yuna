@@ -18,7 +18,7 @@ import jakarta.servlet.ReadListener
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers
 
 class LfsStorageControllerSpec : DescribeSpec({
-    val tempDir = Files.createTempDirectory("yuna-lfs-test").toFile()
+    val tempDir = Files.createTempDirectory("yona-lfs-test").toFile()
     val controller = LfsStorageController(tempDir.absolutePath)
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 

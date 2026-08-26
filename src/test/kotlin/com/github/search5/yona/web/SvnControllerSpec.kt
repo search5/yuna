@@ -27,7 +27,7 @@ import java.nio.file.Files
 // 돌아온다는 것 자체가 이 매핑이 진짜로 DAVServlet까지 도달했다는 확실한 증거가 된다.
 class SvnControllerSpec : DescribeSpec({
 
-    fun newTempBaseDir(): String = Files.createTempDirectory("yuna-svnctrl-test").toFile().absolutePath
+    fun newTempBaseDir(): String = Files.createTempDirectory("yona-svnctrl-test").toFile().absolutePath
 
     fun buildController(baseDir: String) = SvnController(baseDir, MockServletContext())
 

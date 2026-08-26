@@ -58,7 +58,7 @@ class OrganizationViewController(
     private val mentionService: MentionService,
     private val roleRepository: RoleRepository,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
-    @Value("\${yuna.application.hide-project-listing:false}")
+    @Value("\${yona.application.hide-project-listing:false}")
     private val hideProjectListing: Boolean = false
 ) {
 

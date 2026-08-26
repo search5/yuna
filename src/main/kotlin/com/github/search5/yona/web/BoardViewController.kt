@@ -48,7 +48,7 @@ class BoardViewController(
     private val attachmentRepository: AttachmentRepository,
     private val objectMapper: ObjectMapper,
     private val repositoryService: RepositoryService,
-    @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
+    @Value("\${yona.git.base-dir:/tmp/yona/git}")
     private val gitBaseDir: String,
     private val recentIssueService: RecentIssueService,
     private val accessControl: AccessControl,

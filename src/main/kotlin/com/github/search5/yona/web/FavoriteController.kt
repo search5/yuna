@@ -17,7 +17,7 @@ class FavoriteController(
     private val favoriteService: FavoriteService,
     private val issueService: IssueService,
     private val userRepository: UserRepository,
-    @Value("\${yuna.base-url:}")
+    @Value("\${yona.base-url:}")
     private val baseUrl: String
 ) {
 

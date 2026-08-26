@@ -1402,7 +1402,7 @@ class TemplateEquivalenceSpec @Autowired constructor(
                     doc.select("a[data-toggle=search-scope][data-action=/search]").size shouldBe 1
                 }
 
-                it("커스텀 네비게이션 링크는 기본 설정(빈 값)에서는 렌더링되지 않아야 한다(yuna.application.navbar.custom-link.name 미설정 시)") {
+                it("커스텀 네비게이션 링크는 기본 설정(빈 값)에서는 렌더링되지 않아야 한다(yona.application.navbar.custom-link.name 미설정 시)") {
                     val doc = Jsoup.parse(
                         mockMvc.perform(get("/").with(SecurityMockMvcRequestPostProcessors.user(memberDetails))).andReturn().response.contentAsString
                     )

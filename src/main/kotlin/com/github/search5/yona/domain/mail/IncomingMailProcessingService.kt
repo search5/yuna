@@ -62,7 +62,7 @@ class IncomingMailProcessingService(
     private val postingCommentRepository: PostingCommentRepository,
     private val reviewCommentRepository: ReviewCommentRepository,
     private val accessControl: AccessControl,
-    @Value("\${yuna.mailbox.imap.address:}")
+    @Value("\${yona.mailbox.imap.address:}")
     private val inboundBaseAddress: String
 ) {
     private val logger = LoggerFactory.getLogger(IncomingMailProcessingService::class.java)

@@ -63,7 +63,7 @@ class PullRequestMergeResultTemplateRenderingSpec @Autowired constructor(
             // 쓰지 않는다(공유 테스트 DB에서 무관한 프로젝트를 지우다 FK 위반이 날 수 있음).
 
             fun createCommit(bareRepoDir: File, branch: String, filePath: String, content: String, commitMsg: String) {
-                val tempWorkingDir = Files.createTempDirectory("yuna-test-mr").toFile()
+                val tempWorkingDir = Files.createTempDirectory("yona-test-mr").toFile()
                 try {
                     val git = Git.init().setDirectory(tempWorkingDir).call()
                     val config = git.repository.config

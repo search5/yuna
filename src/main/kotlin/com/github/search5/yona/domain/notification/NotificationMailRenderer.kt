@@ -15,9 +15,9 @@ import java.util.Locale
 class NotificationMailRenderer(
     private val messageSource: MessageSource,
     private val bodyProcessor: NotificationMailBodyProcessor,
-    @Value("\${yuna.base-url:}")
+    @Value("\${yona.base-url:}")
     private val baseUrl: String,
-    @Value("\${yuna.site-name:Yona}")
+    @Value("\${yona.site-name:Yona}")
     private val siteName: String
 ) {
     // yona getRenderedMail() + handleLinks/handleImages 대응.

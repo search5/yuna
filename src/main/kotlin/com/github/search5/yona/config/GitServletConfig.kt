@@ -8,7 +8,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.PushedBranchRepository
 import com.github.search5.yona.domain.vcs.RejectPushToReservedRefsPreReceiveHook
-import com.github.search5.yona.domain.vcs.YunaPostReceiveHook
+import com.github.search5.yona.domain.vcs.YonaPostReceiveHook
 import org.eclipse.jgit.http.server.GitServlet
 import org.eclipse.jgit.lfs.server.LfsProtocolServlet
 import org.eclipse.jgit.lfs.server.LargeFileRepository
@@ -32,11 +32,11 @@ import jakarta.servlet.http.HttpServletResponse
 
 @Configuration
 class GitServletConfig(
-    @Value("\${yuna.git.base-dir:/tmp/yuna/git}")
+    @Value("\${yona.git.base-dir:/tmp/yona/git}")
     private val baseDir: String,
-    @Value("\${yuna.lfs.base-dir:/tmp/yuna/lfs}")
+    @Value("\${yona.lfs.base-dir:/tmp/yona/lfs}")
     private val lfsBaseDir: String,
-    @Value("\${yuna.lfs.url:http://localhost:8080/git-lfs}")
+    @Value("\${yona.lfs.url:http://localhost:8080/git-lfs}")
     private val lfsUrl: String,
     private val projectRepository: ProjectRepository,
     private val pullRequestRepository: PullRequestRepository,
@@ -72,7 +72,7 @@ class GitServletConfig(
                 val pusher = resolveCurrentUser()
                 if (project != null && pusher != null) {
                     receivePack.setPostReceiveHook(
-                        YunaPostReceiveHook(
+                        YonaPostReceiveHook(
                             project, pusher, projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher
                         )
                     )

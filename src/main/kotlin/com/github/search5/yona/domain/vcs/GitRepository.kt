@@ -180,7 +180,7 @@ class GitRepository(
                 data = String(bytes, StandardCharsets.UTF_8)
             }
             mimeType = try {
-                val fileTmp = Files.createTempFile("yuna-git-mime", null)
+                val fileTmp = Files.createTempFile("yona-git-mime", null)
                 Files.write(fileTmp, bytes)
                 val detected = Files.probeContentType(fileTmp)
                 Files.delete(fileTmp)

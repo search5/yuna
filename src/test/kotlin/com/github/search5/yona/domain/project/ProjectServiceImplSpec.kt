@@ -510,8 +510,8 @@ class ProjectServiceImplSpec : DescribeSpec({
             val destUser = User(id = 406L, loginId = destOwner, name = "물리깃수신")
             val managerRole = Role(id = RoleType.MANAGER.roleType)
 
-            val sourceDir = File("/tmp/yuna/git/$owner/$name.git")
-            val targetDir = File("/tmp/yuna/git/$destOwner/$name.git")
+            val sourceDir = File("/tmp/yona/git/$owner/$name.git")
+            val targetDir = File("/tmp/yona/git/$destOwner/$name.git")
             sourceDir.deleteRecursively()
             targetDir.deleteRecursively()
             try {
@@ -553,8 +553,8 @@ class ProjectServiceImplSpec : DescribeSpec({
             val destUser = User(id = 407L, loginId = destOwner, name = "물리svn수신")
             val managerRole = Role(id = RoleType.MANAGER.roleType)
 
-            val sourceDir = File("/tmp/yuna/svn/$owner/$name.git")
-            val targetDir = File("/tmp/yuna/svn/$destOwner/$name.git")
+            val sourceDir = File("/tmp/yona/svn/$owner/$name.git")
+            val targetDir = File("/tmp/yona/svn/$destOwner/$name.git")
             sourceDir.deleteRecursively()
             targetDir.deleteRecursively()
             try {
@@ -1560,8 +1560,8 @@ class ProjectServiceImplSpec : DescribeSpec({
     // yona Project.fork() 대응 — 자식 프로젝트 엔티티 생성/멤버 등록과, 물리 Bare 저장소의
     // 하드링크(Hard Link) 기반 무복사 복제(cloneHardLinkedRepository)까지 실제 파일시스템으로 검증한다.
     describe("ProjectServiceImpl.forkProject / cloneHardLinkedRepository (실제 파일시스템)") {
-        val gitBase = File("/tmp/yuna/git")
-        val svnBase = File("/tmp/yuna/svn")
+        val gitBase = File("/tmp/yona/git")
+        val svnBase = File("/tmp/yona/svn")
 
         it("원본 프로젝트가 없으면 예외가 발생해야 한다") {
             every { projectRepository.findById(9001L) } returns Optional.empty()

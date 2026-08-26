@@ -28,35 +28,35 @@ sealed class LdapAuthResult {
  */
 @Component
 class LdapService(
-    @Value("\${yuna.ldap.enabled:false}")
+    @Value("\${yona.ldap.enabled:false}")
     val enabled: Boolean,
-    @Value("\${yuna.ldap.fallback-to-local-login:false}")
+    @Value("\${yona.ldap.fallback-to-local-login:false}")
     val fallbackToLocalLogin: Boolean,
-    @Value("\${yuna.ldap.host:127.0.0.1}")
+    @Value("\${yona.ldap.host:127.0.0.1}")
     private val host: String,
-    @Value("\${yuna.ldap.port:389}")
+    @Value("\${yona.ldap.port:389}")
     private val port: String,
-    @Value("\${yuna.ldap.protocol:ldap}")
+    @Value("\${yona.ldap.protocol:ldap}")
     private val protocol: String,
-    @Value("\${yuna.ldap.base-dn:}")
+    @Value("\${yona.ldap.base-dn:}")
     private val baseDn: String,
-    @Value("\${yuna.ldap.dn-postfix:}")
+    @Value("\${yona.ldap.dn-postfix:}")
     private val dnPostfix: String,
-    @Value("\${yuna.ldap.login-property:sAMAccountName}")
+    @Value("\${yona.ldap.login-property:sAMAccountName}")
     private val loginProperty: String,
-    @Value("\${yuna.ldap.display-name-property:displayName}")
+    @Value("\${yona.ldap.display-name-property:displayName}")
     private val displayNameProperty: String,
-    @Value("\${yuna.ldap.user-name-property:CN}")
+    @Value("\${yona.ldap.user-name-property:CN}")
     private val userNameProperty: String,
-    @Value("\${yuna.ldap.email-property:mail}")
+    @Value("\${yona.ldap.email-property:mail}")
     private val emailProperty: String,
-    @Value("\${yuna.ldap.department-property:department}")
+    @Value("\${yona.ldap.department-property:department}")
     private val departmentProperty: String,
-    @Value("\${yuna.ldap.english-name-property:}")
+    @Value("\${yona.ldap.english-name-property:}")
     private val englishNameProperty: String,
-    @Value("\${yuna.ldap.use-email-base-login:false}")
+    @Value("\${yona.ldap.use-email-base-login:false}")
     private val useEmailBaseLogin: Boolean,
-    @Value("\${yuna.ldap.guest-login-id-prefix:}")
+    @Value("\${yona.ldap.guest-login-id-prefix:}")
     private val guestLoginIdPrefix: String,
     private val userRepository: UserRepository
 ) {

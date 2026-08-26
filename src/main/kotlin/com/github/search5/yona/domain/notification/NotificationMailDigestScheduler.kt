@@ -56,20 +56,20 @@ class NotificationMailDigestScheduler(
     private val commentThreadRepository: CommentThreadRepository,
     private val projectRepository: ProjectRepository,
     private val organizationRepository: OrganizationRepository,
-    @Value("\${yuna.notification.bymail.enabled:true}") private val enabled: Boolean,
-    @Value("\${yuna.notification.bymail.hide-address:true}") private val hideAddress: Boolean,
-    @Value("\${yuna.notification.bymail.recipient-limit:0}") private val recipientLimit: Int,
-    @Value("\${yuna.notification.bymail.delay-ms:180000}") private val delayMs: Long,
-    @Value("\${yuna.notification.bymail.allowed-domains:}") private val allowedDomains: String,
-    @Value("\${yuna.mailbox.imap.address:}") private val imapAddress: String,
-    @Value("\${yuna.hostname:localhost}") private val hostname: String,
-    @Value("\${yuna.site-name:Yona}") private val siteName: String
+    @Value("\${yona.notification.bymail.enabled:true}") private val enabled: Boolean,
+    @Value("\${yona.notification.bymail.hide-address:true}") private val hideAddress: Boolean,
+    @Value("\${yona.notification.bymail.recipient-limit:0}") private val recipientLimit: Int,
+    @Value("\${yona.notification.bymail.delay-ms:180000}") private val delayMs: Long,
+    @Value("\${yona.notification.bymail.allowed-domains:}") private val allowedDomains: String,
+    @Value("\${yona.mailbox.imap.address:}") private val imapAddress: String,
+    @Value("\${yona.hostname:localhost}") private val hostname: String,
+    @Value("\${yona.site-name:Yona}") private val siteName: String
 ) {
     private val logger = LoggerFactory.getLogger(NotificationMailDigestScheduler::class.java)
 
     @Scheduled(
-        initialDelayString = "\${yuna.notification.bymail.initial-delay-ms:5000}",
-        fixedDelayString = "\${yuna.notification.bymail.interval-ms:60000}"
+        initialDelayString = "\${yona.notification.bymail.initial-delay-ms:5000}",
+        fixedDelayString = "\${yona.notification.bymail.interval-ms:60000}"
     )
     fun sendDueNotificationMails() {
         if (!enabled) {

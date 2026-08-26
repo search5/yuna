@@ -35,9 +35,9 @@ class UserController(
     private val userSettingRepository: UserSettingRepository,
     private val organizationRepository: OrganizationRepository,
     private val yonaAuthenticationProvider: YonaAuthenticationProvider,
-    @Value("\${yuna.signup.allowed-email-domains:}")
+    @Value("\${yona.signup.allowed-email-domains:}")
     private val allowedEmailDomains: String,
-    @Value("\${yuna.signup.require-admin-confirm:false}")
+    @Value("\${yona.signup.require-admin-confirm:false}")
     private val requireAdminConfirm: Boolean
 ) {
 

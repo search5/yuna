@@ -43,7 +43,7 @@ private fun createTestCommit(
     authorName: String = "tester",
     authorEmail: String = "tester@yona.io"
 ) {
-    val tempWorkingDir = Files.createTempDirectory("yuna-test-commit").toFile()
+    val tempWorkingDir = Files.createTempDirectory("yona-test-commit").toFile()
     try {
         val git = Git.init().setDirectory(tempWorkingDir).call()
         val config = git.repository.config
@@ -459,7 +459,7 @@ class CodeReviewServiceSpec @Autowired constructor(
             describe("커밋 작성자 자동 감시 (P1-50, yona Commit.getWatchers()의 author 포함 규칙 대응)") {
                 it("PR 밖 커밋에 댓글이 달리면, 그 커밋의 작성자는 감시하지 않았어도 알림을 받아야 한다") {
                     val commitProject = projectRepository.save(Project(name = "commit-author-repo", owner = "owner-x", vcs = "GIT", projectScope = ProjectScope.PUBLIC))
-                    // /tmp/yuna/git는 테스트 실행 간 정리되지 않는 영속 경로라, 과거 세션에서 남은
+                    // /tmp/yona/git는 테스트 실행 간 정리되지 않는 영속 경로라, 과거 세션에서 남은
                     // 손상된(HEAD/config 없이 objects/refs/packed-refs만 있는) 저장소 잔재가 있으면
                     // Git.init()이 그 위에서 재초기화돼도 JGit 로컬 트랜스포트가 유효한 저장소로
                     // 인식하지 못해 push가 TransportException("not found")으로 실패한다 — create()

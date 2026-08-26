@@ -23,15 +23,15 @@ class GlobalModelAttributeAdvice(
     private val issueRepository: IssueRepository,
     private val userSettingRepository: UserSettingRepository,
     // yona application.conf의 "application.sendYonaUsage"(Application.SEND_YONA_USAGE) 대응.
-    @Value("\${yuna.analytics.send-usage:false}") private val sendYonaUsage: Boolean,
+    @Value("\${yona.analytics.send-usage:false}") private val sendYonaUsage: Boolean,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23). 기존 컨트롤러들과 동일 키 재사용.
-    @Value("\${yuna.application.hide-project-listing:false}") private val hideProjectListing: Boolean,
+    @Value("\${yona.application.hide-project-listing:false}") private val hideProjectListing: Boolean,
     // yona controllers/Application.java:42-43 NAVBAR_CUSTOM_LINK_NAME/URL 대응 — common/usermenu.scala.html:80-82. [GL-controllers_Application-007]
-    @Value("\${yuna.application.navbar.custom-link.name:}") private val navbarCustomLinkName: String,
-    @Value("\${yuna.application.navbar.custom-link.url:}") private val navbarCustomLinkUrl: String,
+    @Value("\${yona.application.navbar.custom-link.name:}") private val navbarCustomLinkName: String,
+    @Value("\${yona.application.navbar.custom-link.url:}") private val navbarCustomLinkUrl: String,
     // yona controllers/UserApp.java:79-80 useSocialLoginOnly("application.use.social.login.only") 대응 [GL-controllers_UserApp-011]
     // (P-템플릿 #15) — true면 로그인/회원가입/loginDialog에서 아이디·비밀번호 폼을 숨기고 소셜 로그인만 노출.
-    @Value("\${yuna.application.use-social-login-only:false}") private val useSocialLoginOnly: Boolean
+    @Value("\${yona.application.use-social-login-only:false}") private val useSocialLoginOnly: Boolean
 ) {
 
     @ModelAttribute("currentUser")

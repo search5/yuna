@@ -19,7 +19,7 @@ class AttachmentServiceSpec @Autowired constructor(
     private val attachmentRepository: AttachmentRepository,
     private val cleanupScheduler: AttachmentCleanupScheduler,
     private val cacheManager: CacheManager,
-    @Value("\${yuna.upload.base-dir:/tmp/yuna/uploads}")
+    @Value("\${yona.upload.base-dir:/tmp/yona/uploads}")
     private val baseDir: String
 ) : AbstractIntegrationTest() {
 

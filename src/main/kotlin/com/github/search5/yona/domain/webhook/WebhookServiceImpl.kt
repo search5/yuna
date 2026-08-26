@@ -34,7 +34,7 @@ class WebhookServiceImpl(
     private val webhookThreadRepository: WebhookThreadRepository,
     // yona Webhook.java:178 getBaseUrl()(스킴+호스트) 대응 (P2-08). NotificationUrlResolver가
     // 이미 동일 목적으로 쓰는 설정값을 그대로 재사용한다.
-    @Value("\${yuna.base-url:}")
+    @Value("\${yona.base-url:}")
     private val baseUrl: String,
     // yona Webhook.java:182-192 buildRequestMessage()(리소스 링크) 대응 (P1-132) — 이슈/게시글/PR/댓글 [GL-models_Webhook-017;GL-models_Webhook-018]
     // URL 계산 로직을 새로 만들지 않고, 알림메일 경로에서 이미 쓰는 것과 동일한 리졸버를 재사용한다.
@@ -181,7 +181,7 @@ class WebhookServiceImpl(
     // 커밋 목록이 빠진 채 event/sender/project만 담겨있던 단순 JSON 대신, GitHub 웹훅과 유사한
     // ref/commits/head_commit/sender/pusher/repository 구조로 구성한다.
     // yona Webhook.java:178 getBaseUrl() 대응 (P2-08) — RouteUtil.getUrl(project)(상대경로)에 붙는
-    // 스킴+호스트. NotificationUrlResolver가 쓰는 것과 동일한 yuna.base-url 설정을 재사용한다.
+    // 스킴+호스트. NotificationUrlResolver가 쓰는 것과 동일한 yona.base-url 설정을 재사용한다.
     private fun projectUrl(project: Project?): String =
         project?.let { "$baseUrl/${it.owner}/${it.name}" } ?: baseUrl
 

@@ -27,54 +27,52 @@ spring:
             scope: user:email,read:user
 
 application:
-  noreferrer: "${YUNA_NOREFERRER:false}"
+  noreferrer: "${YONA_NOREFERRER:false}"
 
-yuna:
-  base-url: "${YUNA_BASE_URL:http://localhost:8080}"
-  hostname: "${YUNA_HOSTNAME:localhost}"
-  site-name: "${YUNA_SITE_NAME:Yona}"
+yona:
+  base-url: "${YONA_BASE_URL:http://localhost:8080}"
+  hostname: "${YONA_HOSTNAME:localhost}"
+  site-name: "${YONA_SITE_NAME:Yona}"
   upload:
     base-dir: "${yona.data:data}/uploads"
   signup:
-    allowed-email-domains: "${YUNA_SIGNUP_ALLOWED_EMAIL_DOMAINS:}"
+    allowed-email-domains: "${YONA_SIGNUP_ALLOWED_EMAIL_DOMAINS:}"
   notification:
     bymail:
-      enabled: "${YUNA_NOTIFICATION_BYMAIL_ENABLED:true}"
-      hide-address: "${YUNA_NOTIFICATION_BYMAIL_HIDE_ADDRESS:true}"
-      recipient-limit: "${YUNA_NOTIFICATION_BYMAIL_RECIPIENT_LIMIT:0}"
-      initial-delay-ms: "${YUNA_NOTIFICATION_BYMAIL_INITDELAY_MS:5000}"
-      interval-ms: "${YUNA_NOTIFICATION_BYMAIL_INTERVAL_MS:60000}"
-      delay-ms: "${YUNA_NOTIFICATION_BYMAIL_DELAY_MS:180000}"
-      allowed-domains: "${YUNA_NOTIFICATION_BYMAIL_ALLOWED_DOMAINS:}"
-      keep-days: "${YUNA_NOTIFICATION_KEEP_DAYS:-1}"
+      enabled: "${YONA_NOTIFICATION_BYMAIL_ENABLED:true}"
+      hide-address: "${YONA_NOTIFICATION_BYMAIL_HIDE_ADDRESS:true}"
+      recipient-limit: "${YONA_NOTIFICATION_BYMAIL_RECIPIENT_LIMIT:0}"
+      initial-delay-ms: "${YONA_NOTIFICATION_BYMAIL_INITDELAY_MS:5000}"
+      interval-ms: "${YONA_NOTIFICATION_BYMAIL_INTERVAL_MS:60000}"
+      delay-ms: "${YONA_NOTIFICATION_BYMAIL_DELAY_MS:180000}"
+      allowed-domains: "${YONA_NOTIFICATION_BYMAIL_ALLOWED_DOMAINS:}"
+      keep-days: "${YONA_NOTIFICATION_KEEP_DAYS:-1}"
   ldap:
-    enabled: "${YUNA_LDAP_ENABLED:false}"
-    host: "${YUNA_LDAP_HOST:127.0.0.1}"
-    port: "${YUNA_LDAP_PORT:389}"
-    protocol: "${YUNA_LDAP_PROTOCOL:ldap}"
-    base-dn: "${YUNA_LDAP_BASE_DN:}"
-    dn-postfix: "${YUNA_LDAP_DN_POSTFIX:}"
-    login-property: "${YUNA_LDAP_LOGIN_PROPERTY:sAMAccountName}"
-    display-name-property: "${YUNA_LDAP_DISPLAY_NAME_PROPERTY:displayName}"
-    user-name-property: "${YUNA_LDAP_USER_NAME_PROPERTY:CN}"
-    email-property: "${YUNA_LDAP_EMAIL_PROPERTY:mail}"
-    department-property: "${YUNA_LDAP_DEPARTMENT_PROPERTY:department}"
-    english-name-property: "${YUNA_LDAP_ENGLISH_NAME_PROPERTY:}"
-    use-email-base-login: "${YUNA_LDAP_USE_EMAIL_BASE_LOGIN:false}"
-    fallback-to-local-login: "${YUNA_LDAP_FALLBACK_TO_LOCAL_LOGIN:false}"
-    guest-login-id-prefix: "${YUNA_LDAP_GUEST_LOGIN_ID_PREFIX:}"
+    enabled: "${YONA_LDAP_ENABLED:false}"
+    host: "${YONA_LDAP_HOST:127.0.0.1}"
+    port: "${YONA_LDAP_PORT:389}"
+    protocol: "${YONA_LDAP_PROTOCOL:ldap}"
+    base-dn: "${YONA_LDAP_BASE_DN:}"
+    dn-postfix: "${YONA_LDAP_DN_POSTFIX:}"
+    login-property: "${YONA_LDAP_LOGIN_PROPERTY:sAMAccountName}"
+    display-name-property: "${YONA_LDAP_DISPLAY_NAME_PROPERTY:displayName}"
+    user-name-property: "${YONA_LDAP_USER_NAME_PROPERTY:CN}"
+    email-property: "${YONA_LDAP_EMAIL_PROPERTY:mail}"
+    department-property: "${YONA_LDAP_DEPARTMENT_PROPERTY:department}"
+    english-name-property: "${YONA_LDAP_ENGLISH_NAME_PROPERTY:}"
+    use-email-base-login: "${YONA_LDAP_USE_EMAIL_BASE_LOGIN:false}"
+    fallback-to-local-login: "${YONA_LDAP_FALLBACK_TO_LOCAL_LOGIN:false}"
+    guest-login-id-prefix: "${YONA_LDAP_GUEST_LOGIN_ID_PREFIX:}"
   mailbox:
     imap:
-      enabled: "${YUNA_IMAP_ENABLED:false}"
-      host: "${YUNA_IMAP_HOST:}"
-      user: "${YUNA_IMAP_USER:}"
-      password: "${YUNA_IMAP_PASSWORD:}"
-      ssl: "${YUNA_IMAP_SSL:true}"
-      folder: "${YUNA_IMAP_FOLDER:inbox}"
-      address: "${YUNA_IMAP_ADDRESS:}"
-      polling-interval-ms: "${YUNA_IMAP_POLLING_INTERVAL_MS:300000}"
-
-yona:
+      enabled: "${YONA_IMAP_ENABLED:false}"
+      host: "${YONA_IMAP_HOST:}"
+      user: "${YONA_IMAP_USER:}"
+      password: "${YONA_IMAP_PASSWORD:}"
+      ssl: "${YONA_IMAP_SSL:true}"
+      folder: "${YONA_IMAP_FOLDER:inbox}"
+      address: "${YONA_IMAP_ADDRESS:}"
+      polling-interval-ms: "${YONA_IMAP_POLLING_INTERVAL_MS:300000}"
   feedback-url: "${YONA_FEEDBACK_URL:https://github.com/yona-projects/yona/issues}"
   translation:
     api: "${YONA_TRANSLATION_API:}"
@@ -109,7 +107,7 @@ management:
         include: health, prometheus
   metrics:
     tags:
-      application: yuna
+      application: yona
 
 ---
 spring:
@@ -167,4 +165,3 @@ logging:
   level:
     org.springframework.web: DEBUG
     org.hibernate: WARN
-

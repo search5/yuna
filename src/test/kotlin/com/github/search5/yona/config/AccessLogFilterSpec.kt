@@ -42,7 +42,7 @@ class AccessLogFilterSpec : DescribeSpec({
         it("Combined Log Format으로 요청 정보를 한 줄 로깅해야 한다") {
             val request = MockHttpServletRequest("GET", "/owner/project")
             request.remoteAddr = "127.0.0.1"
-            request.addHeader("Referer", "http://yuna.example.com/")
+            request.addHeader("Referer", "http://yona.example.com/")
             request.addHeader("User-Agent", "Mozilla/5.0")
             val response = MockHttpServletResponse()
             response.status = 200
@@ -56,7 +56,7 @@ class AccessLogFilterSpec : DescribeSpec({
             message shouldContain "127.0.0.1"
             message shouldContain "\"GET /owner/project HTTP/1.1\""
             message shouldContain "200"
-            message shouldContain "\"http://yuna.example.com/\""
+            message shouldContain "\"http://yona.example.com/\""
             message shouldContain "\"Mozilla/5.0\""
         }
 

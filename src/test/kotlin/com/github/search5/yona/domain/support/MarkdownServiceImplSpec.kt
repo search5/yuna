@@ -61,7 +61,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
         autoLinkRenderer, repositoryService,
         issueMarkdownProjectRepository, issueMarkdownIssueRepository,
         issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
-        hostname = "yuna.example.com"
+        hostname = "yona.example.com"
     )
 
     // yona utils/Markdown.java:132-159 transformIssueLink()/:161-211 extractIssueLink() 대응 [GL-utils_Markdown-010]
@@ -94,7 +94,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
             every { issueMarkdownAccessControl.isAllowed(null, project, openIssue, Operation.READ) } returns true
             every { messageSource.getMessage("issue.state.open", null, "open", any()) } returns "열림"
 
-            val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/5")
+            val rendered = markdownService.render("https://yona.example.com/owner/proj/issue/5")
 
             rendered shouldContain "#5.버그 수정"
             rendered shouldContain "issueLink"
@@ -107,19 +107,19 @@ class MarkdownServiceImplSpec : DescribeSpec({
             every { issueMarkdownIssueRepository.findByProjectAndNumber(project, 6L) } returns privateIssue
             every { issueMarkdownAccessControl.isAllowed(null, project, privateIssue, Operation.READ) } returns false
 
-            val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/6")
+            val rendered = markdownService.render("https://yona.example.com/owner/proj/issue/6")
 
             rendered shouldNotContain "issueLink"
         }
 
         it("[텍스트](url) 형태로 직접 감싼 링크는 링크텍스트==href가 아니라 변환 대상이 아니어야 한다") {
-            val rendered = markdownService.render("[여기 참고](https://yuna.example.com/owner/proj/issue/5-wrapped)")
+            val rendered = markdownService.render("[여기 참고](https://yona.example.com/owner/proj/issue/5-wrapped)")
 
             rendered shouldNotContain "issueLink"
         }
 
         it("이슈 경로가 아닌 일반 프로젝트 URL은 변환하지 않아야 한다") {
-            val rendered = markdownService.render("https://yuna.example.com/owner/proj-nolink")
+            val rendered = markdownService.render("https://yona.example.com/owner/proj-nolink")
 
             rendered shouldNotContain "issueLink"
         }
@@ -134,13 +134,13 @@ class MarkdownServiceImplSpec : DescribeSpec({
             autoLinkRenderer, repositoryService,
             issueMarkdownProjectRepository, issueMarkdownIssueRepository,
             issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
-            noreferrerEnabled = true, hostname = "yuna.example.com"
+            noreferrerEnabled = true, hostname = "yona.example.com"
         )
         val noreferrerDisabledService = MarkdownServiceImpl(
             autoLinkRenderer, repositoryService,
             issueMarkdownProjectRepository, issueMarkdownIssueRepository,
             issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
-            noreferrerEnabled = false, hostname = "yuna.example.com"
+            noreferrerEnabled = false, hostname = "yona.example.com"
         )
 
         it("application.noreferrer가 켜져 있으면 외부 링크에 rel=noreferrer가 붙어야 한다") {
@@ -149,7 +149,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
         }
 
         it("이 사이트 호스트명으로 시작하는 링크에는 rel=noreferrer를 붙이지 않아야 한다") {
-            val rendered = noreferrerEnabledService.render("[내부링크](https://yuna.example.com/owner/project)")
+            val rendered = noreferrerEnabledService.render("[내부링크](https://yona.example.com/owner/project)")
             rendered shouldNotContain "noreferrer"
         }
 
@@ -407,7 +407,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 autoLinkRenderer, repositoryService,
                 issueMarkdownProjectRepository, issueMarkdownIssueRepository,
                 issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
-                noreferrerEnabled = true, hostname = "yuna.example.com"
+                noreferrerEnabled = true, hostname = "yona.example.com"
             )
             val rendered = service.render("<a href=\"mailto:test@test.com\">메일</a>")
             rendered.shouldContain("mailto:test@test.com")
@@ -418,36 +418,36 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 autoLinkRenderer, repositoryService,
                 issueMarkdownProjectRepository, issueMarkdownIssueRepository,
                 issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource,
-                noreferrerEnabled = true, hostname = "yuna.example.com"
+                noreferrerEnabled = true, hostname = "yona.example.com"
             )
             val rendered = service.render("<a href=\"http://[\">Bad Link</a>")
             rendered.shouldContain("http://[")
         }
 
         it("transformIssueLink - URI path가 null이거나 issue 패턴이 없으면 변환하지 않는다") {
-            val rendered1 = markdownService.render("https://yuna.example.com")
-            rendered1.shouldContain("https://yuna.example.com")
+            val rendered1 = markdownService.render("https://yona.example.com")
+            rendered1.shouldContain("https://yona.example.com")
 
-            val rendered2 = markdownService.render("https://yuna.example.com/owner/proj/other/5")
+            val rendered2 = markdownService.render("https://yona.example.com/owner/proj/other/5")
             rendered2.shouldContain("other/5")
         }
 
         it("transformIssueLink - project 또는 issue를 못 찾으면 변환하지 않는다") {
             every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "unknown") } returns Optional.empty()
-            val rendered1 = markdownService.render("https://yuna.example.com/owner/unknown/issue/5")
+            val rendered1 = markdownService.render("https://yona.example.com/owner/unknown/issue/5")
             rendered1.shouldNotContain("issueLink")
 
             val proj = Project(id = 1L, name = "proj", owner = "owner", vcs = "GIT")
             every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(proj)
             every { issueMarkdownIssueRepository.findByProjectAndNumber(proj, 999L) } returns null
-            val rendered2 = markdownService.render("https://yuna.example.com/owner/proj/issue/999")
+            val rendered2 = markdownService.render("https://yona.example.com/owner/proj/issue/999")
             rendered2.shouldNotContain("issueLink")
         }
 
         it("transformIssueLink - RuntimeException 발생 시 로깅하고 넘어간다") {
             every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "error") } throws RuntimeException("DB error")
-            val rendered = markdownService.render("https://yuna.example.com/owner/error/issue/1")
-            rendered.shouldContain("https://yuna.example.com/owner/error/issue/1")
+            val rendered = markdownService.render("https://yona.example.com/owner/error/issue/1")
+            rendered.shouldContain("https://yona.example.com/owner/error/issue/1")
             rendered.shouldNotContain("issueLink")
         }
 
@@ -459,7 +459,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
             every { issueMarkdownAccessControl.isAllowed(null, proj, issue, Operation.READ) } returns true
             every { messageSource.getMessage(any(), any(), any(), any()) } returns "열림"
 
-            val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/7#comment-123")
+            val rendered = markdownService.render("https://yona.example.com/owner/proj/issue/7#comment-123")
             rendered.shouldContain("#7.프래그먼트#comment-123")
         }
 
@@ -487,7 +487,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
             every { issueMarkdownAccessControl.isAllowed(null, proj, issue, Operation.READ) } returns true
             every { messageSource.getMessage(any(), any(), any(), any()) } returns null
 
-            val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/11")
+            val rendered = markdownService.render("https://yona.example.com/owner/proj/issue/11")
 
             rendered.shouldContain("#11.메시지없음")
         }
@@ -520,7 +520,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 SecurityContextHolder.getContext().authentication =
                     UsernamePasswordAuthenticationToken("loginuser", "password", listOf(SimpleGrantedAuthority("ROLE_USER")))
 
-                val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/8")
+                val rendered = markdownService.render("https://yona.example.com/owner/proj/issue/8")
 
                 rendered.shouldContain("#8.인증사용자테스트")
                 io.mockk.verify { issueMarkdownAccessControl.isAllowed(currentUser, proj, issue, Operation.READ) }
@@ -537,7 +537,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 SecurityContextHolder.getContext().authentication =
                     AnonymousAuthenticationToken("key", "anonymousUser", listOf(SimpleGrantedAuthority("ROLE_ANONYMOUS")))
 
-                val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/9")
+                val rendered = markdownService.render("https://yona.example.com/owner/proj/issue/9")
 
                 rendered.shouldContain("#9.익명토큰테스트")
                 io.mockk.verify(exactly = 0) { issueMarkdownUserRepository.findByLoginId(any()) }
@@ -555,7 +555,7 @@ class MarkdownServiceImplSpec : DescribeSpec({
                 notAuthenticated.isAuthenticated shouldBe false
                 SecurityContextHolder.getContext().authentication = notAuthenticated
 
-                val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/10")
+                val rendered = markdownService.render("https://yona.example.com/owner/proj/issue/10")
 
                 rendered.shouldContain("#10.미인증테스트")
                 io.mockk.verify(exactly = 0) { issueMarkdownUserRepository.findByLoginId(any()) }

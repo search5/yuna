@@ -43,11 +43,11 @@ import java.nio.file.Files
 // handleGitPostReceiveEvent()는 gitService.getRepositoryPath()가 반환한 File로 RepositoryBuilder를 직접
 // 여는 실제 코드라 mock으로 우회할 수 없다(BareCommitSpec/PullRequestServiceSpec과 동일한 이유).
 private fun seedTwoCommits(branch: String = "main"): Triple<ObjectId, ObjectId, File> {
-    val gitBaseDir = Files.createTempDirectory("yuna-gitpostreceive-test").toFile()
+    val gitBaseDir = Files.createTempDirectory("yona-gitpostreceive-test").toFile()
     val bareDir = File(gitBaseDir, "tester/repo.git")
     Git.init().setDirectory(bareDir).setBare(true).call().close()
 
-    val workingDir = Files.createTempDirectory("yuna-gitpostreceive-work").toFile()
+    val workingDir = Files.createTempDirectory("yona-gitpostreceive-work").toFile()
     val git = Git.init().setDirectory(workingDir).call()
     val file = File(workingDir, "file.txt")
     file.writeText("first")

@@ -16,7 +16,7 @@ class AsyncConfig {
         executor.corePoolSize = 5
         executor.maxPoolSize = 10
         executor.queueCapacity = 100
-        executor.setThreadNamePrefix("yuna-async-")
+        executor.setThreadNamePrefix("yona-async-")
         executor.initialize()
         return executor
     }

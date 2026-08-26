@@ -157,7 +157,7 @@ class AttachmentControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
                 every { accessControl.isAllowedAttachment(loginUser, attachment, Operation.READ) } returns true
 
-                val tempFile = File.createTempFile("yuna-test", "txt")
+                val tempFile = File.createTempFile("yona-test", "txt")
                 tempFile.writeText("Hello World")
                 tempFile.deleteOnExit()
 
@@ -658,7 +658,7 @@ class AttachmentControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
                 every { accessControl.isAllowedAttachment(loginUser, attachment, Operation.READ) } returns true
 
-                val tempFile = File.createTempFile("yuna-test", "txt")
+                val tempFile = File.createTempFile("yona-test", "txt")
                 tempFile.writeText("Hello World")
                 tempFile.deleteOnExit()
                 every { attachmentService.getFile(attachment) } returns tempFile
@@ -675,7 +675,7 @@ class AttachmentControllerSpec : DescribeSpec({
                 every { attachmentRepository.findById(100L) } returns Optional.of(attachment)
                 every { accessControl.isAllowedAttachment(null, attachment, Operation.READ) } returns true
 
-                val tempFile = File.createTempFile("yuna-test", "txt")
+                val tempFile = File.createTempFile("yona-test", "txt")
                 tempFile.writeText("Hello World")
                 tempFile.deleteOnExit()
                 every { attachmentService.getFile(attachment) } returns tempFile
@@ -689,7 +689,7 @@ class AttachmentControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("tester") } returns Optional.empty()
                 every { accessControl.isAllowedAttachment(null, attachment, Operation.READ) } returns true
 
-                val tempFile = File.createTempFile("yuna-test", "txt")
+                val tempFile = File.createTempFile("yona-test", "txt")
                 tempFile.writeText("Hello World")
                 tempFile.deleteOnExit()
                 every { attachmentService.getFile(attachment) } returns tempFile
@@ -1163,7 +1163,7 @@ class AttachmentControllerSpec : DescribeSpec({
                 every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
                 every { accessControl.isAllowedAttachment(loginUser, noMimeAttachment, Operation.READ) } returns true
 
-                val tempFile = File.createTempFile("yuna-test-nomime", "bin")
+                val tempFile = File.createTempFile("yona-test-nomime", "bin")
                 tempFile.writeText("binary")
                 tempFile.deleteOnExit()
                 every { attachmentService.getFile(noMimeAttachment) } returns tempFile

@@ -15,7 +15,7 @@ import java.time.temporal.ChronoUnit
 @Component
 class NotificationCleanupScheduler(
     private val notificationEventRepository: NotificationEventRepository,
-    @Value("\${yuna.notification.bymail.keep-days:-1}") private val keepDays: Long
+    @Value("\${yona.notification.bymail.keep-days:-1}") private val keepDays: Long
 ) {
     private val logger = LoggerFactory.getLogger(NotificationCleanupScheduler::class.java)
 

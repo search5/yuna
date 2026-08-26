@@ -44,7 +44,7 @@ class CodeViewController(
     private val markdownService: MarkdownService,
     private val watchService: WatchService,
     // yona utils.Config.getSiteName() 대응 — code/nohead(_svn).html의 안내 문구 {0} 자리에 채워 넣는다.
-    @Value("\${yuna.site-name:Yona}")
+    @Value("\${yona.site-name:Yona}")
     private val siteName: String
 ) {
 
@@ -266,7 +266,7 @@ class CodeViewController(
         
         // MIME Type 감지
         val mimeType = try {
-            val fileTmp = Files.createTempFile("yuna-view-mime", null)
+            val fileTmp = Files.createTempFile("yona-view-mime", null)
             Files.write(fileTmp, rawData)
             val detected = Files.probeContentType(fileTmp)
             Files.delete(fileTmp)
