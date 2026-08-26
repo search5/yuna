@@ -317,6 +317,26 @@ class ProjectUserServiceSpec @Autowired constructor(
                 }
             }
 
+            // getProjectManagers()의 .filter { it.role.id == RoleType.MANAGER.roleType }는 기존
+            // 테스트들이 전부 프로젝트에 매니저 1명만 있는 상태(beforeEach)로만 enroll/cancelEnroll을
+            // 호출해서, "매니저가 아닌 멤버가 섞여 있어 필터링되는" false 쪽 분기가 비어 있었다.
+            it("16. 매니저 아닌 멤버가 섞여 있어도 가입요청 알림은 매니저에게만 가야 한다") {
+                projectUserRepository.save(ProjectUser(project = project, user = member1, role = roleMember))
+
+                projectUserService.enroll(project.id!!, applicant.id!!)
+                entityManager.flush()
+                entityManager.clear()
+
+                val requestEvents = notificationEventRepository.findAll().filter {
+                    it.resourceId == project.id.toString() &&
+                        it.eventType == EventType.MEMBER_ENROLL_REQUEST &&
+                        it.newValue == "REQUEST"
+                }
+                requestEvents.size shouldBe 1
+                requestEvents[0].receivers.map { it.id } shouldContain manager.id
+                requestEvents[0].receivers.map { it.id } shouldNotContain member1.id
+            }
+
             it("15. addMember - 대기 신청에 있던 유저라면 대기 목록에서 소거 검증") {
                 applicant.enroll(project)
                 userRepository.save(applicant)
@@ -325,6 +345,24 @@ class ProjectUserServiceSpec @Autowired constructor(
                 projectUserService.addMember(project.id!!, applicant.loginId, manager.id!!)
                 val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
                 updatedApplicant.enrolledProjects.map { it.id } shouldNotContain project.id
+            }
+
+            it("17. acceptMemberRequest - MEMBER 역할이 존재하지 않으면 예외를 던져야 한다") {
+                projectUserService.enroll(project.id!!, applicant.id!!)
+                entityManager.flush()
+                roleRepository.delete(roleMember)
+
+                shouldThrow<IllegalStateException> {
+                    projectUserService.acceptMemberRequest(project.id!!, applicant.id!!, manager.id!!)
+                }
+            }
+
+            it("18. addMember - MEMBER 역할이 존재하지 않으면 예외를 던져야 한다") {
+                roleRepository.delete(roleMember)
+
+                shouldThrow<IllegalStateException> {
+                    projectUserService.addMember(project.id!!, applicant.loginId, manager.id!!)
+                }
             }
         }
     }
