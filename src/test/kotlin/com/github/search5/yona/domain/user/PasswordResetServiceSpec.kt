@@ -6,6 +6,7 @@ import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.reflect.full.declaredFunctions
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.jvm.isAccessible
 import org.springframework.test.util.AopTestUtils
@@ -78,6 +79,46 @@ class PasswordResetServiceSpec @Autowired constructor(
                 val hash = passwordResetService.generateResetHash("not-found-user")
                 passwordResetService.addHashToResetTable("not-found-user", hash)
                 passwordResetService.resetPassword(hash, "newPassword") shouldBe false
+            }
+
+            it("타임스탬프 기록이 없는 해시는 만료로 간주해 유효하지 않아야 한다") {
+                val hash = passwordResetService.generateResetHash(user.loginId)
+                passwordResetService.addHashToResetTable(user.loginId, hash)
+
+                // isExpired()의 resetHashTimetable[hashString] ?: return true — resetHashMap엔 있지만
+                // resetHashTimetable엔 없는 상태를 리플렉션으로 인위 조성(addHashToResetTable은 항상 둘을
+                // 함께 채우므로 정상 API 경로로는 이 불일치 상태에 도달할 수 없음).
+                val realService = AopTestUtils.getUltimateTargetObject<PasswordResetServiceImpl>(passwordResetService)
+                val serviceKClass = PasswordResetServiceImpl::class
+                val timetableField = serviceKClass.memberProperties.find { it.name == "resetHashTimetable" }
+                timetableField?.isAccessible = true
+
+                @Suppress("UNCHECKED_CAST")
+                val timetable = timetableField?.getter?.call(realService) as ConcurrentHashMap<String, Long>
+                timetable.remove(hash)
+
+                passwordResetService.isValidResetHash(hash) shouldBe false
+            }
+
+            it("getKeyByValue - 두 번째 이후 항목에서 값을 찾으면 해당 키를 반환해야 한다") {
+                // private 제네릭 메서드라 리플렉션으로 직접 호출. resetHashMap(ConcurrentHashMap)은 순회
+                // 순서를 보장하지 않아 공개 API만으로는 "첫 항목 불일치 후 계속 탐색" 분기를 결정적으로
+                // 재현할 수 없으므로, 순서가 보장되는 LinkedHashMap을 직접 넘겨 호출한다.
+                val realService = AopTestUtils.getUltimateTargetObject<PasswordResetServiceImpl>(passwordResetService)
+                val method = PasswordResetServiceImpl::class.declaredFunctions.find { it.name == "getKeyByValue" }!!
+                method.isAccessible = true
+                val map = linkedMapOf("k1" to "v1", "k2" to "v2", "k3" to "v3")
+
+                method.call(realService, map, "v3") shouldBe "k3"
+            }
+
+            it("getKeyByValue - 값을 찾지 못하면 null을 반환해야 한다") {
+                val realService = AopTestUtils.getUltimateTargetObject<PasswordResetServiceImpl>(passwordResetService)
+                val method = PasswordResetServiceImpl::class.declaredFunctions.find { it.name == "getKeyByValue" }!!
+                method.isAccessible = true
+                val map = linkedMapOf("k1" to "v1", "k2" to "v2")
+
+                method.call(realService, map, "not-found") shouldBe null
             }
         }
     }

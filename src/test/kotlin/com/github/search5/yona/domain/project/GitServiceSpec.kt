@@ -70,5 +70,35 @@ class GitServiceSpec : DescribeSpec({
             val cloned2 = gitService.cloneRepository(remoteRepo.absolutePath, "test-owner", "cloned-repo", "user", "pass")
             cloned2.exists() shouldBe true
         }
+
+        it("cloneRepository - authPw만 제공되면(authId는 null) 인증 정보를 설정하고 정상 클론해야 한다") {
+            val tempGitBase = tempdir()
+            val tempRemote = tempdir()
+            val gitService = GitServiceImpl(tempGitBase.absolutePath)
+            val remoteRepo = GitServiceImpl(tempRemote.absolutePath).createRepository("remote-owner", "remote-repo2")
+
+            val cloned = gitService.cloneRepository(remoteRepo.absolutePath, "test-owner", "cloned-repo-pw-only", null, "pass")
+            cloned.exists() shouldBe true
+        }
+
+        it("cloneRepository - authId만 제공되면(authPw는 null) 인증 정보를 설정하고 정상 클론해야 한다") {
+            val tempGitBase = tempdir()
+            val tempRemote = tempdir()
+            val gitService = GitServiceImpl(tempGitBase.absolutePath)
+            val remoteRepo = GitServiceImpl(tempRemote.absolutePath).createRepository("remote-owner", "remote-repo3")
+
+            val cloned = gitService.cloneRepository(remoteRepo.absolutePath, "test-owner", "cloned-repo-id-only", "user", null)
+            cloned.exists() shouldBe true
+        }
+
+        it("cloneRepository - authId/authPw가 둘 다 빈 문자열(null 아님)이면 인증 정보 없이 정상 클론해야 한다") {
+            val tempGitBase = tempdir()
+            val tempRemote = tempdir()
+            val gitService = GitServiceImpl(tempGitBase.absolutePath)
+            val remoteRepo = GitServiceImpl(tempRemote.absolutePath).createRepository("remote-owner", "remote-repo4")
+
+            val cloned = gitService.cloneRepository(remoteRepo.absolutePath, "test-owner", "cloned-repo-empty-auth", "", "")
+            cloned.exists() shouldBe true
+        }
     }
 })

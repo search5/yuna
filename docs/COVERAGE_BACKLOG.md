@@ -247,6 +247,12 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
   - **추정 원인**: 완료 선언 이후(특히 TASK-0330 FQN→import 대규모 리팩터링, 58개 파일 변경) 재측정 없이 문서만 유지된 것으로 보임 — 배치별 완료 시점에 개별/부분 실행으로 확인한 수치가 이후 다른 배치의 회귀나 리팩터링으로 실제 값이 달라졌는데 전체 클린 재측정을 거치지 않아 반영되지 못한 것으로 추정(정확한 원인은 배치별 기록만으로는 특정 불가).
   - **잔여 `[ ]`/`[~]` 42개, 재작업 필요** — "백로그 전 항목 완료" 선언은 철회하고 배치를 재개해야 함.
 
+### 재작업 진행 (2026-08-26)
+
+- `MailServiceImpl` 완료([x], TASK-0343): `sendNotificationMail`의 replyTo/references 공백뿐 케이스 보강, 잔여 2건 구조적 도달 불가 확정.
+- 1차 배치 5개 완료: `YonaAuthenticationSuccessHandler`([i], 코드 변경 없이 재검증만), `LdapService`([x], **환경 문제 해결** — Testcontainers가 Podman 로컬 소켓을 못 찾던 문제를 `build.gradle.kts`의 `DOCKER_HOST` 자동 감지로 해결, 다른 Testcontainers 기반 항목에도 영향 가능), `GitServletConfig`([x]), `GitServiceImpl`([x]), `PasswordResetServiceImpl`([i]).
+- **잔여 `[~]` 36개, 배치 계속 진행 중.**
+
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
 | 클래스 | 라인% | 분기% | 메서드% | 라인미실행 | 분기미실행 | 메서드미실행 | 상태 | 비고 |
@@ -255,8 +261,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `YonaApplicationKt` | 0.0 | 100.0 | 0.0 | 2 | 0 | 1 | [i] | `fun main()`이 `runApplication<YonaApplication>()`을 호출만 하는데, 실제로 호출하면 같은 JVM 안에서 실제 임베디드 톰캣+비-데몬 스레드를 가진 완전한 앱이 뜨고(main()이 리턴은 하지만 컨텍스트를 반환받지 못해 정리도 불가) 테스트 JVM에 잔류해 이후 테스트를 오염시킨다. 별도 프로세스로 기동하는 방식(subprocess)만 가능한데, 이 클래스가 위임하는 로직(ApplicationContext 부트스트랩) 자체는 이미 150여개의 `@SpringBootTest` 스펙이 동일하게 실행·검증하고 있어 별도 프로세스 스모크테스트가 주는 한계효용이 없다고 판단 — 구조적 제약으로 예외 인정 |
 | **config** | | | | | | | | |
 | `TemplateHelper` | 70.0 | 42.6 | 77.9 | 74 | 179 | 15 | [x] | 2026-08-24: 신규 `TemplateHelperBranchSpec.kt`(순수 mockk, 200 tests), 기존 `TemplateHelperSpec.kt`는 그대로 유지. 전체 회귀 확정치: LINE 100%, BRANCH 96.2%, METHOD 98.5% — 목표 달성. **실버그 발견(미수정, 별도 검토 필요)**: `getVotersForName(voters, fromIndex, size)`가 충분히 음수인 `fromIndex`에서 `IllegalArgumentException`을 던질 수 있음(실제 템플릿 호출부는 전부 고정 양수 리터럴이라 현재는 미트리거) |
-| `GitServletConfig` | 48.0 | 7.1 | 33.3 | 26 | 13 | 4 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 70.0%, BRANCH 64.3%, METHOD 66.7%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
-| `YonaAuthenticationSuccessHandler` | 14.3 | 0.0 | 50.0 | 12 | 12 | 1 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 91.7%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `GitServletConfig` | 100.0 | 96.4 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-26: LFS dispatch/리졸버/ReceivePackFactory 람다·getLargeFileRepository path 파싱 전 분기(리플렉션으로 직접 호출 포함) 보강하여 확보(LINE 100%, BRANCH 96.4%(27/28), METHOD 100%). 잔여 1건은 `parts.getOrNull(0) ?: "default"` — `split("/")`가 Kotlin에서 항상 원소 1개 이상 반환해(SvnCommit/PullRequestCommit과 동일 패턴) 도달 불가 |
+| `YonaAuthenticationSuccessHandler` | 100.0 | 91.7 | 100.0 | 0 | 1 | 0 | [i] | 2026-08-26 재검증: 기존 스펙이 이미 도달 가능한 분기를 전부 커버 중이었음(코드 변경 없음, 백로그의 BRANCH 0.0% 기록 자체가 stale). LINE 100%, BRANCH 91.7%(11/12), METHOD 100%. 잔여 1건은 `savedRequest?.redirectUrl ?: "/"`에서 `getRedirectUrl()` 반환값에 대한 방어적 null 체크 — Kotlin이 non-null로 처리해 `every {...} returns null` 자체가 컴파일 에러(직접 확인), javap로 방어적 `ifnonnull` 확인 |
 | `YonaAuthenticationFailureHandler` | 9.1 | 0.0 | 50.0 | 10 | 8 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `BootstrapSetupInterceptor` | 100.0 | 59.1 | 100.0 | 0 | 9 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `ApiTokenAuthenticationFilter` | 100.0 | 81.2 | 100.0 | 0 | 3 | 0 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 93.8%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
@@ -342,7 +348,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **domain/project** | | | | | | | | |
 | `ProjectServiceImpl` | 70.7 | 50.0 | 40.5 | 84 | 64 | 22 | [x] | 2026-08-24: ProjectServiceImplSpec.kt에 57 tests 추가(25→82). 단독 측정 LINE 100%, BRANCH 96.9%, METHOD 100% — 목표 달성. forkProject/cloneHardLinkedRepository는 실제 임시 파일시스템으로 하드링크 복제까지 검증. 도달 불가능 4건 코드/바이트코드 근거 확정 |
 | `ProjectUserServiceImpl` | 72.9 | 72.7 | 25.0 | 39 | 6 | 21 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 95.5%, METHOD 92.9%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
-| `GitServiceImpl` | 48.4 | 9.1 | 80.0 | 16 | 20 | 1 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 68.2%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `GitServiceImpl` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-26: `cloneRepository`의 authId/authPw 단일 제공·둘 다 빈 문자열(non-null) 조합 3건 추가하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Project` | 100.0 | 94.4 | 100.0 | 0 | 1 | 0 | [i] | 2026-08-25: `forkingProjects`/`enrolledUsers`/`labels` setter 등 프로퍼티 접근자 신규 테스트로 METHOD 100% 확보(LINE 100%, METHOD 100%, BRANCH 94.4%, 17/18). 잔여 1건은 `associationProjects`의 `isForkedFromOrigin && origin != null && ...`에서 `origin != null`이 false가 되는 경우 — `isForkedFromOrigin` getter 자체가 `originalProject != null`과 동일한 표현식이고 `origin`도 같은 `originalProject` 필드이므로, 선행 조건이 true인 시점엔 `origin != null`이 항상 참일 수밖에 없는 동어반복적 중복 null 체크라 도달 불가 |
 | `RecentProjectRepository` | 89.5 | 80.0 | 50.0 | 2 | 2 | 1 | [i] | 2026-08-25: `user.id`/`project.id` null-엘비스 분기 보강(BRANCH 80%, 8/10) — 잔여 catch 블록(DB 예외 방어적 무시)은 실통합 테스트로 강제 재현이 비현실적이라 판단. 추가로 `javap` 확인 결과 `recordVisit()`의 실제 구현은 인터페이스 자신의 default 메서드 바이트코드에 있고 `RecentProjectRepository$DefaultImpls.recordVisit()`는 구버전 바이너리 호환용 미러 메서드로 일반 Kotlin 호출 문법(`repository.recordVisit(...)`)으로는 절대 호출되지 않아(WebhookRepository와 동일 패턴) LINE/METHOD 수치가 낮게 집계됨 — 구조적 한계로 인정 |
 | `TitleHeadServiceImpl` | 100.0 | 95.0 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-25: `beforeTest { clearMocks(titleHeadRepository) }` 누락 수정 및 잔여 분기 보강하여 확보 완료(LINE 100%, BRANCH 95.0%, METHOD 100%) |
@@ -393,8 +399,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Comment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `CommentSpec.kt`(`@MappedSuperclass` 추상 클래스라 구체 서브클래스 `PostingComment` 경유)로 상속 프로퍼티 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/user** | | | | | | | | |
 | `UserServiceImpl` | 21.3 | 9.4 | 31.6 | 74 | 29 | 13 | [x] | 2026-08-25: 비즈니스 로직 분기 테스트 확보 완료. |
-| `PasswordResetServiceImpl` | 14.3 | 4.5 | 20.0 | 42 | 21 | 8 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 98.0%, BRANCH 77.3%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
-| `LdapService` | 33.3 | 0.0 | 25.0 | 42 | 10 | 6 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 96.8%, BRANCH 80.0%, METHOD 50.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `PasswordResetServiceImpl` | 100.0 | 90.9 | 100.0 | 0 | 2 | 0 | [i] | 2026-08-26: `isExpired()`의 timetable 누락 분기, `getKeyByValue()` 순회계속/미발견 분기(리플렉션으로 private 메서드 직접 호출) 보강(LINE 100%, BRANCH 90.9%(20/22), METHOD 100%). 잔여 2건(`resetPassword`의 `getKeyByValue(...) ?: return false`, `removeResetHash`의 `if (key != null)`)은 두 호출 모두 직전에 같은 맵에서 `containsValue(hashString)`이 참으로 확인된 직후(단일 스레드, 개입 코드 없음) 호출돼 `getKeyByValue`가 null을 반환하는 건 논리적 모순이라 도달 불가 |
+| `LdapService` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-26: 환경 문제(Testcontainers가 Docker 유닉스소켓 고정 전략이라 Podman 환경에서 미실행) 해결(build.gradle.kts에 docker/podman 명령어 존재 여부 기반 DOCKER_HOST 자동 설정 추가) 후 재검증. enabled/fallbackToLocalLogin 프로퍼티 접근자, useEmailBaseLogin=true의 DB 조회 콜백(Optional present 경로), englishNameProperty non-blank 분기(별도 인스턴스로 격리) 테스트 추가하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `FavoriteServiceImpl` | 23.1 | 0.0 | 7.7 | 30 | 6 | 12 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `User` | 88.9 | 66.1 | 81.7 | 9 | 19 | 11 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 96%, METHOD 100%)
 | `LdapQueryBuilder` | 100.0 | 94.4 | 100.0 | 0 | 2 | 0 | [i] | 2026-08-25: `attributeString()`의 null 값/예외 catch 분기 보강하여 확보(LINE 100%, METHOD 100%, BRANCH 94.4%, 34/36). 잔여 2건은 `HistoryUtil`/`DiffUtil`과 동일한 Kotlin-Java 플랫폼 타입 방어적 null 체크 패턴으로 강한 유비추론(이 클래스 자체의 `javap` 재확인은 시간 제약상 생략, 기존 확정 패턴과의 구조적 동일성에 근거) |

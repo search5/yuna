@@ -36,7 +36,8 @@ import javax.naming.NamingEnumeration
     "yuna.ldap.base-dn=dc=yona,dc=io",
     "yuna.ldap.dn-postfix=dc=yona,dc=io",
     "yuna.ldap.login-property=uid",
-    "yuna.ldap.user-name-property=uid"
+    "yuna.ldap.user-name-property=uid",
+    "yuna.ldap.use-email-base-login=true"
 ])
 class LdapServiceSpec @Autowired constructor(
     private val ldapService: LdapService,
@@ -174,6 +175,85 @@ class LdapServiceSpec @Autowired constructor(
                 result.shouldBeInstanceOf<LdapAuthResult.Success>()
                 val success = result as LdapAuthResult.Success
                 success.user.loginId shouldBe "testuser"
+            }
+
+            it("enabled/fallbackToLocalLogin 설정값을 그대로 노출해야 한다") {
+                ldapService.enabled shouldBe true
+                ldapService.fallbackToLocalLogin shouldBe false
+            }
+
+            // englishNameProperty가 non-blank인 경우(line 87의 takeIf)는 스펙 전체가 공유하는
+            // @TestPropertySource로는 blank 케이스와 동시에 커버할 수 없어(클래스 레벨 고정값),
+            // 별도 LdapService 인스턴스를 직접 생성해 이 분기만 격리 검증한다.
+            it("englishNameProperty가 설정되어 있으면 해당 속성으로 영문 이름을 조회해야 한다") {
+                val serviceWithEnglishName = LdapService(
+                    enabled = true, fallbackToLocalLogin = false,
+                    host = ldapContainer.host, port = ldapContainer.getMappedPort(389).toString(),
+                    protocol = "ldap", baseDn = "dc=yona,dc=io", dnPostfix = "dc=yona,dc=io",
+                    loginProperty = "uid", displayNameProperty = "displayName", userNameProperty = "uid",
+                    emailProperty = "mail", departmentProperty = "department", englishNameProperty = "cn",
+                    useEmailBaseLogin = false, guestLoginIdPrefix = "", userRepository = userRepository
+                )
+
+                val attrs = BasicAttributes()
+                attrs.put("displayName", "Test User")
+                attrs.put("mail", "test@yona.io")
+                attrs.put("uid", "testuser")
+                attrs.put("cn", "Test English Name")
+                val mockResult = SearchResult("cn=test", null, attrs)
+
+                every { anyConstructed<InitialDirContext>().search(any<String>(), any<String>(), any()) } answers {
+                    val enum2 = mockk<NamingEnumeration<SearchResult>>()
+                    var count = 0
+                    every { enum2.hasMoreElements() } answers {
+                        count < 1
+                    }
+                    every { enum2.nextElement() } answers {
+                        count++
+                        mockResult
+                    }
+                    enum2
+                }
+
+                val result = serviceWithEnglishName.authenticate("testuser", "password")
+                result.shouldBeInstanceOf<LdapAuthResult.Success>()
+                val success = result as LdapAuthResult.Success
+                success.user.englishName shouldBe "Test English Name"
+            }
+
+            // useEmailBaseLogin=true일 때 guessUser()가 userRepository로 loginId→email을 조회하는
+            // 콜백 경로(authenticate$lambda$0/$0$0/$0$1)는 내부적으로 알고 있는 사용자가 있을 때만 탄다.
+            // properPrincipal()은 identity에 "@"가 있으면 그대로 bind DN으로 쓰는데(AD의 UPN 바인딩
+            // 방식 가정) 테스트 컨테이너는 OpenLDAP이라 이메일 형식 DN으로는 실제 bind가 실패한다.
+            // guessUser()/resolveEmail 람다 체인 자체의 커버리지만 목적이므로, DB에는 "@" 없는 값을
+            // email로 저장해 bind 경로(properPrincipal)에 영향 없이 콜백만 격리해서 검증한다.
+            it("useEmailBaseLogin=true이면 내부 DB에 등록된 loginId로 email을 조회하는 콜백이 실행돼야 한다") {
+                // resolveEmail 콜백(userRepository 조회, Optional이 present인 경로) 자체의 커버리지가
+                // 목적이므로, 실제 컨테이너의 유일한 엔트리(uid=testuser)와 bind DN이 어긋나지 않도록
+                // 조회 결과(email)도 동일하게 "testuser"로 저장해 identity가 변하지 않게 한다.
+                userRepository.save(User(loginId = "testuser", name = "치환유저", email = "testuser"))
+
+                val attrs = BasicAttributes()
+                attrs.put("displayName", "Test User")
+                attrs.put("mail", "test@yona.io")
+                attrs.put("uid", "testuser")
+                val mockResult = SearchResult("cn=test", null, attrs)
+
+                every { anyConstructed<InitialDirContext>().search(any<String>(), any<String>(), any()) } answers {
+                    val enum2 = mockk<NamingEnumeration<SearchResult>>()
+                    var count = 0
+                    every { enum2.hasMoreElements() } answers {
+                        count < 1
+                    }
+                    every { enum2.nextElement() } answers {
+                        count++
+                        mockResult
+                    }
+                    enum2
+                }
+
+                val result = ldapService.authenticate("testuser", "password")
+                result.shouldBeInstanceOf<LdapAuthResult.Success>()
             }
         }
     }

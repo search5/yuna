@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.concurrent.TimeUnit
+
 plugins {
 	kotlin("jvm") version "2.2.21"
 	kotlin("plugin.spring") version "2.2.21"
@@ -115,6 +118,24 @@ allOpen {
 	annotation("jakarta.persistence.Embeddable")
 }
 
+// Docker가 없고 Podman만 있는 환경(예: macOS)에서는 표준 유닉스 소켓 탐색이 실패하므로,
+// 명령어 존재 여부를 확인해 Podman의 로컬 API 소켓을 DOCKER_HOST로 지정한다.
+fun resolveDockerHost(): String? {
+	if (System.getenv("DOCKER_HOST") != null) return null
+	fun commandExists(cmd: String) = runCatching {
+		ProcessBuilder("which", cmd).start().waitFor() == 0
+	}.getOrDefault(false)
+	if (commandExists("docker")) return null
+	if (!commandExists("podman")) return null
+	return runCatching {
+		val proc = ProcessBuilder("podman", "machine", "inspect", "--format", "{{.ConnectionInfo.PodmanSocket.Path}}")
+			.redirectErrorStream(true).start()
+		proc.waitFor(10, TimeUnit.SECONDS)
+		val socketPath = proc.inputStream.bufferedReader().readText().trim()
+		if (socketPath.isNotBlank() && File(socketPath).exists()) "unix://$socketPath" else null
+	}.getOrNull()
+}
+
 tasks.withType<Test> {
 	useJUnitPlatform()
 	systemProperty("spring.profiles.active", "test")
@@ -124,6 +145,7 @@ tasks.withType<Test> {
 	environment("TESTCONTAINERS_RYUK_DISABLED", "true")
 	environment("TESTCONTAINERS_CONTAINER_STARTUP_TIMEOUT", "120")
 	environment("TESTCONTAINERS_HOST_OVERRIDE", "127.0.0.1")
+	resolveDockerHost()?.let { environment("DOCKER_HOST", it) }
 	finalizedBy(tasks.jacocoTestReport)
 }
 

@@ -8,10 +8,14 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.PushedBranchRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.mockk.*
+import org.eclipse.jgit.lib.Repository
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.springframework.context.ApplicationEventPublisher
 import java.util.Optional
+import jakarta.servlet.http.HttpServlet
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.authentication.AnonymousAuthenticationToken
@@ -80,15 +84,22 @@ class GitServletConfigSpec : DescribeSpec({
             
             verify { gitProjectVisitRecorder.recordIfApplicable(request) }
             
-            // LFS URI 테스트
+            // LFS URI 테스트 — 실제 LfsProtocolServlet.service()는 relaxed mock 요청으로는
+            // 내부에서 예외 없이 완주하기 어려우므로(JSON 본문 파싱 등), 캡처된 $lfsServlet
+            // 필드를 mock으로 교체해 디스패치 분기(line 126) 자체가 실행되는지만 확인한다.
+            val lfsField = servlet.javaClass.getDeclaredField("\$lfsServlet")
+            lfsField.isAccessible = true
+            val mockLfsServlet = mockkClass(lfsField.type.kotlin, relaxed = true) as HttpServlet
+            lfsField.set(servlet, mockLfsServlet)
+
             val lfsRequest = mockk<HttpServletRequest>(relaxed = true)
             val lfsResponse = mockk<HttpServletResponse>(relaxed = true)
             every { lfsRequest.requestURI } returns "/git/owner/project/info/lfs/objects/batch"
             every { lfsRequest.method } returns "POST"
-            
-            try {
-                servlet.service(lfsRequest, lfsResponse)
-            } catch (e: Exception) {}
+
+            servlet.service(lfsRequest, lfsResponse)
+
+            verify { mockLfsServlet.service(lfsRequest, lfsResponse) }
         }
         
         it("private 메서드 resolveProject, resolveCurrentUser 호출 커버리지") {
@@ -123,16 +134,117 @@ class GitServletConfigSpec : DescribeSpec({
             SecurityContextHolder.getContext().authentication = notAuth
             resolveCurrentUser.invoke(config)
             
-            // 4
-            val auth = UsernamePasswordAuthenticationToken("user", "pass")
+            // 4 - UsernamePasswordAuthenticationToken(principal, credentials) 2-인자 생성자는
+            // authenticated=false로 초기화되므로, 3-인자(authorities 포함) 생성자로 실제
+            // "인증됨 + 익명 아님" 분기(userRepository 조회까지 도달)를 태운다.
+            val auth = UsernamePasswordAuthenticationToken("user", "pass", AuthorityUtils.createAuthorityList("ROLE_USER"))
             SecurityContextHolder.getContext().authentication = auth
             val user = User(loginId = "user")
             every { userRepository.findByLoginId("user") } returns Optional.of(user)
-            resolveCurrentUser.invoke(config)
+            val found = resolveCurrentUser.invoke(config)
+            found shouldNotBe null
             
             // 5
             every { userRepository.findByLoginId("user") } returns Optional.empty()
-            resolveCurrentUser.invoke(config)
+            val notFound = resolveCurrentUser.invoke(config)
+            notFound shouldBe null
+        }
+
+        it("gitServletRegistrationBean() - baseDir가 존재하지 않으면 새로 생성해야 한다") {
+            val freshBaseDir = File.createTempFile("git-fresh", "").apply { delete() }
+            val freshConfig = GitServletConfig(
+                freshBaseDir.absolutePath, tempLfsBaseDir.absolutePath, "http://localhost:8080/git-lfs",
+                projectRepository, pullRequestRepository, userRepository, pushedBranchRepository,
+                eventPublisher, gitProjectVisitRecorder
+            )
+
+            freshBaseDir.exists() shouldBe false
+            freshConfig.gitServletRegistrationBean()
+            freshBaseDir.exists() shouldBe true
+
+            freshBaseDir.deleteRecursively()
+        }
+
+        it("ReceivePackFactory 람다 - project/pusher 조합별 post-receive hook 설정 분기") {
+            val lambda = GitServletConfig::class.java.getDeclaredMethod(
+                "gitServletRegistrationBean\$lambda\$0\$1",
+                GitServletConfig::class.java, HttpServletRequest::class.java, Repository::class.java
+            )
+            lambda.isAccessible = true
+
+            val bareRepoDir = File.createTempFile("bare-repo", "").apply { delete(); mkdirs() }
+            val repo = FileRepositoryBuilder().setGitDir(bareRepoDir).setBare().build().apply { create(true) }
+
+            // (1) project == null (URI가 gitUriPattern에 안 맞음) -> else 분기(경고 로그)
+            val reqInvalid = mockk<HttpServletRequest>(relaxed = true)
+            every { reqInvalid.requestURI } returns "/invalid"
+            SecurityContextHolder.clearContext()
+            val rp1 = lambda.invoke(null, config, reqInvalid, repo)
+            rp1 shouldNotBe null
+
+            // (2) project != null, pusher == null (인증 정보 없음) -> else 분기
+            val reqValid = mockk<HttpServletRequest>(relaxed = true)
+            every { reqValid.requestURI } returns "/git/owner/projectName.git/info/refs"
+            val project = Project(owner = "owner", name = "projectName", vcs = "GIT")
+            every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "projectName") } returns Optional.of(project)
+            SecurityContextHolder.clearContext()
+            val rp2 = lambda.invoke(null, config, reqValid, repo)
+            rp2 shouldNotBe null
+
+            // (3) project != null, pusher != null -> if 분기(post-receive hook 설정)
+            val authedUser = UsernamePasswordAuthenticationToken("user", "pass", AuthorityUtils.createAuthorityList("ROLE_USER"))
+            SecurityContextHolder.getContext().authentication = authedUser
+            every { userRepository.findByLoginId("user") } returns Optional.of(User(loginId = "user"))
+            val rp3 = lambda.invoke(null, config, reqValid, repo)
+            rp3 shouldNotBe null
+
+            repo.close()
+            bareRepoDir.deleteRecursively()
+        }
+
+        it("LfsProtocolServlet.getLargeFileRepository - path/action 파싱 및 디렉터리 생성 분기") {
+            val bean = config.gitServletRegistrationBean()
+            val dispatcherServlet = bean.servlet!!
+            val lfsField = dispatcherServlet.javaClass.getDeclaredField("\$lfsServlet")
+            lfsField.isAccessible = true
+            val lfsServlet = lfsField.get(dispatcherServlet)
+
+            val lfsRequestClass = Class.forName("org.eclipse.jgit.lfs.server.LfsProtocolServlet\$LfsRequest")
+            val lfsRequestCtor = lfsRequestClass.getDeclaredConstructor().apply { isAccessible = true }
+            val lfsRequest = lfsRequestCtor.newInstance()
+
+            val method = lfsServlet.javaClass.getDeclaredMethod(
+                "getLargeFileRepository", lfsRequestClass, String::class.java, String::class.java
+            )
+            method.isAccessible = true
+
+            // "/git/" 접두어 제거 + info/lfs 접미어 제거 + 정상 owner/project 2-파트
+            method.invoke(lfsServlet, lfsRequest, "/git/owner/project/info/lfs/objects/batch", "download") shouldNotBe null
+            // 같은 owner/project 재호출 -> projectLfsDir가 이미 존재하는 분기(mkdirs 생략)
+            method.invoke(lfsServlet, lfsRequest, "/git/owner/project/info/lfs/objects/batch", "download") shouldNotBe null
+            // "/"로 시작(하지만 "/git/"는 아님) 케이스
+            method.invoke(lfsServlet, lfsRequest, "/owner2/project2", "download") shouldNotBe null
+            // "/"로 시작 안 하는 케이스(else, 그대로 사용) + info/lfs 접미어 없음
+            method.invoke(lfsServlet, lfsRequest, "owner3/project3", "upload") shouldNotBe null
+            // 파트가 부족해 owner/project 모두 기본값("default")으로 폴백
+            method.invoke(lfsServlet, lfsRequest, "", "download") shouldNotBe null
+        }
+
+        it("저장소 리졸버 람다 - FileRepositoryBuilder로 Repository를 생성해야 한다") {
+            val lambda = GitServletConfig::class.java.getDeclaredMethod(
+                "gitServletRegistrationBean\$lambda\$0\$0",
+                File::class.java, HttpServletRequest::class.java, String::class.java
+            )
+            lambda.isAccessible = true
+
+            val gitBaseDir = File.createTempFile("resolver-base", "").apply { delete(); mkdirs() }
+            val req = mockk<HttpServletRequest>(relaxed = true)
+
+            val repo = lambda.invoke(null, gitBaseDir, req, "some-repo.git") as Repository
+            repo shouldNotBe null
+            repo.close()
+
+            gitBaseDir.deleteRecursively()
         }
     }
 })
