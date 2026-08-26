@@ -123,6 +123,41 @@ class LdapUserProvisioningServiceSpec : DescribeSpec({
             result.englishName shouldBe "Gildong Hong"
         }
 
+        // isNullOrBlank()는 null-체크와 isBlank-체크 두 서브 분기로 구성된다. 기존 테스트는
+        // englishName이 없음(null 기본값)과 명확한 값("Gildong Hong")만 다뤄서, "non-null이지만
+        // 공백뿐"인 케이스(isBlank()==true 서브 분기)가 신규 생성/기존 동기화 양쪽 호출부 모두 비어 있었다.
+        it("신규 유저 생성 시 englishName이 공백뿐이면 설정하지 않아야 한다") {
+            val ldapUser = LdapUser(
+                displayName = "홍길동", email = "gildong@example.com", loginId = "gildong",
+                department = "개발팀", isGuestUser = false, englishName = "   "
+            )
+            every { userRepository.findByEmail("gildong@example.com") } returns Optional.empty()
+            val savedSlot = slot<User>()
+            every { userRepository.save(capture(savedSlot)) } answers { savedSlot.captured }
+
+            val result = service.reconcile(ldapUser, "myPassword123!")
+
+            result.englishName shouldBe null
+        }
+
+        it("기존 유저 동기화 시 englishName이 공백뿐이면 갱신하지 않아야 한다") {
+            val existingUser = User(
+                id = 5L, loginId = "gildong", name = "옛이름", email = "gildong@example.com",
+                password = "x", passwordSalt = "y", isGuest = false, englishName = "Old English Name"
+            )
+            every { userRepository.findByEmail("gildong@example.com") } returns Optional.of(existingUser)
+            every { userRepository.save(any()) } answers { firstArg() }
+
+            val ldapUser = LdapUser(
+                displayName = "홍길동", email = "gildong@example.com", loginId = "gildong",
+                englishName = "   "
+            )
+
+            val result = service.reconcile(ldapUser, "pw")
+
+            result.englishName shouldBe "Old English Name"
+        }
+
         it("기존 유저의 passwordSalt가 null이면 비밀번호 불일치로 간주하고 재발급해야 한다") {
             val existingUser = User(
                 id = 5L, loginId = "gildong", name = "옛이름", email = "gildong@example.com",

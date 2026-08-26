@@ -17,6 +17,9 @@ class UserDetailsServiceImpl(
 
         val authorities = mutableListOf(SimpleGrantedAuthority("ROLE_${user.state.name}"))
         if (user.state == UserState.SITE_ADMIN) {
+            // 테스트 커버리지 도달 불가: 이 분기에 들어오면 이미 위 라인에서 "ROLE_SITE_ADMIN"이
+            // authorities의 유일한 원소로 들어가 있으므로 none{}은 항상 false — 중복 방지용 방어
+            // 코드지만 이 시점에는 중복이 성립할 수 없다.
             if (authorities.none { it.authority == "ROLE_SITE_ADMIN" }) {
                 authorities.add(SimpleGrantedAuthority("ROLE_SITE_ADMIN"))
             }

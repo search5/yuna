@@ -251,6 +251,41 @@ class PullRequestServiceSpec @Autowired constructor(
                 commits.first().state shouldBe PullRequestCommit.State.CURRENT
             }
 
+            // yona PullRequestMerger의 refs/yobi/pull/{id}/merged 캐시 재사용 대응 — getMergedTreeIfReusable()가
+            // 이전 attemptMerge()가 만든 병합 커밋의 부모 2개가 이번 부모와 동일하면 재계산 없이 그 tree를
+            // 재사용하는 분기는, 기존 테스트가 전부 동일 PR에 attemptMerge를 단 한 번만 호출해서 비어 있었다.
+            it("1-1. 새 커밋 없이 attemptMerge를 연속 호출하면 캐시된 병합 tree를 재사용해도 동일한 결과를 반환해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature-reuse", "test3.txt", "source modification", "Update source")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "캐시 재사용 테스트 PR",
+                        body = "동일 부모로 재검사되는 PR입니다.",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature-reuse",
+                        contributor = contributor,
+                        receiver = receiver,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                val firstAttempt = pullRequestService.attemptMerge(pr.id!!)
+                firstAttempt.conflicts() shouldBe false
+
+                // 새 커밋 없이 동일 부모로 재검사 — getMergedTreeIfReusable()의 캐시 히트 분기를 탄다.
+                val secondAttempt = pullRequestService.attemptMerge(pr.id!!)
+                secondAttempt.conflicts() shouldBe false
+                secondAttempt.gitCommits.size shouldBe firstAttempt.gitCommits.size
+            }
+
             it("2. 충돌이 발생하는 경우 - attemptMerge 및 merge 실패 검증") {
                 val toBareDir = repositoryService.getRepository(toProject).getDirectory()
                 val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
@@ -1763,6 +1798,164 @@ class PullRequestServiceSpec @Autowired constructor(
 
                 val diffs = pullRequestService.getDiff(pr, headCommitId)
                 diffs.any { it.pathB == "test2.txt" } shouldBe true
+            }
+
+            describe("존재하지 않는 리소스 조회 시 예외 처리 (orElseThrow 분기)") {
+                it("attemptMerge - 존재하지 않는 pullRequestId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.attemptMerge(999999L)
+                    }
+                }
+
+                it("merge - 존재하지 않는 pullRequestId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.merge(999999L, receiver)
+                    }
+                }
+
+                it("getPullRequests - 존재하지 않는 toProjectId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.getPullRequests(999999L, null)
+                    }
+                }
+
+                it("getPullRequest - 존재하지 않는 toProjectId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.getPullRequest(999999L, 1L)
+                    }
+                }
+
+                it("getPullRequest - 정상적으로 프로젝트/번호에 해당하는 PR을 반환해야 한다") {
+                    val pr = pullRequestService.createPullRequest(
+                        "조회용 PR", "...", fromProject.id!!, toProject.id!!,
+                        "refs/heads/feature", "refs/heads/master", contributor
+                    )
+
+                    val found = pullRequestService.getPullRequest(toProject.id!!, pr.number!!)
+
+                    found?.id shouldBe pr.id
+                }
+
+                it("createPullRequest - 존재하지 않는 fromProjectId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.createPullRequest(
+                            "제목", "본문", 999999L, toProject.id!!,
+                            "refs/heads/feature", "refs/heads/master", contributor
+                        )
+                    }
+                }
+
+                it("createPullRequest - 존재하지 않는 toProjectId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.createPullRequest(
+                            "제목", "본문", fromProject.id!!, 999999L,
+                            "refs/heads/feature", "refs/heads/master", contributor
+                        )
+                    }
+                }
+
+                it("updatePullRequest - 존재하지 않는 pullRequestId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.updatePullRequest(999999L, "제목", "본문", "refs/heads/feature", "refs/heads/master")
+                    }
+                }
+
+                it("changeState - 존재하지 않는 pullRequestId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.changeState(999999L, State.CLOSED, contributor.loginId)
+                    }
+                }
+
+                it("addReviewer - 존재하지 않는 pullRequestId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.addReviewer(999999L, receiver)
+                    }
+                }
+
+                it("addReviewer - 존재하지 않는 reviewer면 예외를 던져야 한다") {
+                    val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                    createCommit(toBareDir, "master", "test.txt", "hello", "init")
+                    val pr = pullRequestRepository.save(
+                        PullRequest(
+                            title = "리뷰어없음 PR", body = "...", toProject = toProject, fromProject = fromProject,
+                            toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                            contributor = contributor, receiver = receiver, state = State.OPEN
+                        )
+                    )
+                    val ghostReviewer = User(id = 999999L, loginId = "ghost-reviewer", name = "유령리뷰어")
+
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.addReviewer(pr.id!!, ghostReviewer)
+                    }
+                }
+
+                it("addReviewer - 이미 리뷰어로 등록된 유저를 다시 추가해도 알림이 중복 발행되지 않아야 한다") {
+                    val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                    createCommit(toBareDir, "master", "test.txt", "hello", "init")
+                    val pr = pullRequestRepository.save(
+                        PullRequest(
+                            title = "리뷰어중복 PR", body = "...", toProject = toProject, fromProject = fromProject,
+                            toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                            contributor = contributor, receiver = receiver, state = State.OPEN
+                        )
+                    )
+                    pullRequestService.addReviewer(pr.id!!, receiver)
+
+                    pullRequestService.addReviewer(pr.id!!, receiver)
+
+                    pullRequestRepository.findById(pr.id!!).get().reviewers.size shouldBe 1
+                }
+
+                it("removeReviewer - 리뷰어로 등록돼 있지 않은 유저를 제거해도 예외 없이 아무 일도 없어야 한다") {
+                    val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                    createCommit(toBareDir, "master", "test.txt", "hello", "init")
+                    val pr = pullRequestRepository.save(
+                        PullRequest(
+                            title = "리뷰어없음 제거시도 PR", body = "...", toProject = toProject, fromProject = fromProject,
+                            toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                            contributor = contributor, receiver = receiver, state = State.OPEN
+                        )
+                    )
+
+                    pullRequestService.removeReviewer(pr.id!!, receiver)
+
+                    pullRequestRepository.findById(pr.id!!).get().reviewers.size shouldBe 0
+                }
+
+                it("removeReviewer - 존재하지 않는 pullRequestId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.removeReviewer(999999L, receiver)
+                    }
+                }
+
+                it("removeReviewer - 존재하지 않는 reviewer면 예외를 던져야 한다") {
+                    val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                    createCommit(toBareDir, "master", "test.txt", "hello", "init")
+                    val pr = pullRequestRepository.save(
+                        PullRequest(
+                            title = "리뷰어없음 제거 PR", body = "...", toProject = toProject, fromProject = fromProject,
+                            toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                            contributor = contributor, receiver = receiver, state = State.OPEN
+                        )
+                    )
+                    val ghostReviewer = User(id = 999999L, loginId = "ghost-reviewer2", name = "유령리뷰어2")
+
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.removeReviewer(pr.id!!, ghostReviewer)
+                    }
+                }
+
+                it("deleteFromBranch - 존재하지 않는 pullRequestId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.deleteFromBranch(999999L)
+                    }
+                }
+
+                it("restoreFromBranch - 존재하지 않는 pullRequestId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        pullRequestService.restoreFromBranch(999999L)
+                    }
+                }
             }
         }
     }

@@ -46,6 +46,18 @@ class UserDetailsServiceImplSpec : DescribeSpec({
             }
         }
 
+        it("password, passwordSalt가 non-null이면 그대로 반환해야 한다") {
+            val user = User(id = 3L, loginId = "haspw", name = "비번있음", email = "haspw@example.com", state = UserState.ACTIVE)
+            user.password = "hashed-pw"
+            user.passwordSalt = "salt-value"
+            every { userRepository.findByLoginId("haspw") } returns Optional.of(user)
+
+            val details = service.loadUserByUsername("haspw") as YonaUserDetails
+
+            details.password shouldBe "hashed-pw"
+            details.passwordSalt shouldBe "salt-value"
+        }
+
         it("id, password, passwordSalt가 null일 때 기본값을 처리해야 한다") {
             val user = User(id = null, loginId = "nullfields", name = "null", email = "null@example.com", state = UserState.ACTIVE)
             user.password = null
