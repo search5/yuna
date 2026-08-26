@@ -32,7 +32,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.io.IOException
 import java.time.Instant
 
 @Service
@@ -431,7 +430,7 @@ class PullRequestServiceImpl(
         refUpdate.setRefLogMessage("merged", true)
         val rc = refUpdate.update()
         if (rc != RefUpdate.Result.NEW && rc != RefUpdate.Result.FAST_FORWARD && rc != RefUpdate.Result.FORCED) {
-            throw IOException("Ref update failed for $mergedRef: $rc")
+            throw PullRequestException("Ref update failed for $mergedRef: $rc")
         }
 
         return mergeCommitId

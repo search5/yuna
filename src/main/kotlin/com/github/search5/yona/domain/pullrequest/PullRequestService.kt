@@ -112,3 +112,9 @@ class InvalidBranchOperationException(message: String) : RuntimeException(messag
 // yona PullRequestApp.editPullRequest()의 findDuplicatedPullRequest() != null 분기 대응 (P1-68).
 @ResponseStatus(value = HttpStatus.CONFLICT, reason = "동일한 브랜치 조합의 풀 리퀘스트가 이미 열려 있습니다.")
 class DuplicatedPullRequestException(message: String) : RuntimeException(message)
+
+// yona errors/PullRequestException.java 대응 (P2-50). legacy MergeRefUpdate.updateRef()가 ref 갱신
+// 실패(NEW/FAST_FORWARD/FORCED가 아닌 그 외 RefUpdate.Result)를 이 전용 타입으로 던지던 것과 동일하게,
+// 범용 IOException 대신 병합 실패임을 타입으로 구분할 수 있게 이식한다(실제 동작 차이는 없음 — legacy도
+// 호출부가 항상 catch(Exception)으로 뭉뚱그려 처리해 타입 기반 분기가 존재한 적이 없다).
+class PullRequestException(message: String) : RuntimeException(message)

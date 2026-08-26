@@ -911,12 +911,15 @@ class BoardViewControllerSpec : DescribeSpec({
                     .andExpect(model().attribute("preparedPostBody", ""))
             }
 
-            it("readme=true인데 README.md 조회 중 예외가 발생해도 정상적으로 폼을 반환해야 한다") {
+            it("readme=true인데 README 후보 4개 모두 조회 중 예외가 발생해도 정상적으로 폼을 반환해야 한다") {
                 val gitProject = Project(id = 23L, name = "ReadmeBroken", owner = "owner", vcs = "GIT", projectScope = ProjectScope.PRIVATE)
                 val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
                 memberUser.projectUsers.add(ProjectUser(id = 982L, user = memberUser, project = gitProject, role = Role(id = RoleType.MEMBER.roleType)))
                 val mockRepo = mockk<PlayRepository>()
                 every { mockRepo.getRawFile("HEAD", "README.md") } throws RuntimeException("io error")
+                every { mockRepo.getRawFile("HEAD", "readme.md") } throws RuntimeException("io error")
+                every { mockRepo.getRawFile("HEAD", "README.markdown") } throws RuntimeException("io error")
+                every { mockRepo.getRawFile("HEAD", "readme.markdown") } throws RuntimeException("io error")
                 every { repositoryService.getRepository(gitProject) } returns mockRepo
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "ReadmeBroken") } returns Optional.of(gitProject)
                 every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
@@ -925,6 +928,45 @@ class BoardViewControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/owner/ReadmeBroken/post/new").param("readme", "true").principal(userAuth))
                     .andExpect(status().isOk)
                     .andExpect(model().attribute("preparedPostBody", ""))
+            }
+
+            // yona READMEFileNameFilter() 대응 (P2-47) — README.md가 없으면 readme.md/README.markdown/
+            // readme.markdown 순서로 다음 후보를 시도해야 한다.
+            it("README.md가 없으면 다음 후보(readme.md)의 내용을 preparedPostBody로 채워야 한다") {
+                val gitProject = Project(id = 29L, name = "ReadmeFallback", owner = "owner", vcs = "GIT", projectScope = ProjectScope.PRIVATE)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 985L, user = memberUser, project = gitProject, role = Role(id = RoleType.MEMBER.roleType)))
+                val mockRepo = mockk<PlayRepository>()
+                every { mockRepo.getRawFile("HEAD", "README.md") } throws java.io.FileNotFoundException()
+                every { mockRepo.getRawFile("HEAD", "readme.md") } returns "소문자 README 내용".toByteArray(Charsets.UTF_8)
+                every { repositoryService.getRepository(gitProject) } returns mockRepo
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "ReadmeFallback") } returns Optional.of(gitProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(29L, 10L) } returns true
+
+                mockMvc.perform(get("/owner/ReadmeFallback/post/new").param("readme", "true").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("preparedPostBody", "소문자 README 내용"))
+
+                verify(exactly = 0) { mockRepo.getRawFile("HEAD", "README.markdown") }
+            }
+
+            it("README.md/readme.md가 없으면 README.markdown의 내용을 preparedPostBody로 채워야 한다") {
+                val gitProject = Project(id = 30L, name = "ReadmeMarkdownFallback", owner = "owner", vcs = "GIT", projectScope = ProjectScope.PRIVATE)
+                val memberUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+                memberUser.projectUsers.add(ProjectUser(id = 986L, user = memberUser, project = gitProject, role = Role(id = RoleType.MEMBER.roleType)))
+                val mockRepo = mockk<PlayRepository>()
+                every { mockRepo.getRawFile("HEAD", "README.md") } throws java.io.FileNotFoundException()
+                every { mockRepo.getRawFile("HEAD", "readme.md") } throws java.io.FileNotFoundException()
+                every { mockRepo.getRawFile("HEAD", "README.markdown") } returns "마크다운 확장자 README".toByteArray(Charsets.UTF_8)
+                every { repositoryService.getRepository(gitProject) } returns mockRepo
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "ReadmeMarkdownFallback") } returns Optional.of(gitProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(memberUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(30L, 10L) } returns true
+
+                mockMvc.perform(get("/owner/ReadmeMarkdownFallback/post/new").param("readme", "true").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("preparedPostBody", "마크다운 확장자 README"))
             }
 
             it("path 파라미터만 있으면 HEAD 브랜치의 파일 내용을 preparedPostBody로 채워야 한다") {

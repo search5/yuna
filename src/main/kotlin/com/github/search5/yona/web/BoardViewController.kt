@@ -227,12 +227,7 @@ class BoardViewController(
 
         var preparedPostBody = ""
         if (readme == true) {
-            try {
-                val bytes = repositoryService.getRepository(project).getRawFile("HEAD", "README.md")
-                if (bytes != null) {
-                    preparedPostBody = String(bytes, StandardCharsets.UTF_8)
-                }
-            } catch (e: Exception) {}
+            preparedPostBody = readReadmeCandidate(project)
         } else if (issueTemplate == true) {
             preparedPostBody = getIssueTemplate(project)
         } else if (!path.isNullOrBlank()) {
@@ -489,6 +484,23 @@ class BoardViewController(
             return "redirect:/$owner/$projectName"
         }
         return "redirect:/$owner/$projectName/post/${saved.number}"
+    }
+
+    // yona playRepository/BareRepository.java:89-121 readREADME()/getFirstFoundREADMEfileObjectId()/
+    // READMEFileNameFilter() 대응 (P2-47). 4개 후보 파일명을 이 순서 그대로 순회해 첫 매치를 사용한다.
+    private fun readReadmeCandidate(project: Project): String {
+        val candidates = listOf("README.md", "readme.md", "README.markdown", "readme.markdown")
+        for (candidate in candidates) {
+            try {
+                val bytes = repositoryService.getRepository(project).getRawFile("HEAD", candidate)
+                if (bytes != null) {
+                    return String(bytes, StandardCharsets.UTF_8)
+                }
+            } catch (e: Exception) {
+                // 이 후보 파일이 없으면(또는 저장소 조회 자체가 실패해도) 다음 후보로 계속 진행
+            }
+        }
+        return ""
     }
 
     private fun getIssueTemplate(project: Project): String {

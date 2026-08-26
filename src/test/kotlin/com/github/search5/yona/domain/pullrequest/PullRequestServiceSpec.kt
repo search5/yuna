@@ -1759,6 +1759,37 @@ class PullRequestServiceSpec @Autowired constructor(
                 }
             }
 
+            // yona errors/PullRequestException.java 대응 (P2-50) — ref 갱신이 NEW/FAST_FORWARD/FORCED가
+            // 아닌 결과로 실패하면 IOException이 아닌 전용 PullRequestException을 던져야 한다. merged ref의
+            // lock 파일을 미리 점유해 JGit RefUpdate가 LOCK_FAILURE를 반환하도록 강제해 재현한다.
+            it("merge - merged ref 갱신이 lock 충돌로 실패하면 PullRequestException을 던져야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                createCommit(fromBareDir, "feature", "test2.txt", "source change", "Source change")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "lock 충돌 테스트 PR", body = "...",
+                        toProject = toProject, fromProject = fromProject,
+                        toBranch = "refs/heads/master", fromBranch = "refs/heads/feature",
+                        contributor = contributor, receiver = receiver, state = State.OPEN
+                    )
+                )
+
+                val lockFile = java.io.File(toBareDir, "refs/yobi/pull/${pr.id}/merged.lock")
+                lockFile.parentFile.mkdirs()
+                lockFile.writeText("locked by another process")
+
+                try {
+                    shouldThrow<PullRequestException> {
+                        pullRequestService.merge(pr.id!!, receiver)
+                    }
+                } finally {
+                    lockFile.delete()
+                }
+            }
+
             it("updatePullRequest - throws DuplicatedPullRequestException when duplicate exists") {
                 val toBareDir = repositoryService.getRepository(toProject).getDirectory()
                 createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
