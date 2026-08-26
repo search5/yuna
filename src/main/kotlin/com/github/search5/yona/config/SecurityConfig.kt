@@ -25,7 +25,8 @@ class SecurityConfig(
     private val customOAuth2UserService: CustomOAuth2UserService,
     private val gitAuthorizationFilter: GitAuthorizationFilter,
     private val svnAuthorizationFilter: SvnAuthorizationFilter,
-    private val apiTokenAuthenticationFilter: ApiTokenAuthenticationFilter
+    private val apiTokenAuthenticationFilter: ApiTokenAuthenticationFilter,
+    private val accessLogFilter: AccessLogFilter
 ) {
 
     @Bean
@@ -79,6 +80,7 @@ class SecurityConfig(
             .addFilterAfter(gitAuthorizationFilter, BasicAuthenticationFilter::class.java)
             .addFilterAfter(svnAuthorizationFilter, BasicAuthenticationFilter::class.java)
             .addFilterAfter(apiTokenAuthenticationFilter, BasicAuthenticationFilter::class.java)
+            .addFilterAfter(accessLogFilter, BasicAuthenticationFilter::class.java)
         return http.build()
     }
 }

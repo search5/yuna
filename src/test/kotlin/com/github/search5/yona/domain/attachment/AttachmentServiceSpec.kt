@@ -6,6 +6,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.cache.CacheManager
 import org.springframework.transaction.annotation.Transactional
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -17,6 +18,7 @@ class AttachmentServiceSpec @Autowired constructor(
     private val attachmentService: AttachmentService,
     private val attachmentRepository: AttachmentRepository,
     private val cleanupScheduler: AttachmentCleanupScheduler,
+    private val cacheManager: CacheManager,
     @Value("\${yuna.upload.base-dir:/tmp/yuna/uploads}")
     private val baseDir: String
 ) : AbstractIntegrationTest() {
@@ -25,6 +27,7 @@ class AttachmentServiceSpec @Autowired constructor(
         describe("AttachmentService 파일 업로드 및 관리 테스트") {
             beforeEach {
                 attachmentRepository.deleteAll()
+                cacheManager.getCache("attachmentsByContainer")?.clear()
                 val uploadDir = File(baseDir)
                 if (uploadDir.exists()) {
                     uploadDir.deleteRecursively()
@@ -337,6 +340,88 @@ class AttachmentServiceSpec @Autowired constructor(
                 val unchanged = attachmentRepository.findById(attachment.id!!).get()
                 unchanged.containerType shouldBe ResourceType.ISSUE_POST
                 unchanged.containerId shouldBe "200"
+            }
+
+            // yona utils/AttachmentCache.java 대응 (P2-49) — 첨부파일 목록 조회 결과가 캐싱되고,
+            // store/delete/moveAll/moveOnlySelected가 해당 컨테이너의 캐시를 무효화해야 한다.
+            describe("첨부파일 목록 캐싱 (P2-49)") {
+                it("같은 컨테이너를 두 번 조회하면 캐시된 동일 결과를 반환해야 한다") {
+                    attachmentService.store(
+                        ByteArrayInputStream("cache-test-1".toByteArray()), "cache1.txt",
+                        ResourceType.ISSUE_POST, "cache-container-1", "chulsoo"
+                    )
+
+                    val first = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-1")
+                    // 캐시 뒤에서 DB에 직접 행을 추가해도(서비스 계층을 거치지 않아 캐시 무효화가 안 됨),
+                    // 캐시가 살아있다면 두 번째 조회도 여전히 첫 조회 결과(1건)를 반환해야 한다.
+                    attachmentRepository.save(
+                        Attachment(
+                            name = "sneaked-in.txt", hash = "sneaky-hash", containerType = ResourceType.ISSUE_POST,
+                            containerId = "cache-container-1", mimeType = "text/plain", size = 1L,
+                            createdDate = Instant.now(), ownerLoginId = "chulsoo"
+                        )
+                    )
+                    val second = attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-1")
+
+                    first.size shouldBe 1
+                    second.size shouldBe 1
+                }
+
+                it("store()로 새 첨부를 추가하면 그 컨테이너의 캐시가 무효화되어 최신 목록을 반환해야 한다") {
+                    attachmentService.store(
+                        ByteArrayInputStream("cache-evict-1".toByteArray()), "evict1.txt",
+                        ResourceType.ISSUE_POST, "cache-container-2", "chulsoo"
+                    )
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-2").size shouldBe 1
+
+                    attachmentService.store(
+                        ByteArrayInputStream("cache-evict-2".toByteArray()), "evict2.txt",
+                        ResourceType.ISSUE_POST, "cache-container-2", "chulsoo"
+                    )
+
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-2").size shouldBe 2
+                }
+
+                it("delete()로 첨부를 삭제하면 그 컨테이너의 캐시가 무효화되어야 한다") {
+                    val (attachment, _) = attachmentService.store(
+                        ByteArrayInputStream("cache-delete".toByteArray()), "del.txt",
+                        ResourceType.ISSUE_POST, "cache-container-3", "chulsoo"
+                    )
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-3").size shouldBe 1
+
+                    attachmentService.delete(attachment)
+
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-3").size shouldBe 0
+                }
+
+                it("deleteAll()로 컨테이너를 비우면 그 컨테이너의 캐시가 무효화되어야 한다") {
+                    attachmentService.store(
+                        ByteArrayInputStream("cache-deleteall".toByteArray()), "delall.txt",
+                        ResourceType.ISSUE_POST, "cache-container-4", "chulsoo"
+                    )
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-4").size shouldBe 1
+
+                    attachmentService.deleteAll(ResourceType.ISSUE_POST, "cache-container-4")
+
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-4").size shouldBe 0
+                }
+
+                it("moveAll()로 컨테이너를 옮기면 출발지/도착지 캐시가 모두 무효화되어야 한다") {
+                    attachmentService.store(
+                        ByteArrayInputStream("cache-movefrom".toByteArray()), "movefrom.txt",
+                        ResourceType.ISSUE_POST, "cache-container-5-from", "chulsoo"
+                    )
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-5-from").size shouldBe 1
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.NONISSUE_COMMENT, "cache-container-5-to").size shouldBe 0
+
+                    attachmentService.moveAll(
+                        ResourceType.ISSUE_POST, "cache-container-5-from",
+                        ResourceType.NONISSUE_COMMENT, "cache-container-5-to"
+                    )
+
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "cache-container-5-from").size shouldBe 0
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.NONISSUE_COMMENT, "cache-container-5-to").size shouldBe 1
+                }
             }
         }
     }

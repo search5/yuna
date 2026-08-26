@@ -1,12 +1,17 @@
 package com.github.search5.yona.domain.attachment
 
 import com.github.search5.yona.domain.enumeration.ResourceType
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import java.time.Instant
 
 interface AttachmentRepository : JpaRepository<Attachment, Long> {
+    // yona utils/AttachmentCache.java의 get(containerType, containerId) 대응 (P2-49). 첨부파일 단건이
+    // 변경될 때마다 AttachmentServiceImpl의 store/delete/deleteAll/moveAll/moveOnlySelected가 같은
+    // 이름의 캐시를 @CacheEvict로 무효화한다.
+    @Cacheable("attachmentsByContainer", key = "#containerType.name() + #containerId")
     fun findByContainerTypeAndContainerId(containerType: ResourceType, containerId: String): List<Attachment>
     fun countByContainerTypeAndContainerId(containerType: ResourceType, containerId: String): Int
     fun existsByHash(hash: String): Boolean

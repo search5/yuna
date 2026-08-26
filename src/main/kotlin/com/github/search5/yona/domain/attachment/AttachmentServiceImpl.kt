@@ -3,6 +3,8 @@ package com.github.search5.yona.domain.attachment
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.support.FileUtil
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.cache.annotation.CacheEvict
+import org.springframework.cache.annotation.Caching
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.io.File
@@ -21,6 +23,9 @@ class AttachmentServiceImpl(
     private val baseDir: String
 ) : AttachmentService {
 
+    // yona utils/AttachmentCache.java의 remove(container) 대응 (P2-49) — 새 첨부가 추가되면 그
+    // 컨테이너의 목록 캐시를 무효화한다(dedup으로 기존 행을 재사용하는 경우도 안전하게 함께 지운다).
+    @CacheEvict("attachmentsByContainer", key = "#containerType.name() + #containerId")
     override fun store(
         inputStream: InputStream,
         name: String,
@@ -96,6 +101,7 @@ class AttachmentServiceImpl(
         return File(baseDir, attachment.hash)
     }
 
+    @CacheEvict("attachmentsByContainer", key = "#attachment.containerType.name() + #attachment.containerId")
     override fun delete(attachment: Attachment) {
         attachmentRepository.delete(attachment)
         // 동일한 해시를 참조하는 다른 파일 첨부 레코드가 없다면 디스크에서 삭제
@@ -108,6 +114,9 @@ class AttachmentServiceImpl(
         }
     }
 
+    // delete(attachment)를 내부에서 호출하지만 같은 클래스 내 self-invocation은 Spring AOP 프록시를
+    // 우회해 그쪽 @CacheEvict가 발동하지 않으므로, 이 메서드 자체에도 명시적으로 걸어준다.
+    @CacheEvict("attachmentsByContainer", key = "#containerType.name() + #containerId")
     override fun deleteAll(containerType: ResourceType, containerId: String) {
         val attachments = attachmentRepository.findByContainerTypeAndContainerId(containerType, containerId)
         for (attachment in attachments) {
@@ -115,6 +124,10 @@ class AttachmentServiceImpl(
         }
     }
 
+    @Caching(evict = [
+        CacheEvict("attachmentsByContainer", key = "#fromType.name() + #fromId"),
+        CacheEvict("attachmentsByContainer", key = "#toType.name() + #toId")
+    ])
     override fun moveAll(
         fromType: ResourceType,
         fromId: String,
@@ -130,6 +143,10 @@ class AttachmentServiceImpl(
         return attachments.size
     }
 
+    @Caching(evict = [
+        CacheEvict("attachmentsByContainer", key = "#fromType.name() + #fromId"),
+        CacheEvict("attachmentsByContainer", key = "#toType.name() + #toId")
+    ])
     override fun moveOnlySelected(
         fromType: ResourceType,
         fromId: String,

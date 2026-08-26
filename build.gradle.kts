@@ -36,6 +36,9 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
+	// yona utils/AttachmentCache.java의 Play Cache(24시간 TTL) 대응 (P2-49).
+	implementation("org.springframework.boot:spring-boot-starter-cache")
+	implementation("com.github.ben-manes.caffeine:caffeine")
 	// yona MailboxService의 com.sun.mail.imap.IMAPFolder/IMAPStore(IDLE 명령, UID 조회) 대응 (P1-55).
 	// spring-boot-starter-mail은 angus-mail을 runtimeOnly로만 끌어와 IMAPFolder 등 구현 클래스가
 	// 컴파일 시점엔 보이지 않으므로 명시적으로 추가한다(버전은 Spring Boot 의존성 관리로 고정됨).
