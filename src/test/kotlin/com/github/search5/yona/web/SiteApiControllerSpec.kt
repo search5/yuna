@@ -85,6 +85,18 @@ class SiteApiControllerSpec : DescribeSpec({
                     .param("body", "body"))
                     .andExpect(status().isForbidden)
             }
+
+            it("인증은 있으나 DB에 사용자가 없는 경우 403 에러") {
+                every { userRepository.findByLoginId("user") } returns Optional.empty()
+
+                mockMvc.perform(post("/site/mail")
+                    .principal(normalAuth)
+                    .param("to", "a@a.com")
+                    .param("from", "b@b.com")
+                    .param("subject", "test")
+                    .param("body", "body"))
+                    .andExpect(status().isForbidden)
+            }
         }
 
         describe("POST /site/mail") {
@@ -104,6 +116,39 @@ class SiteApiControllerSpec : DescribeSpec({
                     .andExpect(view().name("site/mail"))
                     .andExpect(model().attribute("sended", true))
                     .andExpect(model().attribute("notConfiguredItems", emptyList<String>()))
+            }
+
+            it("smtp.user가 공백뿐이면(null/빈문자열 아님) notConfiguredItems에 포함해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { environment.getProperty("spring.mail.host") } returns "smtp.gmail.com"
+                every { environment.getProperty("spring.mail.username") } returns "   "
+                every { environment.getProperty("spring.mail.password") } returns "pass"
+
+                mockMvc.perform(post("/site/mail")
+                    .principal(adminAuth)
+                    .param("to", "a@a.com")
+                    .param("from", "b@b.com")
+                    .param("subject", "test")
+                    .param("body", "body"))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("notConfiguredItems", listOf("smtp.user")))
+            }
+
+            it("메일 발송 실패 시 예외 message가 null이면 기본 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { environment.getProperty("spring.mail.host") } returns "smtp.gmail.com"
+                every { environment.getProperty("spring.mail.username") } returns "user"
+                every { environment.getProperty("spring.mail.password") } returns "pass"
+                every { mailService.sendHtmlMail(any(), any(), any(), any(), any()) } throws RuntimeException()
+
+                mockMvc.perform(post("/site/mail")
+                    .principal(adminAuth)
+                    .param("to", "a@a.com")
+                    .param("from", "b@b.com")
+                    .param("subject", "test")
+                    .param("body", "body"))
+                    .andExpect(status().isOk)
+                    .andExpect(model().attribute("errorMessage", "Failed to send email"))
             }
 
             it("환경변수 미설정 시 notConfiguredItems 반환") {
@@ -188,6 +233,17 @@ class SiteApiControllerSpec : DescribeSpec({
                     .param("query", "test"))
                     .andExpect(status().is3xxRedirection)
                     .andExpect(redirectedUrl("/sites/userList?state=ACTIVE&query=test"))
+            }
+
+            it("loginId도 loginIdParam도 없으면 400 계열 예외로 403을 반환해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+
+                mockMvc.perform(post("/site/toggleSiteAdminRole")
+                    .principal(adminAuth)
+                    .param("state", "ACTIVE")
+                    .param("query", "test"))
+                    .andExpect(status().isForbidden)
+                    .andExpect(jsonPath("$.reason").value("FORBIDDEN"))
             }
         }
 
@@ -310,6 +366,29 @@ class SiteApiControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$[0]").value("a@a.com"))
             }
+
+            it("all이 true가 아니면 all=false로 조회해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { siteService.getMailList(false, listOf("p1")) } returns listOf("b@b.com")
+
+                mockMvc.perform(post("/site/mailList")
+                    .principal(adminAuth)
+                    .param("all", "false")
+                    .param("projects", "p1"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0]").value("b@b.com"))
+            }
+
+            it("projects 파라미터가 없으면 빈 목록으로 조회해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                every { siteService.getMailList(true, emptyList()) } returns listOf("c@c.com")
+
+                mockMvc.perform(post("/site/mailList")
+                    .principal(adminAuth)
+                    .param("all", "true"))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$[0]").value("c@c.com"))
+            }
         }
 
         describe("GET /site/export") {
@@ -424,6 +503,19 @@ class SiteApiControllerSpec : DescribeSpec({
                     .content(json))
                     .andExpect(status().isBadRequest)
                     .andExpect(jsonPath("$.message").value("error"))
+            }
+
+            it("IllegalArgumentException의 message가 null이면 기본 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("admin") } returns Optional.of(adminUser)
+                val json = """{"avatarFileId": 124, "email": "a@a.com"}"""
+                every { siteService.setUserAvatar(124L, "a@a.com") } throws IllegalArgumentException()
+
+                mockMvc.perform(post("/site/setAttachmentToUserAvatar")
+                    .principal(adminAuth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(json))
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.message").value("Bad request"))
             }
         }
 

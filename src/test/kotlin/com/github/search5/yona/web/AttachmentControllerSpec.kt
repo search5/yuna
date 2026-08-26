@@ -319,6 +319,43 @@ class AttachmentControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.attachments").isEmpty)
             }
 
+            it("containerType이 공백뿐이면(null 아님) 빈 목록을 반환한다") {
+                mockMvc.perform(
+                    get("/files")
+                        .param("containerType", "   ")
+                        .param("containerId", "10")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.attachments").isEmpty)
+            }
+
+            it("목록의 첨부 id/size가 null이면 각각 \"\"/\"0\"으로 응답해야 한다") {
+                val noIdSizeAttachment = Attachment(
+                    id = null, name = "no-id.txt", hash = "nohash",
+                    containerType = ResourceType.ISSUE_POST, containerId = "10",
+                    mimeType = "text/plain", size = null,
+                    createdDate = Instant.now(), ownerLoginId = "tester"
+                )
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every {
+                    accessControl.isAllowedAttachment(loginUser, match { it.containerType == ResourceType.ISSUE_POST && it.containerId == "10" }, Operation.READ)
+                } returns true
+                every {
+                    attachmentRepository.findByContainerTypeAndContainerId(ResourceType.ISSUE_POST, "10")
+                } returns listOf(noIdSizeAttachment)
+
+                mockMvc.perform(
+                    get("/files")
+                        .param("containerType", "ISSUE_POST")
+                        .param("containerId", "10")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.attachments[0].id").value(""))
+                    .andExpect(jsonPath("$.attachments[0].size").value("0"))
+            }
+
             it("유효하지 않은 containerType 문자열이면 NOT_A_RESOURCE로 처리된다") {
                 every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
                 every {
@@ -474,6 +511,75 @@ class AttachmentControllerSpec : DescribeSpec({
                         .param("authorLoginId", "login-user")
                 )
                     .andExpect(status().isCreated)
+            }
+
+            it("authorEmail이 공백뿐이면(null 아님) 없는 것처럼 처리해 authorLoginId로 넘어간다") {
+                val loginIdUser2 = User(id = 8L, loginId = "login-user2", name = "로그인유저2")
+                every { userRepository.findByLoginId("login-user2") } returns Optional.of(loginIdUser2)
+                every {
+                    attachmentService.store(any(), "test-file.txt", ResourceType.NOT_A_RESOURCE, "", "login-user2")
+                } returns (attachment to true)
+
+                mockMvc.perform(
+                    multipart("/files")
+                        .file(multipartFile)
+                        .param("authorEmail", "   ")
+                        .param("authorLoginId", "login-user2")
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("authorLoginId가 공백뿐이면(null 아님) 없는 것처럼 처리해 principal로 넘어간다") {
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every {
+                    attachmentService.store(any(), "test-file.txt", ResourceType.NOT_A_RESOURCE, "", "tester")
+                } returns (attachment to true)
+
+                mockMvc.perform(
+                    multipart("/files")
+                        .file(multipartFile)
+                        .param("authorLoginId", "   ")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("authorLoginId로 찾은 사용자가 anonymous이면 건너뛰고 principal로 대체한다") {
+                val anonByLoginId = User(id = 9L, loginId = "anonymous", name = "익명2")
+                every { userRepository.findByLoginId("anon-login") } returns Optional.of(anonByLoginId)
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every {
+                    attachmentService.store(any(), "test-file.txt", ResourceType.NOT_A_RESOURCE, "", "tester")
+                } returns (attachment to true)
+
+                mockMvc.perform(
+                    multipart("/files")
+                        .file(multipartFile)
+                        .param("authorLoginId", "anon-login")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("업로드된 첨부의 size가 null이면 응답의 size는 \"0\"이어야 한다") {
+                val noSizeAttachment = Attachment(
+                    id = 103L, name = "test-file.txt", hash = "nosizehash",
+                    containerType = ResourceType.NOT_A_RESOURCE, containerId = "",
+                    mimeType = "text/plain", size = null,
+                    createdDate = Instant.now(), ownerLoginId = "tester"
+                )
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every {
+                    attachmentService.store(any(), "test-file.txt", ResourceType.NOT_A_RESOURCE, "", "tester")
+                } returns (noSizeAttachment to true)
+
+                mockMvc.perform(
+                    multipart("/files")
+                        .file(multipartFile)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isCreated)
+                    .andExpect(jsonPath("$.size").value("0"))
             }
 
             it("authorLoginId로 사용자를 찾지 못하면 principal 기준으로 대체된다") {
@@ -797,6 +903,22 @@ class AttachmentControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
             }
 
+            it("BOARD_POST의 containerId가 숫자가 아니면 403 Forbidden을 반환한다") {
+                val postingAttachmentBadId = Attachment(
+                    id = 503L, name = "board-attach-bad.png", hash = "boardhashbad",
+                    containerType = ResourceType.BOARD_POST, containerId = "not-a-number", ownerLoginId = "someone-else"
+                )
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every { attachmentRepository.findById(503L) } returns Optional.of(postingAttachmentBadId)
+
+                mockMvc.perform(
+                    post("/files/503")
+                        .param("_method", "delete")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
+            }
+
             it("BOARD_POST 게시글을 찾을 수 없으면 403 Forbidden을 반환한다") {
                 val postingAttachment = Attachment(
                     id = 501L, name = "board-attach2.png", hash = "boardhash2",
@@ -857,6 +979,22 @@ class AttachmentControllerSpec : DescribeSpec({
                         .principal(userAuth)
                 )
                     .andExpect(status().isOk)
+            }
+
+            it("MILESTONE의 containerId가 숫자가 아니면 403 Forbidden을 반환한다") {
+                val milestoneAttachmentBadId = Attachment(
+                    id = 603L, name = "milestone-attach-bad.png", hash = "milestonehashbad",
+                    containerType = ResourceType.MILESTONE, containerId = "not-a-number", ownerLoginId = "someone-else"
+                )
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every { attachmentRepository.findById(603L) } returns Optional.of(milestoneAttachmentBadId)
+
+                mockMvc.perform(
+                    post("/files/603")
+                        .param("_method", "delete")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isForbidden)
             }
 
             it("MILESTONE을 찾을 수 없으면 403 Forbidden을 반환한다") {
@@ -971,6 +1109,26 @@ class AttachmentControllerSpec : DescribeSpec({
                     .andExpect(status().isForbidden)
             }
 
+            it("정의되지 않은 그 외 리소스 타입(else 분기)은 업로더 본인이 아니어도 사이트관리자면 삭제할 수 있다") {
+                val siteAdmin = User(id = 2L, loginId = "admin", name = "관리자", state = UserState.SITE_ADMIN)
+                val adminAuth = UsernamePasswordAuthenticationToken("admin", "password")
+                val etcAttachment = Attachment(
+                    id = 802L, name = "etc-attach3.png", hash = "etchash3",
+                    containerType = ResourceType.WIKI_PAGE, containerId = "72", ownerLoginId = "someone-else"
+                )
+                every { userRepository.findByLoginId("admin") } returns Optional.of(siteAdmin)
+                every { attachmentRepository.findById(802L) } returns Optional.of(etcAttachment)
+                every { attachmentService.delete(etcAttachment) } returns Unit
+                every { attachmentRepository.existsByHash("etchash3") } returns false
+
+                mockMvc.perform(
+                    post("/files/802")
+                        .param("_method", "delete")
+                        .principal(adminAuth)
+                )
+                    .andExpect(status().isOk)
+            }
+
             it("첨부 삭제 후 원본 파일이 남아있으면 그 사실을 안내하는 메시지를 반환한다") {
                 val project = mockk<Project>()
                 val issue = mockk<Issue>()
@@ -994,6 +1152,30 @@ class AttachmentControllerSpec : DescribeSpec({
         }
 
         describe("미커버 분기 테스트") {
+            // getFile()의 Content-Type 헤더는 attachment.mimeType ?: "application/octet-stream" 인데,
+            // 기존 테스트는 전부 mimeType이 있는 첨부(text/plain)만 다뤄서 null 쪽(기본값 대체)이 비어 있었다.
+            it("mimeType이 없는 첨부파일을 조회하면 Content-Type을 application/octet-stream으로 기본 처리한다") {
+                val noMimeAttachment = Attachment(
+                    id = 900L, name = "no-mime.bin", hash = "nomimehash",
+                    containerType = ResourceType.ISSUE_POST, containerId = "10", mimeType = null, ownerLoginId = "tester"
+                )
+                every { attachmentRepository.findById(900L) } returns Optional.of(noMimeAttachment)
+                every { userRepository.findByLoginId("tester") } returns Optional.of(loginUser)
+                every { accessControl.isAllowedAttachment(loginUser, noMimeAttachment, Operation.READ) } returns true
+
+                val tempFile = File.createTempFile("yuna-test-nomime", "bin")
+                tempFile.writeText("binary")
+                tempFile.deleteOnExit()
+                every { attachmentService.getFile(noMimeAttachment) } returns tempFile
+
+                mockMvc.perform(
+                    get("/files/900")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(header().string("Content-Type", "application/octet-stream"))
+            }
+
             it("[TASK-09] getFile에서 file이 존재하지 않는 경우 INTERNAL_SERVER_ERROR를 반환한다") {
                 val attachment = Attachment(id = 100L, name = "test.txt", hash = "abc", containerType = ResourceType.ISSUE_POST, containerId = "1", ownerLoginId = "user1")
                 every { attachmentRepository.findById(100L) } returns Optional.of(attachment)

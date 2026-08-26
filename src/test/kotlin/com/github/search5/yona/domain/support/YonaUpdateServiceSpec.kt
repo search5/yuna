@@ -92,6 +92,83 @@ class YonaUpdateServiceSpec : DescribeSpec({
             
             service.isUpdateRequired() shouldBe true
             service.getLatestVersion() shouldBe "1.16.0"
+            service.getReleaseUrl() shouldBe "https://github.com/yona-projects/yona/releases/tag/v1.16.0"
+            io.mockk.unmockkStatic(Git::class)
+        }
+
+        it("이미 최고 버전이 기록된 뒤 더 높은 버전 태그가 나오면 갱신해야 한다") {
+            // checkForUpdate()의 `highestVersion == null || compareVersions(...) > 0`에서,
+            // 기존 테스트들은 highestVersion이 이미 설정된 뒤 compareVersions가 호출될 때 항상
+            // false(더 낮거나 같음)만 나와서 true(더 높음, 갱신) 쪽이 미실행이었다.
+            val service = YonaUpdateService("repo", "1.15.0")
+
+            val mockRefLow = mockk<Ref>()
+            every { mockRefLow.name } returns "^refs/tags/v1.14.0"
+            val mockRefHigh = mockk<Ref>()
+            every { mockRefHigh.name } returns "^refs/tags/v1.16.0"
+
+            val lsCommand = mockk<LsRemoteCommand>()
+            every { lsCommand.setRemote(any()) } returns lsCommand
+            every { lsCommand.setHeads(any()) } returns lsCommand
+            every { lsCommand.setTags(any()) } returns lsCommand
+            every { lsCommand.call() } returns listOf(mockRefLow, mockRefHigh)
+
+            io.mockk.mockkStatic(Git::class)
+            every { Git.lsRemoteRepository() } returns lsCommand
+
+            service.checkForUpdate()
+
+            service.isUpdateRequired() shouldBe true
+            service.getLatestVersion() shouldBe "1.16.0"
+            io.mockk.unmockkStatic(Git::class)
+        }
+
+        it("compareVersions에 빈 리스트 두 개를 주면(for 루프 0회 반복) 0을 반환해야 한다") {
+            // maxSize=maxOf(v1.size, v2.size)가 0이 되는 경우는 실제 checkForUpdate() 흐름에서는
+            // parseVersion()이 항상 size>=2인 리스트만 반환해 도달하지 않는다 — private 메서드를
+            // 리플렉션으로 직접 호출해 for 루프 자체의 0회-반복 분기를 닫는다.
+            val service = YonaUpdateService("repo", "1.15.0")
+            val method = YonaUpdateService::class.java.getDeclaredMethod(
+                "compareVersions", List::class.java, List::class.java
+            )
+            method.isAccessible = true
+
+            val result = method.invoke(service, emptyList<Int>(), emptyList<Int>()) as Int
+
+            result shouldBe 0
+        }
+
+        it("isWatched 프로퍼티를 읽고 쓸 수 있어야 한다") {
+            val service = YonaUpdateService("repo", "1.15.0")
+            service.isWatched shouldBe true
+            service.isWatched = false
+            service.isWatched shouldBe false
+        }
+
+        it("compareVersions에서 첫 번째 인자(versionParts)가 더 짧으면 그쪽을 0으로 채워 비교한다") {
+            // compareVersions(versionParts, highestVersion) 호출부에서 versionParts가 이미
+            // 기록된 highestVersion보다 짧은 경우 — 기존 테스트는 항상 두 번째 인자(highestVersion
+            // 또는 currentParts)만 짧아서 v1 쪽의 getOrNull(i) ?: 0 null 분기가 미실행이었다.
+            val service = YonaUpdateService("repo", "1.15.0")
+
+            val mockRefLong = mockk<Ref>()
+            every { mockRefLong.name } returns "^refs/tags/v1.15.0.1"
+            val mockRefShort = mockk<Ref>()
+            every { mockRefShort.name } returns "^refs/tags/v1.15"
+
+            val lsCommand = mockk<LsRemoteCommand>()
+            every { lsCommand.setRemote(any()) } returns lsCommand
+            every { lsCommand.setHeads(any()) } returns lsCommand
+            every { lsCommand.setTags(any()) } returns lsCommand
+            every { lsCommand.call() } returns listOf(mockRefLong, mockRefShort)
+
+            io.mockk.mockkStatic(Git::class)
+            every { Git.lsRemoteRepository() } returns lsCommand
+
+            service.checkForUpdate()
+
+            service.isUpdateRequired() shouldBe true
+            service.getLatestVersion() shouldBe "1.15.0.1"
             io.mockk.unmockkStatic(Git::class)
         }
 
@@ -117,6 +194,55 @@ class YonaUpdateServiceSpec : DescribeSpec({
             io.mockk.unmockkStatic(Git::class)
         }
         
+        it("모든 태그가 파싱 실패하면 highestVersion이 null로 남아 최신 버전 없음으로 처리한다") {
+            // if (highestVersion != null && compareVersions(...) > 0)의 첫 번째 && 피연산자
+            // (highestVersion == null 쪽)가 기존 테스트들에서는 항상 non-null이라 미실행이었다 —
+            // 파싱 가능한 태그가 하나도 없는 경우로 그 분기를 닫는다.
+            val service = YonaUpdateService("repo", "1.15.0")
+
+            val mockRef = mockk<Ref>()
+            every { mockRef.name } returns "^refs/tags/vX.Y.Z"
+
+            val lsCommand = mockk<LsRemoteCommand>()
+            every { lsCommand.setRemote(any()) } returns lsCommand
+            every { lsCommand.setHeads(any()) } returns lsCommand
+            every { lsCommand.setTags(any()) } returns lsCommand
+            every { lsCommand.call() } returns listOf(mockRef)
+
+            io.mockk.mockkStatic(Git::class)
+            every { Git.lsRemoteRepository() } returns lsCommand
+
+            service.checkForUpdate()
+
+            service.isUpdateRequired() shouldBe false
+            service.getLatestVersion() shouldBe null
+            io.mockk.unmockkStatic(Git::class)
+        }
+
+        it("버전 세그먼트 개수가 다르면 짧은 쪽을 0으로 채워 비교한다") {
+            // compareVersions()의 v1.getOrNull(i) ?: 0 / v2.getOrNull(i) ?: 0 엘비스는 기존
+            // 테스트들이 전부 3세그먼트끼리만 비교해 null(범위 밖) 쪽이 미실행이었다.
+            val service = YonaUpdateService("repo", "1.15")
+
+            val mockRef = mockk<Ref>()
+            every { mockRef.name } returns "^refs/tags/v1.15.0.1"
+
+            val lsCommand = mockk<LsRemoteCommand>()
+            every { lsCommand.setRemote(any()) } returns lsCommand
+            every { lsCommand.setHeads(any()) } returns lsCommand
+            every { lsCommand.setTags(any()) } returns lsCommand
+            every { lsCommand.call() } returns listOf(mockRef)
+
+            io.mockk.mockkStatic(Git::class)
+            every { Git.lsRemoteRepository() } returns lsCommand
+
+            service.checkForUpdate()
+
+            service.isUpdateRequired() shouldBe true
+            service.getLatestVersion() shouldBe "1.15.0.1"
+            io.mockk.unmockkStatic(Git::class)
+        }
+
         it("currentVersion 파싱 실패 시 1.15.0을 기본으로 동작한다") {
             val service = YonaUpdateService("repo", "invalid-version")
             
