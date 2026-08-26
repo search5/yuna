@@ -350,6 +350,20 @@ class OrganizationServiceSpec @Autowired constructor(
                     }
                 }
                 
+                it("createOrganization(organization: Organization) 1-인자 오버로드는 created만 채워 그대로 저장해야 한다") {
+                    // 3-인자 오버로드(name/descr/creatorId)와 달리 이 오버로드는 이름 검증·관리자 지정 없이
+                    // Organization 엔티티를 그대로 저장만 한다 — 어떤 테스트도 이 오버로드를 호출한 적이 없었음.
+                    val organization = Organization(name = "raw-created-org", descr = "설명")
+                    organization.created shouldBe null
+
+                    val saved = organizationService.createOrganization(organization)
+
+                    saved.id shouldNotBe null
+                    saved.name shouldBe "raw-created-org"
+                    saved.created shouldNotBe null
+                    organizationUserRepository.existsByOrganizationIdAndUserId(saved.id!!, admin.id!!) shouldBe false
+                }
+
                 it("leaveOrganization 일반 멤버가 관리자가 2명일때 탈퇴 성공") {
                     val org = organizationService.createOrganization("org-leave-success", "desc", admin.id!!)
                     val admin2 = userRepository.save(User(loginId = "admin-2", name = "어드민2", email = "admin2@yona.io"))
@@ -360,6 +374,177 @@ class OrganizationServiceSpec @Autowired constructor(
                     
                     organizationService.leaveOrganization(org.id!!, targetUser.id!!)
                     organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, targetUser.id!!) shouldBe false
+                }
+            }
+
+            describe("존재하지 않는 리소스 조회 시 예외 처리 (orElseThrow 분기)") {
+                it("createOrganization - 존재하지 않는 creatorId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.createOrganization("no-creator-org", "desc", 999999L)
+                    }
+                }
+
+                it("createOrganization - ORG_ADMIN 역할이 존재하지 않으면 예외를 던져야 한다") {
+                    organizationUserRepository.deleteAll()
+                    roleRepository.deleteAll()
+                    shouldThrow<IllegalStateException> {
+                        organizationService.createOrganization("no-role-org", "desc", admin.id!!)
+                    }
+                }
+
+                it("updateOrganizationSettings - 존재하지 않는 orgId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.updateOrganizationSettings(999999L, "new-name", "desc", admin.id!!)
+                    }
+                }
+
+                it("addOrganizationMember - 존재하지 않는 orgId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.addOrganizationMember(999999L, member.loginId, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    }
+                }
+
+                it("addOrganizationMember - 존재하지 않는 userLoginId면 예외를 던져야 한다") {
+                    val org = organizationService.createOrganization("org-no-user", "desc", admin.id!!)
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.addOrganizationMember(org.id!!, "no-such-login-id", RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    }
+                }
+
+                it("addOrganizationMember - 존재하지 않는 roleId면 예외를 던져야 한다") {
+                    val org = organizationService.createOrganization("org-no-role", "desc", admin.id!!)
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.addOrganizationMember(org.id!!, member.loginId, 999999L, admin.id!!)
+                    }
+                }
+
+                it("removeOrganizationMember - 존재하지 않는 orgId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.removeOrganizationMember(999999L, member.id!!, admin.id!!)
+                    }
+                }
+
+                it("updateOrganizationMemberRole - 존재하지 않는 orgId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.updateOrganizationMemberRole(999999L, member.id!!, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    }
+                }
+
+                it("updateOrganizationMemberRole - 대상 유저가 조직 멤버가 아니면 예외를 던져야 한다") {
+                    val org = organizationService.createOrganization("org-role-nomember", "desc", admin.id!!)
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.updateOrganizationMemberRole(org.id!!, member.id!!, RoleType.ORG_MEMBER.roleType, admin.id!!)
+                    }
+                }
+
+                it("updateOrganizationMemberRole - 존재하지 않는 newRoleId면 예외를 던져야 한다") {
+                    val org = organizationService.createOrganization("org-role-norole", "desc", admin.id!!)
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.updateOrganizationMemberRole(org.id!!, admin.id!!, 999999L, admin.id!!)
+                    }
+                }
+
+                it("deleteOrganization - 존재하지 않는 orgId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.deleteOrganization(999999L, admin.id!!)
+                    }
+                }
+
+                it("enroll - 존재하지 않는 orgName이면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.enroll("no-such-org", member.id!!)
+                    }
+                }
+
+                it("enroll - 존재하지 않는 userId면 예외를 던져야 한다") {
+                    val org = organizationService.createOrganization("org-enroll-nouser", "desc", admin.id!!)
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.enroll(org.name, 999999L)
+                    }
+                }
+
+                it("cancelEnroll - 존재하지 않는 orgName이면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.cancelEnroll("no-such-org", member.id!!)
+                    }
+                }
+
+                it("cancelEnroll - 존재하지 않는 userId면 예외를 던져야 한다") {
+                    val org = organizationService.createOrganization("org-cancel-nouser", "desc", admin.id!!)
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.cancelEnroll(org.name, 999999L)
+                    }
+                }
+
+                it("leaveOrganization - 존재하지 않는 orgId면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.leaveOrganization(999999L, admin.id!!)
+                    }
+                }
+            }
+
+            describe("추가 분기 커버리지") {
+                it("createOrganization - 이미 존재하는 조직 이름이면 예외를 던져야 한다") {
+                    organizationService.createOrganization("dup-org", "desc", admin.id!!)
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.createOrganization("dup-org", "desc2", admin.id!!)
+                    }
+                }
+
+                it("createOrganization - 이미 존재하는 사용자 loginId와 같은 이름이면 예외를 던져야 한다") {
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.createOrganization(admin.loginId, "desc", admin.id!!)
+                    }
+                }
+
+                it("updateOrganizationSettings - 이름을 바꾸지 않으면(동일 이름) 중복 이름 검사를 건너뛰어야 한다") {
+                    val org = organizationService.createOrganization("org-samename", "desc", admin.id!!)
+                    organizationService.updateOrganizationSettings(org.id!!, "org-samename", "새 설명", admin.id!!)
+                    organizationRepository.findById(org.id!!).get().descr shouldBe "새 설명"
+                }
+
+                it("removeOrganizationMember - 관리자가 2명이면 관리자를 삭제해도 예외가 발생하지 않아야 한다") {
+                    val org = organizationService.createOrganization("org-remove-admin2", "desc", admin.id!!)
+                    val admin2 = userRepository.save(User(loginId = "remove-admin2", name = "어드민2", email = "remove-admin2@yona.io"))
+                    organizationService.addOrganizationMember(org.id!!, admin2.loginId, RoleType.ORG_ADMIN.roleType, admin.id!!)
+
+                    organizationService.removeOrganizationMember(org.id!!, admin.id!!, admin2.id!!)
+
+                    organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, admin.id!!) shouldBe false
+                }
+
+                it("enroll - 이미 정식 멤버인 유저가 enroll을 호출하면 예외를 던져야 한다") {
+                    val org = organizationService.createOrganization("org-enroll-alreadymember", "desc", admin.id!!)
+                    organizationService.addOrganizationMember(org.id!!, member.loginId, RoleType.ORG_MEMBER.roleType, admin.id!!)
+
+                    shouldThrow<IllegalArgumentException> {
+                        organizationService.enroll(org.name, member.id!!)
+                    }
+                }
+
+                it("cancelEnroll 시 관리자가 없는 경우 알림 전송 없이 정상 취소되어야 한다") {
+                    val org = organizationService.createOrganization("org-cancel-noadmin", "desc", admin.id!!)
+                    val applicant = userRepository.save(User(loginId = "cancel-noadmin-user", name = "신청자", email = "cancel-noadmin@yona.io"))
+                    organizationService.enroll(org.name, applicant.id!!)
+                    entityManager.flush()
+                    entityManager.clear()
+                    organizationUserRepository.deleteAll()
+
+                    organizationService.cancelEnroll(org.name, applicant.id!!)
+
+                    val updatedApplicant = userRepository.findById(applicant.id!!).orElse(null)
+                    updatedApplicant.enrolledOrganizations.count { it.id == org.id } shouldBe 0
+                }
+
+                it("leaveOrganization - 조직 멤버가 아닌 유저가 탈퇴를 시도해도(관리자가 2명 이상이면) 정상 처리돼야 한다") {
+                    val org = organizationService.createOrganization("org-leave-notmember", "desc", admin.id!!)
+                    val admin2 = userRepository.save(User(loginId = "leave-notmember-admin2", name = "어드민2", email = "leave-notmember-admin2@yona.io"))
+                    organizationService.addOrganizationMember(org.id!!, admin2.loginId, RoleType.ORG_ADMIN.roleType, admin.id!!)
+                    val outsider = userRepository.save(User(loginId = "leave-outsider", name = "비회원", email = "leave-outsider@yona.io"))
+
+                    organizationService.leaveOrganization(org.id!!, outsider.id!!)
+
+                    organizationUserRepository.existsByOrganizationIdAndUserId(org.id!!, outsider.id!!) shouldBe false
                 }
             }
         }

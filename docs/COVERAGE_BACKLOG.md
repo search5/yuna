@@ -346,7 +346,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `NotificationMail` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `NotificationMailSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `NotificationEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `NotificationEventSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/organization** | | | | | | | | |
-| `OrganizationServiceImpl` | 94.1 | 69.4 | 40.6 | 10 | 19 | 19 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 97.1%, BRANCH 82.3%, METHOD 46.9%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `OrganizationServiceImpl` | 100.0 | 93.5 | 100.0 | 0 | 4 | 0 | [i] | 2026-08-26: 16개 메서드에서 orElseThrow 예외 람다가 단 하나도 호출된 적이 없어(METHOD 46.9%→100%) 각 메서드별 not-found 테스트를 신규 추가, 그 외 이름 중복/관리자 2명 이상/관리자 없음/멤버 아님 등 분기 보강으로 LINE 100% 확보. 잔여 BRANCH 4건은 모두 `OrganizationUser.role.id`(타입상 `Long?`이지만 `Role`은 코드베이스 전역에서 `RoleType` 고정 ID로만 생성·영속화돼 실제로는 결코 null이 아님)의 null 분기로 구조적 도달 불가 |
 | `Organization` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `OrganizationSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `OrganizationUser` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `OrganizationUserSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/project** | | | | | | | | |
