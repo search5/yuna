@@ -49,6 +49,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import java.io.File
+import java.nio.file.Files
 import java.time.Instant
 import java.util.Optional
 
@@ -102,7 +103,9 @@ class ProjectServiceImplSpec : DescribeSpec({
         pullRequestEventRepository,
         pullRequestCommitRepository,
         favoriteProjectRepository,
-        watchService
+        watchService,
+        "/tmp/yona/git",
+        "/tmp/yona/svn"
     )
 
     describe("ProjectServiceImpl.acceptTransfer") {
@@ -1743,6 +1746,85 @@ class ProjectServiceImplSpec : DescribeSpec({
             val result = projectService.forkProject(9009L, 11L, "vcs-svn-abbrev-fork-dest", "vcs-svn-abbrev-fork-dest-repo")
 
             result.owner shouldBe "vcs-svn-abbrev-fork-dest"
+        }
+    }
+
+    // 크로스플랫폼/운영 경로 하드코딩 버그 수정 — acceptTransfer/forkProject 두 곳에만
+    // "/tmp/yona/git", "/tmp/yona/svn"이 리터럴로 박혀 있어, yona.git.base-dir/yona.svn.base-dir을
+    // 다른 값으로 설정해도 이 두 기능만 계속 /tmp/yona를 참조하던 문제를 검증한다.
+    describe("ProjectServiceImpl 설정 가능한 base-dir 지원 (하드코딩 버그 수정)") {
+        val customGitBase = Files.createTempDirectory("yona-custom-git").toFile()
+        val customSvnBase = Files.createTempDirectory("yona-custom-svn").toFile()
+        val customBaseDirProjectService = ProjectServiceImpl(
+            projectRepository, projectUserRepository, repositoryService, userRepository,
+            projectTransferRepository, roleRepository, organizationRepository, organizationUserRepository,
+            labelRepository, issueRepository, issueService, issueLabelCategoryRepository, issueLabelService,
+            assigneeRepository, webhookRepository, webhookThreadRepository, postingRepository, postingService,
+            commentThreadRepository, pullRequestRepository, pullRequestEventRepository, pullRequestCommitRepository,
+            favoriteProjectRepository, watchService,
+            customGitBase.absolutePath, customSvnBase.absolutePath
+        )
+
+        it("포크 시 하드코딩된 /tmp/yona/git이 아니라 주입된 gitBaseDir 설정을 따라야 한다") {
+            val owner = "custom-base-fork-owner"
+            val name = "custom-base-fork-repo"
+            val destOwner = "custom-base-fork-dest"
+            val destName = "custom-base-fork-dest-repo"
+            val sourceDir = File(customGitBase, "$owner/$name.git")
+            val targetDir = File(customGitBase, "$destOwner/$destName.git")
+            sourceDir.mkdirs()
+            File(sourceDir, "HEAD").writeText("ref: refs/heads/main")
+
+            val original = Project(id = 9100L, name = name, owner = owner, vcs = "GIT")
+            val forker = User(id = 100L, loginId = "custom-forker")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            every { projectRepository.findById(9100L) } returns Optional.of(original)
+            every { userRepository.findById(100L) } returns Optional.of(forker)
+            every { projectRepository.save(any()) } answers { firstArg() }
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+
+            customBaseDirProjectService.forkProject(9100L, 100L, destOwner, destName)
+
+            targetDir.exists() shouldBe true
+            File(targetDir, "HEAD").exists() shouldBe true
+            // 예전 하드코딩 경로(/tmp/yona/git)에는 생성되지 않아야 한다.
+            File("/tmp/yona/git/$destOwner/$destName.git").exists() shouldBe false
+        }
+
+        it("프로젝트 이관 시 하드코딩된 /tmp/yona/svn이 아니라 주입된 svnBaseDir 설정을 따라야 한다") {
+            val owner = "custom-base-transfer-owner"
+            val name = "custom-base-transfer-repo"
+            val destOwner = "custom-base-transfer-dest"
+            val sender2 = User(id = 101L, loginId = owner, name = "커스텀이관")
+            val proj = Project(id = 9101L, name = name, owner = owner, vcs = "SUBVERSION")
+            val pt = ProjectTransfer(
+                id = 9101L, project = proj, sender = sender2, destination = destOwner,
+                confirmKey = "key", newProjectName = name, requested = Instant.now()
+            )
+            val destUser = User(id = 102L, loginId = destOwner, name = "커스텀이관수신")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+
+            val sourceDir = File(customSvnBase, "$owner/$name.git")
+            val targetDir = File(customSvnBase, "$destOwner/$name.git")
+            sourceDir.mkdirs()
+
+            every { projectTransferRepository.findByIdAndAcceptedAndRequestedAfter(9101L, false, any()) } returns Optional.of(pt)
+            every { userRepository.findById(102L) } returns Optional.of(destUser)
+            every { organizationRepository.findByName(destOwner) } returns Optional.empty()
+            every { projectRepository.save(any()) } returns proj
+            every { projectUserRepository.findByProjectIdAndUserId(9101L, 101L) } returns Optional.empty()
+            every { userRepository.findByLoginId(destOwner) } returns Optional.of(destUser)
+            every { projectUserRepository.findByProjectIdAndUserId(9101L, 102L) } returns Optional.empty()
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { projectTransferRepository.delete(any()) } returns Unit
+
+            customBaseDirProjectService.acceptTransfer(9101L, "key", 102L)
+
+            sourceDir.exists() shouldBe false
+            targetDir.exists() shouldBe true
+            File("/tmp/yona/svn/$destOwner/$name.git").exists() shouldBe false
         }
     }
 

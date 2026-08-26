@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.project
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -62,7 +63,15 @@ class ProjectServiceImpl(
     // yona FavoriteProject.java:41-50 updateFavoriteProject() 대응 (P2-27). [GL-models_FavoriteProject-008]
     private val favoriteProjectRepository: FavoriteProjectRepository,
     // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
-    private val watchService: WatchService
+    private val watchService: WatchService,
+    // 크로스플랫폼/운영 경로 설정 버그 수정 — 다른 서비스(RepositoryService 등)와 동일하게
+    // 물리 저장소 base-dir을 설정으로 주입받는다. 이전에는 acceptTransfer/forkProject 두 곳에
+    // "/tmp/yona/git", "/tmp/yona/svn"이 리터럴로 하드코딩돼 있어, yona.git.base-dir/
+    // yona.svn.base-dir을 다른 경로로 바꿔도 이 두 기능만 그 설정을 무시했다.
+    @Value("\${yona.git.base-dir:/tmp/yona/git}")
+    private val gitBaseDir: String,
+    @Value("\${yona.svn.base-dir:/tmp/yona/svn}")
+    private val svnBaseDir: String
 ) : ProjectService {
 
     // yona Project.findByOwnerAndProjectName()의 예전 위치(previousOwnerLoginId/previousName) 폴백
@@ -358,9 +367,9 @@ class ProjectServiceImpl(
 
         // 물리 저장소 폴더명 이동
         val baseDir = if (project.vcs?.uppercase() == "SUBVERSION" || project.vcs?.uppercase() == "SVN") {
-            "/tmp/yona/svn" // 기본경로 활용
+            svnBaseDir
         } else {
-            "/tmp/yona/git"
+            gitBaseDir
         }
         val sourceDir = File(baseDir, "$originalOwner/$originalName.git")
         val targetDir = File(baseDir, "$newOwner/$newName.git")
@@ -478,9 +487,9 @@ class ProjectServiceImpl(
 
         // 물리 Bare 깃 저장소를 하드링크(Hard Link) 방식으로 무복사 복제
         val baseDir = if (original.vcs?.uppercase() == "SUBVERSION" || original.vcs?.uppercase() == "SVN") {
-            "/tmp/yona/svn"
+            svnBaseDir
         } else {
-            "/tmp/yona/git"
+            gitBaseDir
         }
         val sourceDir = File(baseDir, "${original.owner}/${original.name}.git")
         val targetDir = File(baseDir, "$destOwner/$destName.git")
