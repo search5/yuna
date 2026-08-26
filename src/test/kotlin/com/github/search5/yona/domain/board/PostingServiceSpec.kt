@@ -83,6 +83,19 @@ class PostingServiceSpec @Autowired constructor(
             // yona NotificationEvent.forNewPost()의 getReceivers(abstractPosting, except)(watchers +
             // getMentionedUsers(body)) 대응 (P1-127). 신규 게시글 본문의 @멘션도 알림 수신자에
             // 포함되어야 한다.
+            // publishNotification()의 notificationEventRecorder.record(notificationEvent)?.let { ... }는
+            // record()가 receivers.isEmpty()일 때 null을 반환해(레거시와 동일) 저장하지 않는데, 기존
+            // 테스트는 전부 워처를 하나 이상 둬서 이 null 분기가 비어 있었다.
+            it("워처도 멘션도 없이 게시글을 작성하면 수신자가 없어 알림 이벤트가 저장되지 않아야 한다") {
+                val author = userRepository.save(User(loginId = "lonely-writer", name = "작성자", email = "lonely-writer@yona.io"))
+                val project = projectRepository.save(Project(name = "lonely-board-project", owner = "lonely-writer", projectScope = ProjectScope.PUBLIC))
+                val posting = Posting(title = "아무도 안 보는 글", body = "본문", project = project)
+
+                postingService.createPosting(project.id!!, posting, author.id!!)
+
+                notificationEventRepository.findAll().size shouldBe 0
+            }
+
             it("게시글 본문에 멘션이 포함되어 있으면 멘션된 사용자도 신규 게시글 알림 수신자에 포함되어야 한다") {
                 val author = userRepository.save(User(loginId = "mention-writer", name = "작성자", email = "mention-writer@yona.io"))
                 val mentioned = userRepository.save(User(loginId = "mentioned-reader", name = "멘션대상", email = "mentioned-reader@yona.io"))
@@ -147,6 +160,37 @@ class PostingServiceSpec @Autowired constructor(
                 updated.history shouldNotBe null
                 updated.history!!.contains("history-made-by") shouldBe true
                 updated.history!!.contains("작성자6") shouldBe true
+            }
+
+            it("본문이 null인 게시글을 작성하고 수정하면 빈 문자열로 처리돼야 한다") {
+                val author = userRepository.save(User(loginId = "writer-nullbody", name = "작성자", email = "writer-nullbody@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project-nullbody", owner = "writer-nullbody"))
+                val saved = postingService.createPosting(project.id!!, Posting(title = "본문없음", body = null, project = project), author.id!!)
+                resetNotifications()
+
+                val updated = postingService.updatePosting(
+                    projectId = project.id!!, number = saved.number!!,
+                    title = "본문없음", body = "새 본문", notice = false, readme = false,
+                    authorId = author.id!!, sendNotificationMail = false
+                )
+
+                updated.history shouldNotBe null
+            }
+
+            it("업데이트 알림 대상 수신자가 없으면 알림 이벤트가 저장되지 않아야 한다") {
+                val author = userRepository.save(User(loginId = "writer-noreceiver", name = "작성자", email = "writer-noreceiver@yona.io"))
+                val editor = userRepository.save(User(loginId = "editor-noreceiver", name = "편집자", email = "editor-noreceiver@yona.io"))
+                val project = projectRepository.save(Project(name = "board-project-noreceiver", owner = "writer-noreceiver"))
+                val saved = postingService.createPosting(project.id!!, Posting(title = "원본", body = "원본 본문", project = project), author.id!!)
+                resetNotifications()
+
+                postingService.updatePosting(
+                    projectId = project.id!!, number = saved.number!!,
+                    title = "수정됨", body = "수정된 본문", notice = false, readme = false,
+                    authorId = editor.id!!, sendNotificationMail = false
+                )
+
+                notificationEventRepository.findAll().size shouldBe 0
             }
 
             it("본문이 바뀌지 않으면 history를 기록하지 않아야 한다(P2-02)") {
@@ -294,6 +338,28 @@ class PostingServiceSpec @Autowired constructor(
             }
 
             describe("예외 및 엣지 케이스 테스트 (미커버 분기)") {
+                it("getPostings - 정상적으로 프로젝트의 게시글 페이지를 반환해야 한다") {
+                    val author = userRepository.save(User(loginId = "gp-writer", name = "작성자", email = "gp-writer@yona.io"))
+                    val project = projectRepository.save(Project(name = "gp-project", owner = "gp-writer"))
+                    postingService.createPosting(project.id!!, Posting(title = "글1", body = "본문1", project = project), author.id!!)
+
+                    val page = postingService.getPostings(project.id!!, PageRequest.of(0, 10))
+
+                    page.totalElements shouldBe 1
+                }
+
+                it("getNotices - 정상적으로 프로젝트의 공지 게시글 목록을 반환해야 한다") {
+                    val author = userRepository.save(User(loginId = "gn-writer", name = "작성자", email = "gn-writer@yona.io"))
+                    val project = projectRepository.save(Project(name = "gn-project", owner = "gn-writer"))
+                    postingService.createPosting(project.id!!, Posting(title = "공지글", body = "본문", notice = true, project = project), author.id!!)
+                    postingService.createPosting(project.id!!, Posting(title = "일반글", body = "본문", project = project), author.id!!)
+
+                    val notices = postingService.getNotices(project.id!!)
+
+                    notices.size shouldBe 1
+                    notices.first().title shouldBe "공지글"
+                }
+
                 it("getPostings - 존재하지 않는 프로젝트 조회 시 예외 발생") {
                     shouldThrow<IllegalArgumentException> {
                         postingService.getPostings(9999L, PageRequest.of(0, 10))

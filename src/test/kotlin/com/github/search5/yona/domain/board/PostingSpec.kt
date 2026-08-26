@@ -45,5 +45,22 @@ class PostingSpec : DescribeSpec({
             posting.labels.size shouldBe 1
             posting.labels.first() shouldBe label
         }
+
+        it("notice/readme/parent/labels를 생성 후에도 재할당할 수 있어야 한다") {
+            val project = mockk<Project>()
+            val posting = Posting(id = 1L, project = project)
+            val newParent = Posting(id = 2L, project = project)
+            val newLabel = mockk<IssueLabel>()
+
+            posting.notice = true
+            posting.readme = true
+            posting.parent = newParent
+            posting.labels = mutableSetOf(newLabel)
+
+            posting.notice shouldBe true
+            posting.readme shouldBe true
+            posting.parent shouldBe newParent
+            posting.labels shouldBe mutableSetOf(newLabel)
+        }
     }
 })
