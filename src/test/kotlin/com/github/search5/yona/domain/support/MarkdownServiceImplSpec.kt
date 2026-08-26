@@ -23,6 +23,10 @@ import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.context.MessageSource
+import org.springframework.security.authentication.AnonymousAuthenticationToken
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.context.SecurityContextHolder
 import tools.jackson.databind.node.ObjectNode
 import java.io.File
 import java.io.OutputStream
@@ -463,6 +467,99 @@ class MarkdownServiceImplSpec : DescribeSpec({
             every { repositoryService.getRepository(any()) } throws RuntimeException("Repo not found")
             val output = markdownService.renderFileInCodeBrowser("![test](./img.png)", project)
             output.shouldContain("/yobi/yobi/files/master/img.png")
+        }
+
+        it("hostname 인자를 생략하면 기본값 localhost가 적용된다") {
+            val service = MarkdownServiceImpl(
+                autoLinkRenderer, repositoryService,
+                issueMarkdownProjectRepository, issueMarkdownIssueRepository,
+                issueMarkdownUserRepository, issueMarkdownAccessControl, messageSource
+            )
+            val rendered = service.render("https://localhost/owner/proj/other/5")
+            rendered.shouldContain("other/5")
+        }
+
+        it("issue.state 메시지 코드가 해석되지 않아 null이 반환되면 stateStr로 대체해야 한다") {
+            val proj = Project(id = 1L, name = "proj", owner = "owner", vcs = "GIT")
+            val issue = Issue(id = 30L, title = "메시지없음", project = proj, number = 11L, state = State.OPEN)
+            every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(proj)
+            every { issueMarkdownIssueRepository.findByProjectAndNumber(proj, 11L) } returns issue
+            every { issueMarkdownAccessControl.isAllowed(null, proj, issue, Operation.READ) } returns true
+            every { messageSource.getMessage(any(), any(), any(), any()) } returns null
+
+            val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/11")
+
+            rendered.shouldContain("#11.메시지없음")
+        }
+
+        // resolveCurrentUser()의 SecurityContextHolder 인증 분기 — 기존 테스트는 전부 컨텍스트에
+        // 인증 정보를 설정하지 않아 `authentication == null` 쪽만 탔다. 인증됨+비익명(실제 사용자
+        // 조회) 및 AnonymousAuthenticationToken 두 분기가 비어 있었다.
+        describe("resolveCurrentUser - SecurityContextHolder 인증 분기") {
+            beforeTest {
+                clearMocks(
+                    issueMarkdownProjectRepository, issueMarkdownIssueRepository,
+                    issueMarkdownUserRepository, issueMarkdownAccessControl,
+                    answers = false
+                )
+            }
+            afterTest {
+                SecurityContextHolder.clearContext()
+            }
+
+            it("인증되고 익명이 아니면 userRepository로 조회한 사용자로 권한을 검사해야 한다") {
+                val proj = Project(id = 1L, name = "proj", owner = "owner", vcs = "GIT")
+                val issue = Issue(id = 20L, title = "인증사용자테스트", project = proj, number = 8L, state = State.OPEN)
+                val currentUser = User(id = 99L, loginId = "loginuser", name = "로그인유저")
+                every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(proj)
+                every { issueMarkdownIssueRepository.findByProjectAndNumber(proj, 8L) } returns issue
+                every { issueMarkdownUserRepository.findByLoginId("loginuser") } returns Optional.of(currentUser)
+                every { issueMarkdownAccessControl.isAllowed(currentUser, proj, issue, Operation.READ) } returns true
+                every { messageSource.getMessage(any(), any(), any(), any()) } returns "열림"
+
+                SecurityContextHolder.getContext().authentication =
+                    UsernamePasswordAuthenticationToken("loginuser", "password", listOf(SimpleGrantedAuthority("ROLE_USER")))
+
+                val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/8")
+
+                rendered.shouldContain("#8.인증사용자테스트")
+                io.mockk.verify { issueMarkdownAccessControl.isAllowed(currentUser, proj, issue, Operation.READ) }
+            }
+
+            it("AnonymousAuthenticationToken이면 익명 사용자(null)로 권한을 검사해야 한다") {
+                val proj = Project(id = 1L, name = "proj", owner = "owner", vcs = "GIT")
+                val issue = Issue(id = 21L, title = "익명토큰테스트", project = proj, number = 9L, state = State.OPEN)
+                every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(proj)
+                every { issueMarkdownIssueRepository.findByProjectAndNumber(proj, 9L) } returns issue
+                every { issueMarkdownAccessControl.isAllowed(null, proj, issue, Operation.READ) } returns true
+                every { messageSource.getMessage(any(), any(), any(), any()) } returns "열림"
+
+                SecurityContextHolder.getContext().authentication =
+                    AnonymousAuthenticationToken("key", "anonymousUser", listOf(SimpleGrantedAuthority("ROLE_ANONYMOUS")))
+
+                val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/9")
+
+                rendered.shouldContain("#9.익명토큰테스트")
+                io.mockk.verify(exactly = 0) { issueMarkdownUserRepository.findByLoginId(any()) }
+            }
+
+            it("인증되었으나 isAuthenticated=false이면 익명 사용자(null)로 권한을 검사해야 한다") {
+                val proj = Project(id = 1L, name = "proj", owner = "owner", vcs = "GIT")
+                val issue = Issue(id = 22L, title = "미인증테스트", project = proj, number = 10L, state = State.OPEN)
+                every { issueMarkdownProjectRepository.findByOwnerAndName("owner", "proj") } returns Optional.of(proj)
+                every { issueMarkdownIssueRepository.findByProjectAndNumber(proj, 10L) } returns issue
+                every { issueMarkdownAccessControl.isAllowed(null, proj, issue, Operation.READ) } returns true
+                every { messageSource.getMessage(any(), any(), any(), any()) } returns "열림"
+
+                val notAuthenticated = UsernamePasswordAuthenticationToken("loginuser", "password")
+                notAuthenticated.isAuthenticated shouldBe false
+                SecurityContextHolder.getContext().authentication = notAuthenticated
+
+                val rendered = markdownService.render("https://yuna.example.com/owner/proj/issue/10")
+
+                rendered.shouldContain("#10.미인증테스트")
+                io.mockk.verify(exactly = 0) { issueMarkdownUserRepository.findByLoginId(any()) }
+            }
         }
     }
 })

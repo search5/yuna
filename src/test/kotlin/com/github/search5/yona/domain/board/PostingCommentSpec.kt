@@ -32,5 +32,19 @@ class PostingCommentSpec : DescribeSpec({
             comment.parentComment shouldBe parentComment
             comment.projectId shouldBe 1L
         }
+
+        it("posting/parentComment를 생성 후에도 재할당할 수 있어야 한다") {
+            val project = mockk<Project>()
+            val posting = Posting(id = 1L, project = project)
+            val otherPosting = Posting(id = 2L, project = project)
+            val comment = PostingComment(id = 1L, posting = posting)
+            val otherParent = PostingComment(id = 3L, posting = posting)
+
+            comment.posting = otherPosting
+            comment.parentComment = otherParent
+
+            comment.posting shouldBe otherPosting
+            comment.parentComment shouldBe otherParent
+        }
     }
 })
