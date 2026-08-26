@@ -9,6 +9,7 @@ import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.*
 import org.eclipse.jgit.api.errors.TransportException
 import org.springframework.context.MessageSource
@@ -271,6 +272,71 @@ class ImportApiControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.error").value("Unknown error"))
             }
 
+            it("일반 Exception의 message가 null이면 기본 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+                every { organizationRepository.findByName("testuser") } returns Optional.empty()
+                every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
+                every { gitService.cloneRepository("http://error-nomsg", "testuser", "yona-imported", null, null) } throws RuntimeException()
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                val requestJson = """{"url": "http://error-nomsg", "owner": "testuser", "name": "yona-imported"}"""
+                mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("Git Import Failed"))
+            }
+
+            it("TransportException의 message가 null이면 빈 문자열로 처리해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+                every { organizationRepository.findByName("testuser") } returns Optional.empty()
+                every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
+                every { gitService.cloneRepository("http://transport-nomsg", "testuser", "yona-imported", null, null) } throws TransportException(null as String?)
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { messageSource.getMessage("project.import.error.transport", arrayOf("Unknown"), any()) } returns "전송 에러"
+                val requestJson = """{"url": "http://transport-nomsg", "owner": "testuser", "name": "yona-imported"}"""
+                mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("전송 에러"))
+            }
+
+            it("TransportException 메시지에 공백이 없으면(split 결과 1개) statusCode를 Unknown으로 처리해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+                every { organizationRepository.findByName("testuser") } returns Optional.empty()
+                every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
+                every { gitService.cloneRepository("http://nospace", "testuser", "yona-imported", null, null) } throws TransportException("NoSpaceInMessage")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { messageSource.getMessage("project.import.error.transport", arrayOf("Unknown"), any()) } returns "전송 에러"
+                val requestJson = """{"url": "http://nospace", "owner": "testuser", "name": "yona-imported"}"""
+                mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("전송 에러"))
+            }
+
+            it("TransportException notAuthorized + authId만 있고 authPw가 없으면 인증 실패 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+                every { organizationRepository.findByName("testuser") } returns Optional.empty()
+                every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
+                every { gitService.cloneRepository("http://auth-partial", "testuser", "yona-imported", "id", null) } throws TransportException("not authorized")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { messageSource.getMessage("project.import.error.transport.failedToAuth", null, any()) } returns "인증 실패"
+                val requestJson = """{"url": "http://auth-partial", "owner": "testuser", "name": "yona-imported", "authId": "id"}"""
+                mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("인증 실패"))
+            }
+
+            it("조직 멤버(관리자 아님)가 조직으로 임포트 시도하면 403을 반환해야 한다") {
+                val org = Organization(id = 10L, name = "myorg")
+                val mockOrgUser = mockk<OrganizationUser>()
+                every { mockOrgUser.role.id } returns RoleType.ORG_MEMBER.roleType
+
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+                every { userRepository.findByLoginId("myorg") } returns Optional.empty()
+                every { organizationRepository.findByName("myorg") } returns Optional.of(org)
+                every { organizationUserRepository.findByOrganizationIdAndUserId(10L, 1L) } returns Optional.of(mockOrgUser)
+                val requestJson = """{"url": "a", "owner": "myorg", "name": "a"}"""
+                mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
+                    .andExpect(status().isForbidden)
+            }
+
             it("조직으로 임포트 성공 시 200 OK와 함께 생성된 프로젝트 정보를 반환해야 한다") {
                 val org = Organization(id = 10L, name = "myorg")
                 val mockOrgUser = mockk<OrganizationUser>()
@@ -306,6 +372,50 @@ class ImportApiControllerSpec : DescribeSpec({
                 )
                     .andExpect(status().isOk)
                     .andExpect(jsonPath("$.id").value(100L))
+            }
+
+            // finally 블록의 clonedDir?.let { if (it.exists()) ... }와 defaultRepoDir.exists()는
+            // 기존 테스트들이 전부 실제로 존재하지 않는 File 경로(mock 반환값)만 써서 항상 false만
+            // 탔다 — 실제 임시 디렉터리를 만들어 true 쪽 분기(삭제 실행)를 닫는다.
+            it("성공 시 clonedDir와 기존 저장소 디렉터리가 실제로 존재하면 finally에서 삭제해야 한다") {
+                val tempClonedDir = kotlin.io.path.createTempDirectory(prefix = "yuna-import-cloned-").toFile()
+                val tempRepoDir = kotlin.io.path.createTempDirectory(prefix = "yuna-import-repo-").toFile()
+                val savedProject = Project(id = 101L, name = "yona-imported2", owner = "testuser", overview = null)
+
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+                every { organizationRepository.findByName("testuser") } returns Optional.empty()
+                every { projectRepository.findByOwnerAndName("testuser", "yona-imported2") } returns Optional.empty()
+                every { gitService.cloneRepository("https://github.com/naver/yona.git", "testuser", "yona-imported2", null, null) } returns tempClonedDir
+                every { gitService.getRepositoryPath("testuser", "yona-imported2") } returns tempRepoDir
+                every { projectService.createProject(any(), loginUser) } returns savedProject
+
+                val requestJson = """{"url": "https://github.com/naver/yona.git", "owner": "testuser", "name": "yona-imported2"}"""
+
+                mockMvc.perform(
+                    post("/api/new/import")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestJson)
+                )
+                    .andExpect(status().isOk)
+
+                tempClonedDir.exists() shouldBe false
+                tempRepoDir.exists() shouldBe false
+            }
+
+            // hasNoCredentials = authId.isNullOrEmpty() && authPw.isNullOrEmpty()의 isEmpty() 서브
+            // 분기는 기존 테스트가 null(미지정)만 다뤄서, "빈 문자열(null 아님)" 케이스가 비어 있었다.
+            it("TransportException notAuthorized + authId/authPw가 둘 다 빈 문자열이면 unauthorized 메시지를 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+                every { organizationRepository.findByName("testuser") } returns Optional.empty()
+                every { projectRepository.findByOwnerAndName("testuser", "yona-imported") } returns Optional.empty()
+                every { gitService.cloneRepository("http://auth-empty", "testuser", "yona-imported", "", "") } throws TransportException("not authorized")
+                every { gitService.getRepositoryPath("testuser", "yona-imported") } returns File("/tmp/yuna/git/testuser/yona-imported.git")
+                every { messageSource.getMessage("project.import.error.transport.unauthorized", null, any()) } returns "인증 권한이 필요합니다."
+                val requestJson = """{"url": "http://auth-empty", "owner": "testuser", "name": "yona-imported", "authId": "", "authPw": ""}"""
+                mockMvc.perform(post("/api/new/import").principal(userAuth).contentType(MediaType.APPLICATION_JSON).content(requestJson))
+                    .andExpect(status().isBadRequest)
+                    .andExpect(jsonPath("$.error").value("인증 권한이 필요합니다."))
             }
         }
     }

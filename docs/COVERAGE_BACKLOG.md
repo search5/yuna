@@ -251,7 +251,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 
 - `MailServiceImpl` 완료([x], TASK-0343): `sendNotificationMail`의 replyTo/references 공백뿐 케이스 보강, 잔여 2건 구조적 도달 불가 확정.
 - 1차 배치 5개 완료: `YonaAuthenticationSuccessHandler`([i], 코드 변경 없이 재검증만), `LdapService`([x], **환경 문제 해결** — Testcontainers가 Podman 로컬 소켓을 못 찾던 문제를 `build.gradle.kts`의 `DOCKER_HOST` 자동 감지로 해결, 다른 Testcontainers 기반 항목에도 영향 가능), `GitServletConfig`([x]), `GitServiceImpl`([x]), `PasswordResetServiceImpl`([i]).
-- **잔여 `[~]` 36개, 배치 계속 진행 중.**
+- 2차 배치 5개 완료: `MilestoneServiceImpl`([x]), `GitPostReceiveEventListener`([x]), `RepositoryService`([x]), `ImportApiController`([x]), `CodeHistoryController`([x]) — 전부 목표 달성. **배치 방식 변경**: fork 5개가 동시에 `./gradlew test`를 실행해 Gradle 데몬이 심각하게 경합(EOFException 반복)하는 문제가 반복 확인되어, 이후 배치부터는 fork는 테스트 코드 작성까지만 하고 gradle 실행/검증은 메인 세션이 순차적으로 수행하는 방식으로 전환.
+- **잔여 `[~]` 31개, 배치 계속 진행 중.**
 
 ## 항목 목록 (패키지별, 미실행 라인+분기 합계 내림차순)
 
@@ -296,7 +297,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `WebhookType` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `WebhookTypeSpec.kt`로 값/valueOf/values 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `EventType` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `EventTypeSpec.kt`(messageKey/order/isCreating()/valueOf/values 전체)로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/event** | | | | | | | | |
-| `GitPostReceiveEventListener` | 51.1 | 26.7 | 55.6 | 45 | 22 | 4 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 63.0%, BRANCH 36.7%, METHOD 66.7%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `GitPostReceiveEventListener` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-26: 실제 bare git 저장소 기반 신규 describe(UPDATE/CREATE/DELETE/존재하지않는objectId/UPDATE_NONFASTFORWARD/owner null), record() null 반환 케이스 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PullRequestMergeEventListener` | 96.1 | 73.7 | 100.0 | 4 | 10 | 0 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 99.0%, BRANCH 81.6%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
 | `PullRequestMergeEvent` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PullRequestMergeEventSpec.kt`로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/issue** | | | | | | | | |
@@ -327,7 +328,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `MentionServiceImpl` | 100.0 | 90.5 | 100.0 | 0 | 2 | 0 | [i] | 2026-08-25: ISSUE_COMMENT 타입의 `resourceId.toLongOrNull()` null 분기 등 보강(LINE 100%, METHOD 100%, BRANCH 90.5%, 19/21). 잔여 미달 2건은 구조적 도달 불가 — (1) `when`문의 else 분기는 DB 조회가 이미 2개 리소스 타입(ISSUE_POST/ISSUE_COMMENT)으로만 필터링해 반환하므로 도달 불가, (2) `comment.issue.id?.let{}`의 null 분기는 실제 서비스에서 IssueComment가 항상 영속화된(id 존재) Issue를 참조해 실통합 테스트로 구성하기 비현실적으로 판단 |
 | `Mention` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `MentionSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/milestone** | | | | | | | | |
-| `MilestoneServiceImpl` | 34.2 | 21.4 | 30.0 | 25 | 11 | 7 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 34.2%, BRANCH 21.4%, METHOD 30.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `MilestoneServiceImpl` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-26: `updateMilestone()`의 `existing.id`(nullable) null 케이스(비영속 상태에서도 예외 발생) 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `Milestone` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `MilestoneSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/notification** | | | | | | | | |
 | `NotificationMailDigestScheduler` | 69.6 | 34.8 | 100.0 | 51 | 116 | 0 | [x] | 2026-08-24: `NotificationMailDigestSchedulerSpec.kt`에 54 tests 추가(12→66). 전체 회귀 확정치: LINE 98.8%, BRANCH 98.3%, METHOD 100% — 목표 달성. 도달 불가능 3건 코드 근거 확정(User.name/Issue.project/Posting.project non-null 타입) |
@@ -425,7 +426,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Hunk` | 0.0 | 0.0 | 0.0 | 26 | 18 | 15 | [x] | 2026-08-25: `size()`/`equals()`(전 필드별 diff 분기+동일인스턴스/null/타입다름)/`hashCode()` 신규 테스트 및 `beginA/endA/beginB/endB/lines` 프로퍼티 접근자 테스트(Kotlin data 클래스 자동생성 getter/setter 미실행으로 METHOD 33%→100% 해결)로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%)
 | `DiffLine` | 0.0 | 0.0 | 0.0 | 21 | 22 | 9 | [x] | 2026-08-25: `equals()`(전 필드별 diff 분기)/`hashCode()`(numA/numB/file null·non-null 조합) 신규 테스트 및 `file` 접근자 테스트(METHOD 44%→100% 해결)로 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%)
 | `SvnRepository` | 92.2 | 63.9 | 91.4 | 15 | 26 | 3 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 92.2%, BRANCH 63.9%, METHOD 91.4%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
-| `RepositoryService` | 67.5 | 36.7 | 66.7 | 13 | 19 | 2 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 92.5%, BRANCH 86.7%, METHOD 83.3%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `RepositoryService` | 97.5 | 96.7 | 100.0 | 1 | 1 | 0 | [x] | 2026-08-26: SVN/GIT `userResolver` 람다 직접 호출(리플렉션), SVN+owner null, `getFileAsRaw` 프로젝트 존재 분기, `getMetaDataFromAncestorDirectories` 빈 경로 케이스 보강(LINE 97.5%, BRANCH 96.7%(29/30), METHOD 100%). 잔여 1건은 `project.vcs?.uppercase() ?: "GIT"` — `BranchViewController`/`CompareViewController`와 동일한 Kotlin 방어적 null-체크 패턴, javap로 확인(offset 26 `ifnonnull`이 앞선 `checkNotNullExpressionValue` 통과 후에는 항상 참일 수밖에 없어 도달 불가) |
 | `SvnCommit` | 39.1 | 7.1 | 37.5 | 14 | 13 | 10 | [i] | 2026-08-25: `getMessage`/`getAuthor`(리졸버 미호출 포함)/`getAuthorName`/`getId`/`getShortId`/`getShortMessage`(null/빈문자열/한줄/여러줄/앞뒤공백/공백만)/`getAuthorDate`/`getParentCount`(revision 0/1/2 분기) 등 전 메서드 보강(LINE 100%, METHOD 100%, BRANCH 85.7%). 잔여 미달은 `getShortMessage()`의 `if (lines.isNotEmpty())`로, `trim()` 결과 문자열에 대한 `split("\n")`은 Kotlin에서 항상 원소 1개 이상인 리스트를 반환하므로(빈 문자열도 `listOf("")`) else 분기가 도달 불가로 판단 |
 | `GitCommit` | 64.7 | 25.0 | 60.0 | 6 | 15 | 6 | [x] | 2026-08-25: 신규 테스트 보강(에이전트 위임)하여 95% 이상 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | `PushedBranch` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `PushedBranchSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
@@ -463,8 +464,8 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `CommentController` | 80.2 | 44.4 | 52.9 | 19 | 50 | 8 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
 | `ProjectController` | 79.6 | 56.8 | 95.2 | 31 | 32 | 1 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 94.1%, BRANCH 83.8%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
 | `SiteApiController` | 75.6 | 41.1 | 81.2 | 29 | 33 | 3 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 89.3%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
-| `CodeHistoryController` | 47.4 | 35.3 | 71.4 | 40 | 22 | 2 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 88.2%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
-| `ImportApiController` | 74.4 | 37.1 | 60.0 | 23 | 39 | 2 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 98.9%, BRANCH 79.0%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `CodeHistoryController` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-26: `getHistory`/`getCommit` 각각에서 authorDate/committerDate null·non-null 양쪽 케이스(서로 다른 메서드라 커버리지 비공유) 보강하여 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
+| `ImportApiController` | 100.0 | 95.2 | 100.0 | 0 | 3 | 0 | [x] | 2026-08-26: finally 블록 실존재 삭제, authId/authPw 조합(빈 문자열·단일 제공), 조직 멤버(비관리자) 403, TransportException/일반 Exception의 null message, statusCode Unknown 분기 등 보강하여 확보(LINE 100%, BRANCH 95.2%(59/62), METHOD 100%) |
 | `ImportViewController` | 76.6 | 45.3 | 75.0 | 26 | 35 | 2 | [x] | 2026-08-25: validateImportForm/addTransportError 잔여 분기(owner 검증 4종, 인증정보 null/빈문자열 조합, 메시지 null, 상태코드 파싱, clone 성공 후 실패 시 디렉터리 정리) 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 98.4%, METHOD 100%) |
 | `ProjectApiController` | 94.1 | 61.5 | 100.0 | 14 | 47 | 0 | [x] | 2026-08-25: addProjectMembers 잔여 분기(알 수 없는 role/역할 미존재/기존 멤버 갱신), exports()의 담당자·마일스톤·라벨·마감일·중첩댓글·null 저자 등 잔여 분기 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 95.9%, METHOD 100%). 도달 불가 2건 확인(`isGlobalResourceCreatable`는 currentUser!=null 가드 이후라 구조적으로 false 불가, `PullRequest.contributor`는 non-null 타입이라 안전호출 null분기 불가) |
 | `OrganizationController` | 45.9 | 25.0 | 64.3 | 33 | 24 | 5 | [x] | 2026-08-25: createOrganization/addOrganizationMember/updateOrganizationMemberRole/removeOrganizationMember 등 이전엔 전혀 테스트되지 않던 엔드포인트 전부와 예외 메시지 null 기본값 분기(6곳) 보강하여 95% 이상 확보 완료(LINE 100%, BRANCH 96.9%, METHOD 100%) |

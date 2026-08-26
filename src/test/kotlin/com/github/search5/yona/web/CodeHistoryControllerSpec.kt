@@ -221,6 +221,21 @@ class CodeHistoryControllerSpec : DescribeSpec({
                     mockMvc.perform(get("/api/vcs/owner/NotFound/history"))
                         .andExpect(status().isNotFound)
                 }
+
+                it("authorDate/committerDate가 null이면 0L로 처리해야 한다") {
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                    val playRepo = mockk<PlayRepository>()
+                    every { repositoryService.getRepository(project) } returns playRepo
+                    val commit = mockk<Commit>(relaxed = true)
+                    every { commit.getId() } returns commitId
+                    every { commit.getShortId() } returns "abc123d"
+                    every { commit.getAuthorDate() } returns null
+                    every { commit.getCommitterDate() } returns null
+                    every { playRepo.getHistory(0, 20, "HEAD", null) } returns listOf(commit)
+
+                    mockMvc.perform(get("/api/vcs/owner/TestProj/history"))
+                        .andExpect(status().isOk)
+                }
             }
 
             describe("GET /api/vcs/{owner}/{projectName}/commit/{commitId}") {
@@ -243,6 +258,21 @@ class CodeHistoryControllerSpec : DescribeSpec({
                     every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "NotFound") } returns Optional.empty()
                     mockMvc.perform(get("/api/vcs/owner/NotFound/commit/$commitId"))
                         .andExpect(status().isNotFound)
+                }
+
+                it("authorDate/committerDate가 존재하면 해당 시각을 그대로 반환해야 한다") {
+                    every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProj") } returns Optional.of(project)
+                    val playRepo = mockk<PlayRepository>()
+                    every { repositoryService.getRepository(project) } returns playRepo
+                    val commit = mockk<Commit>(relaxed = true)
+                    every { commit.getId() } returns commitId
+                    every { commit.getShortId() } returns "abc123d"
+                    every { commit.getAuthorDate() } returns Date()
+                    every { commit.getCommitterDate() } returns Date()
+                    every { playRepo.getCommit(commitId) } returns commit
+
+                    mockMvc.perform(get("/api/vcs/owner/TestProj/commit/$commitId"))
+                        .andExpect(status().isOk)
                 }
 
                 it("커밋이 없으면 404를 반환해야 한다") {
