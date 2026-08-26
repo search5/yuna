@@ -285,9 +285,9 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | **config/svn** | | | | | | | | |
 | `SvnAuthorizationFilter` | 100.0 | 97.6 | 100.0 | 0 | 1 | 0 | [x] | 2026-08-26: fork 테스트(`SvnAuthorizationFilterExtraSpec.kt` 포함)로 LINE/METHOD 100%, BRANCH 97.6%(41/42) 확보 완료 |
 | **domain/attachment** | | | | | | | | |
-| `AttachmentServiceImpl` | 95.8 | 85.7 | 100.0 | 3 | 4 | 0 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 97.2%, BRANCH 92.9%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `AttachmentServiceImpl` | 97.2 | 96.4 | 100.0 | 2 | 1 | 0 | [x] | 2026-08-26: fork 테스트로 LINE 97.2%, BRANCH 96.4%(27/28), METHOD 100% 확보 완료 |
 | `AttachmentCleanupScheduler` | 90.0 | 100.0 | 100.0 | 2 | 0 | 0 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
-| `Attachment` | 100.0 | 100.0 | 70.0 | 0 | 0 | 6 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 100.0%, METHOD 70.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `Attachment` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-26: fork 테스트로 프로퍼티 접근자 전체 확보, 100%/100%/100% 완료 |
 | **domain/board** | | | | | | | | |
 | `PostingServiceImpl` | 96.4 | 68.2 | 63.2 | 5 | 14 | 7 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 99.3%, BRANCH 81.8%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
 | `Posting` | 100.0 | 100.0 | 90.0 | 0 | 0 | 1 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 100.0%, BRANCH 100.0%, METHOD 90.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |

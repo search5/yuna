@@ -320,6 +320,24 @@ class AttachmentServiceSpec @Autowired constructor(
                 // store 메서드 내에서는 정상적인 tempFile을 쓰므로, 이 부분은 Mocking 없이 완벽한 테스트가 불가능할 수 있음.
                 // 본 테스트는 문서화용.
             }
+
+            it("15. containerId만 다르면(type/owner는 일치) moveOnlySelected가 옮기지 않아야 한다") {
+                val (attachment, _) = attachmentService.store(
+                    ByteArrayInputStream("wrong-container-id".toByteArray()), "wrongid.txt",
+                    ResourceType.ISSUE_POST, "200", "chulsoo"
+                )
+
+                val movedCount = attachmentService.moveOnlySelected(
+                    ResourceType.ISSUE_POST, "999",
+                    ResourceType.ISSUE_POST, "300",
+                    listOf(attachment.id!!), "chulsoo"
+                )
+
+                movedCount shouldBe 0
+                val unchanged = attachmentRepository.findById(attachment.id!!).get()
+                unchanged.containerType shouldBe ResourceType.ISSUE_POST
+                unchanged.containerId shouldBe "200"
+            }
         }
     }
 }

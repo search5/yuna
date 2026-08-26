@@ -31,5 +31,30 @@ class AttachmentSpec : DescribeSpec({
             attachment.createdDate shouldBe now
             attachment.ownerLoginId shouldBe "user1"
         }
+
+        it("모든 프로퍼티를 setter로 재할당할 수 있어야 한다") {
+            val attachment = Attachment()
+            val now = Instant.now()
+
+            attachment.id = 2L
+            attachment.name = "changed.txt"
+            attachment.hash = "fedcba"
+            attachment.containerType = ResourceType.ISSUE_COMMENT
+            attachment.containerId = "456"
+            attachment.mimeType = "image/png"
+            attachment.size = 2048L
+            attachment.createdDate = now
+            attachment.ownerLoginId = "user2"
+
+            attachment.id shouldBe 2L
+            attachment.name shouldBe "changed.txt"
+            attachment.hash shouldBe "fedcba"
+            attachment.containerType shouldBe ResourceType.ISSUE_COMMENT
+            attachment.containerId shouldBe "456"
+            attachment.mimeType shouldBe "image/png"
+            attachment.size shouldBe 2048L
+            attachment.createdDate shouldBe now
+            attachment.ownerLoginId shouldBe "user2"
+        }
     }
 })
