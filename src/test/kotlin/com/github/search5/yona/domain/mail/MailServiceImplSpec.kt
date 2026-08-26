@@ -131,6 +131,33 @@ class MailServiceImplSpec : DescribeSpec({
             captured.captured.messageID shouldNotBe null
         }
 
+        it("replyTo가 공백뿐이면(null 아님) Reply-To 헤더를 설정하지 않는다") {
+            val captured = slot<MimeMessage>()
+            every { mailSender.send(capture(captured)) } answers { captured.captured.saveChanges() }
+
+            service.sendNotificationMail(
+                toList = listOf(MailRecipient("to@yona.io", "받는사람")), bccList = emptyList(),
+                fromName = "발신자", subject = "제목", htmlBody = "<p>내용</p>", plainBody = "내용",
+                replyTo = "   ", messageId = null, references = null, sentDate = Date()
+            )
+
+            // MimeMessage.getReplyTo()는 헤더가 없으면 From으로 폴백하므로, 헤더 자체의 부재를 직접 확인한다.
+            captured.captured.getHeader("Reply-To") shouldBe null
+        }
+
+        it("references가 공백뿐이면(null 아님) References 헤더를 설정하지 않는다") {
+            val captured = slot<MimeMessage>()
+            every { mailSender.send(capture(captured)) } answers { captured.captured.saveChanges() }
+
+            service.sendNotificationMail(
+                toList = listOf(MailRecipient("to@yona.io", "받는사람")), bccList = emptyList(),
+                fromName = "발신자", subject = "제목", htmlBody = "<p>내용</p>", plainBody = "내용",
+                replyTo = null, messageId = null, references = "   ", sentDate = Date()
+            )
+
+            captured.captured.getHeader("References") shouldBe null
+        }
+
         it("references를 지정하면 References 헤더가 붙어야 한다") {
             val captured = slot<MimeMessage>()
             every { mailSender.send(capture(captured)) } answers { captured.captured.saveChanges() }
