@@ -15,6 +15,7 @@ import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.support.CodeRange
 import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.user.UserIdent
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
 import com.github.search5.yona.domain.vcs.RepositoryService
@@ -32,6 +33,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.transaction.annotation.Transactional
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
 
 private fun createTestCommit(
     bareRepoDir: File,
@@ -420,6 +422,21 @@ class CodeReviewServiceSpec @Autowired constructor(
                     notificationEventRepository.findAll().size shouldBe 0
                 }
 
+                it("30초 내에 상태를 CLOSED->OPEN으로 되돌리면 두 알림이 상쇄되어 발행되지 않아야 한다") {
+                    watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.PULL_REQUEST, resourceId = pullRequest.id.toString()))
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = "abc123",
+                        contents = "댓글", codeRange = null, threadId = null, currentUser = otherUser
+                    )
+                    notificationMailRepository.deleteAll()
+                    notificationEventRepository.deleteAll()
+
+                    codeReviewService.updateThreadState(comment.thread!!.id!!, CommentThread.ThreadState.CLOSED, user)
+                    codeReviewService.updateThreadState(comment.thread!!.id!!, CommentThread.ThreadState.OPEN, user)
+
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+
                 it("PR 밖(순수 커밋 위) 스레드는 그 커밋을 감시 중인 사용자에게 알림이 발행되어야 한다") {
                     watchRepository.save(Watch(user = otherUser, resourceType = ResourceType.COMMIT, resourceId = "${project.id}:deadbeef"))
                     val comment = codeReviewService.createReviewComment(
@@ -650,6 +667,40 @@ class CodeReviewServiceSpec @Autowired constructor(
 
                 reviewCommentRepository.findById(commentId).isPresent shouldBe false
                 commentThreadRepository.findById(threadId).isPresent shouldBe false
+            }
+
+            it("삭제 후에도 스레드에 댓글이 남아있으면 스레드는 삭제되지 않아야 한다") {
+                val codeRange = CodeRange(
+                    path = "src/main/kotlin/App.kt",
+                    startSide = CodeRange.Side.B, startLine = 10, startColumn = 0,
+                    endSide = CodeRange.Side.B, endLine = 10, endColumn = 0
+                )
+                val firstComment = codeReviewService.createReviewComment(
+                    project = project, pullRequest = pullRequest, commitId = "1234567890abcdef",
+                    contents = "첫번째 리뷰", codeRange = codeRange, threadId = null, currentUser = user
+                )
+                val threadId = firstComment.thread?.id!!
+                codeReviewService.createReviewComment(
+                    project = project, pullRequest = pullRequest, commitId = "1234567890abcdef",
+                    contents = "답글", codeRange = null, threadId = threadId, currentUser = user
+                )
+
+                codeReviewService.deleteReviewComment(firstComment.id!!, user)
+
+                reviewCommentRepository.findById(firstComment.id!!).isPresent shouldBe false
+                commentThreadRepository.findById(threadId).isPresent shouldBe true
+            }
+
+            it("타인이 다른 유저의 커밋 댓글 삭제 시 Permission denied 예외가 발생해야 한다") {
+                val comment = codeReviewService.createCommitComment(
+                    project = project, commitId = "1234567890abcdef", contents = "커밋 댓글",
+                    path = null, line = null, side = null, currentUser = user
+                )
+
+                val exception = io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                    codeReviewService.deleteCommitComment(comment.id!!, otherUser)
+                }
+                exception.message shouldBe "Permission denied"
             }
 
             it("[Test-13-1-6] 타인이 다른 유저의 리뷰 댓글 삭제 시 Permission denied 예외가 발생해야 한다") {
@@ -898,6 +949,73 @@ class CodeReviewServiceSpec @Autowired constructor(
                     events.size shouldBe 0
                 }
 
+                // 실제 bare git 저장소 커밋을 만들어 GitCommit.getAuthor() -> userResolver(email)의
+                // 3가지 실질 분기(가입 유저 없음/게스트/정상 유저)를 검증한다. 기존 테스트는 전부
+                // invalid-commit-id로 getCommit() 자체가 예외를 던지는 catch 경로만 탔다.
+                describe("실제 git 커밋 기반 codeAuthor 로딩 (createReviewComment/getCommitWatchers 공통)") {
+                    lateinit var codeAuthorProject: Project
+                    lateinit var bareDir: File
+
+                    beforeEach {
+                        codeAuthorProject = projectRepository.save(
+                            Project(name = "codeauthor-repo", owner = "owner-x", vcs = "GIT", projectScope = ProjectScope.PUBLIC)
+                        )
+                        val preExisting = repositoryService.getRepository(codeAuthorProject).getDirectory()
+                        if (preExisting.exists()) preExisting.deleteRecursively()
+                        repositoryService.getRepository(codeAuthorProject).create()
+                        bareDir = repositoryService.getRepository(codeAuthorProject).getDirectory()
+                    }
+
+                    fun latestCommitId(): String =
+                        repositoryService.getRepository(codeAuthorProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+
+                    it("커밋 작성자 이메일이 등록된 유저와 일치하지 않으면 codeAuthors에 추가되지 않아야 한다") {
+                        createTestCommit(bareDir, "master", "a.txt", "v1", authorName = "unknown", authorEmail = "unknown-nobody@nowhere.io")
+                        val commitId = latestCommitId()
+                        val codeRange = CodeRange(path = "a.txt", startSide = CodeRange.Side.B, startLine = 1, endSide = CodeRange.Side.B, endLine = 1)
+
+                        val comment = codeReviewService.createReviewComment(
+                            project = codeAuthorProject, pullRequest = null, commitId = commitId,
+                            contents = "미등록 작성자 커밋 댓글", codeRange = codeRange, threadId = null, currentUser = user
+                        )
+
+                        (comment.thread as CodeCommentThread).codeAuthors.size shouldBe 0
+                    }
+
+                    it("커밋 작성자가 게스트 계정이면 codeAuthors에 추가되지 않아야 한다") {
+                        val guestAuthor = userRepository.save(
+                            User(loginId = "guest-author", name = "게스트작성자", email = "guest-author@yona.io", isGuest = true)
+                        )
+                        createTestCommit(bareDir, "master", "b.txt", "v1", authorName = guestAuthor.name, authorEmail = guestAuthor.email!!)
+                        val commitId = latestCommitId()
+                        val codeRange = CodeRange(path = "b.txt", startSide = CodeRange.Side.B, startLine = 1, endSide = CodeRange.Side.B, endLine = 1)
+
+                        val comment = codeReviewService.createReviewComment(
+                            project = codeAuthorProject, pullRequest = null, commitId = commitId,
+                            contents = "게스트 작성자 커밋 댓글", codeRange = codeRange, threadId = null, currentUser = user
+                        )
+
+                        (comment.thread as CodeCommentThread).codeAuthors.size shouldBe 0
+                    }
+
+                    it("커밋 작성자가 등록된 정상 유저면 codeAuthors에 추가되고, 그 유저는 감시하지 않았어도 알림을 받아야 한다") {
+                        createTestCommit(bareDir, "master", "c.txt", "v1", authorName = otherUser.name, authorEmail = otherUser.email!!)
+                        val commitId = latestCommitId()
+                        val codeRange = CodeRange(path = "c.txt", startSide = CodeRange.Side.B, startLine = 1, endSide = CodeRange.Side.B, endLine = 1)
+
+                        val comment = codeReviewService.createReviewComment(
+                            project = codeAuthorProject, pullRequest = null, commitId = commitId,
+                            contents = "정상 작성자 커밋 댓글", codeRange = codeRange, threadId = null, currentUser = user
+                        )
+
+                        (comment.thread as CodeCommentThread).codeAuthors.map { it.id } shouldBe listOf(otherUser.id)
+                        val events = notificationEventRepository.findAll().filter { it.newValue == "정상 작성자 커밋 댓글" }
+                        events.size shouldBe 1
+                        events.first().receivers.map { it.id } shouldBe listOf(otherUser.id)
+                    }
+                }
+
                 it("isThreadOutdated - 잘못된 타입의 스레드인 경우 false를 반환해야 한다") {
                     val nonCodeThread = commentThreadRepository.save(
                         NonRangedCodeCommentThread(
@@ -923,6 +1041,375 @@ class CodeReviewServiceSpec @Autowired constructor(
                         )
                     )
                     codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                }
+            }
+
+            describe("존재하지 않는 리소스 조회 시 예외 처리 (orElseThrow 분기)") {
+                it("createReviewComment - 존재하지 않는 threadId면 예외를 던져야 한다") {
+                    val exception = io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                        codeReviewService.createReviewComment(
+                            project = project, pullRequest = pullRequest, commitId = "abc", contents = "답글",
+                            codeRange = null, threadId = 999999L, currentUser = user
+                        )
+                    }
+                    exception.message shouldBe "CommentThread not found for id: 999999"
+                }
+
+                it("deleteReviewComment - 존재하지 않는 commentId면 예외를 던져야 한다") {
+                    io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                        codeReviewService.deleteReviewComment(999999L, user)
+                    }
+                }
+
+                it("deleteCommitComment - 존재하지 않는 commentId면 예외를 던져야 한다") {
+                    io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                        codeReviewService.deleteCommitComment(999999L, user)
+                    }
+                }
+
+                it("updateThreadState - 존재하지 않는 threadId면 예외를 던져야 한다") {
+                    io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                        codeReviewService.updateThreadState(999999L, CommentThread.ThreadState.CLOSED, user)
+                    }
+                }
+
+                it("addReviewer - 존재하지 않는 reviewerId면 예외를 던져야 한다") {
+                    io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                        codeReviewService.addReviewer(pullRequest.id!!, 999999L)
+                    }
+                }
+
+                it("removeReviewer - 존재하지 않는 reviewerId면 예외를 던져야 한다") {
+                    io.kotest.assertions.throwables.shouldThrow<IllegalArgumentException> {
+                        codeReviewService.removeReviewer(pullRequest.id!!, 999999L)
+                    }
+                }
+            }
+
+            describe("추가 분기 커버리지") {
+                it("codeRange는 있지만 startLine이 없으면 NonRangedCodeCommentThread로 생성돼야 한다") {
+                    val codeRange = CodeRange(path = "no-startline.txt", startLine = null)
+
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "abc123",
+                        contents = "startLine 없는 codeRange", codeRange = codeRange, threadId = null, currentUser = user
+                    )
+
+                    (comment.thread is NonRangedCodeCommentThread) shouldBe true
+                }
+
+                it("codeRange가 있어도 commitId와 pullRequest가 모두 없으면 thread.commitId가 null이어야 한다") {
+                    val codeRange = CodeRange(path = "nocommit.txt", startSide = CodeRange.Side.B, startLine = 1, endSide = CodeRange.Side.B, endLine = 1)
+
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = null,
+                        contents = "커밋도 PR도 없음", codeRange = codeRange, threadId = null, currentUser = user
+                    )
+
+                    (comment.thread as CodeCommentThread).commitId shouldBe null
+                }
+
+                it("PR의 mergedCommitIdFrom이 설정돼 있으면 라인지정 스레드의 prevCommitId로 그대로 사용돼야 한다") {
+                    pullRequest.mergedCommitIdFrom = "merged-from-abc"
+                    pullRequestRepository.save(pullRequest)
+                    val codeRange = CodeRange(path = "prevcommit.txt", startSide = CodeRange.Side.B, startLine = 1, endSide = CodeRange.Side.B, endLine = 1)
+
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = null,
+                        contents = "prevCommitId 있음", codeRange = codeRange, threadId = null, currentUser = user
+                    )
+
+                    (comment.thread as CodeCommentThread).prevCommitId shouldBe "merged-from-abc"
+                }
+
+                it("PR의 mergedCommitIdFrom이 설정돼 있으면 라인 없는 스레드의 prevCommitId로도 그대로 사용돼야 한다") {
+                    pullRequest.mergedCommitIdFrom = "merged-from-def"
+                    pullRequestRepository.save(pullRequest)
+
+                    val comment = codeReviewService.createReviewComment(
+                        project = project, pullRequest = pullRequest, commitId = null,
+                        contents = "prevCommitId 있음(라인없음)", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    (comment.thread as NonRangedCodeCommentThread).prevCommitId shouldBe "merged-from-def"
+                }
+
+                it("PR도 커밋ID도 없는 순수 댓글은 커밋 감시자 조회 없이 멘션된 사용자에게만 알림이 가야 한다") {
+                    val mentioned = userRepository.save(User(loginId = "mentioned-nocommit", name = "멘션대상", email = "mentioned-nocommit@yona.io"))
+
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = null,
+                        contents = "@mentioned-nocommit 님 확인해주세요", codeRange = null, threadId = null, currentUser = user
+                    )
+
+                    val events = notificationEventRepository.findAll()
+                    events.size shouldBe 1
+                    events.first().receivers.map { it.id } shouldBe listOf(mentioned.id)
+                }
+            }
+
+            describe("직접 구성한 엔티티로만 재현 가능한 방어 분기") {
+                it("deleteReviewComment - 댓글에 연결된 스레드가 없으면 IllegalStateException을 던져야 한다") {
+                    val orphanComment = reviewCommentRepository.save(
+                        ReviewComment(contents = "고아 댓글", createdDate = Instant.now(), author = UserIdent(user), thread = null)
+                    )
+
+                    io.kotest.assertions.throwables.shouldThrow<IllegalStateException> {
+                        codeReviewService.deleteReviewComment(orphanComment.id!!, user)
+                    }
+                }
+
+                it("deleteReviewComment - 스레드의 project가 없어도 pullRequest.toProject로 대체해 정상 삭제돼야 한다") {
+                    val thread = commentThreadRepository.save(
+                        NonRangedCodeCommentThread(pullRequest = pullRequest, project = null, commitId = "x")
+                    )
+                    val comment = reviewCommentRepository.save(
+                        ReviewComment(contents = "프로젝트 없는 스레드 댓글", createdDate = Instant.now(), author = UserIdent(user), thread = thread)
+                    )
+
+                    codeReviewService.deleteReviewComment(comment.id!!, user)
+
+                    reviewCommentRepository.findById(comment.id!!).isPresent shouldBe false
+                }
+
+                it("deleteReviewComment - 스레드에 project도 pullRequest도 없으면 IllegalStateException을 던져야 한다") {
+                    val thread = commentThreadRepository.save(
+                        NonRangedCodeCommentThread(pullRequest = null, project = null, commitId = "x")
+                    )
+                    val comment = reviewCommentRepository.save(
+                        ReviewComment(contents = "프로젝트/PR 모두 없는 댓글", createdDate = Instant.now(), author = UserIdent(user), thread = thread)
+                    )
+
+                    io.kotest.assertions.throwables.shouldThrow<IllegalStateException> {
+                        codeReviewService.deleteReviewComment(comment.id!!, user)
+                    }
+                }
+
+                it("deleteCommitComment - 댓글에 연결된 project가 없으면 IllegalStateException을 던져야 한다") {
+                    val orphanCommitComment = commitCommentRepository.save(
+                        CommitComment(project = null, contents = "고아 커밋 댓글", commitId = "x", createdDate = Instant.now(), author = UserIdent(user))
+                    )
+
+                    io.kotest.assertions.throwables.shouldThrow<IllegalStateException> {
+                        codeReviewService.deleteCommitComment(orphanCommitComment.id!!, user)
+                    }
+                }
+
+                it("updateThreadState - PR도 project도 없는 스레드는 상태는 바뀌지만 알림은 발행되지 않아야 한다") {
+                    val thread = commentThreadRepository.save(
+                        NonRangedCodeCommentThread(pullRequest = null, project = null, commitId = "x")
+                    )
+
+                    val updated = codeReviewService.updateThreadState(thread.id!!, CommentThread.ThreadState.CLOSED, user)
+
+                    updated.state shouldBe CommentThread.ThreadState.CLOSED
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+
+                it("getCommitWatchers - author.id가 없는(고아) 기존 리뷰 댓글은 감시자 계산에서 조용히 제외돼야 한다") {
+                    val ghostThread = commentThreadRepository.save(
+                        NonRangedCodeCommentThread(pullRequest = null, project = project, commitId = "ghost-commit")
+                    )
+                    reviewCommentRepository.save(
+                        ReviewComment(contents = "고아 작성자 댓글", createdDate = Instant.now(), author = UserIdent(id = null, loginId = "ghost", name = "유령"), thread = ghostThread)
+                    )
+                    ghostThread.state = CommentThread.ThreadState.OPEN
+
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "ghost-commit",
+                        contents = "두 번째 댓글", codeRange = null, threadId = null, currentUser = otherUser
+                    )
+
+                    val events = notificationEventRepository.findAll().filter { it.newValue == "두 번째 댓글" }
+                    events.size shouldBe 0
+                }
+
+                it("getCommitWatchers - author 자체가 null인 기존 리뷰 댓글도 감시자 계산에서 조용히 제외돼야 한다") {
+                    val noAuthorThread = commentThreadRepository.save(
+                        NonRangedCodeCommentThread(pullRequest = null, project = project, commitId = "no-author-commit")
+                    )
+                    reviewCommentRepository.save(
+                        ReviewComment(contents = "author 필드 자체가 없는 댓글", createdDate = Instant.now(), author = null, thread = noAuthorThread)
+                    )
+
+                    codeReviewService.createReviewComment(
+                        project = project, pullRequest = null, commitId = "no-author-commit",
+                        contents = "세 번째 댓글", codeRange = null, threadId = null, currentUser = otherUser
+                    )
+
+                    val events = notificationEventRepository.findAll().filter { it.newValue == "세 번째 댓글" }
+                    events.size shouldBe 0
+                }
+
+                it("getCommitWatchers - author.id가 없는(고아) 기존 커밋 댓글도 감시자 계산에서 조용히 제외돼야 한다") {
+                    commitCommentRepository.save(
+                        CommitComment(
+                            project = project, contents = "고아 작성자 커밋 댓글", commitId = "ghost-commit-2",
+                            createdDate = Instant.now(), author = UserIdent(id = null, loginId = "ghost2", name = "유령2")
+                        )
+                    )
+
+                    codeReviewService.createCommitComment(
+                        project = project, commitId = "ghost-commit-2", contents = "두 번째 커밋 댓글",
+                        path = null, line = null, side = null, currentUser = otherUser
+                    )
+
+                    val events = notificationEventRepository.findAll().filter { it.newValue == "두 번째 커밋 댓글" }
+                    events.size shouldBe 0
+                }
+
+                it("getCommitWatchers - author 자체가 null인 기존 커밋 댓글도 감시자 계산에서 조용히 제외돼야 한다") {
+                    commitCommentRepository.save(
+                        CommitComment(
+                            project = project, contents = "author 필드 자체가 없는 커밋 댓글", commitId = "no-author-commit-2",
+                            createdDate = Instant.now(), author = null
+                        )
+                    )
+
+                    codeReviewService.createCommitComment(
+                        project = project, commitId = "no-author-commit-2", contents = "세 번째 커밋 댓글",
+                        path = null, line = null, side = null, currentUser = otherUser
+                    )
+
+                    val events = notificationEventRepository.findAll().filter { it.newValue == "세 번째 커밋 댓글" }
+                    events.size shouldBe 0
+                }
+
+                it("updateThreadState - PR은 없고 project는 있지만 commitId가 없으면 알림이 발행되지 않아야 한다") {
+                    val thread = commentThreadRepository.save(
+                        NonRangedCodeCommentThread(pullRequest = null, project = project, commitId = null)
+                    )
+
+                    val updated = codeReviewService.updateThreadState(thread.id!!, CommentThread.ThreadState.CLOSED, user)
+
+                    updated.state shouldBe CommentThread.ThreadState.CLOSED
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
+            }
+
+            describe("computeOutdated 추가 분기") {
+                it("커밋 댓글 스레드도 PullRequestCommit에 기록이 있으면 outdated가 아니어야 한다") {
+                    val pr2 = pullRequestRepository.save(
+                        PullRequest(
+                            title = "outdated 커밋댓글 테스트", toProject = project, fromProject = project,
+                            toBranch = "master", fromBranch = "feature", contributor = user,
+                            mergedCommitIdFrom = "a", mergedCommitIdTo = "b"
+                        )
+                    )
+                    pullRequestCommitRepository.save(PullRequestCommit(pullRequest = pr2, commitId = "existing-commit"))
+                    val thread = commentThreadRepository.save(
+                        CodeCommentThread(
+                            pullRequest = pr2, project = project, prevCommitId = "", commitId = "existing-commit",
+                            codeRange = CodeRange(path = "test.txt", startLine = 1)
+                        )
+                    )
+
+                    codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                }
+
+                it("라인 정보는 있지만 커밋ID가 비어있으면 outdated가 아니어야 한다") {
+                    val thread = commentThreadRepository.save(
+                        CodeCommentThread(
+                            pullRequest = pullRequest, project = project, commitId = "", prevCommitId = "",
+                            codeRange = CodeRange(path = "test.txt", startLine = 1)
+                        )
+                    )
+                    codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                }
+
+                it("PR의 mergedCommitIdFrom이 없으면 outdated가 아니어야 한다") {
+                    val pr2 = pullRequestRepository.save(
+                        PullRequest(
+                            title = "머지커밋프롬없음", toProject = project, fromProject = project,
+                            toBranch = "master", fromBranch = "feature", contributor = user,
+                            mergedCommitIdFrom = null, mergedCommitIdTo = "b"
+                        )
+                    )
+                    val thread = commentThreadRepository.save(
+                        CodeCommentThread(
+                            pullRequest = pr2, project = project, commitId = "c", prevCommitId = "p",
+                            codeRange = CodeRange(path = "test.txt", startLine = 1)
+                        )
+                    )
+                    codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                }
+
+                it("PR의 mergedCommitIdTo가 없으면 outdated가 아니어야 한다") {
+                    val pr3 = pullRequestRepository.save(
+                        PullRequest(
+                            title = "머지커밋투없음", toProject = project, fromProject = project,
+                            toBranch = "master", fromBranch = "feature", contributor = user,
+                            mergedCommitIdFrom = "a", mergedCommitIdTo = null
+                        )
+                    )
+                    val thread = commentThreadRepository.save(
+                        CodeCommentThread(
+                            pullRequest = pr3, project = project, commitId = "c", prevCommitId = "p",
+                            codeRange = CodeRange(path = "test.txt", startLine = 1)
+                        )
+                    )
+                    codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                }
+
+                it("codeRange의 path가 null이면 빈 문자열(존재하지 않는 경로)로 취급해 blobId 조회가 실패하고 outdated(true)로 처리돼야 한다") {
+                    val outdatedProject = projectRepository.save(Project(name = "outdated-repo-nopath", owner = "owner-x", vcs = "GIT"))
+                    repositoryService.getRepository(outdatedProject).create()
+                    try {
+                        val bareDir = repositoryService.getRepository(outdatedProject).getDirectory()
+                        createTestCommit(bareDir, "master", "test.txt", "v1")
+                        val c1 = repositoryService.getRepository(outdatedProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+
+                        val pr = pullRequestRepository.save(
+                            PullRequest(
+                                title = "outdated path없음 테스트", toProject = outdatedProject, fromProject = outdatedProject,
+                                toBranch = "master", fromBranch = "feature", contributor = user,
+                                mergedCommitIdFrom = c1, mergedCommitIdTo = c1
+                            )
+                        )
+                        val thread = commentThreadRepository.save(
+                            CodeCommentThread(
+                                pullRequest = pr, project = outdatedProject, prevCommitId = c1, commitId = c1,
+                                codeRange = CodeRange(path = null, startLine = 1)
+                            )
+                        )
+
+                        codeReviewService.isThreadOutdated(thread.id!!) shouldBe true
+                    } finally {
+                        try { repositoryService.getRepository(outdatedProject).delete() } catch (e: Exception) {}
+                    }
+                }
+
+                it("코드 경로가 슬래시로 시작하면 앞의 슬래시를 제거하고 비교해야 한다") {
+                    val outdatedProject = projectRepository.save(Project(name = "outdated-repo-slash", owner = "owner-x", vcs = "GIT"))
+                    repositoryService.getRepository(outdatedProject).create()
+                    try {
+                        val bareDir = repositoryService.getRepository(outdatedProject).getDirectory()
+                        createTestCommit(bareDir, "master", "test.txt", "v1")
+                        val c1 = repositoryService.getRepository(outdatedProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+                        createTestCommit(bareDir, "master", "test.txt", "v2")
+                        val c2 = repositoryService.getRepository(outdatedProject).getBranches()
+                            .first { it.name == "refs/heads/master" }.headCommit.getId()
+
+                        val pr = pullRequestRepository.save(
+                            PullRequest(
+                                title = "outdated 슬래시경로 테스트", toProject = outdatedProject, fromProject = outdatedProject,
+                                toBranch = "master", fromBranch = "feature", contributor = user,
+                                mergedCommitIdFrom = c1, mergedCommitIdTo = c2
+                            )
+                        )
+                        val thread = commentThreadRepository.save(
+                            CodeCommentThread(
+                                pullRequest = pr, project = outdatedProject, prevCommitId = c1, commitId = c2,
+                                codeRange = CodeRange(path = "/test.txt", startLine = 1)
+                            )
+                        )
+
+                        codeReviewService.isThreadOutdated(thread.id!!) shouldBe false
+                    } finally {
+                        try { repositoryService.getRepository(outdatedProject).delete() } catch (e: Exception) {}
+                    }
                 }
             }
         }
