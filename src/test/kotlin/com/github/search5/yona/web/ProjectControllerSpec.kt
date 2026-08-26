@@ -257,6 +257,57 @@ class ProjectControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
             }
 
+            it("라벨 목록 조회 시 프로젝트가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+
+                mockMvc.perform(get("/api/owner/unknown/labels"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("라벨 붙이기 시 프로젝트가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+
+                mockMvc.perform(post("/api/owner/unknown/labels").param("name", "linux").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("라벨 붙이기 시 인증되지 않으면 401을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
+
+                mockMvc.perform(post("/api/owner/priv/labels").param("name", "linux"))
+                    .andExpect(status().isUnauthorized)
+            }
+
+            it("이미 존재하는 라벨에 새로 붙는 경우(isCreated=false, isAttached=true) 200 OK와 라벨을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(31L, 10L) } returns true
+                every { projectService.attachLabel(31L, "os", "linux") } returns
+                    AttachLabelResult(Label(id = 1L, category = "os", name = "linux"), isCreated = false, isAttached = true)
+
+                mockMvc.perform(
+                    post("/api/owner/priv/labels")
+                        .param("category", "os")
+                        .param("name", "linux")
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+            }
+
+            it("라벨 떼기 시 프로젝트가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/owner/unknown/labels/1").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("라벨 떼기 시 인증되지 않으면 401을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
+
+                mockMvc.perform(delete("/api/owner/priv/labels/1"))
+                    .andExpect(status().isUnauthorized)
+            }
+
             it("비공개 프로젝트는 비회원이 조회하면 403을 반환해야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
 
@@ -376,6 +427,13 @@ class ProjectControllerSpec : DescribeSpec({
                 mockMvc.perform(get("/api/owner/th-priv/titleHeads"))
                     .andExpect(status().isForbidden)
             }
+
+            it("프로젝트가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+
+                mockMvc.perform(get("/api/owner/unknown/titleHeads"))
+                    .andExpect(status().isNotFound)
+            }
         }
 
         describe("GET/DELETE /api/{owner}/{projectName}/pushedBranches (P1-15/24)") {
@@ -442,6 +500,27 @@ class ProjectControllerSpec : DescribeSpec({
                     delete("/api/owner/bp/pushedBranches/2").principal(userAuth)
                 )
                     .andExpect(status().isForbidden)
+            }
+
+            it("조회 시 프로젝트가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+
+                mockMvc.perform(get("/api/owner/unknown/pushedBranches"))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("삭제 시 프로젝트가 없으면 404를 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+
+                mockMvc.perform(delete("/api/owner/unknown/pushedBranches/2").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("삭제 시 인증되지 않으면 401을 반환해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "bp") } returns Optional.of(branchProject)
+
+                mockMvc.perform(delete("/api/owner/bp/pushedBranches/2"))
+                    .andExpect(status().isUnauthorized)
             }
         }
 

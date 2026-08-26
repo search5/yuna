@@ -78,6 +78,14 @@ class IssueLabelServiceImplExtraSpec : DescribeSpec({
             result!!.name shouldBe "label"
         }
         
+        it("newLabelByCategoryName - 프로젝트를 찾을 수 없으면 예외를 던져야 한다") {
+            every { projectRepository.findById(999L) } returns Optional.empty()
+
+            shouldThrow<IllegalArgumentException> {
+                service.newLabelByCategoryName(999L, "cat", true, "label", "color")
+            }
+        }
+
         it("newLabelByCategoryName - 이미 라벨이 있으면 null 반환") {
             every { projectRepository.findById(1L) } returns Optional.of(project)
             val existingCategory = IssueLabelCategory(id = 11L, name = "cat", project = project)
@@ -159,6 +167,84 @@ class IssueLabelServiceImplExtraSpec : DescribeSpec({
             shouldThrow<IllegalArgumentException> {
                 service.copyLabels(2L, 3L)
             }
+        }
+
+        it("getLabels - 프로젝트를 찾으면 해당 프로젝트의 라벨 목록을 반환해야 한다") {
+            val category = IssueLabelCategory(id = 10L, name = "cat", project = project)
+            val label = IssueLabel(id = 22L, category = category, name = "label", project = project)
+            every { projectRepository.findById(1L) } returns Optional.of(project)
+            every { issueLabelRepository.findByProject(project) } returns listOf(label)
+
+            val result = service.getLabels(1L)
+
+            result shouldBe listOf(label)
+        }
+
+        it("getCategories - 프로젝트를 찾으면 해당 프로젝트의 카테고리 목록을 반환해야 한다") {
+            val category = IssueLabelCategory(id = 10L, name = "cat", project = project)
+            every { projectRepository.findById(1L) } returns Optional.of(project)
+            every { issueLabelCategoryRepository.findByProject(project) } returns listOf(category)
+
+            val result = service.getCategories(1L)
+
+            result shouldBe listOf(category)
+        }
+
+        // findById(labelId).orElse(null)?.category — 라벨 자체가 없으면(Optional.empty) category가
+        // null이 되어 안전호출이 전파되고, "카테고리가 비면 삭제" 검사(if (category != null && ...))가
+        // 통째로 건너뛰어진다. 기존 테스트는 전부 라벨이 존재하는 경우만 다뤘다.
+        it("deleteLabel - 라벨을 찾지 못해도 예외 없이 삭제 호출만 수행하고 카테고리 정리는 건너뛰어야 한다") {
+            every { issueLabelRepository.findById(999L) } returns Optional.empty()
+            every { issueLabelRepository.deleteIssueMappings(999L) } returns Unit
+            every { issueLabelRepository.deletePostingMappings(999L) } returns Unit
+            every { issueLabelRepository.deleteById(999L) } returns Unit
+
+            service.deleteLabel(999L)
+
+            verify(exactly = 0) { issueLabelCategoryRepository.delete(any()) }
+            verify(exactly = 0) { issueLabelRepository.findByCategory(any()) }
+        }
+
+        // label.id?.let { deleteLabel(it) } — id가 null인 라벨은 deleteLabel 호출 자체를 건너뛴다.
+        // 또한 .filter { it.category.id == categoryId }로 다른 카테고리의 라벨은 애초에 제외된다.
+        it("deleteCategory - id가 null인 라벨과 다른 카테고리의 라벨은 삭제 대상에서 제외해야 한다") {
+            val category = IssueLabelCategory(id = 11L, name = "cat", project = project)
+            val otherCategory = IssueLabelCategory(id = 12L, name = "other-cat", project = project)
+            val categoryWithNullId = IssueLabelCategory(id = null, name = "no-id-cat", project = project)
+            val labelWithNullId = IssueLabel(id = null, category = category, name = "no-id-label", project = project)
+            val labelInOtherCategory = IssueLabel(id = 55L, category = otherCategory, name = "other-label", project = project)
+            val labelInNullIdCategory = IssueLabel(id = 56L, category = categoryWithNullId, name = "null-cat-label", project = project)
+
+            every { issueLabelCategoryRepository.findById(11L) } returns Optional.of(category)
+            every { issueLabelRepository.findByProject(project) } returns listOf(labelWithNullId, labelInOtherCategory, labelInNullIdCategory)
+            every { issueLabelCategoryRepository.existsById(11L) } returns true
+            every { issueLabelCategoryRepository.delete(category) } returns Unit
+
+            service.deleteCategory(11L)
+
+            verify(exactly = 0) { issueLabelRepository.deleteById(any()) }
+            verify(exactly = 1) { issueLabelCategoryRepository.delete(category) }
+        }
+
+        // deleteLabel()이 마지막 라벨을 지우며 이미 카테고리를 삭제했다면, deleteCategory()의
+        // existsById 체크는 false를 반환해 마지막 delete 호출을 건너뛰어야 한다.
+        it("deleteCategory - deleteLabel이 이미 카테고리를 지웠으면(existsById=false) 다시 삭제하지 않아야 한다") {
+            val category = IssueLabelCategory(id = 11L, name = "cat", project = project)
+            val label = IssueLabel(id = 22L, category = category, name = "label", project = project)
+
+            every { issueLabelCategoryRepository.findById(11L) } returns Optional.of(category)
+            every { issueLabelRepository.findByProject(project) } returns listOf(label)
+            every { issueLabelRepository.findById(22L) } returns Optional.of(label)
+            every { issueLabelRepository.deleteIssueMappings(22L) } returns Unit
+            every { issueLabelRepository.deletePostingMappings(22L) } returns Unit
+            every { issueLabelRepository.deleteById(22L) } returns Unit
+            every { issueLabelRepository.findByCategory(category) } returns emptyList()
+            every { issueLabelCategoryRepository.delete(category) } returns Unit
+            every { issueLabelCategoryRepository.existsById(11L) } returns false
+
+            service.deleteCategory(11L)
+
+            verify(exactly = 1) { issueLabelCategoryRepository.delete(category) }
         }
     }
 })

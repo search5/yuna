@@ -41,6 +41,16 @@ class DiagnosticServiceSpec : DescribeSpec({
 
             errors.filter { it.contains("yuna.base-url") } shouldBe emptyList()
         }
+
+        it("baseUrl 인자를 생략하면 기본값 빈 문자열이 적용되어 경고 메시지를 포함해야 한다") {
+            val service = DiagnosticService(dataSource = validDataSource())
+
+            val errors = service.checkAll()
+
+            errors shouldContain
+                "yuna.base-url is not configured. Links in webhook payloads and notification emails " +
+                "may be relative or broken."
+        }
     }
 
     describe("checkAll - IMAP 메일 수신기 헬스체크 (P1-137)") {
@@ -61,6 +71,17 @@ class DiagnosticServiceSpec : DescribeSpec({
             )
 
             service.checkAll() shouldNotContain "The Email Receiver is not initialized"
+        }
+
+        it("ImapMailboxPoller 빈은 있지만 healthCheckMessage가 null이면(정상) 관련 에러를 추가하지 않아야 한다") {
+            val poller = mockk<ImapMailboxPoller>()
+            every { poller.healthCheckMessage() } returns null
+
+            val service = DiagnosticService(
+                dataSource = validDataSource(), imapMailboxPoller = poller, baseUrl = "https://yona.example.com"
+            )
+
+            service.checkAll() shouldNotContain "The Email Receiver is not running"
         }
     }
 
@@ -98,6 +119,11 @@ class DiagnosticServiceSpec : DescribeSpec({
         it("JavaMailSender가 없으면 에러를 포함해야 한다") {
             val service = DiagnosticService(dataSource = validDataSource(), mailSender = null, baseUrl = "http://localhost")
             service.checkAll() shouldContain "JavaMailSender is not configured. Email notifications may not work."
+        }
+        it("JavaMailSender가 설정돼 있으면 관련 에러를 추가하지 않아야 한다") {
+            val mailSender = mockk<org.springframework.mail.javamail.JavaMailSender>()
+            val service = DiagnosticService(dataSource = validDataSource(), mailSender = mailSender, baseUrl = "http://localhost")
+            service.checkAll() shouldNotContain "JavaMailSender is not configured. Email notifications may not work."
         }
     }
 })

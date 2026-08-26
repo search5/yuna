@@ -14,6 +14,7 @@ import org.tmatesoft.svn.core.io.SVNRepositoryFactory
 import org.tmatesoft.svn.core.io.diff.SVNDeltaGenerator
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.FileNotFoundException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -119,10 +120,36 @@ class SvnRepositorySpec : DescribeSpec({
             repo.isEmpty() shouldBe true
         }
 
+        it("디렉토리는 존재하지만 유효한 SVN 저장소가 아니면 SVNException을 잡고 true를 반환해야 한다") {
+            val baseDir = newTempBaseDir()
+            val repo = SvnRepository("owner33", "not-svn", baseDir, userResolver)
+            repo.getDirectory().mkdirs()
+
+            repo.isEmpty() shouldBe true
+        }
+
         it("delete()를 호출하면 저장소 디렉토리가 사라져야 한다") {
             val repo = SvnRepository("owner4", "proj4", newTempBaseDir(), userResolver)
             repo.create()
             commitFile(repo, "a.txt", "hello", "커밋")
+
+            repo.delete()
+
+            repo.getDirectory().exists() shouldBe false
+        }
+
+        it("디렉토리가 이미 존재하면 mkdirs 없이 그대로 저장소를 초기화해야 한다") {
+            val repo = SvnRepository("owner37", "proj37", newTempBaseDir(), userResolver)
+            repo.getDirectory().mkdirs()
+
+            repo.create()
+
+            repo.getDirectory().exists() shouldBe true
+            repo.isEmpty() shouldBe true
+        }
+
+        it("저장소가 없는 상태에서 delete()를 호출해도 예외 없이 안전해야 한다") {
+            val repo = SvnRepository("owner38", "no-such-dir", newTempBaseDir(), userResolver)
 
             repo.delete()
 
@@ -145,6 +172,28 @@ class SvnRepositorySpec : DescribeSpec({
             history[0].getMessage() shouldBe "세 번째 커밋"
             history[1].getMessage() shouldBe "두 번째 커밋"
             history[2].getMessage() shouldBe "첫 번째 커밋"
+        }
+
+        it("path를 지정하면 해당 경로 하위의 로그만 조회해야 한다") {
+            val repo = SvnRepository("owner31", "proj31", newTempBaseDir(), userResolver)
+            repo.create()
+            commitFile(repo, "dir/a.txt", "v1", "dir 커밋")
+            commitFile(repo, "b.txt", "v1", "루트 커밋")
+
+            val history = repo.getHistory(0, 25, null, "dir")
+
+            history.size shouldBe 1
+            history[0].getMessage() shouldBe "dir 커밋"
+        }
+
+        it("페이지 범위가 전체 리비전을 초과하면 빈 목록을 반환해야 한다") {
+            val repo = SvnRepository("owner32", "proj32", newTempBaseDir(), userResolver)
+            repo.create()
+            commitFile(repo, "a.txt", "v1", "커밋")
+
+            val history = repo.getHistory(10, 10, null, null)
+
+            history shouldBe emptyList()
         }
 
         it("getCommit(rev)으로 특정 리비전의 커밋을 조회할 수 있어야 한다") {
@@ -203,6 +252,19 @@ class SvnRepositorySpec : DescribeSpec({
             commit.getAuthor()?.loginId shouldBe "alice"
             commit.getAuthor()?.name shouldBe "테스트유저alice"
         }
+
+        it("전체 리비전이 페이지 크기보다 충분히 많으면 endRevision이 1로 보정되지 않아야 한다") {
+            val repo = SvnRepository("owner39", "proj39", newTempBaseDir(), userResolver)
+            repo.create()
+            repeat(10) { i -> commitFile(repo, "a.txt", "v$i", "커밋$i") }
+
+            val history = repo.getHistory(0, 5, null, null)
+
+            // startRevision(10)~endRevision(5) 양끝 포함이라 6개(커밋9~커밋4)가 반환된다.
+            history.size shouldBe 6
+            history[0].getMessage() shouldBe "커밋9"
+            history.last().getMessage() shouldBe "커밋4"
+        }
     }
 
     describe("getMetaDataFromPath() — 파일/디렉토리 조회") {
@@ -256,6 +318,69 @@ class SvnRepositorySpec : DescribeSpec({
 
             metaAtRev1 shouldNotBe null
             metaAtRev1!!.get("data").asString() shouldBe "v1"
+        }
+
+        it("branch 파라미터가 숫자가 아니면 NumberFormatException을 잡고 HEAD(-1) 기준으로 조회해야 한다") {
+            val repo = SvnRepository("owner30", "proj30", newTempBaseDir(), userResolver)
+            repo.create()
+            commitFile(repo, "a.txt", "latest content", "커밋")
+
+            val meta = repo.getMetaDataFromPath("not-a-number", "a.txt")
+
+            meta shouldNotBe null
+            meta!!.get("data").asString() shouldBe "latest content"
+        }
+
+        it("파일 내용에 널 바이트가 있으면 바이너리로 판단해야 한다") {
+            val repo = SvnRepository("owner36", "proj36", newTempBaseDir(), userResolver)
+            repo.create()
+            commitFile(repo, "bin.dat", "abc" + " " + "def", "바이너리 커밋")
+
+            val meta = repo.getMetaDataFromPath("bin.dat")
+
+            meta shouldNotBe null
+            meta!!.get("isBinary").asBoolean() shouldBe true
+        }
+
+        it("파일 크기가 1MB를 초과하면 널 바이트가 없어도 바이너리로 판단해야 한다") {
+            val repo = SvnRepository("owner41", "proj41", newTempBaseDir(), userResolver)
+            repo.create()
+            val bigContent = "a".repeat(1024 * 1024 + 1)
+            commitFile(repo, "big.txt", bigContent, "대용량 파일 커밋")
+
+            val meta = repo.getMetaDataFromPath("big.txt")
+
+            meta shouldNotBe null
+            meta!!.get("isBinary").asBoolean() shouldBe true
+            meta.get("data").asString() shouldBe ""
+        }
+
+        it("userResolver가 사용자를 찾지 못하면 userName/userLoginId를 빈 문자열로 채워야 한다(디렉토리/파일 공통)") {
+            val noSuchUserResolver: (String) -> User? = { null }
+            val repo = SvnRepository("owner42", "proj42", newTempBaseDir(), noSuchUserResolver)
+            repo.create()
+            commitFile(repo, "dir/a.txt", "content", "커밋", author = "ghost")
+
+            val dirMeta = repo.getMetaDataFromPath("dir")
+            val fileMeta = repo.getMetaDataFromPath("dir/a.txt")
+
+            dirMeta shouldNotBe null
+            dirMeta!!.get("data").get("a.txt").get("userName").asString() shouldBe ""
+            dirMeta.get("data").get("a.txt").get("userLoginId").asString() shouldBe ""
+            fileMeta shouldNotBe null
+            fileMeta!!.get("userName").asString() shouldBe ""
+            fileMeta.get("userLoginId").asString() shouldBe ""
+        }
+
+        it("확장자로 MIME 타입을 판별할 수 없는 파일은 기본 mimeType(application/octet-stream)으로 채워야 한다") {
+            val repo = SvnRepository("owner48", "proj48", newTempBaseDir(), userResolver)
+            repo.create()
+            commitFile(repo, "unknownext.yunatestunknown", "plain text content", "알 수 없는 확장자 커밋")
+
+            val meta = repo.getMetaDataFromPath("unknownext.yunatestunknown")
+
+            meta shouldNotBe null
+            meta!!.get("mimeType").asString() shouldBe "application/octet-stream"
         }
     }
 
@@ -388,6 +513,29 @@ class SvnRepositorySpec : DescribeSpec({
             val renamedRepo = SvnRepository("owner23", "after-rename", baseDir, userResolver)
             renamedRepo.getDirectory().exists() shouldBe true
         }
+
+        it("목적지의 상위 디렉토리가 없으면 새로 만들고 이동해야 한다") {
+            val baseDir = newTempBaseDir()
+            val repo = SvnRepository("owner34", "proj34", baseDir, userResolver)
+            repo.create()
+            commitFile(repo, "a.txt", "content", "커밋")
+
+            val moved = repo.move("owner34", "proj34", "brand-new-owner", "proj34")
+
+            moved shouldBe true
+            val movedRepo = SvnRepository("brand-new-owner", "proj34", baseDir, userResolver)
+            movedRepo.getDirectory().exists() shouldBe true
+        }
+
+        it("원본 저장소가 존재하지 않으면 아무 것도 하지 않고 true를 반환해야 한다") {
+            val baseDir = newTempBaseDir()
+            val repo = SvnRepository("owner35", "no-such", baseDir, userResolver)
+
+            val moved = repo.move("owner35", "no-such", "owner35", "renamed")
+
+            moved shouldBe true
+            File(baseDir, "owner35/renamed").exists() shouldBe false
+        }
     }
 
     describe("Git 전용 개념(브랜치)의 SVN no-op 동작 — legacy와 동일") {
@@ -430,6 +578,109 @@ class SvnRepositorySpec : DescribeSpec({
             repo.getArchive(out, "HEAD")
 
             out.size() shouldBe 0
+        }
+
+        it("setDefaultBranch()/deleteBranch()/createBranch()는 legacy와 동일하게 아무 것도 하지 않아야 한다") {
+            val repo = SvnRepository("owner43", "proj43", newTempBaseDir(), userResolver)
+
+            repo.setDefaultBranch("develop")
+            repo.deleteBranch("develop")
+            repo.createBranch("develop", "HEAD")
+
+            repo.getDefaultBranch() shouldBe "HEAD"
+        }
+    }
+
+    describe("작성자(author) 정보가 없는 익명 커밋 방어 처리") {
+        fun commitFileAnonymous(repo: SvnRepository, path: String, content: String, message: String): Long {
+            val svnURL = SVNURL.fromFile(repo.getDirectory())
+            val svnRepository = SVNRepositoryFactory.create(svnURL)
+            try {
+                val editor = svnRepository.getCommitEditor(message, null)
+                editor.openRoot(-1)
+                editor.addFile(path, null, -1)
+                editor.applyTextDelta(path, null)
+                val deltaGenerator = SVNDeltaGenerator()
+                val checksum = deltaGenerator.sendDelta(
+                    path, ByteArrayInputStream(content.toByteArray(StandardCharsets.UTF_8)), editor, true
+                )
+                editor.closeFile(path, checksum)
+                editor.closeDir()
+                return editor.closeEdit().newRevision
+            } finally {
+                svnRepository.closeSession()
+            }
+        }
+
+        it("authenticationManager 없이 커밋되어 author 정보가 없으면 author를 빈 문자열로 채워야 한다") {
+            val repo = SvnRepository("owner44", "proj44", newTempBaseDir(), userResolver)
+            repo.create()
+            commitFileAnonymous(repo, "anon.txt", "익명 커밋 내용", "익명 커밋")
+
+            val fileMeta = repo.getMetaDataFromPath("anon.txt")
+            val dirMeta = repo.getMetaDataFromPath("")
+
+            fileMeta shouldNotBe null
+            fileMeta!!.get("author").asString() shouldBe ""
+            dirMeta shouldNotBe null
+            dirMeta!!.get("data").get("anon.txt").get("author").asString() shouldBe ""
+        }
+
+        it("커밋 메시지 없이(null) 커밋되면 commitMessage를 빈 문자열로 채워야 한다") {
+            val svnURLBuild: (SvnRepository) -> SVNURL = { SVNURL.fromFile(it.getDirectory()) }
+            val repo = SvnRepository("owner45", "proj45", newTempBaseDir(), userResolver)
+            repo.create()
+            val svnRepository = SVNRepositoryFactory.create(svnURLBuild(repo))
+            try {
+                val editor = svnRepository.getCommitEditor(null, null)
+                editor.openRoot(-1)
+                editor.addFile("nomsg.txt", null, -1)
+                editor.applyTextDelta("nomsg.txt", null)
+                val deltaGenerator = SVNDeltaGenerator()
+                val checksum = deltaGenerator.sendDelta(
+                    "nomsg.txt", ByteArrayInputStream("내용".toByteArray(StandardCharsets.UTF_8)), editor, true
+                )
+                editor.closeFile("nomsg.txt", checksum)
+                editor.closeDir()
+                editor.closeEdit()
+            } finally {
+                svnRepository.closeSession()
+            }
+
+            val fileMeta = repo.getMetaDataFromPath("nomsg.txt")
+            val dirMeta = repo.getMetaDataFromPath("")
+
+            fileMeta shouldNotBe null
+            fileMeta!!.get("commitMessage").asString() shouldBe ""
+            dirMeta shouldNotBe null
+            dirMeta!!.get("data").get("nomsg.txt").get("commitMessage").asString() shouldBe ""
+            dirMeta.get("data").get("nomsg.txt").get("msg").asString() shouldBe ""
+        }
+    }
+
+    describe("getParentCommitOf()/move() 예외 방어 처리") {
+        it("존재하지 않는 리비전(범위 밖)의 부모를 조회하면 getCommit()이 SVNException을 던지고, 이를 잡아 null을 반환해야 한다") {
+            val repo = SvnRepository("owner46", "proj46", newTempBaseDir(), userResolver)
+            repo.create()
+            commitFile(repo, "a.txt", "content", "커밋")
+
+            // commitId=1000 -> getCommit("999") 호출 -> 리비전 999는 존재하지 않아 SVNException 발생 -> catch -> null
+            repo.getParentCommitOf("1000") shouldBe null
+        }
+
+        it("목적지가 비어있지 않은 디렉토리이면 Files.move가 IOException을 던지고, 이를 잡아 false를 반환해야 한다") {
+            val baseDir = newTempBaseDir()
+            val repo = SvnRepository("owner47", "proj47", baseDir, userResolver)
+            repo.create()
+            commitFile(repo, "a.txt", "content", "커밋")
+
+            val destDir = File(baseDir, "owner47/dest-not-empty")
+            destDir.mkdirs()
+            File(destDir, "occupied.txt").writeText("이미 점유된 파일")
+
+            val moved = repo.move("owner47", "proj47", "owner47", "dest-not-empty")
+
+            moved shouldBe false
         }
     }
 })

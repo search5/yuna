@@ -27,4 +27,36 @@ class UserVerificationSpec : DescribeSpec({
             verification.isValidDate() shouldBe false
         }
     }
+
+    describe("UserVerification 프로퍼티 접근자") {
+        it("모든 필드의 getter/setter가 정상 동작해야 한다") {
+            val user = User(id = 1L, loginId = "test", name = "Test", email = "test@example.com")
+            val otherUser = User(id = 2L, loginId = "other", name = "Other", email = "other@example.com")
+            val verification = UserVerification(
+                id = 10L,
+                user = user,
+                loginId = "test",
+                verificationCode = "code",
+                timestamp = 123L
+            )
+
+            verification.id shouldBe 10L
+            verification.user shouldBe user
+            verification.loginId shouldBe "test"
+            verification.verificationCode shouldBe "code"
+            verification.timestamp shouldBe 123L
+
+            verification.id = 20L
+            verification.user = otherUser
+            verification.loginId = "changed"
+            verification.verificationCode = "new-code"
+            verification.timestamp = 456L
+
+            verification.id shouldBe 20L
+            verification.user shouldBe otherUser
+            verification.loginId shouldBe "changed"
+            verification.verificationCode shouldBe "new-code"
+            verification.timestamp shouldBe 456L
+        }
+    }
 })

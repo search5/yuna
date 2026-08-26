@@ -136,6 +136,16 @@ class IssueLabelServiceImplSpec : DescribeSpec({
             verify(exactly = 0) { issueLabelCategoryRepository.save(any()) }
         }
 
+        it("동일 이름 카테고리를 찾았는데 id가 null이면(비영속) 다른 카테고리로 취급해 예외를 던져야 한다") {
+            val duplicateWithNullId = IssueLabelCategory(id = null, name = "중복 이름", isExclusive = false, project = project)
+            every { issueLabelCategoryRepository.findById(10L) } returns Optional.of(oldCategory)
+            every { issueLabelCategoryRepository.findByProjectAndName(project, "중복 이름") } returns duplicateWithNullId
+
+            shouldThrow<DuplicateLabelCategoryNameException> {
+                service.updateCategory(categoryId = 10L, name = "중복 이름", isExclusive = false)
+            }
+        }
+
         it("자기 자신과 이름이 같으면(변경 없음) 중복으로 취급하지 않아야 한다") {
             val sameNameAsSelf = IssueLabelCategory(id = 10L, name = "기존 카테고리", isExclusive = false, project = project)
             every { issueLabelCategoryRepository.findById(10L) } returns Optional.of(sameNameAsSelf)

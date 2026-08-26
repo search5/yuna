@@ -174,6 +174,51 @@ class CodeReviewServiceSpec @Autowired constructor(
                 codeThread.state shouldBe CommentThread.ThreadState.OPEN
             }
 
+            // createReviewComment의 commitId==null && pullRequest!=null 분기(CodeCommentThread 쪽,
+            // pullRequest.mergedCommitIdTo/From을 사용)는 기존 테스트가 전부 commitId를 명시적으로
+            // 넘겨서 비어 있었다.
+            it("1-1. commitId 없이 PR만으로 라인지정 리뷰 댓글을 생성하면 PR의 병합 커밋ID를 사용해야 한다") {
+                val codeRange = CodeRange(
+                    path = "src/main/kotlin/App.kt",
+                    startSide = CodeRange.Side.B,
+                    startLine = 5,
+                    startColumn = 0,
+                    endSide = CodeRange.Side.B,
+                    endLine = 5,
+                    endColumn = 0
+                )
+
+                val comment = codeReviewService.createReviewComment(
+                    project = project,
+                    pullRequest = pullRequest,
+                    commitId = null,
+                    contents = "PR 기반 라인지정 댓글",
+                    codeRange = codeRange,
+                    threadId = null,
+                    currentUser = user
+                )
+
+                val codeThread = comment.thread as CodeCommentThread
+                codeThread.commitId shouldBe pullRequest.mergedCommitIdTo
+            }
+
+            // 같은 commitId==null && pullRequest!=null 분기의 NonRangedCodeCommentThread(codeRange
+            // 없는) 쪽도 동일하게 비어 있었다.
+            it("1-2. commitId와 codeRange 없이 PR만으로 리뷰 댓글을 생성하면 PR의 병합 커밋ID를 사용해야 한다") {
+                val comment = codeReviewService.createReviewComment(
+                    project = project,
+                    pullRequest = pullRequest,
+                    commitId = null,
+                    contents = "PR 기반 댓글(라인 없음)",
+                    codeRange = null,
+                    threadId = null,
+                    currentUser = user
+                )
+
+                val thread = comment.thread as NonRangedCodeCommentThread
+                thread.commitId shouldBe pullRequest.mergedCommitIdTo
+            }
+
             // yona NotificationEvent.forNewComment(sender, pullRequest, newComment) 대응 (P1-50)
             describe("리뷰 댓글 알림 (P1-50)") {
                 it("PR 위 리뷰 댓글을 작성하면 PR 감시자에게 NEW_REVIEW_COMMENT 알림이 발행되어야 한다") {
