@@ -24,11 +24,9 @@ class IssueEvent(
     var senderLoginId: String? = null,
     var senderEmail: String? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var oldValue: String? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var newValue: String? = null,
 

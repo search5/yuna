@@ -16,7 +16,6 @@ class PullRequest(
     @Column(nullable = false)
     var title: String = "",
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var body: String? = null,
 

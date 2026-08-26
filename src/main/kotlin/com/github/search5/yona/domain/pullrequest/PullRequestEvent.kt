@@ -25,11 +25,9 @@ class PullRequestEvent(
     @Column(nullable = false)
     var eventType: EventType = EventType.PULL_REQUEST_STATE_CHANGED,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var oldValue: String? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var newValue: String? = null,
 

@@ -170,7 +170,11 @@ class DataBackupServiceImpl(
                     table
                 )?.toLong()
             }
+            // 조인 테이블처럼 "id" 컬럼 자체가 없는 테이블에 pg_get_serial_sequence(table, 'id')를
+            // 호출하면 (시퀀스가 없어서 null을 돌려주는 게 아니라) "column "id" of relation ...
+            // does not exist" 예외가 난다 — 호출 전에 컬럼 존재 여부를 먼저 확인해야 한다.
             Dialect.POSTGRES -> {
+                if (!hasIdColumn(table)) return null
                 val sequenceName = jdbcTemplate.queryForObject(
                     "SELECT pg_get_serial_sequence(?, 'id')", String::class.java, table
                 ) ?: return null
@@ -183,6 +187,14 @@ class DataBackupServiceImpl(
         }
     }
 
+    private fun hasIdColumn(table: String): Boolean {
+        dataSource.connection.use { connection ->
+            connection.metaData.getColumns(connection.catalog, connection.schema, table, "id").use { rs ->
+                return rs.next()
+            }
+        }
+    }
+
     // yona DefaultExchanger.importSequence() 대응 (P2-07) — export 시점에 캡처해둔 "다음 값"을
     // 그대로 복원한다(백업된 행들의 max(id)+1을 재계산하지 않음 — 그러면 export 이전에 이미
     // 삭제된 행으로 생긴 시퀀스 갭이 사라져 그 ID가 재사용될 수 있다).
@@ -192,6 +204,7 @@ class DataBackupServiceImpl(
                 jdbcTemplate.execute("ALTER TABLE $table AUTO_INCREMENT = $nextValue")
             }
             Dialect.POSTGRES -> {
+                if (!hasIdColumn(table)) return
                 val sequenceName = jdbcTemplate.queryForObject(
                     "SELECT pg_get_serial_sequence(?, 'id')",
                     String::class.java,

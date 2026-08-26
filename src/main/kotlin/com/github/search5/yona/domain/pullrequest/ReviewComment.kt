@@ -11,7 +11,6 @@ class ReviewComment(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT", nullable = false)
     var contents: String = "",
 

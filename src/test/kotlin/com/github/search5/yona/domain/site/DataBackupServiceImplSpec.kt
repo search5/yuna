@@ -115,12 +115,17 @@ class DataBackupServiceImplSpec : DescribeSpec({
 
         it("모든 테이블을 조회하고 방언별로 sequence를 추출해야 한다 (PostgreSQL)") {
             every { metaData.databaseProductName } returns "PostgreSQL"
-            
+
             val tablesRs = mockk<ResultSet>(relaxed = true)
             every { metaData.getTables(any(), any(), any(), any()) } returns tablesRs
             every { tablesRs.next() } returnsMany listOf(true, false)
             every { tablesRs.getString("TABLE_NAME") } returns "users"
-            
+
+            // hasIdColumn() 가드 — id 컬럼이 있는 테이블로 취급한다.
+            val idColumnsRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
+            every { idColumnsRs.next() } returns true
+
             every { jdbcTemplate.queryForList("SELECT * FROM users") } returns listOf(mapOf("id" to 1))
             
             every { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, "users") } returns "users_id_seq"
@@ -153,12 +158,38 @@ class DataBackupServiceImplSpec : DescribeSpec({
             str.contains("\"sequences\":{}") shouldBe true
         }
 
+        it("PostgreSQL에서 id 컬럼 자체가 없는 테이블(예: 조인 테이블)은 pg_get_serial_sequence를 호출하지 않고 sequences에서 제외해야 한다") {
+            every { metaData.databaseProductName } returns "PostgreSQL"
+
+            val tablesRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getTables(any(), any(), any(), any()) } returns tablesRs
+            every { tablesRs.next() } returnsMany listOf(true, false)
+            every { tablesRs.getString("TABLE_NAME") } returns "join_table"
+
+            val idColumnsRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
+            every { idColumnsRs.next() } returns false
+
+            every { jdbcTemplate.queryForList("SELECT * FROM join_table") } returns listOf(mapOf("a_id" to 1, "b_id" to 2))
+
+            val result = service.exportAll()
+            val str = String(result)
+
+            str.contains("\"sequences\":{}") shouldBe true
+            verify(exactly = 0) { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, any()) }
+        }
+
         it("PostgreSQL에서 sequence가 없는 경우(null) 예외 없이 넘어가야 한다") {
             every { metaData.databaseProductName } returns "PostgreSQL"
             val tablesRs = mockk<ResultSet>(relaxed = true)
             every { metaData.getTables(any(), any(), any(), any()) } returns tablesRs
             every { tablesRs.next() } returnsMany listOf(true, false)
             every { tablesRs.getString("TABLE_NAME") } returns "users"
+
+            val idColumnsRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
+            every { idColumnsRs.next() } returns true
+
             every { jdbcTemplate.queryForList("SELECT * FROM users") } returns listOf(mapOf("id" to 1))
             
             // sequence_name is null
@@ -238,6 +269,10 @@ class DataBackupServiceImplSpec : DescribeSpec({
             every { metaData.getColumns(any(), any(), any(), null) } returns columnsRs
             every { columnsRs.next() } returns false
 
+            val idColumnsRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
+            every { idColumnsRs.next() } returns true
+
             every { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, "users") } returns "users_id_seq"
             every { jdbcTemplate.queryForObject("SELECT setval(?, ?, false)", Long::class.java, "users_id_seq", 200L) } returns 200L
 
@@ -267,6 +302,10 @@ class DataBackupServiceImplSpec : DescribeSpec({
             val columnsRs = mockk<ResultSet>(relaxed = true)
             every { metaData.getColumns(any(), any(), any(), null) } returns columnsRs
             every { columnsRs.next() } returns false
+
+            val idColumnsRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
+            every { idColumnsRs.next() } returns true
 
             every { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, "users") } returns null
 

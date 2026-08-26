@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.project
 
+import com.github.search5.yona.domain.support.toSnakeCaseSort
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
@@ -71,33 +72,40 @@ interface ProjectRepository : JpaRepository<Project, Long> {
     """)
     fun findPublicProjectIds(): List<Long>
 
-    @Query("""
-        SELECT p FROM Project p 
-        WHERE p.id IN :projectIds 
-          AND (p.name LIKE :keyword 
-               OR p.overview LIKE :keyword)
-    """)
-    fun searchProjects(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Project>
+    // JPQL 대신 네이티브 쿼리를 쓰는 이유는 IssueRepository.searchIssues() 주석 참고 (Postgres
+    // Hibernate 7.2.x LIKE 2개 이상 버그 회피 — name/overview 2개 컬럼이라 1개로 인수분해 불가).
+    @Query(
+        value = "SELECT * FROM project WHERE id IN :projectIds AND (name LIKE :keyword OR overview LIKE :keyword)",
+        countQuery = "SELECT COUNT(*) FROM project WHERE id IN :projectIds AND (name LIKE :keyword OR overview LIKE :keyword)",
+        nativeQuery = true
+    )
+    fun searchProjectsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Project>
 
-    @Query("""
-        SELECT COUNT(p) FROM Project p 
-        WHERE p.id IN :projectIds 
-          AND (p.name LIKE :keyword 
-               OR p.overview LIKE :keyword)
-    """)
-    fun countSearchProjects(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
+    fun searchProjects(projectIds: List<Long>, keyword: String, pageable: Pageable): Page<Project> =
+        searchProjectsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, pageable.toSnakeCaseSort())
 
-    @Query("""
-        SELECT p FROM Project p 
-        WHERE (p.name LIKE :query 
-               OR p.owner LIKE :query)
-    """)
-    fun findProjectsForAdmin(@Param("query") query: String, pageable: Pageable): Page<Project>
+    @Query(
+        value = "SELECT COUNT(*) FROM project WHERE id IN :projectIds AND (name LIKE :keyword OR overview LIKE :keyword)",
+        nativeQuery = true
+    )
+    fun countSearchProjectsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
 
-    @Query("""
-        SELECT COUNT(p) FROM Project p 
-        WHERE (p.name LIKE :query 
-               OR p.owner LIKE :query)
-    """)
+    fun countSearchProjects(projectIds: List<Long>, keyword: String): Int =
+        countSearchProjectsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword)
+
+    @Query(
+        value = "SELECT * FROM project WHERE (name LIKE :query OR owner LIKE :query)",
+        countQuery = "SELECT COUNT(*) FROM project WHERE (name LIKE :query OR owner LIKE :query)",
+        nativeQuery = true
+    )
+    fun findProjectsForAdminQuery(@Param("query") query: String, pageable: Pageable): Page<Project>
+
+    fun findProjectsForAdmin(query: String, pageable: Pageable): Page<Project> =
+        findProjectsForAdminQuery(query, pageable.toSnakeCaseSort())
+
+    @Query(
+        value = "SELECT COUNT(*) FROM project WHERE (name LIKE :query OR owner LIKE :query)",
+        nativeQuery = true
+    )
     fun countProjectsForAdmin(@Param("query") query: String): Int
 }

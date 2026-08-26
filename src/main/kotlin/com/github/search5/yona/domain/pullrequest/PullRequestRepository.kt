@@ -2,6 +2,7 @@ package com.github.search5.yona.domain.pullrequest
 
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.support.toSnakeCaseSort
 import com.github.search5.yona.domain.user.User
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -27,17 +28,24 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
     fun countByToProjectInAndState(toProjects: List<Project>, state: State): Long
 
     // yona organization/group_pullrequest_list.scala.html의 condition.filter(제목 검색) 대응.
-    @Query("""
-        SELECT pr FROM PullRequest pr
-        WHERE pr.toProject IN :projects AND pr.state = :state
-          AND (:keyword = '' OR pr.title LIKE CONCAT('%', :keyword, '%'))
-    """)
-    fun searchByToProjectInAndState(
-        @Param("projects") projects: List<Project>,
+    //
+    // JPQL 대신 네이티브 쿼리를 쓰는 이유는 IssueRepository.searchIssues() 주석 참고 (Postgres
+    // Hibernate 7.2.x 버그 — LIKE가 다른 타입의 바인드 파라미터와 함께 있으면 실패). 네이티브
+    // 쿼리는 엔티티가 아닌 ID로만 바인딩 가능하므로 `List<Project>`를 ID 리스트로 변환해 위임한다.
+    @Query(
+        value = "SELECT * FROM pull_request WHERE to_project_id IN :projectIds AND state = :#{#state.name()} AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%'))",
+        countQuery = "SELECT COUNT(*) FROM pull_request WHERE to_project_id IN :projectIds AND state = :#{#state.name()} AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%'))",
+        nativeQuery = true
+    )
+    fun searchByToProjectIdInAndStateQuery(
+        @Param("projectIds") projectIds: List<Long>,
         @Param("state") state: State,
         @Param("keyword") keyword: String,
         pageable: Pageable
     ): Page<PullRequest>
+
+    fun searchByToProjectInAndState(projects: List<Project>, state: State, keyword: String, pageable: Pageable): Page<PullRequest> =
+        searchByToProjectIdInAndStateQuery(projects.map { it.id!! }.ifEmpty { listOf(-1L) }, state, keyword, pageable.toSnakeCaseSort())
 
     fun findFirstByToProjectOrderByNumberDesc(toProject: Project): PullRequest?
     fun findByContributor(contributor: User): List<PullRequest>

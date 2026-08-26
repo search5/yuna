@@ -13,11 +13,9 @@ abstract class AbstractPosting(
     @Column(nullable = false)
     var title: String = "",
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var body: String? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var history: String? = null,
 

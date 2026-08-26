@@ -39,11 +39,9 @@ class NotificationEvent(
     @Column(nullable = false)
     override var eventType: EventType = EventType.NEW_ISSUE,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var oldValue: String? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var newValue: String? = null,
 

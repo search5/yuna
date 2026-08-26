@@ -2,6 +2,7 @@ package com.github.search5.yona.domain.milestone
 
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.support.toSnakeCaseSort
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
@@ -19,35 +20,40 @@ interface MilestoneRepository : JpaRepository<Milestone, Long> {
     fun findByProjectAndState(project: Project, state: State, sort: Sort): List<Milestone>
     fun findByProjectAndTitle(project: Project, title: String): Milestone?
 
-    @Query("""
-        SELECT m FROM Milestone m 
-        WHERE m.project.id IN :projectIds 
-          AND (m.title LIKE :keyword 
-               OR m.contents LIKE :keyword)
-     """)
-    fun searchMilestones(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Milestone>
+    // JPQL 대신 네이티브 쿼리를 쓰는 이유는 IssueRepository.searchIssues() 주석 참고 (Postgres
+    // Hibernate 7.2.x LIKE 2개 이상 버그 회피 — title/contents 2개 컬럼이라 1개로 인수분해 불가).
+    @Query(
+        value = "SELECT * FROM milestone WHERE project_id IN :projectIds AND (title LIKE :keyword OR contents LIKE :keyword)",
+        countQuery = "SELECT COUNT(*) FROM milestone WHERE project_id IN :projectIds AND (title LIKE :keyword OR contents LIKE :keyword)",
+        nativeQuery = true
+    )
+    fun searchMilestonesQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Milestone>
 
-    @Query("""
-        SELECT COUNT(m) FROM Milestone m 
-        WHERE m.project.id IN :projectIds 
-          AND (m.title LIKE :keyword 
-               OR m.contents LIKE :keyword)
-    """)
-    fun countSearchMilestones(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
+    fun searchMilestones(projectIds: List<Long>, keyword: String, pageable: Pageable): Page<Milestone> =
+        searchMilestonesQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, pageable.toSnakeCaseSort())
 
-    @Query("""
-        SELECT m FROM Milestone m 
-        WHERE m.project = :project 
-          AND (m.title LIKE :keyword 
-               OR m.contents LIKE :keyword)
-    """)
-    fun searchMilestonesInProject(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<Milestone>
+    @Query(
+        value = "SELECT COUNT(*) FROM milestone WHERE project_id IN :projectIds AND (title LIKE :keyword OR contents LIKE :keyword)",
+        nativeQuery = true
+    )
+    fun countSearchMilestonesQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
 
-    @Query("""
-        SELECT COUNT(m) FROM Milestone m 
-        WHERE m.project = :project 
-          AND (m.title LIKE :keyword 
-               OR m.contents LIKE :keyword)
-    """)
+    fun countSearchMilestones(projectIds: List<Long>, keyword: String): Int =
+        countSearchMilestonesQuery(projectIds.ifEmpty { listOf(-1L) }, keyword)
+
+    @Query(
+        value = "SELECT * FROM milestone WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR contents LIKE :keyword)",
+        countQuery = "SELECT COUNT(*) FROM milestone WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR contents LIKE :keyword)",
+        nativeQuery = true
+    )
+    fun searchMilestonesInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<Milestone>
+
+    fun searchMilestonesInProject(project: Project, keyword: String, pageable: Pageable): Page<Milestone> =
+        searchMilestonesInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
+
+    @Query(
+        value = "SELECT COUNT(*) FROM milestone WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR contents LIKE :keyword)",
+        nativeQuery = true
+    )
     fun countSearchMilestonesInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
 }

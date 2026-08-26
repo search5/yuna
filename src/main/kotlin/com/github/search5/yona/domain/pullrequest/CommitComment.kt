@@ -23,7 +23,6 @@ class CommitComment(
     @Enumerated(EnumType.STRING)
     var side: CodeRange.Side? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT", nullable = false)
     var contents: String = "",
 

@@ -22,7 +22,6 @@ class PullRequestCommit(
 
     var created: Instant? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var commitMessage: String = "",
 

@@ -50,6 +50,13 @@ dependencies {
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
 	runtimeOnly("org.postgresql:postgresql")
+	// MariaDB/PostgreSQL 외 지원 대상 DB(MySQL/SQL Server/CUBRID) 드라이버.
+	runtimeOnly("com.mysql:mysql-connector-j:9.1.0")
+	runtimeOnly("com.microsoft.sqlserver:mssql-jdbc:12.8.1.jre11")
+	runtimeOnly("org.cubrid:cubrid-jdbc:11.3.2.0053")
+	// CUBRIDDialect는 hibernate-core가 아니라 hibernate-community-dialects에 있다(공식 유지보수
+	// 대상은 아니지만 현재 Hibernate 7.x용으로 갱신돼 있음, org.hibernate.community.dialect.CUBRIDDialect).
+	implementation("org.hibernate.orm:hibernate-community-dialects")
 
 	// JGit
 	implementation("org.eclipse.jgit:org.eclipse.jgit:7.6.0.202603022253-r")
@@ -102,11 +109,16 @@ dependencies {
 	testImplementation("io.kotest.extensions:kotest-extensions-spring:1.3.0")
 	testImplementation("io.mockk:mockk:1.13.11")
 
-	// Testcontainers
-	testImplementation("org.testcontainers:testcontainers:1.20.0")
-	testImplementation("org.testcontainers:junit-jupiter:1.20.0")
-	testImplementation("org.testcontainers:postgresql:1.20.0")
-	testImplementation("org.testcontainers:mariadb:1.20.0")
+	// Testcontainers — MariaDB/PostgreSQL/MySQL/SQL Server/CUBRID 5개 DB를 전부 도커 컨테이너
+	// 기준으로 검증하기 위해 버전을 1.21.4로 통일하고 mssqlserver/mysql 모듈을 추가했다.
+	testImplementation("org.testcontainers:testcontainers:1.21.4")
+	testImplementation("org.testcontainers:junit-jupiter:1.21.4")
+	testImplementation("org.testcontainers:postgresql:1.21.4")
+	testImplementation("org.testcontainers:mariadb:1.21.4")
+	testImplementation("org.testcontainers:mysql:1.21.4")
+	testImplementation("org.testcontainers:mssqlserver:1.21.4")
+	// CUBRID 공식 Testcontainers 모듈(testcontainers.com Official Module, CUBRID사 직접 관리).
+	testImplementation("org.cubrid:testcontainers-cubrid:0.1.0")
 }
 
 kotlin {
@@ -144,6 +156,9 @@ tasks.withType<Test> {
 	systemProperty("spring.profiles.active", "test")
 	systemProperty("testcontainers.host", "127.0.0.1")
 	systemProperty("api.version", "1.44")
+	// AbstractIntegrationTest의 DB 컨테이너 선택 스위치(mariadb|postgres|mysql|mssql|cubrid).
+	// -Dyona.it.db=... 로 gradle CLI에 준 값을 포크된 테스트 JVM까지 그대로 전달한다.
+	systemProperty("yona.it.db", System.getProperty("yona.it.db", "mariadb"))
 	environment("DOCKER_API_VERSION", "1.44")
 	environment("TESTCONTAINERS_RYUK_DISABLED", "true")
 	environment("TESTCONTAINERS_CONTAINER_STARTUP_TIMEOUT", "120")
@@ -178,3 +193,4 @@ tasks.jacocoTestCoverageVerification {
 		}
 	}
 }
+

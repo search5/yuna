@@ -33,6 +33,11 @@ class DataBackupServiceIntegrationSpec @Autowired constructor(
     private val jdbc: JdbcTemplate by lazy { JdbcTemplate(dataSource) }
 
     init {
+        // 이 스펙은 MariaDB 전용 검증 SQL(INFORMATION_SCHEMA.TABLES.AUTO_INCREMENT, DATABASE())을
+        // 직접 쓴다 — PostgreSQL 등 다른 DB 기준으로 전체 스위트를 돌릴 때는(-Dyona.it.db=postgres)
+        // 같은 메커니즘을 DataBackupServicePostgresIntegrationSpec이 방언에 맞는 SQL로 이미
+        // 별도 검증하므로, 여기서는 MariaDB(기본값)일 때만 실행한다.
+        if (System.getProperty("yona.it.db", "mariadb") == "mariadb") {
         describe("DataBackupService export/import 왕복") {
             it("백업 시점 이후에 추가된 데이터는 해당 백업으로 복원하면 사라져야 한다") {
                 // Given: 기준 시점 데이터
@@ -143,6 +148,7 @@ class DataBackupServiceIntegrationSpec @Autowired constructor(
                 )
                 restoredCount shouldBe 1
             }
+        }
         }
     }
 }

@@ -21,7 +21,6 @@ class Milestone(
 
     var dueDate: Instant? = null,
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     var contents: String? = null,
 

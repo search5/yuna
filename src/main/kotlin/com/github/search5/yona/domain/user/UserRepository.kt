@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.user
 
+import com.github.search5.yona.domain.support.toSnakeCaseSort
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
@@ -13,37 +14,38 @@ interface UserRepository : JpaRepository<User, Long> {
     fun findByToken(token: String): Optional<User>
     fun findByState(state: UserState): List<User>
 
-    @Query("""
-        SELECT u FROM User u 
-        WHERE u.state IN (com.github.search5.yona.domain.user.UserState.ACTIVE, com.github.search5.yona.domain.user.UserState.SITE_ADMIN) 
-          AND (u.name LIKE :keyword 
-               OR u.loginId LIKE :keyword
-               OR u.englishName LIKE :keyword)
-     """)
-    fun searchUsers(@Param("keyword") keyword: String, pageable: Pageable): Page<User>
+    // JPQL 대신 네이티브 쿼리를 쓰는 이유는 IssueRepository.searchIssues() 주석 참고 (Postgres
+    // Hibernate 7.2.x LIKE 2개 이상 버그 회피 — name/login_id(/english_name) 컬럼이 여러 개라
+    // 1개로 인수분해 불가). enum(UserState)은 문자열 이름으로 바인딩한다.
+    @Query(
+        value = "SELECT * FROM n4user WHERE state IN ('ACTIVE', 'SITE_ADMIN') AND (name LIKE :keyword OR login_id LIKE :keyword OR english_name LIKE :keyword)",
+        countQuery = "SELECT COUNT(*) FROM n4user WHERE state IN ('ACTIVE', 'SITE_ADMIN') AND (name LIKE :keyword OR login_id LIKE :keyword OR english_name LIKE :keyword)",
+        nativeQuery = true
+    )
+    fun searchUsersQuery(@Param("keyword") keyword: String, pageable: Pageable): Page<User>
 
-    @Query("""
-        SELECT COUNT(u) FROM User u 
-        WHERE u.state IN (com.github.search5.yona.domain.user.UserState.ACTIVE, com.github.search5.yona.domain.user.UserState.SITE_ADMIN) 
-          AND (u.name LIKE :keyword 
-               OR u.loginId LIKE :keyword
-               OR u.englishName LIKE :keyword)
-    """)
+    fun searchUsers(keyword: String, pageable: Pageable): Page<User> =
+        searchUsersQuery(keyword, pageable.toSnakeCaseSort())
+
+    @Query(
+        value = "SELECT COUNT(*) FROM n4user WHERE state IN ('ACTIVE', 'SITE_ADMIN') AND (name LIKE :keyword OR login_id LIKE :keyword OR english_name LIKE :keyword)",
+        nativeQuery = true
+    )
     fun countSearchUsers(@Param("keyword") keyword: String): Int
 
-    @Query("""
-        SELECT u FROM User u 
-        WHERE u.state = :state 
-          AND (u.name LIKE :query 
-               OR u.loginId LIKE :query)
-    """)
-    fun findUsersForAdmin(@Param("state") state: UserState, @Param("query") query: String, pageable: Pageable): Page<User>
+    @Query(
+        value = "SELECT * FROM n4user WHERE state = :#{#state.name()} AND (name LIKE :query OR login_id LIKE :query)",
+        countQuery = "SELECT COUNT(*) FROM n4user WHERE state = :#{#state.name()} AND (name LIKE :query OR login_id LIKE :query)",
+        nativeQuery = true
+    )
+    fun findUsersForAdminQuery(@Param("state") state: UserState, @Param("query") query: String, pageable: Pageable): Page<User>
 
-    @Query("""
-        SELECT COUNT(u) FROM User u 
-        WHERE u.state = :state 
-          AND (u.name LIKE :query 
-               OR u.loginId LIKE :query)
-    """)
+    fun findUsersForAdmin(state: UserState, query: String, pageable: Pageable): Page<User> =
+        findUsersForAdminQuery(state, query, pageable.toSnakeCaseSort())
+
+    @Query(
+        value = "SELECT COUNT(*) FROM n4user WHERE state = :#{#state.name()} AND (name LIKE :query OR login_id LIKE :query)",
+        nativeQuery = true
+    )
     fun countUsersForAdmin(@Param("state") state: UserState, @Param("query") query: String): Int
 }
