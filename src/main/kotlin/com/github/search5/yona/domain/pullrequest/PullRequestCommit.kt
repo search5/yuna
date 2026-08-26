@@ -22,7 +22,7 @@ class PullRequestCommit(
 
     var created: Instant? = null,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var commitMessage: String = "",
 
     @Column(nullable = false)

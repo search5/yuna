@@ -23,7 +23,7 @@ class CommitComment(
     @Enumerated(EnumType.STRING)
     var side: CodeRange.Side? = null,
 
-    @Column(columnDefinition = "TEXT", nullable = false)
+    @Column(length = 1_000_000, nullable = false)
     var contents: String = "",
 
     var createdDate: Instant = Instant.now(),

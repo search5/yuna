@@ -45,10 +45,16 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
             "mssql" -> KMSSQLServerContainer("mcr.microsoft.com/mssql/server:2022-latest")
                 .acceptLicense()
             // CUBRID 공식 Testcontainers 모듈(org.cubrid:testcontainers-cubrid, CUBRID사 직접 관리).
+            // 공식 도커 이미지(cubrid/cubrid-docker)의 CUBRID_LOCALE 기본값이 "en_US"(UTF-8이
+            // 아님)라 한글 등 비ASCII 문자열이 깨져서 저장된다(실측 확인 — "홍길동"이 다른
+            // 인코딩으로 잘못 해석된 바이트로 저장됨). DB 생성 시점 로케일을 UTF-8로 지정해야
+            // 하고, 클라이언트 쪽도 JDBC URL의 charSet=utf-8로 맞춰줘야 한다.
             "cubrid" -> CubridContainer("cubrid/cubrid:11.4")
                 .withDatabaseName("yona")
                 .withUsername("yona")
                 .withPassword("yona_password")
+                .withUrlParam("charSet", "utf-8")
+                .withEnv("CUBRID_LOCALE", "en_US.utf8")
             else -> MariaDBContainer("mariadb:10.11")
                 .withDatabaseName("yona")
                 .withUsername("yona")
@@ -69,7 +75,25 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
             // CUBRIDDialect는 hibernate-core가 아니라 hibernate-community-dialects에 있어
             // Hibernate가 JDBC 메타데이터만으로 자동 인식하지 못한다 — 명시적으로 지정해야 한다.
             if (selectedDb == "cubrid") {
-                registry.add("spring.jpa.database-platform") { "org.hibernate.community.dialect.CUBRIDDialect" }
+                // CUBRIDDialect의 BOOLEAN→bit 매핑/타임존 지원이 CUBRID JDBC 드라이버 결함과
+                // 부딪히는 문제를 우회하는 커스텀 방언 — config/YunaCubridDialect.kt 주석 참고.
+                registry.add("spring.jpa.database-platform") { "com.github.search5.yona.config.YunaCubridDialect" }
+                // CUBRID는 role 등 다른 DB에서는 평범한 테이블/컬럼명을 예약어로 취급해 DDL이
+                // 깨진다. globally_quoted_identifiers는 기본 물리 네이밍 전략(snake_case 변환)
+                // 자체를 무력화하는 부작용이 있어(실측 확인) 쓰지 않고, 예약어와 겹칠 때만
+                // 개별적으로 인용하는 전용 네이밍 전략을 쓴다 — config/YunaCubridNamingStrategy.kt.
+                registry.add("spring.jpa.hibernate.naming.physical-strategy") { "com.github.search5.yona.config.YunaCubridNamingStrategy" }
+                // CUBRID 브로커가 유휴/오래된 커넥션을 서버 쪽에서 먼저 끊는 경우가 있는데,
+                // HikariCP가 이를 감지 못하고 죽은 커넥션을 내주면 드라이버 내부에서 NPE(this.con
+                // is null)가 난다 — 대규모 스위트를 통으로 돌릴 때만 재현되는 걸 실측으로 확인했다
+                // (개별 실행 시엔 통과). 커넥션을 실제 사용 전에 검증하도록 강제해 걸러낸다.
+                registry.add("spring.datasource.hikari.connection-test-query") { "SELECT 1" }
+                registry.add("spring.datasource.hikari.max-lifetime") { "300000" }
+                // 커넥션 검증으로도 못 잡는다 — JDBC getGeneratedKeys() 기반 ID 회수
+                // (GetGeneratedKeysDelegate)가 대규모 스위트에서만 CUBRID 드라이버 내부 NPE로
+                // 죽는 걸 실측으로 확인했다. 방언이 제공하는 identity-select 방식(예: CUBRID의
+                // LAST_INSERT_ID() 계열)으로 우회한다.
+                registry.add("spring.jpa.properties.hibernate.jdbc.use_get_generated_keys") { "false" }
             }
         }
     }

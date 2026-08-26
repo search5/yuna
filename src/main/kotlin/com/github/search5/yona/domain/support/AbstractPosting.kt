@@ -13,10 +13,10 @@ abstract class AbstractPosting(
     @Column(nullable = false)
     var title: String = "",
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var body: String? = null,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var history: String? = null,
 
     var createdDate: Instant? = null,

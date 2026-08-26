@@ -21,7 +21,7 @@ class Milestone(
 
     var dueDate: Instant? = null,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var contents: String? = null,
 
     @Enumerated(EnumType.STRING)

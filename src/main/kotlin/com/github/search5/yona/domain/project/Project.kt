@@ -16,7 +16,7 @@ class Project(
     @Column(nullable = false)
     var name: String = "",
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var overview: String? = null,
 
     var vcs: String? = null,

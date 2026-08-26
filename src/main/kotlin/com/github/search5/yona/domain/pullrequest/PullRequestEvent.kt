@@ -25,10 +25,10 @@ class PullRequestEvent(
     @Column(nullable = false)
     var eventType: EventType = EventType.PULL_REQUEST_STATE_CHANGED,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var oldValue: String? = null,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var newValue: String? = null,
 
     var created: Instant = Instant.now()

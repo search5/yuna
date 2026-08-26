@@ -190,16 +190,31 @@ spring:
     activate:
       on-profile: cubrid
   datasource:
-    url: "jdbc:cubrid:localhost:33000:yona:::"
+    # charSet=utf-8이 없으면 한글 등 비ASCII 문자열이 깨져서 저장된다(실측 확인).
+    url: "jdbc:cubrid:localhost:33000:yona:::?charSet=utf-8"
     username: yona
     password: yona_password
     driver-class-name: cubrid.jdbc.driver.CUBRIDDriver
+    hikari:
+      # CUBRID 브로커가 유휴/오래된 커넥션을 서버 쪽에서 먼저 끊어버리는 경우가 있는데,
+      # HikariCP가 이를 감지 못하고 죽은 커넥션을 그대로 내주면 CUBRID 드라이버 내부에서
+      # NPE(this.con is null)가 난다(대규모 테스트 스위트에서 실측 확인). 커넥션을 실제로
+      # 사용하기 전에 유효성 검사를 하도록 강제해 죽은 커넥션을 미리 걸러낸다.
+      connection-test-query: SELECT 1
+      max-lifetime: 300000
   jpa:
     # CUBRIDDialect는 hibernate-community-dialects 모듈에 있어 JDBC 메타데이터만으로 자동
     # 인식되지 않는다 — 명시적으로 지정해야 한다.
-    database-platform: org.hibernate.community.dialect.CUBRIDDialect
+    database-platform: com.github.search5.yona.config.YunaCubridDialect
     hibernate:
       ddl-auto: update
+      # CUBRID는 role 등 다른 DB에서는 평범한 테이블/컬럼명을 예약어로 취급해 DDL이 "Syntax
+      # error: unexpected 'role'"처럼 깨진다. globally_quoted_identifiers로 전부 인용부호를
+      # 씌우면 되레 Hibernate가 모든 식별자를 "이미 인용됨"으로 표시해버려 기본 물리 네이밍
+      # 전략(camelCase→snake_case 변환)이 통째로 무시되는 부작용이 있어(실측 확인), 예약어와
+      # 겹칠 때만 개별적으로 인용하는 전용 네이밍 전략을 쓴다.
+      naming:
+        physical-strategy: com.github.search5.yona.config.YunaCubridNamingStrategy
     show-sql: true
     properties:
       hibernate:

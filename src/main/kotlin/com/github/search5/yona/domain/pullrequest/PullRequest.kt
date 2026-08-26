@@ -16,7 +16,7 @@ class PullRequest(
     @Column(nullable = false)
     var title: String = "",
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var body: String? = null,
 
     @ManyToOne(fetch = FetchType.LAZY)

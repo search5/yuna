@@ -684,18 +684,23 @@ class IssueServiceSpec @Autowired constructor(
                     val fromProject = projectRepository.save(Project(name = "from-proj6", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
                     val toProject = projectRepository.save(Project(name = "to-proj6", owner = "owner-b", projectScope = ProjectScope.PUBLIC))
 
+                    // number를 명시적으로 다르게 준다 — 실제 생성 흐름(IssueServiceImpl)은 항상
+                    // project.lastIssueNumber로 채우지만, 이 테스트는 그 흐름을 우회해 리포지토리에
+                    // 직접 save하므로 둘 다 기본값(null)로 두면 CUBRID의 (project_id, number) 유니크
+                    // 제약이 "NULL과 NULL은 같다"고 판단해(다른 DB는 NULL을 서로 다르다고 취급) 두
+                    // 번째 insert가 제약 위반으로 실패한다.
                     val parent = issueRepository.save(
                         Issue(
                             title = "부모 이슈", body = "본문", project = fromProject,
                             authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
-                            createdDate = Instant.now()
+                            createdDate = Instant.now(), number = 1L
                         )
                     )
                     val child = issueRepository.save(
                         Issue(
                             title = "자식 이슈", body = "본문", project = fromProject,
                             authorId = mover.id, authorLoginId = mover.loginId, authorName = mover.name,
-                            createdDate = Instant.now(), parent = parent
+                            createdDate = Instant.now(), parent = parent, number = 2L
                         )
                     )
 

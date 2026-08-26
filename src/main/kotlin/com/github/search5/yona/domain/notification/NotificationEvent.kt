@@ -39,10 +39,10 @@ class NotificationEvent(
     @Column(nullable = false)
     override var eventType: EventType = EventType.NEW_ISSUE,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var oldValue: String? = null,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var newValue: String? = null,
 
     @OneToOne(mappedBy = "notificationEvent", cascade = [CascadeType.ALL])

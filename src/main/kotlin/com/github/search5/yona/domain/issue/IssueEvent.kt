@@ -24,10 +24,10 @@ class IssueEvent(
     var senderLoginId: String? = null,
     var senderEmail: String? = null,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var oldValue: String? = null,
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1_000_000)
     var newValue: String? = null,
 
     var created: Instant = Instant.now(),
