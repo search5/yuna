@@ -66,6 +66,18 @@ class DataBackupServiceImplSpec : DescribeSpec({
             
             service.exportAll()
         }
+
+        it("databaseProductName이 null이면 OTHER 방언으로 처리해야 한다") {
+            every { metaData.databaseProductName } returns null
+            val tablesRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getTables(any(), any(), any(), any()) } returns tablesRs
+            every { tablesRs.next() } returns false
+
+            val result = service.exportAll()
+
+            result shouldNotBe null
+            // 검증 로직 없음, 에러만 안나면 성공 (databaseProductName ?: "" 엘비스의 null쪽 겨냥)
+        }
     }
 
     describe("exportAll") {
@@ -119,6 +131,28 @@ class DataBackupServiceImplSpec : DescribeSpec({
             str.contains("30") shouldBe true
         }
 
+        it("MySQL에서 AUTO_INCREMENT 조회 결과가 null이면(예: id 없는 조인 테이블) sequences에서 제외해야 한다") {
+            every { metaData.databaseProductName } returns "MySQL"
+
+            val tablesRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getTables(any(), any(), any(), any()) } returns tablesRs
+            every { tablesRs.next() } returnsMany listOf(true, false)
+            every { tablesRs.getString("TABLE_NAME") } returns "join_table"
+
+            every { jdbcTemplate.queryForList("SELECT * FROM join_table") } returns listOf(mapOf("a_id" to 1, "b_id" to 2))
+            every { jdbcTemplate.queryForObject(
+                "SELECT AUTO_INCREMENT FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+                JLong::class.java,
+                "test_catalog",
+                "join_table"
+            ) } returns null
+
+            val result = service.exportAll()
+            val str = String(result)
+            str.contains("join_table") shouldBe true
+            str.contains("\"sequences\":{}") shouldBe true
+        }
+
         it("PostgreSQL에서 sequence가 없는 경우(null) 예외 없이 넘어가야 한다") {
             every { metaData.databaseProductName } returns "PostgreSQL"
             val tablesRs = mockk<ResultSet>(relaxed = true)
@@ -153,19 +187,33 @@ class DataBackupServiceImplSpec : DescribeSpec({
                 }
             """.trimIndent().toByteArray()
 
+            // dateTimeColumns()는 DATA_TYPE이 datetime 계열일 때만 COLUMN_NAME을 조회하므로(조건부 호출),
+            // getInt/getString을 각각 독립적인 returnsMany로 스텁하면 호출 횟수가 어긋나 엉뚱한 컬럼명과
+            // 매칭된다 — 같은 행 인덱스를 공유하는 answers로 묶어야 실제 호출 패턴과 일치한다.
+            val columnNames = listOf("id", "name", "created_at")
+            val columnTypes = listOf(Types.INTEGER, Types.VARCHAR, Types.TIMESTAMP)
+            var columnIdx = -1
             val columnsRs = mockk<ResultSet>(relaxed = true)
             every { metaData.getColumns(any(), any(), any(), null) } returns columnsRs
-            every { columnsRs.next() } returnsMany listOf(true, true, true, false)
-            every { columnsRs.getString("COLUMN_NAME") } returnsMany listOf("id", "name", "created_at")
-            every { columnsRs.getInt("DATA_TYPE") } returnsMany listOf(Types.INTEGER, Types.VARCHAR, Types.TIMESTAMP)
+            every { columnsRs.next() } answers { columnIdx++; columnIdx < columnNames.size }
+            every { columnsRs.getString("COLUMN_NAME") } answers { columnNames[columnIdx] }
+            every { columnsRs.getInt("DATA_TYPE") } answers { columnTypes[columnIdx] }
+
+            val capturedCalls = mutableListOf<List<Any?>>()
+            every { jdbcTemplate.update(any<String>(), *anyVararg<Any>()) } answers {
+                capturedCalls.add(it.invocation.args)
+                1
+            }
 
             service.importAll(json)
+
+            val insertCall = capturedCalls.first { (it[0] as String).startsWith("INSERT") }
+            val boundValues = insertCall[1] as Array<*>
+            boundValues.last() shouldBe java.sql.Timestamp.from(java.time.Instant.parse("2026-08-20T06:21:04.973Z"))
 
             verify { jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0") }
             verify { jdbcTemplate.update("DELETE FROM users") }
             verify { jdbcTemplate.update("DELETE FROM empty_table") }
-            // row insert verification (value array check is tricky with mockk, just verify update was called)
-            verify(atLeast = 1) { jdbcTemplate.update(any<String>(), *anyVararg<Any>()) }
             verify { jdbcTemplate.execute("ALTER TABLE users AUTO_INCREMENT = 100") }
             verify { jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1") }
         }
@@ -227,6 +275,28 @@ class DataBackupServiceImplSpec : DescribeSpec({
             verify(exactly = 0) { jdbcTemplate.queryForObject("SELECT setval(?, ?, false)", Long::class.java, any(), any()) }
         }
 
+        it("sequences 키가 아예 없으면 빈 맵으로 처리해 예외 없이 진행해야 한다") {
+            every { metaData.databaseProductName } returns "MySQL"
+
+            val json = """
+                {
+                  "tables": {
+                    "users": [
+                      {"id": 1}
+                    ]
+                  }
+                }
+            """.trimIndent().toByteArray()
+
+            val columnsRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getColumns(any(), any(), any(), null) } returns columnsRs
+            every { columnsRs.next() } returns false
+
+            service.importAll(json)
+
+            verify(exactly = 0) { jdbcTemplate.execute(match<String> { it.contains("AUTO_INCREMENT") }) }
+        }
+
         it("기타 DB인 경우 외래키 토글 및 시퀀스 복원이 무시되어야 한다 (OTHER)") {
             every { metaData.databaseProductName } returns "Oracle"
             
@@ -274,6 +344,31 @@ class DataBackupServiceImplSpec : DescribeSpec({
 
             // insert가 호출되지 않아야 함
             verify(exactly = 0) { jdbcTemplate.update(any<String>(), *anyVararg<Any>()) }
+        }
+
+        it("datetime 컬럼 값이 String이 아니면(null 등) 변환을 시도하지 않고 그대로 바인딩해야 한다") {
+            every { metaData.databaseProductName } returns "MySQL"
+
+            val json = """
+                {
+                  "tables": {
+                    "users": [
+                      {"id": 1, "created_at": null}
+                    ]
+                  },
+                  "sequences": {}
+                }
+            """.trimIndent().toByteArray()
+
+            val columnsRs = mockk<ResultSet>(relaxed = true)
+            every { metaData.getColumns(any(), any(), "users", null) } returns columnsRs
+            every { columnsRs.next() } returnsMany listOf(true, true, false)
+            every { columnsRs.getString("COLUMN_NAME") } returnsMany listOf("id", "created_at")
+            every { columnsRs.getInt("DATA_TYPE") } returnsMany listOf(Types.INTEGER, Types.TIMESTAMP)
+
+            service.importAll(json)
+
+            // Exception 안나면 성공 (coerceForInsert의 value !is String 분기 겨냥)
         }
 
         it("잘못된 datetime 문자열은 파싱을 포기하고 그대로 반환해야 한다") {

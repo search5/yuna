@@ -380,7 +380,7 @@ TASK-0271에서 `fix[e[s|d]]?`(중첩 대괄호 오사용)를 `fix(?:es|ed)?`로
 | `Role` | 100.0 | 100.0 | 100.0 | 0 | 0 | 0 | [x] | 2026-08-25: 신규 `RoleSpec.kt`로 프로퍼티 접근자 포함 전체 확보 완료(LINE 100%, BRANCH 100%, METHOD 100%) |
 | **domain/site** | | | | | | | | |
 | `SiteService` | 41.2 | 18.6 | 41.7 | 60 | 57 | 7 | [x] | 2026-08-23: 27 tests 추가(총 33). 단독 측정 LINE 100%, METHOD 100%, BRANCH 95.7%(67/70) — 목표 달성. 도달 불가능 3건 확인(`getMailList`/`getNoAvatarUsers`의 `User.email`이 non-nullable `var email: String=""`이라 null 분기가 타입 시스템상 불가능) |
-| `DataBackupServiceImpl` | 86.1 | 72.7 | 100.0 | 14 | 15 | 0 | [~] | 2026-08-25 재검증(전체 클린 `./gradlew test jacocoTestReport` 기준): 실제로는 LINE 98.0%, BRANCH 90.9%, METHOD 100.0%, CLASS 100.0%로 95% 미달 확인 — 이전 완료 표기가 부정확했음(전용 테스트 파일 부재 또는 이후 회귀 추정). 재작업 필요. [기존 기록: 2026-08-25: 테스트 보강하여 95% 이상 확보 완료] |
+| `DataBackupServiceImpl` | 99.0 | 96.4 | 100.0 | 1 | 2 | 0 | [x] | 2026-08-26: fork 테스트에 실제 버그 발견 — `dateTimeColumns()` mock이 getInt/getString을 각각 독립 `returnsMany`로 스텁했으나 프로덕션 코드는 DATA_TYPE이 datetime 계열일 때만 조건부로 COLUMN_NAME을 조회해 호출 횟수가 어긋나 "created_at"이 아닌 "id"가 datetime 컬럼으로 잘못 매칭 — 같은 행 인덱스를 공유하는 answers로 수정해 Timestamp 변환 성공 경로(line133)를 실제로 검증하도록 고침. `sequences` 키 부재 테스트 추가로 LINE 99.0%, BRANCH 96.4% 확보. 잔여 미달분은 `dataSource.connection.use{}` 인라인 함수의 Kotlin/JaCoCo 라인번호 오귀속(javap로 확인, 존재하지 않는 라인 번호 엔트리 발견 — 실제로는 매 테스트에서 정상 실행됨) |
 | **domain/support** | | | | | | | | |
 | `TranslationServiceImpl` | 11.5 | 0.0 | 25.0 | 54 | 30 | 3 | [x] | 2026-08-25: 신규 테스트 추가하여 커버리지 확보 완료. |
 | `SearchServiceImpl` | 68.2 | 37.5 | 85.7 | 27 | 40 | 1 | [x] | 2026-08-25: 테스트 보강하여 95% 이상 확보 완료 |
