@@ -1,17 +1,24 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.domain.issue.IssueFilterType
+import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.user.FavoriteService
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
+import java.time.format.DateTimeFormatter
 
 @RestController
 class FavoriteController(
     private val favoriteService: FavoriteService,
-    private val userRepository: UserRepository
+    private val issueService: IssueService,
+    private val userRepository: UserRepository,
+    @Value("\${yuna.base-url:}")
+    private val baseUrl: String
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -88,6 +95,55 @@ class FavoriteController(
             "projectIds" to issueIds,
             "projects" to issuesJson
         ))
+    }
+
+    // yona controllers/api/UserApi.java:129-186 getIssuesByUser()/issuesAsJson() 대응 (P2-52).
+    @GetMapping("/-_-api/v1/user/issues")
+    fun getIssuesByUser(
+        @RequestParam(defaultValue = "assigned") filter: String,
+        @RequestParam(defaultValue = "1") page: Int,
+        @RequestParam(defaultValue = "10") pageNum: Int,
+        authentication: Authentication?
+    ): ResponseEntity<Map<String, Any>> {
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        val filterType = try {
+            IssueFilterType.getValue(filter)
+        } catch (e: IllegalArgumentException) {
+            return ResponseEntity.badRequest().body(mapOf("message" to (e.message ?: "invalid filter")))
+        }
+
+        val allIssues = issueService.getIssuesByFilter(filterType, user)
+        val fromIndex = ((page - 1) * pageNum).coerceIn(0, allIssues.size)
+        val toIndex = (fromIndex + pageNum).coerceIn(fromIndex, allIssues.size)
+        val pageOfIssues = allIssues.subList(fromIndex, toIndex)
+
+        val result = pageOfIssues.map { issue ->
+            val authorNode = mapOf(
+                "id" to issue.authorId,
+                "loginId" to issue.authorLoginId,
+                "name" to issue.authorName
+            )
+            val assigneeNode = issue.assignee?.let {
+                mapOf("id" to it.id, "loginId" to it.user.loginId, "name" to it.user.name)
+            } ?: emptyMap()
+            val projectNode = mapOf("id" to issue.project.id, "name" to issue.project.name)
+
+            mapOf(
+                "id" to issue.id,
+                "number" to issue.number,
+                "state" to issue.state.toString(),
+                "title" to issue.title,
+                "createdDate" to issue.createdDate?.let { DateTimeFormatter.ISO_INSTANT.format(it) },
+                "updatedDate" to issue.updatedDate?.let { DateTimeFormatter.ISO_INSTANT.format(it) },
+                "author" to authorNode,
+                "assignee" to assigneeNode,
+                "project" to projectNode,
+                "owner" to issue.project.owner,
+                "refUrl" to "$baseUrl/${issue.project.owner}/${issue.project.name}/issue/${issue.number}"
+            )
+        }
+
+        return ResponseEntity.ok(mapOf("result" to result))
     }
 
     @PostMapping("/-_-api/v1/favoriteOrganizations/{organizationId}")

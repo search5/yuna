@@ -1046,6 +1046,120 @@ class IssueServiceSpec @Autowired constructor(
                     mentionService.getMentioningIssueIds(mentioned.id!!) shouldBe listOf(savedIssue.id)
                 }
             }
+
+            // yona models/support/IssueSearchCondition.java 대응 (P2-52).
+            describe("getIssuesByFilter") {
+                it("ASSIGNED - 담당자로 지정된 이슈만 반환해야 한다") {
+                    val user = userRepository.save(User(loginId = "filter-assigned-user", name = "필터담당자"))
+                    val otherUser = userRepository.save(User(loginId = "filter-assigned-other", name = "다른유저"))
+                    val project = projectRepository.save(Project(name = "filter-assigned-project", owner = "filter-assigned-user"))
+
+                    val assignedIssue = issueService.createIssue(
+                        Issue(title = "담당 이슈", project = project, authorId = otherUser.id, authorLoginId = otherUser.loginId),
+                        otherUser, assigneeUser = user
+                    )
+                    issueService.createIssue(
+                        Issue(title = "담당 아닌 이슈", project = project, authorId = otherUser.id, authorLoginId = otherUser.loginId),
+                        otherUser
+                    )
+
+                    val result = issueService.getIssuesByFilter(IssueFilterType.ASSIGNED, user)
+
+                    result.map { it.id } shouldBe listOf(assignedIssue.id)
+                }
+
+                it("CREATED - 본인이 작성한 이슈만 반환해야 한다") {
+                    val author = userRepository.save(User(loginId = "filter-created-author", name = "작성자"))
+                    val other = userRepository.save(User(loginId = "filter-created-other", name = "다른유저2"))
+                    val project = projectRepository.save(Project(name = "filter-created-project", owner = "filter-created-author"))
+
+                    val createdIssue = issueService.createIssue(
+                        Issue(title = "내가 쓴 이슈", project = project, authorId = author.id, authorLoginId = author.loginId), author
+                    )
+                    issueService.createIssue(
+                        Issue(title = "남이 쓴 이슈", project = project, authorId = other.id, authorLoginId = other.loginId), other
+                    )
+
+                    val result = issueService.getIssuesByFilter(IssueFilterType.CREATED, author)
+
+                    result.map { it.id } shouldBe listOf(createdIssue.id)
+                }
+
+                it("MENTIONED - 나를 멘션한 이슈만 반환해야 한다") {
+                    val author = userRepository.save(User(loginId = "filter-mention-author", name = "멘션작성자"))
+                    val mentioned = userRepository.save(User(loginId = "filter-mention-target", name = "멘션대상"))
+                    val project = projectRepository.save(Project(name = "filter-mention-project", owner = "filter-mention-author"))
+
+                    val mentioningIssue = issueService.createIssue(
+                        Issue(
+                            title = "멘션 이슈", body = "@filter-mention-target 확인해주세요", project = project,
+                            authorId = author.id, authorLoginId = author.loginId
+                        ),
+                        author
+                    )
+                    issueService.createIssue(
+                        Issue(title = "멘션 없는 이슈", body = "그냥 이슈", project = project, authorId = author.id, authorLoginId = author.loginId),
+                        author
+                    )
+
+                    val result = issueService.getIssuesByFilter(IssueFilterType.MENTIONED, mentioned)
+
+                    result.map { it.id } shouldBe listOf(mentioningIssue.id)
+                }
+
+                it("FAVORITE - 즐겨찾기한 이슈만 반환해야 한다") {
+                    val author = userRepository.save(User(loginId = "filter-favorite-author", name = "즐찾작성자"))
+                    val project = projectRepository.save(Project(name = "filter-favorite-project", owner = "filter-favorite-author"))
+                    val favoritedIssue = issueService.createIssue(
+                        Issue(title = "즐겨찾는 이슈", project = project, authorId = author.id, authorLoginId = author.loginId), author
+                    )
+                    issueService.createIssue(
+                        Issue(title = "즐겨찾지 않는 이슈", project = project, authorId = author.id, authorLoginId = author.loginId), author
+                    )
+                    favoriteIssueRepository.save(FavoriteIssue(user = author, issue = favoritedIssue))
+
+                    val result = issueService.getIssuesByFilter(IssueFilterType.FAVORITE, author)
+
+                    result.map { it.id } shouldBe listOf(favoritedIssue.id)
+                }
+
+                it("ALL - 담당/작성/멘션/즐겨찾기 이슈를 중복 없이 합쳐 반환해야 한다") {
+                    val user = userRepository.save(User(loginId = "filter-all-user", name = "올필터유저"))
+                    val other = userRepository.save(User(loginId = "filter-all-other", name = "타인"))
+                    val project = projectRepository.save(Project(name = "filter-all-project", owner = "filter-all-user"))
+
+                    val createdIssue = issueService.createIssue(
+                        Issue(title = "내가 쓴 이슈", project = project, authorId = user.id, authorLoginId = user.loginId), user
+                    )
+                    val assignedIssue = issueService.createIssue(
+                        Issue(title = "담당 이슈", project = project, authorId = other.id, authorLoginId = other.loginId),
+                        other, assigneeUser = user
+                    )
+                    val mentionedIssue = issueService.createIssue(
+                        Issue(title = "멘션 이슈", body = "@filter-all-user 확인", project = project, authorId = other.id, authorLoginId = other.loginId),
+                        other
+                    )
+                    val favoritedIssue = issueService.createIssue(
+                        Issue(title = "즐겨찾는 이슈", project = project, authorId = other.id, authorLoginId = other.loginId), other
+                    )
+                    favoriteIssueRepository.save(FavoriteIssue(user = user, issue = favoritedIssue))
+                    // 작성자이면서 동시에 담당자이기도 한 이슈 — ALL 결과에 한 번만 나와야 한다(중복 제거).
+                    val bothCreatedAndAssigned = issueService.createIssue(
+                        Issue(title = "작성+담당 겹침 이슈", project = project, authorId = user.id, authorLoginId = user.loginId),
+                        user, assigneeUser = user
+                    )
+                    issueService.createIssue(
+                        Issue(title = "무관한 이슈", project = project, authorId = other.id, authorLoginId = other.loginId), other
+                    )
+
+                    val result = issueService.getIssuesByFilter(IssueFilterType.ALL, user)
+
+                    result.map { it.id }.toSet() shouldBe setOf(
+                        createdIssue.id, assignedIssue.id, mentionedIssue.id, favoritedIssue.id, bothCreatedAndAssigned.id
+                    )
+                    result.size shouldBe 5
+                }
+            }
         }
     }
 }

@@ -1,7 +1,10 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.issue.Assignee
 import com.github.search5.yona.domain.issue.Issue
+import com.github.search5.yona.domain.issue.IssueFilterType
+import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.organization.Organization
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.*
@@ -15,18 +18,20 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import java.time.Instant
 import java.util.Optional
 import io.mockk.clearMocks
 
 class FavoriteControllerSpec : DescribeSpec({
     val favoriteService = mockk<FavoriteService>()
+    val issueService = mockk<IssueService>()
     val userRepository = mockk<UserRepository>()
 
-    val favoriteController = FavoriteController(favoriteService, userRepository)
+    val favoriteController = FavoriteController(favoriteService, issueService, userRepository, "https://yuna.example.com")
     val mockMvc = MockMvcBuilders.standaloneSetup(favoriteController).build()
 
     beforeTest {
-        clearMocks(favoriteService, userRepository)
+        clearMocks(favoriteService, issueService, userRepository)
     }
 
     describe("FavoriteController 단위 테스트") {
@@ -161,6 +166,84 @@ class FavoriteControllerSpec : DescribeSpec({
 
             it("인증되지 않은 요청은 401을 반환해야 한다") {
                 mockMvc.perform(post("/-_-api/v1/favoriteOrganizations/20"))
+                    .andExpect(status().isUnauthorized)
+            }
+        }
+
+        describe("GET /-_-api/v1/user/issues") {
+            it("filter=assigned로 요청하면 담당 이슈 목록을 legacy와 동일한 JSON 형식으로 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                val assignee = Assignee(id = 40L, user = user, project = project)
+                val assignedIssue = Issue(
+                    id = 32L, number = 7L, title = "담당이슈", project = project, state = State.OPEN,
+                    authorId = 99L, authorLoginId = "author99", authorName = "작성자99",
+                    assignee = assignee, createdDate = Instant.parse("2026-01-01T00:00:00Z"),
+                    updatedDate = Instant.parse("2026-01-02T00:00:00Z")
+                )
+                every { issueService.getIssuesByFilter(IssueFilterType.ASSIGNED, user) } returns listOf(assignedIssue)
+
+                mockMvc.perform(get("/-_-api/v1/user/issues").param("filter", "assigned").principal(auth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.result[0].id").value(32))
+                    .andExpect(jsonPath("$.result[0].number").value(7))
+                    .andExpect(jsonPath("$.result[0].state").value("OPEN"))
+                    .andExpect(jsonPath("$.result[0].title").value("담당이슈"))
+                    .andExpect(jsonPath("$.result[0].author.id").value(99))
+                    .andExpect(jsonPath("$.result[0].author.loginId").value("author99"))
+                    .andExpect(jsonPath("$.result[0].assignee.id").value(40))
+                    .andExpect(jsonPath("$.result[0].assignee.loginId").value("testuser"))
+                    .andExpect(jsonPath("$.result[0].project.id").value(10))
+                    .andExpect(jsonPath("$.result[0].project.name").value("testproject"))
+                    .andExpect(jsonPath("$.result[0].owner").value("testowner"))
+                    .andExpect(jsonPath("$.result[0].refUrl").value("https://yuna.example.com/testowner/testproject/issue/7"))
+            }
+
+            it("담당자가 없으면 assignee는 빈 객체여야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                val noAssigneeIssue = Issue(id = 33L, number = 8L, title = "담당자없음", project = project)
+                every { issueService.getIssuesByFilter(IssueFilterType.CREATED, user) } returns listOf(noAssigneeIssue)
+
+                mockMvc.perform(get("/-_-api/v1/user/issues").param("filter", "created").principal(auth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.result[0].assignee").isEmpty)
+            }
+
+            it("filter 기본값은 assigned여야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueService.getIssuesByFilter(IssueFilterType.ASSIGNED, user) } returns emptyList()
+
+                mockMvc.perform(get("/-_-api/v1/user/issues").principal(auth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.result").isArray)
+            }
+
+            it("page/pageNum으로 페이지네이션이 적용되어야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                val issues = (1..25).map { i ->
+                    Issue(id = i.toLong(), number = i.toLong(), title = "이슈$i", project = project)
+                }
+                every { issueService.getIssuesByFilter(IssueFilterType.ALL, user) } returns issues
+
+                mockMvc.perform(
+                    get("/-_-api/v1/user/issues")
+                        .param("filter", "all").param("page", "2").param("pageNum", "10")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.result.length()").value(10))
+                    .andExpect(jsonPath("$.result[0].id").value(11))
+                    .andExpect(jsonPath("$.result[9].id").value(20))
+            }
+
+            it("지원하지 않는 filter 값이면 400을 반환해야 한다") {
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+
+                mockMvc.perform(get("/-_-api/v1/user/issues").param("filter", "kakao").principal(auth))
+                    .andExpect(status().isBadRequest)
+            }
+
+            it("인증되지 않은 요청은 401을 반환해야 한다") {
+                mockMvc.perform(get("/-_-api/v1/user/issues"))
                     .andExpect(status().isUnauthorized)
             }
         }

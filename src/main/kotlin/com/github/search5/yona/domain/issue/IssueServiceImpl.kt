@@ -44,6 +44,30 @@ class IssueServiceImpl(
     private val mentionService: MentionService
 ) : IssueService {
 
+    // yona models/support/IssueSearchCondition.java:18-44 getExpressionListByFilter() 대응 (P2-52).
+    override fun getIssuesByFilter(filter: IssueFilterType, user: User): List<Issue> {
+        val userId = user.id!!
+        return when (filter) {
+            IssueFilterType.ASSIGNED -> issueRepository.findByAssignee_UserId(userId)
+                .sortedByDescending { it.updatedDate }
+            IssueFilterType.CREATED -> issueRepository.findByAuthorId(userId)
+                .sortedByDescending { it.updatedDate }
+            IssueFilterType.MENTIONED -> issueRepository.findAllById(mentionService.getMentioningIssueIds(userId))
+                .sortedByDescending { it.updatedDate }
+            IssueFilterType.FAVORITE -> favoriteIssueRepository.findByUserId(userId).map { it.issue }
+                .sortedByDescending { it.updatedDate }
+            IssueFilterType.ALL -> {
+                val assigned = issueRepository.findByAssignee_UserId(userId)
+                val created = issueRepository.findByAuthorId(userId)
+                val mentioned = issueRepository.findAllById(mentionService.getMentioningIssueIds(userId))
+                val favorite = favoriteIssueRepository.findByUserId(userId).map { it.issue }
+                (assigned + created + mentioned + favorite)
+                    .distinctBy { it.id }
+                    .sortedByDescending { it.updatedDate }
+            }
+        }
+    }
+
     override fun createIssue(
         issue: Issue,
         author: User,

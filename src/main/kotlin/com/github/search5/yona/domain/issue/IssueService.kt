@@ -6,6 +6,10 @@ import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.ResponseStatus
 
 interface IssueService {
+    // yona models/support/IssueSearchCondition.java 대응 (P2-52) — assigned/created/mentioned/
+    // favorite 필터는 해당 조건 하나만, all은 넷을 합쳐(중복 제거) updatedDate desc로 반환한다.
+    fun getIssuesByFilter(filter: IssueFilterType, user: User): List<Issue>
+
     // yona AbstractPosting.isPublish(transient)/Issue.isDraft(영속) 대응 (P1-65).
     // isDraft=true면 State.DRAFT로 생성되고(신규 이슈 알림 미발행), 그 외엔 기존과 동일.
     fun createIssue(
