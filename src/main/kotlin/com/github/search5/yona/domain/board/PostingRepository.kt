@@ -32,15 +32,19 @@ interface PostingRepository : JpaRepository<Posting, Long> {
     // `like_escape(bigint, unknown) does not exist`로 항상 실패하는 버그가 있다
     // (IssueRepository.searchIssues() 주석 참고). 네이티브 쿼리는 엔티티가 아닌 ID로만 바인딩
     // 가능하므로 `List<Project>`를 받는 공개 메서드는 ID 리스트로 변환해 내부 쿼리에 위임한다.
+    // notice = false/0 같은 SQL 리터럴은 DB마다 다르게 깨진다(PostgreSQL은 진짜 boolean 컬럼이라
+    // 정수 리터럴과 비교 시 타입 불일치 에러, SQL Server는 TRUE/FALSE 리터럴 자체가 없음 —
+    // 실측 확인). 리터럴 대신 파라미터로 바인딩하면 각 방언의 Boolean JDBC 타입 매핑을 그대로
+    // 타므로 전부 호환된다.
     @Query(
-        value = "SELECT * FROM posting WHERE project_id IN :projectIds AND notice = 0 AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
-        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id IN :projectIds AND notice = 0 AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
+        value = "SELECT * FROM posting WHERE project_id IN :projectIds AND notice = :isNotice AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
+        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id IN :projectIds AND notice = :isNotice AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
         nativeQuery = true
     )
-    fun findByProjectIdInAndKeywordQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Posting>
+    fun findByProjectIdInAndKeywordQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("isNotice") isNotice: Boolean, pageable: Pageable): Page<Posting>
 
     fun findByProjectInAndKeyword(projects: List<Project>, keyword: String, pageable: Pageable): Page<Posting> =
-        findByProjectIdInAndKeywordQuery(projects.map { it.id!! }.ifEmpty { listOf(-1L) }, keyword, pageable.toSnakeCaseSort())
+        findByProjectIdInAndKeywordQuery(projects.map { it.id!! }.ifEmpty { listOf(-1L) }, keyword, false, pageable.toSnakeCaseSort())
 
     @Query(
         value = "SELECT * FROM posting WHERE (project_id IN :projectIds AND (title LIKE :keyword OR body LIKE :keyword)) OR (:userId IS NOT NULL AND author_id = :userId AND (title LIKE :keyword OR body LIKE :keyword))",
@@ -62,20 +66,23 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         countSearchPostingsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId)
 
     @Query(
-        value = "SELECT * FROM posting WHERE project_id = :#{#project.id} AND notice = 0 AND (title LIKE :keyword OR body LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = 0 AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT * FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (title LIKE :keyword OR body LIKE :keyword)",
+        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (title LIKE :keyword OR body LIKE :keyword)",
         nativeQuery = true
     )
-    fun searchPostingsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<Posting>
+    fun searchPostingsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, @Param("isNotice") isNotice: Boolean, pageable: Pageable): Page<Posting>
 
     fun searchPostingsInProject(project: Project, keyword: String, pageable: Pageable): Page<Posting> =
-        searchPostingsInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
+        searchPostingsInProjectQuery(project, keyword, false, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = 0 AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (title LIKE :keyword OR body LIKE :keyword)",
         nativeQuery = true
     )
-    fun countSearchPostingsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
+    fun countSearchPostingsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, @Param("isNotice") isNotice: Boolean): Int
+
+    fun countSearchPostingsInProject(project: Project, keyword: String): Int =
+        countSearchPostingsInProjectQuery(project, keyword, false)
 
     fun findAllByOrderByCreatedDateDesc(pageable: Pageable): Page<Posting>
 
@@ -85,7 +92,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
             SELECT DISTINCT p.* FROM posting p
             JOIN posting_issue_label pl ON pl.posting_id = p.id
             WHERE p.project_id = :#{#project.id}
-              AND p.notice = 0
+              AND p.notice = :isNotice
               AND pl.issue_label_id IN :labelIds
               AND (:keyword IS NULL OR p.title LIKE :keyword OR p.body LIKE :keyword)
         """,
@@ -93,7 +100,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
             SELECT COUNT(DISTINCT p.id) FROM posting p
             JOIN posting_issue_label pl ON pl.posting_id = p.id
             WHERE p.project_id = :#{#project.id}
-              AND p.notice = 0
+              AND p.notice = :isNotice
               AND pl.issue_label_id IN :labelIds
               AND (:keyword IS NULL OR p.title LIKE :keyword OR p.body LIKE :keyword)
         """,
@@ -103,9 +110,10 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         @Param("project") project: Project,
         @Param("labelIds") labelIds: List<Long>,
         @Param("keyword") keyword: String?,
+        @Param("isNotice") isNotice: Boolean,
         pageable: Pageable
     ): Page<Posting>
 
     fun findByProjectAndLabelIdsIn(project: Project, labelIds: List<Long>, keyword: String?, pageable: Pageable): Page<Posting> =
-        findByProjectAndLabelIdsInQuery(project, labelIds, keyword, pageable.toSnakeCaseSort())
+        findByProjectAndLabelIdsInQuery(project, labelIds, keyword, false, pageable.toSnakeCaseSort())
 }
