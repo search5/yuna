@@ -1,0 +1,75 @@
+yuna
+Copyright 2012-2015 NAVER Corp. (original Yobi/Yona project)
+Portions Copyright 2026 yuna contributors (Kotlin/Spring Boot port of Yona)
+
+This product includes software originally developed as part of the Yona
+project (https://github.com/yona-projects/yona), itself continued from the
+Yobi project. yuna is a from-scratch re-implementation of Yona's application
+layer on a different technology stack (Kotlin/Spring Boot/JPA instead of
+Java/Scala/Play Framework/Ebean); no source code was copied from the
+original Play/Ebean codebase, but yuna reproduces its data model, views, and
+behavior, and is therefore a derivative work for licensing purposes. See
+LICENSE for the Apache License, Version 2.0 under which both projects are
+distributed, and AUTHORS for attribution carried forward from the original
+project.
+
+yuna contains subcomponents with separate copyright notices and license
+terms. Your use of the source code for these subcomponents is subject to
+the terms and conditions of their respective licenses. The list below
+reflects yuna's actual dependency stack (see build.gradle.kts) and
+supersedes the legacy Yona NOTICE's Play Framework-era subcomponent list,
+which no longer applies since none of that stack is used here.
+
+=======================================================================
+Apache License, Version 2.0
+=======================================================================
+The following subcomponents are licensed under the Apache License,
+Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0):
+
+  - Spring Framework / Spring Boot / Spring Security (https://spring.io/)
+  - Kotlin (https://kotlinlang.org/) and kotlin-reflect
+  - Kotest, MockK (Kotlin test/mocking libraries)
+  - Google Guava
+  - Google Caffeine (cache library)
+  - Testcontainers (https://www.testcontainers.org/)
+  - Apache Commons Lang
+  - Apache Tika
+  - HtmlCompressor
+  - Micrometer / micrometer-registry-prometheus
+  - Jackson (jackson-module-kotlin)
+  - MariaDB Connector/J, PostgreSQL JDBC Driver, MySQL Connector/J,
+    Microsoft JDBC Driver for SQL Server, CUBRID JDBC Driver
+
+=======================================================================
+Eclipse Public License / Eclipse Distribution License
+=======================================================================
+  - Eclipse JGit (https://www.eclipse.org/jgit/) and its LFS/HTTP-server
+    modules — dual-licensed; see the project for current license terms.
+
+=======================================================================
+GNU Lesser General Public License (LGPL)
+=======================================================================
+  - Hibernate ORM (https://hibernate.org/) — LGPL 2.1
+  - JExcelAPI ("jxl") — LGPL
+
+=======================================================================
+BSD / MIT-style licenses
+=======================================================================
+  - commonmark-java and its extensions (BSD 2-Clause)
+  - OWASP Java HTML Sanitizer (BSD 3-Clause)
+  - jsoup (MIT)
+
+=======================================================================
+TMate Software License
+=======================================================================
+  - SVNKit and svnkit-dav (https://svnkit.com/) — TMate Software License
+    (source-available; see project for terms)
+
+=======================================================================
+Mozilla Public License (MPL)
+=======================================================================
+  - juniversalchardet — MPL 1.1
+
+This list is maintained on a best-effort basis alongside build.gradle.kts;
+it is not a substitute for running your own license-compliance tooling
+before redistributing binaries built from this project.

@@ -1,11 +1,45 @@
 # yuna
 
-레거시 [yona](https://github.com/yona-projects/yona)(Play Framework/Java/Ebean)를 Spring Boot/Kotlin/JPA로 이식한 프로젝트입니다.
+<img src="src/main/resources/static/images/yona-logo.png" width="220px" alt="Yona logo">
+
+**yuna**는 [Yona](https://github.com/yona-projects/yona)(Play Framework/Java/Ebean 기반의 설치형
+프로젝트 협업 플랫폼)를 **Kotlin + Spring Boot + JPA(Hibernate)** 스택으로 새로 옮겨 쓴
+프로젝트입니다. 화면 구조·데이터 모델·동작 방식은 legacy Yona와 최대한 동일하게 유지하면서,
+런타임과 빌드 도구만 현재 JVM 생태계로 교체하는 것을 목표로 합니다.
+
+## Yona란?
+
+- Git/SVN 저장소가 내장된 설치형 이슈 트래커 + 게시판 + 코드 리뷰 플랫폼
+- 네이버/네이버랩스를 비롯해 여러 기업·공공기관에서 수년간 실사용되며 다듬어진 애플리케이션
+
+### 주요 기능
+
+- 프로젝트 기반의 유연한 이슈 트래커와 게시판 — 프로젝트 간 이슈 이동, 서브 태스크, 본문 변경이력,
+  이슈 템플릿
+- 내장 코드 저장소 — Git/SVN 선택 가능, 온라인 수정·커밋, 프로젝트 멤버 전용 접근 제어
+- 블록 기반 코드 리뷰 — 코드 블록 단위 리뷰 스레드, 리뷰 점수
+- 그룹(조직) 기능 — 그룹 단위 이슈/게시글 통합 관리, 그룹 프로젝트·멤버
+- LDAP 지원 및 소셜 로그인(OAuth2)
+- 다른 서비스·다른 Yona/yuna 인스턴스로의 마이그레이션(Export/Import, GitHub 이전 등)
+
+## Yona → yuna: 무엇이 바뀌었나
+
+| | legacy Yona | yuna |
+|---|---|---|
+| 언어 | Java / Scala 템플릿 | Kotlin |
+| 프레임워크 | Play Framework 2.x | Spring Boot |
+| ORM | Ebean | JPA / Hibernate |
+| 뷰 엔진 | Scala Template(`.scala.html`) | Thymeleaf |
+| JDK | Java 8 | Java 21 |
+| 지원 DB | MariaDB(기본) 또는 H2(내장형) | **MariaDB / PostgreSQL / MySQL / SQL Server / CUBRID** |
+
+포팅 진행 상황과 legacy 대비 의도적으로 남겨둔 차이점은 `docs/PARITY_BACKLOG.md`,
+`docs/TEMPLATE_BACKLOG.md`, `docs/COVERAGE_BACKLOG.md`에 기록돼 있습니다.
 
 ## 요구 사항
 
 - JDK 21
-- (테스트/운영 DB) MariaDB — 기본 스프링 프로파일이 `mariadb`
+- 운영/테스트 DB 중 하나: MariaDB(기본), PostgreSQL, MySQL, SQL Server, CUBRID
 
 ## 빌드 & 실행
 
@@ -22,6 +56,31 @@ gradlew.bat bootRun
 ```bash
 ./gradlew test        # Linux/macOS
 gradlew.bat test       # Windows
+```
+
+## 데이터베이스 선택
+
+기본 Spring 프로파일은 `mariadb`입니다. 다른 DB로 운영하려면 `spring.profiles.active`를
+아래 중 하나로 지정하세요(`src/main/resources/application.yml`에 각 프로파일의 접속 설정이 있습니다).
+
+| 프로파일 | DB |
+|---|---|
+| `mariadb` (기본값) | MariaDB |
+| `postgres` | PostgreSQL |
+| `mysql` | MySQL |
+| `mssql` | Microsoft SQL Server |
+| `cubrid` | CUBRID |
+
+```bash
+java -jar yuna.jar --spring.profiles.active=postgres
+```
+
+통합 테스트는 실제 Docker 컨테이너(Testcontainers) 기준으로 5개 DB 전부 검증돼 있습니다.
+특정 DB로만 테스트를 돌리려면(**동시에 두 개 이상 돌리면 gradle 빌드 출력 디렉터리가
+꼬이니 항상 한 번에 하나씩만 실행하세요**):
+
+```bash
+./gradlew test -Dyona.it.db=postgres   # mariadb|postgres|mysql|mssql|cubrid
 ```
 
 ## 운영 환경 설정 (특히 Windows)
@@ -82,3 +141,9 @@ gradlew.bat test       # Windows
 
 `docs/PARITY_BACKLOG.md`, `docs/TEMPLATE_BACKLOG.md`, `docs/COVERAGE_BACKLOG.md`에 legacy yona 대비
 이식 진행 상황과 의도적으로 남겨둔 차이점들이 기록되어 있습니다.
+
+## 라이선스
+
+yuna는 원본 Yona/Yobi와 동일하게 [Apache License 2.0](LICENSE)으로 제공됩니다.
+서드파티 구성 요소 고지는 [NOTICE](NOTICE), 원 프로젝트 기여자 명단은 [AUTHORS](AUTHORS)를
+참고하세요.

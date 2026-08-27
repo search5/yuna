@@ -41,3 +41,7 @@ out/
 .serena
 .claude
 .claude/
+
+### yuna 실사용자 데이터 (legacy yona의 .gitignore "uploads" 규칙 대응) ###
+# yona.upload.base-dir 기본값(data/uploads) — 실사용자 업로드 파일이 저장소에 커밋되면 안 된다.
+/data/
