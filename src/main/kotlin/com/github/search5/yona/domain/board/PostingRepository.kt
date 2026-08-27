@@ -33,8 +33,8 @@ interface PostingRepository : JpaRepository<Posting, Long> {
     // (IssueRepository.searchIssues() 주석 참고). 네이티브 쿼리는 엔티티가 아닌 ID로만 바인딩
     // 가능하므로 `List<Project>`를 받는 공개 메서드는 ID 리스트로 변환해 내부 쿼리에 위임한다.
     @Query(
-        value = "SELECT * FROM posting WHERE project_id IN :projectIds AND notice = false AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
-        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id IN :projectIds AND notice = false AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
+        value = "SELECT * FROM posting WHERE project_id IN :projectIds AND notice = 0 AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
+        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id IN :projectIds AND notice = 0 AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
         nativeQuery = true
     )
     fun findByProjectIdInAndKeywordQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Posting>
@@ -62,8 +62,8 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         countSearchPostingsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId)
 
     @Query(
-        value = "SELECT * FROM posting WHERE project_id = :#{#project.id} AND notice = false AND (title LIKE :keyword OR body LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = false AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT * FROM posting WHERE project_id = :#{#project.id} AND notice = 0 AND (title LIKE :keyword OR body LIKE :keyword)",
+        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = 0 AND (title LIKE :keyword OR body LIKE :keyword)",
         nativeQuery = true
     )
     fun searchPostingsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<Posting>
@@ -72,7 +72,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         searchPostingsInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = false AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = 0 AND (title LIKE :keyword OR body LIKE :keyword)",
         nativeQuery = true
     )
     fun countSearchPostingsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
@@ -85,7 +85,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
             SELECT DISTINCT p.* FROM posting p
             JOIN posting_issue_label pl ON pl.posting_id = p.id
             WHERE p.project_id = :#{#project.id}
-              AND p.notice = false
+              AND p.notice = 0
               AND pl.issue_label_id IN :labelIds
               AND (:keyword IS NULL OR p.title LIKE :keyword OR p.body LIKE :keyword)
         """,
@@ -93,7 +93,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
             SELECT COUNT(DISTINCT p.id) FROM posting p
             JOIN posting_issue_label pl ON pl.posting_id = p.id
             WHERE p.project_id = :#{#project.id}
-              AND p.notice = false
+              AND p.notice = 0
               AND pl.issue_label_id IN :labelIds
               AND (:keyword IS NULL OR p.title LIKE :keyword OR p.body LIKE :keyword)
         """,

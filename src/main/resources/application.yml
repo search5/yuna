@@ -171,7 +171,9 @@ spring:
     activate:
       on-profile: mssql
   datasource:
-    url: jdbc:sqlserver://localhost:1433;databaseName=yona;encrypt=false
+    # sendStringParametersAsUnicode=true가 없으면(mssql-jdbc 기본값은 false) 문자열
+    # 파라미터가 비유니코드로 전송된다.
+    url: jdbc:sqlserver://localhost:1433;databaseName=yona;encrypt=false;sendStringParametersAsUnicode=true
     username: sa
     password: yona_password
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
@@ -183,6 +185,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # Hibernate가 String을 기본적으로 varchar(비유니코드)로 매핑해 한글 등 비ASCII
+        # 문자가 INSERT 시점에 손실된다(LIKE 검색에서만 0건으로 드러남 — 같은 트랜잭션
+        # 안에서는 Hibernate 1차 캐시가 저장 직전 자바 객체를 그대로 돌려줘서 findById/
+        # findAll로는 이 손실이 감춰진다). 모든 String을 nvarchar(유니코드)로 매핑한다.
+        use_nationalized_character_data: true
 
 ---
 spring:

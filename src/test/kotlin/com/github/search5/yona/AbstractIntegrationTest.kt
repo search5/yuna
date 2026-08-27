@@ -42,8 +42,13 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
                 .withUsername("yona")
                 .withPassword("yona_password")
             // SQL Server 공식 이미지는 고정 계정(sa)/DB(master)만 지원해 withDatabaseName이 없다.
+            // sendStringParametersAsUnicode=true가 없으면(mssql-jdbc 기본값은 false) 문자열
+            // 파라미터가 클라이언트 쪽에서 비유니코드로 좁혀져 전송돼, varchar 컬럼과 LIKE 비교 시
+            // 한글 등 비ASCII 문자가 매치되지 않는다(데이터 자체는 정상 저장/조회되는데도
+            // LIKE만 0건으로 실패 — 실측 확인).
             "mssql" -> KMSSQLServerContainer("mcr.microsoft.com/mssql/server:2022-latest")
                 .acceptLicense()
+                .withUrlParam("sendStringParametersAsUnicode", "true")
             // CUBRID 공식 Testcontainers 모듈(org.cubrid:testcontainers-cubrid, CUBRID사 직접 관리).
             // 공식 도커 이미지(cubrid/cubrid-docker)의 CUBRID_LOCALE 기본값이 "en_US"(UTF-8이
             // 아님)라 한글 등 비ASCII 문자열이 깨져서 저장된다(실측 확인 — "홍길동"이 다른
@@ -94,6 +99,14 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
                 // 죽는 걸 실측으로 확인했다. 방언이 제공하는 identity-select 방식(예: CUBRID의
                 // LAST_INSERT_ID() 계열)으로 우회한다.
                 registry.add("spring.jpa.properties.hibernate.jdbc.use_get_generated_keys") { "false" }
+            }
+            if (selectedDb == "mssql") {
+                // Hibernate가 String을 기본적으로 varchar(비유니코드, SQL Server 기본 코드페이지)로
+                // 매핑해 한글 등 비ASCII 문자가 INSERT 시점에 '?'로 뭉개진다(LIKE 검색에서만
+                // 0건으로 드러남 — 같은 트랜잭션 안에서는 Hibernate 1차 캐시가 방금 저장한
+                // 자바 객체를 그대로 돌려줘서 findById/findAll로는 이 손실이 감춰진다). 모든
+                // String을 nvarchar(유니코드)로 매핑하도록 강제한다.
+                registry.add("spring.jpa.properties.hibernate.use_nationalized_character_data") { "true" }
             }
         }
     }
