@@ -317,7 +317,7 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 | 170 | [x] | `git/view.scala.html` | `pullrequest/view.html` | 완료(TASK-0243, 전면 재작성). "commits" 탭은 legacy에 없는 yuna 자체 확장이었음을 확인해 제거, tab 쿼리파라미터도 제거하고 legacy와 동일하게 단일 overview 페이지로 되돌림 |
 | 171 | [x] | `git/viewChanges.scala.html` | `pullrequest/view.html`(tab=changes) | 완료(TASK-0243). 별도 URL(`/pull/{number}/changes`)은 유지(허용된 아키텍처 차이), 콘텐츠는 legacy viewChanges와 대조해 review-wrap/reviewlist/non-ranged 댓글까지 재현 |
 | 172 | [x] | `git/clone.scala.html` | `pullrequest/clone.html` | 완료(TASK-0243). **비고 정정**: 이 파일은 "클론 방법 안내"가 아니라 fork 진행 중 보여주는 인터스티셜 화면이었음(재조사로 확인) — `ProjectViewController.fork()`가 이름검증만 하고 이 화면을 렌더, 화면의 JS가 3초 후 신설 `doClone()` 엔드포인트를 호출해 실제 fork 수행 |
-| 173 | [x] | `git/fork.scala.html` | `project/fork.html` | 완료(TASK-0243, TASK-0258에서 마무리). 콘텐츠 전면 재작성(owner-select/scope radio/이미 포크된 프로젝트 안내). `ProjectRepository.findByOwnerAndOriginalProject`는 TASK-0243 당시 신설만 되고 실제로는 POST `fork()`의 이름중복 에러 분기에서만 호출돼, 정작 legacy가 항상 계산하는 최초 GET 진입점(`newFork()`)에서는 호출된 적이 없어 "이미 포크된 프로젝트 있음" 경고가 실제로는 절대 뜨지 않는 죽은 코드였다(템플릿에 TODO로 남아있던 것을 재검토하며 발견) — `newFork()`에 legacy `PullRequestApp.findDestination(forkOwner)` 대응 로직과 함께 추가해 완료. owner-select의 조직별 목적지 전환(newFork 3-arg 라우트)은 yuna 라우트가 목적지 owner 파라미터를 안 받아 단순화(문서화된 보류) |
+| 173 | [x] | `git/fork.scala.html` | `project/fork.html` | 완료(TASK-0243, TASK-0258에서 마무리). 콘텐츠 전면 재작성(owner-select/scope radio/이미 포크된 프로젝트 안내). `ProjectRepository.findByOwnerAndOriginalProject`는 TASK-0243 당시 신설만 되고 실제로는 POST `fork()`의 이름중복 에러 분기에서만 호출돼, 정작 legacy가 항상 계산하는 최초 GET 진입점(`newFork()`)에서는 호출된 적이 없어 "이미 포크된 프로젝트 있음" 경고가 실제로는 절대 뜨지 않는 죽은 코드였다(템플릿에 TODO로 남아있던 것을 재검토하며 발견) — `newFork()`에 legacy `PullRequestApp.findDestination(forkOwner)` 대응 로직과 함께 추가해 완료. owner-select의 조직별 목적지 전환(newFork 3-arg 라우트)은 yuna 라우트가 목적지 owner 파라미터를 안 받아 단순화(문서화된 보류) — **정정(코드 재대조)**: 바로 앞 문장의 `findDestination(forkOwner)` 추가 자체가 이미 `newFork()`에 `forkOwner` 쿼리 파라미터(`@RequestParam(required = false) forkOwner: String?`, `ProjectViewController.kt:1105`)를 받도록 확장해뒀으므로, "라우트가 파라미터를 안 받는다"는 이유는 stale하다. 실제로 안 되는 건 `project/fork.html`의 owner-select `data-url`이 `forkOwner` 쿼리를 실어 보내지 않고(`yobi.project.Fork.js`는 선택된 `<option>`의 `data-url`로 그냥 리다이렉트만 함) 두 `<option>`이 동일 URL을 가리켜서다 — 남은 건 백엔드 제약이 아니라 순수 템플릿 배선(`data-url`에 `forkOwner=${org.name}` 추가) 문제 |
 | 174 | [x] | `git/partial_branch.scala.html` | `pullrequest/partial_branch.html` | 완료(TASK-0243) |
 | 175 | [x] | `git/partial_forklist.scala.html` | `pullrequest/partial_forklist.html` | 완료(TASK-0243) |
 | 176 | [x] | `git/partial_info.scala.html` | `pullrequest/partial_info.html` | 완료(TASK-0243). 리뷰 참여/뱃지/overview·changes 탭 바 |
@@ -1032,7 +1032,9 @@ legacy는 PR/코드리뷰를 `git/` 디렉터리에 둔다(Git 저장소 조작�
 - **legacy와 다르게 처리한 지점**: 없음(발견된 격차 전부 순수 버그 수정/기능 복구).
 - **참고**: `board/view.scala.html`의 `common.noAuthor`(작성자 없음 표시)는 yuna의 `Posting`이 작성자
   정보를 비정규화 저장해 항상 값이 존재하므로 해당 없음. `change.history`(게시글 수정 이력 모달)는 이력
-  추적 테이블 자체가 없어 순수 템플릿 포팅 범위를 넘어 보류.
+  추적 테이블 자체가 없어 순수 템플릿 포팅 범위를 넘어 보류. **정정**: #41(TASK-0257)이 이후
+  `Posting.history`/`HistoryUtil`/`common/partial_history.html`을 완성하면서 이 화면에도 배선해뒀다(위
+  #147 표 행의 2026-08-23 정정 참고) — "이력 추적 테이블 자체가 없어 보류"는 stale.
 - **테스트**: `TemplateEquivalenceSpec.kt`의 `[Test-19-27]`(게시판 목록 — 공지글 중복노출 방지, 대괄호
   접두어 분리 표시 검증), `[Test-19-28]`(게시판 상세 삭제모달 예/아니오 메시지키 검증). 다른 세션이 동시에
   같은 파일에 `[Test-19-25]`(프로젝트 생성 화면)를 추가해둔 것을 발견해 번호 충돌을 피하기 위해 내 항목을
