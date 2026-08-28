@@ -1,0 +1,97 @@
+package com.github.search5.yona.web
+
+import com.github.search5.yona.domain.enumeration.State
+import com.github.search5.yona.domain.project.ProjectRepository
+import com.github.search5.yona.domain.pullrequest.PullRequest
+import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
+import org.springframework.http.ResponseEntity
+import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
+
+// yona-wiki P3-02 Step5 — Go CLI 등 외부 클라이언트를 위한 신규 범용 REST API
+// (`/api/v1/projects/{owner}/{project}/pull-requests`). ApiTokenAuthenticationFilter의
+// resourceSegmentToResourceType 매핑에 "pull-requests"가 이미 있어(Step3) 이 네임스페이스로 오는
+// 요청은 필터 단계에서 이미 PULL_REQUESTS 스코프 그룹으로 인가된다 — 컨트롤러에서 다시 구현하지 않는다.
+//
+// 클래스명이 기존 web/ 패키지와 충돌하지 않는다(레거시 PR API 컨트롤러가 따로 없음, IssueApi/
+// ProjectApi와 달리) — 계획 문서가 제안한 이름을 그대로 쓴다.
+//
+// 비즈니스 로직/권한 체크는 기존 PullRequestController.kt(`/api/projects/{projectId}/pullrequests`,
+// 숫자 projectId 기반, 웹 프런트엔드용)에 이미 완비돼 있어, owner/project 이름으로 프로젝트를 찾아
+// 그 컨트롤러의 공개 메서드에 위임하는 얇은 어댑터로만 구현한다(신규 서비스 로직 없음).
+@RestController
+@RequestMapping("/api/v1/projects/{owner}/{project}/pull-requests")
+class PullRequestApiController(
+    private val projectRepository: ProjectRepository,
+    private val pullRequestController: PullRequestController
+) {
+
+    @GetMapping
+    fun list(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @RequestParam(required = false) state: State?,
+        authentication: Authentication?
+    ): ResponseEntity<List<PullRequest>> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.getPullRequests(found.id!!, state, authentication)
+    }
+
+    @PostMapping
+    fun create(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @RequestBody request: PullRequestController.CreatePullRequestRequest,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.createPullRequest(found.id!!, request, authentication)
+    }
+
+    @GetMapping("/{number}")
+    fun get(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.getPullRequest(found.id!!, number, authentication)
+    }
+
+    @PostMapping("/{number}/merge")
+    fun merge(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequestMergeResult> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.mergePullRequest(found.id!!, number, authentication)
+    }
+
+    // yona-wiki 계획 원문 "리뷰" 대응 — PullRequestService가 제공하는 리뷰 단위는 리뷰어
+    // 등록/해제(addReviewer/removeReviewer)이며, 코드 라인 단위 리뷰 코멘트(ReviewComment/
+    // CommentThread)는 이 범용 REST API의 범위가 아니다(기존 ReviewApiController가 별도로 다룸).
+    @PostMapping("/{number}/reviewers")
+    fun addReviewer(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Unit> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.addReviewer(found.id!!, number, authentication)
+    }
+}

@@ -1,6 +1,7 @@
 package com.github.search5.yona.config
 
 import org.springframework.context.annotation.Bean
+import org.springframework.http.HttpMethod
 import org.springframework.context.annotation.Configuration
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
@@ -48,6 +49,16 @@ class SecurityConfig(
                     // yona-wiki P3-09(Swagger/OpenAPI UI) 대응 — springdoc이 자동 스캔하는 API
                     // 문서에는 관리자 전용 엔드포인트도 포함되므로 /site/**와 동일하게 제한한다.
                     .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/v3/api-docs").hasAnyRole("ADMIN", "SITE_ADMIN")
+                    // yona-wiki P3-02 Step4~6 — 신규 `/api/v1/projects/**` 네임스페이스는 ApiTokenAuthenticationFilter가
+                    // 스코프 토큰이 없거나 알 수 없는 토큰이면 그냥 통과시킨다(컨트롤러의 401/403 처리에 위임하는
+                    // 설계, 필터 주석 참고). 이 앱의 다른 모든 API 경로는 anyRequest().permitAll() + 컨트롤러
+                    // 자체 인증/인가 체크(getLoginUser 401, AccessControl 403)에 의존하는 동일한 컨벤션을 쓰고
+                    // 있어 이 자체로는 구멍이 아니지만(공개 프로젝트 익명 읽기 허용도 그 컨벤션의 일부), 신규
+                    // 쓰기 경로(POST/PUT/PATCH/DELETE)만큼은 프레임워크 레벨에서도 방어선을 하나 더 두어
+                    // 토큰/세션이 전혀 없는 요청이 컨트롤러까지 도달하기 전에 걸러지도록 한다. GET은 기존
+                    // 컨벤션(공개 프로젝트 익명 조회 허용)을 그대로 유지하기 위해 제외한다.
+                    .requestMatchers(HttpMethod.GET, "/api/v1/projects/**").permitAll()
+                    .requestMatchers("/api/v1/projects/**").authenticated()
                     .anyRequest().permitAll()
             }
             .formLogin { form ->
