@@ -29,6 +29,10 @@ repositories {
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("io.micrometer:micrometer-registry-prometheus")
+	// Swagger/OpenAPI UI 노출 (P3-09, yona 동치성과 무관한 신규 기능) — 기존 @RestController를
+	// 런타임에 자동 스캔해 /swagger-ui.html에 대화형 API 문서를 제공한다. springdoc 3.x가
+	// Spring Boot 4.x/Spring Framework 7.x 계열용 메이저 버전이라 이걸 쓴다(2.x는 Spring Boot 3.x용).
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-oauth2-client")

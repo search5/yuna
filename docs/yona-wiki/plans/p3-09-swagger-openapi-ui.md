@@ -2,7 +2,7 @@
 type: plan
 id: P3-09
 title: "Swagger/OpenAPI UI 노출"
-status: planned
+status: done
 priority: 1
 depends_on: []
 blocks: []
@@ -66,18 +66,40 @@ API 표면을 한눈에 보고 테스트해볼 수 있는 문서화 도구가 �
 
 ## 완료 기준 (Definition of Done)
 
-- [ ] `/swagger-ui.html`에서 기존 REST 컨트롤러 전체가 자동으로 나열됨을 확인
-- [ ] 접근 정책(관리자 전용 여부)이 결정되고 테스트로 고정됨
-- [ ] `./gradlew test` 전체 GREEN(기존 SecurityConfig 테스트 회귀 없음)
+- [x] `/swagger-ui.html`(`/v3/api-docs`)에서 기존 REST 컨트롤러 전체가 자동으로 나열됨을 확인 — 테스트로
+      `IssueController`의 실제 매핑 경로(`/api/projects/{projectId}/issues`)가 스펙에 포함됨을 검증
+- [x] 접근 정책(관리자 전용)이 결정되고 테스트로 고정됨 — `/site/**`와 동일하게 `hasAnyRole("ADMIN","SITE_ADMIN")`
+- [x] `./gradlew test` 전체 GREEN(5572건, 기존 SecurityConfig 테스트 회귀 없음)
+
+## 완료 로그 (2026-08-28)
+
+TDD로 진행 — `SwaggerUiAccessIntegrationSpec.kt`를 먼저 작성해 RED 확인 후 `SecurityConfig.kt`에
+`/swagger-ui/**`,`/swagger-ui.html`,`/v3/api-docs/**`,`/v3/api-docs` 4개 패턴을 `/site/**`와 동일한
+`hasAnyRole("ADMIN","SITE_ADMIN")`으로 제한해 GREEN.
+
+**TDD 과정에서 발견한 함정 2가지**(둘 다 계획 단계에서는 안 보였던 것):
+1. `BootstrapSetupInterceptor`(별개 기능 — "DB에 회원 0명이면 무조건 `/bootstrap-setup`으로 리다이렉트")가
+   비로그인 접근 테스트와 우연히 같은 상태코드(302)로 겹쳐서, 관리자 유저를 먼저 시딩하지 않으면 테스트가
+   "엉뚱한 이유로 통과"하는 거짓 양성이 남. `beforeSpec`에서 SITE_ADMIN 유저를 먼저 만들어 이 게이트를
+   우회하도록 고쳐서 실제 접근 제어만 검증하게 함.
+2. 비로그인 요청의 기대 상태코드가 계획서 초안의 "403/302" 추정과 달리 실제로는 **401**(`SecurityConfig.kt`에
+   `httpBasic { }`도 함께 설정돼 있어, MockMvc의 비-브라우저 요청은 formLogin 리다이렉트가 아니라
+   `WWW-Authenticate` 기반 401 응답을 받음) — `/site/**`와 동일한 방언이라 일관성 있는 정상 동작.
+
+**의존성**: `org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0`(springdoc 3.x가 Spring Boot 4.x/Spring
+Framework 7.x용 메이저 버전).
+
+Step 3(문서 품질 개선 — `@Operation` 어노테이션, `GroupedOpenApi` 그룹핑)은 이번 범위에서 제외, 후속 이터레이션으로 분리.
 
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
 |---|---|---|
-| 접근 정책 | 관리자 전용 vs 로그인 사용자 전체 허용 미정 | Step 2에서 결정, 기본값은 관리자 전용 권장 |
-| springdoc 버전 호환성 | Spring Boot 4.x + Spring Security 6.x 조합에서의 정확한 springdoc 버전 확인 필요 | Step 1 착수 시 Maven Central에서 최신 안정 버전 확인 |
+| ~~접근 정책~~ | ~~관리자 전용 vs 로그인 사용자 전체 허용 미정~~ | **해소** — 관리자 전용으로 확정, 테스트로 고정 |
+| ~~springdoc 버전 호환성~~ | ~~Spring Boot 4.x + Spring Security 6.x 조합에서의 정확한 springdoc 버전 확인 필요~~ | **해소** — 3.1.0으로 확인, 정상 동작 |
 
 ## 관련
 
 - 백로그 원본: [`docs/PARITY_BACKLOG.md`](../../PARITY_BACKLOG.md#p3-09)
-- 관련 소스: `config/SecurityConfig.kt:41-48`
+- 관련 소스: `config/SecurityConfig.kt:41-51`, `config/BootstrapSetupInterceptor.kt`
+- 테스트: `src/test/kotlin/com/github/search5/yona/config/SwaggerUiAccessIntegrationSpec.kt`

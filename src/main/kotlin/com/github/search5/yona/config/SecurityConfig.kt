@@ -45,6 +45,9 @@ class SecurityConfig(
                     .requestMatchers("/git/**").permitAll()
                     .requestMatchers("/svn/**").permitAll()
                     .requestMatchers("/site/**", "/sites/**").hasAnyRole("ADMIN", "SITE_ADMIN")
+                    // yona-wiki P3-09(Swagger/OpenAPI UI) 대응 — springdoc이 자동 스캔하는 API
+                    // 문서에는 관리자 전용 엔드포인트도 포함되므로 /site/**와 동일하게 제한한다.
+                    .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/v3/api-docs").hasAnyRole("ADMIN", "SITE_ADMIN")
                     .anyRequest().permitAll()
             }
             .formLogin { form ->
