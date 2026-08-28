@@ -158,7 +158,13 @@ class GitPushHooksSpec : DescribeSpec({
 
                 newHook().onPostReceive(mockk(relaxed = true), listOf(createCommand))
 
-                verify(exactly = 0) { eventPublisher.publishEvent(match { it is RelatedPullRequestMergeEvent }) }
+                // ApplicationEventPublisher.publishEvent()는 publishEvent(ApplicationEvent)/publishEvent(Any)
+                // 두 오버로드가 있는데, RelatedPullRequestMergeEvent는 ApplicationEvent가 아니라(순수 data
+                // class) 항상 publishEvent(Any) 오버로드로 호출된다. match<Any>로 타입 파라미터를 명시하지
+                // 않으면 컴파일러가 ApplicationEvent 오버로드로 추론해 `it is RelatedPullRequestMergeEvent`가
+                // 컴파일타임에 항상 false로 확정돼(Kotlin 2.4 컴파일러가 이걸 에러로 잡아냄) 검증 자체가
+                // 무의미해진다(항상 통과) — Any로 명시해 실제 publishEvent(Any) 오버로드를 타도록 고정한다.
+                verify(exactly = 0) { eventPublisher.publishEvent(match<Any> { it is RelatedPullRequestMergeEvent }) }
             }
 
             it("브랜치 삭제(DELETE)는 RelatedPullRequestMergeEvent를 발행하지 않아야 한다") {
@@ -166,7 +172,13 @@ class GitPushHooksSpec : DescribeSpec({
 
                 newHook().onPostReceive(mockk(relaxed = true), listOf(deleteCommand))
 
-                verify(exactly = 0) { eventPublisher.publishEvent(match { it is RelatedPullRequestMergeEvent }) }
+                // ApplicationEventPublisher.publishEvent()는 publishEvent(ApplicationEvent)/publishEvent(Any)
+                // 두 오버로드가 있는데, RelatedPullRequestMergeEvent는 ApplicationEvent가 아니라(순수 data
+                // class) 항상 publishEvent(Any) 오버로드로 호출된다. match<Any>로 타입 파라미터를 명시하지
+                // 않으면 컴파일러가 ApplicationEvent 오버로드로 추론해 `it is RelatedPullRequestMergeEvent`가
+                // 컴파일타임에 항상 false로 확정돼(Kotlin 2.4 컴파일러가 이걸 에러로 잡아냄) 검증 자체가
+                // 무의미해진다(항상 통과) — Any로 명시해 실제 publishEvent(Any) 오버로드를 타도록 고정한다.
+                verify(exactly = 0) { eventPublisher.publishEvent(match<Any> { it is RelatedPullRequestMergeEvent }) }
             }
         }
 

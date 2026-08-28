@@ -17,6 +17,7 @@ import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.support.isModifiedByOthers
+import com.github.search5.yona.domain.support.isModifiedByOthersLegacyChecksum
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.http.HttpStatus
@@ -245,6 +246,140 @@ class CommentController(
         commentService.deletePostingComment(commentId, user)
         return ResponseEntity.ok().build()
     }
+
+    // yona controllers/api/IssueApi.java newIssueComment() 대응 (P2-56). legacy Open API
+    // 네임스페이스는 필드명이 다르다(`comment` 단일 문자열) — createIssueComment()와 동일한
+    // commentService를 재사용하되 요청 DTO만 legacy 필드명에 맞춘다.
+    @PostMapping("/-_-api/v1/owners/{owner}/projects/{projectName}/issues/{number}/comments")
+    fun newIssueCommentLegacyPath(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable number: Long,
+        @RequestBody request: LegacyIssueCommentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<IssueComment> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+
+        val issue = issueRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        if (!accessControl.isIssueCommentCreatable(user, project, issue)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val savedComment = commentService.createIssueComment(issue.id!!, request.comment, user, null)
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedComment)
+    }
+
+    // yona controllers/api/IssueApi.java updateIssueComment() 대응 (P2-56). legacy 필드명은
+    // `content`/`sha1`(원문 체크섬) — updateIssueComment()와 동일한 로직을 재사용한다.
+    @PutMapping("/-_-api/v1/owners/{owner}/projects/{projectName}/issues/{number}/comments/{commentId}")
+    fun updateIssueCommentLegacyPath(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable number: Long,
+        @PathVariable commentId: Long,
+        @RequestBody request: LegacyUpdateCommentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!checkReadPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val comment = issueCommentRepository.findById(commentId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
+            .map { it.role.id == RoleType.MANAGER.roleType }
+            .orElse(false)
+
+        if (comment.authorId != user.id && !isManager) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        if (isModifiedByOthersLegacyChecksum(comment.contents, request.sha1)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(mapOf("message" to "Already modified by someone.", "storedContent" to comment.contents))
+        }
+
+        val updated = commentService.updateIssueComment(commentId, request.content, user)
+        return ResponseEntity.ok(updated)
+    }
+
+    // yona controllers/api/BoardApi.java newPostingComment() 대응 (P2-57). legacy 필드명은 `body`.
+    @PostMapping("/-_-api/v1/owners/{owner}/projects/{projectName}/posts/{number}/comments")
+    fun newPostingCommentLegacyPath(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable number: Long,
+        @RequestBody request: LegacyPostingCommentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<PostingComment> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+
+        val posting = postingRepository.findByProjectAndNumber(project, number)
+            ?: return ResponseEntity.notFound().build()
+
+        if (!accessControl.isPostingCommentCreatable(user, project, posting)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val savedComment = commentService.createPostingComment(posting.id!!, request.body, user, null)
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedComment)
+    }
+
+    // yona controllers/api/BoardApi.java updatePostingComment() 대응 (P2-57). legacy 필드명은
+    // `content`/`sha1`(원문 체크섬).
+    @PutMapping("/-_-api/v1/owners/{owner}/projects/{projectName}/posts/{number}/comments/{commentId}")
+    fun updatePostingCommentLegacyPath(
+        @PathVariable owner: String,
+        @PathVariable projectName: String,
+        @PathVariable number: Long,
+        @PathVariable commentId: Long,
+        @RequestBody request: LegacyUpdateCommentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!checkReadPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val comment = postingCommentRepository.findById(commentId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val isManager = projectUserRepository.findByProjectIdAndUserId(project.id!!, user.id!!)
+            .map { it.role.id == RoleType.MANAGER.roleType }
+            .orElse(false)
+
+        if (comment.authorId != user.id && !isManager) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        if (isModifiedByOthersLegacyChecksum(comment.contents, request.sha1)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(mapOf("message" to "Already modified by someone.", "storedContent" to comment.contents))
+        }
+
+        val updated = commentService.updatePostingComment(commentId, request.content, user)
+        return ResponseEntity.ok(updated)
+    }
+
+    data class LegacyIssueCommentRequest(val comment: String = "")
+    data class LegacyPostingCommentRequest(val body: String = "")
+    data class LegacyUpdateCommentRequest(val content: String = "", val sha1: String = "")
 
     data class CommentRequest(
         val contents: String = "",

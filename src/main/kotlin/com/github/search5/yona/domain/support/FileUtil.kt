@@ -45,19 +45,23 @@ object FileUtil {
     fun detectMediaType(file: File, name: String): String {
         val metadata = Metadata()
         metadata.set(TikaCoreProperties.RESOURCE_NAME_KEY, name)
+        // Tika 4.x부터 저수준 Detector SPI(Tika().detector.detect())의 시그니처가 바뀌어서
+        // (TikaInputStream + 추가 파라미터 요구) 내부 SPI에 직접 의존하지 않는 상위 Tika 파사드의
+        // detect(InputStream, Metadata) 편의 메서드로 대체한다 — 반환 타입이 MediaType이 아니라
+        // String(예: "text/plain")이라 아래 주타입 판별을 substringBefore로 바꿨다.
         val mediaType = file.inputStream().use { input ->
-            Tika().detector.detect(BufferedInputStream(input), metadata)
+            Tika().detect(BufferedInputStream(input), metadata)
         }
 
         return when {
-            mediaType.type.lowercase() == "text" -> {
+            mediaType.substringBefore('/').lowercase() == "text" -> {
                 val charset = file.inputStream().use { detectCharset(it) }
                 "$mediaType; charset=${Charset.forName(charset).name()}"
             }
             // Tika가 ogg 비디오를 audio/ogg로 오판하는 것을 보정 (yona FileUtil.java:132-136 동일 대응).
-            mediaType.toString() == "audio/ogg" && name.substringAfterLast('.', "").lowercase() == "ogv" ->
+            mediaType == "audio/ogg" && name.substringAfterLast('.', "").lowercase() == "ogv" ->
                 "video/ogg"
-            else -> mediaType.toString()
+            else -> mediaType
         }
     }
 }

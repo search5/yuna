@@ -74,13 +74,20 @@ class IssueServiceImpl(
         assigneeUser: User?,
         milestoneId: Long?,
         labelIds: List<Long>?,
-        isDraft: Boolean
+        isDraft: Boolean,
+        explicitNumber: Long?,
+        sendNotification: Boolean
     ): Issue {
         val project = issue.project
-        project.lastIssueNumber = project.lastIssueNumber + 1
-        projectRepository.save(project)
-
-        issue.number = project.lastIssueNumber
+        if (explicitNumber != null && explicitNumber > 0) {
+            // yona AbstractPosting.saveWithNumber() 대응 — project.lastIssueNumber 카운터는
+            // 건드리지 않고 지정된 번호를 그대로 쓴다.
+            issue.number = explicitNumber
+        } else {
+            project.lastIssueNumber = project.lastIssueNumber + 1
+            projectRepository.save(project)
+            issue.number = project.lastIssueNumber
+        }
         issue.createdDate = Instant.now()
         issue.updatedDate = Instant.now()
         issue.authorId = author.id
@@ -115,8 +122,10 @@ class IssueServiceImpl(
         titleHeadService.saveTitleHeadKeyword(project, savedIssue.title)
 
         // yona IssueApp.newIssue()의 "if (!newIssue.isDraft) { NotificationEvent.afterNewIssue(newIssue); }"
-        // 대응 — 초안은 발행(publishIssue) 시점에야 처음 알림이 발행된다.
-        if (!isDraft) {
+        // 대응 — 초안은 발행(publishIssue) 시점에야 처음 알림이 발행된다. sendNotification=false는
+        // controllers/api/IssueApi.java newIssues()의 "sendNotification" 플래그 대응(P2-56 복원) —
+        // 마이그레이션으로 과거 이슈를 대량 삽입할 때 알림 폭주를 막는 용도.
+        if (!isDraft && sendNotification) {
             publishNewIssueNotification(savedIssue, author)
         }
 

@@ -2,11 +2,11 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 plugins {
-	kotlin("jvm") version "2.2.21"
-	kotlin("plugin.spring") version "2.2.21"
-	id("org.springframework.boot") version "4.0.6"
+	kotlin("jvm") version "2.4.10"
+	kotlin("plugin.spring") version "2.4.10"
+	id("org.springframework.boot") version "4.1.1"
 	id("io.spring.dependency-management") version "1.1.7"
-	kotlin("plugin.jpa") version "2.2.21"
+	kotlin("plugin.jpa") version "2.4.10"
 	jacoco
 }
 
@@ -44,25 +44,30 @@ dependencies {
 	// 컴파일 시점엔 보이지 않으므로 명시적으로 추가한다(버전은 Spring Boot 의존성 관리로 고정됨).
 	implementation("org.eclipse.angus:angus-mail")
 	// yona CreationViaEmail.postprocessForHTML()의 new HtmlCompressor().compress() 대응 (P1-61).
-	implementation("com.googlecode.htmlcompressor:htmlcompressor:1.4")
+	implementation("com.googlecode.htmlcompressor:htmlcompressor:1.5.2")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.thymeleaf.extras:thymeleaf-extras-springsecurity6")
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
 	runtimeOnly("org.postgresql:postgresql")
 	// MariaDB/PostgreSQL 외 지원 대상 DB(MySQL/SQL Server/CUBRID) 드라이버.
-	runtimeOnly("com.mysql:mysql-connector-j:9.1.0")
-	runtimeOnly("com.microsoft.sqlserver:mssql-jdbc:12.8.1.jre11")
+	runtimeOnly("com.mysql:mysql-connector-j:9.3.0")
+	runtimeOnly("com.microsoft.sqlserver:mssql-jdbc:12.10.0.jre11")
 	runtimeOnly("org.cubrid:cubrid-jdbc:11.3.2.0053")
+	// yona가 기본값으로 제공하던 "설치 없이 바로 써보기" 임베디드 DB 대응(h2 프로파일).
+	// 도커/별도 서버 설치 없이 파일 기반으로 즉시 실행 가능 — testRuntimeOnly가 아니라
+	// runtimeOnly로 선언해야 테스트 실행 시에도(Gradle이 testRuntimeOnly가 runtimeOnly를
+	// extend) AbstractIntegrationTest의 -Dyona.it.db=h2 옵션에서 드라이버를 찾을 수 있다.
+	runtimeOnly("com.h2database:h2:2.4.240")
 	// CUBRIDDialect는 hibernate-core가 아니라 hibernate-community-dialects에 있다(공식 유지보수
 	// 대상은 아니지만 현재 Hibernate 7.x용으로 갱신돼 있음, org.hibernate.community.dialect.CUBRIDDialect).
 	implementation("org.hibernate.orm:hibernate-community-dialects")
 
 	// JGit
-	implementation("org.eclipse.jgit:org.eclipse.jgit:7.6.0.202603022253-r")
-	implementation("org.eclipse.jgit:org.eclipse.jgit.http.server:7.6.0.202603022253-r")
-	implementation("org.eclipse.jgit:org.eclipse.jgit.lfs:7.6.0.202603022253-r")
-	implementation("org.eclipse.jgit:org.eclipse.jgit.lfs.server:7.6.0.202603022253-r")
+	implementation("org.eclipse.jgit:org.eclipse.jgit:7.7.1.202607240634-r")
+	implementation("org.eclipse.jgit:org.eclipse.jgit.http.server:7.7.1.202607240634-r")
+	implementation("org.eclipse.jgit:org.eclipse.jgit.lfs:7.7.1.202607240634-r")
+	implementation("org.eclipse.jgit:org.eclipse.jgit.lfs.server:7.7.1.202607240634-r")
 
 	// SVNKit
 	implementation("org.tmatesoft.svnkit:svnkit:1.10.11")
@@ -72,19 +77,19 @@ dependencies {
 	implementation("com.github.albfernandez:juniversalchardet:2.5.0")
 
 	// Commonmark
-	implementation("org.commonmark:commonmark:0.22.0")
-	implementation("org.commonmark:commonmark-ext-gfm-tables:0.22.0")
-	implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.22.0")
-	implementation("org.commonmark:commonmark-ext-autolink:0.22.0")
+	implementation("org.commonmark:commonmark:0.24.0")
+	implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
+	implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.24.0")
+	implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
 
 	// JSoup
-	implementation("org.jsoup:jsoup:1.17.2")
+	implementation("org.jsoup:jsoup:1.21.1")
 
 	// OWASP HTML Sanitizer (allowlist 기반 XSS 방지, yona Markdown.java와 동등 정책)
-	implementation("com.googlecode.owasp-java-html-sanitizer:owasp-java-html-sanitizer:20240325.1")
+	implementation("com.googlecode.owasp-java-html-sanitizer:owasp-java-html-sanitizer:20260313.1")
 
 	// Apache Commons Lang3
-	implementation("org.apache.commons:commons-lang3:3.14.0")
+	implementation("org.apache.commons:commons-lang3:3.20.0")
 
 	// JExcelAPI (Legacy Yona Excel support)
 	implementation("net.sourceforge.jexcelapi:jxl:2.6.12")
@@ -92,11 +97,11 @@ dependencies {
 	// Apache Tika (yona FileUtil.detectMediaType()의 콘텐츠 기반 MIME 감지 대응, P2-25) — 확장자가
 	// 없는 해시 파일명(SHA-256 원문 저장 방식) 그대로 JDK Files.probeContentType()에 넘기면 사실상
 	// 항상 감지 실패해 모든 첨부가 application/octet-stream으로 저장된다.
-	implementation("org.apache.tika:tika-core:2.9.2")
+	implementation("org.apache.tika:tika-core:4.0.0")
 
 	// Guava (yona utils/CacheStore.java의 renderedMarkdown 캐시 대응, P2-43) — 사용자 지시로 원본
 	// 그대로 Guava Cache/CacheBuilder를 사용한다(Caffeine 등으로 대체하지 않음).
-	implementation("com.google.guava:guava:33.3.1-jre")
+	implementation("com.google.guava:guava:33.4.8-jre")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.security:spring-security-test")
@@ -104,10 +109,10 @@ dependencies {
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
 	// Kotest & MockK
-	testImplementation("io.kotest:kotest-runner-junit5:5.9.0")
-	testImplementation("io.kotest:kotest-assertions-core:5.9.0")
+	testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
+	testImplementation("io.kotest:kotest-assertions-core:5.9.1")
 	testImplementation("io.kotest.extensions:kotest-extensions-spring:1.3.0")
-	testImplementation("io.mockk:mockk:1.13.11")
+	testImplementation("io.mockk:mockk:1.14.11")
 
 	// Testcontainers — MariaDB/PostgreSQL/MySQL/SQL Server/CUBRID 5개 DB를 전부 도커 컨테이너
 	// 기준으로 검증하기 위해 버전을 1.21.4로 통일하고 mssqlserver/mysql 모듈을 추가했다.
@@ -168,7 +173,7 @@ tasks.withType<Test> {
 }
 
 jacoco {
-	toolVersion = "0.8.12"
+	toolVersion = "0.8.15"
 }
 
 tasks.jacocoTestReport {

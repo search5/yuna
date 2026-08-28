@@ -271,6 +271,15 @@ class ProjectControllerSpec : DescribeSpec({
                     .andExpect(status().isNotFound)
             }
 
+            // legacy controllers/api/ProjectApi.java newLabel() 경로 별칭 (P2-59)
+            it("legacy 경로 /-_-api/v1/owners/{owner}/projects/{projectName}/labels로도 동일하게 동작해야 한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "unknown") } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/-_-api/v1/owners/owner/projects/unknown/labels").param("name", "linux").principal(userAuth)
+                ).andExpect(status().isNotFound)
+            }
+
             it("라벨 붙이기 시 인증되지 않으면 401을 반환해야 한다") {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "priv") } returns Optional.of(privateProject)
 

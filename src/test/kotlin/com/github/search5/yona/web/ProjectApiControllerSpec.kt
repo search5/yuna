@@ -141,6 +141,25 @@ class ProjectApiControllerSpec : DescribeSpec({
             ).andExpect(status().isUnauthorized)
         }
 
+        // legacy Open API 경로 별칭 (P2-59)
+        it("legacy 경로 /-_-api/v1/owners/{owner}/projects로도 동일하게 동작해야 한다") {
+            every { userRepository.findByLoginId("admin") } returns Optional.of(siteManager)
+            every { projectRepository.findByOwnerAndName("someowner", "newproj") } returns Optional.empty()
+            every { organizationRepository.findByName("someowner") } returns Optional.empty()
+            val saved = Project(id = 60L, owner = "someowner", name = "newproj")
+            every { projectRepository.save(any()) } returns saved
+            every { roleRepository.findById(RoleType.SITEMANAGER.roleType) } returns Optional.of(sitemanagerRole)
+            every { projectUserRepository.save(any()) } answers { firstArg() }
+            every { repositoryService.getRepository(saved) } returns mockk(relaxed = true)
+
+            mockMvc.perform(
+                post("/-_-api/v1/owners/someowner/projects")
+                    .principal(siteManagerAuth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"projectName": "newproj"}""")
+            ).andExpect(status().isCreated)
+        }
+
         it("사이트매니저가 아니면 400과 안내 메시지를 반환해야 한다") {
             every { userRepository.findByLoginId("normal") } returns Optional.of(normalUser)
 
@@ -495,6 +514,14 @@ class ProjectApiControllerSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("acme", "nope") } returns Optional.empty()
 
             mockMvc.perform(get("/api/projects/acme/nope/exports").principal(managerAuth))
+                .andExpect(status().isNotFound)
+        }
+
+        // legacy Open API 경로 별칭 (P2-59)
+        it("legacy 경로 /-_-api/v1/owners/{owner}/projects/{projectName}/exports로도 동일하게 동작해야 한다") {
+            every { projectRepository.findByOwnerAndName("acme", "nope") } returns Optional.empty()
+
+            mockMvc.perform(get("/-_-api/v1/owners/acme/projects/nope/exports").principal(managerAuth))
                 .andExpect(status().isNotFound)
         }
 

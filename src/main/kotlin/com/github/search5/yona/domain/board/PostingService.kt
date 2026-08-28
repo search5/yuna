@@ -7,7 +7,10 @@ interface PostingService {
     fun getPostings(projectId: Long, pageable: Pageable): Page<Posting>
     fun getNotices(projectId: Long): List<Posting>
     fun getPosting(projectId: Long, number: Long): Posting?
-    fun createPosting(projectId: Long, posting: Posting, authorId: Long): Posting
+    // yona controllers/api/BoardApi.java createPostingNode()의 "number 필드가 있으면
+    // saveWithNumber(number), 없으면 save()" 대응 (P2-57 복원) — explicitNumber가 주어지면
+    // project.lastPostingNumber 카운터를 건드리지 않고 그 번호를 그대로 쓴다.
+    fun createPosting(projectId: Long, posting: Posting, authorId: Long, explicitNumber: Long? = null): Posting
     fun updatePosting(
         projectId: Long,
         number: Long,

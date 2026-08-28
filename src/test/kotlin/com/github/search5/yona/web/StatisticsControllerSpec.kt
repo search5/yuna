@@ -58,7 +58,7 @@ class StatisticsControllerSpec : DescribeSpec({
             )
 
             mockMvc.perform(
-                get("/-_-api/v1/users/testuser/statistics")
+                get("/api/users/testuser/statistics")
             )
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.issue").value(10))
@@ -79,7 +79,7 @@ class StatisticsControllerSpec : DescribeSpec({
             every { userRepository.findByLoginId("nosuch") } returns Optional.empty()
 
             mockMvc.perform(
-                get("/-_-api/v1/users/nosuch/statistics")
+                get("/api/users/nosuch/statistics")
             )
                 .andExpect(status().isNotFound)
         }

@@ -97,18 +97,22 @@ class PostingServiceImpl(
     }
 
     @Transactional
-    override fun createPosting(projectId: Long, posting: Posting, authorId: Long): Posting {
+    override fun createPosting(projectId: Long, posting: Posting, authorId: Long, explicitNumber: Long?): Posting {
         val project = projectRepository.findById(projectId)
             .orElseThrow { IllegalArgumentException("프로젝트를 찾을 수 없습니다.") }
         val author = userRepository.findById(authorId)
             .orElseThrow { IllegalArgumentException("사용자를 찾을 수 없습니다.") }
 
-        // 일련번호 증가 및 프로젝트 영속화
-        project.lastPostingNumber = project.lastPostingNumber + 1
-        projectRepository.save(project)
-
         posting.project = project
-        posting.number = project.lastPostingNumber
+        if (explicitNumber != null && explicitNumber > 0) {
+            // yona AbstractPosting.saveWithNumber() 대응 — project.lastPostingNumber 카운터는
+            // 건드리지 않고 지정된 번호를 그대로 쓴다.
+            posting.number = explicitNumber
+        } else {
+            project.lastPostingNumber = project.lastPostingNumber + 1
+            projectRepository.save(project)
+            posting.number = project.lastPostingNumber
+        }
         posting.authorId = author.id
         posting.authorLoginId = author.loginId
         posting.authorName = author.name

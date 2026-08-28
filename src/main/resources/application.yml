@@ -231,6 +231,28 @@ spring:
 spring:
   config:
     activate:
+      on-profile: h2
+  datasource:
+    # yona가 기본값으로 제공하던 H2(내장형) 대응 — Docker/별도 DB 서버 설치 없이 파일 기반으로
+    # 바로 실행된다(legacy `db.default.url="jdbc:h2:file:./yobi"`와 동일한 취지). AUTO_SERVER=TRUE로
+    # 실행 중에도 H2 콘솔 등 다른 클라이언트가 같은 파일에 동시 접속할 수 있게 한다.
+    url: jdbc:h2:file:./data/h2/yona;AUTO_SERVER=TRUE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+---
+spring:
+  config:
+    activate:
       on-profile: test
   datasource:
     driver-class-name: org.mariadb.jdbc.Driver

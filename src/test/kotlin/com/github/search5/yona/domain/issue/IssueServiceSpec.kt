@@ -919,6 +919,44 @@ class IssueServiceSpec @Autowired constructor(
                         issueService.publishIssue(999999L, author)
                     }
                 }
+
+                // yona controllers/api/IssueApi.java createIssuesNode()의 "number 필드가 있으면
+                // saveWithNumber(number), 없으면 save()" 대응 (P2-56 복원, legacy Open API 마이그레이션
+                // 전용 옵션).
+                it("explicitNumber가 주어지면 project.lastIssueNumber 카운터를 건드리지 않고 그 번호를 그대로 쓴다") {
+                    val author = userRepository.save(User(loginId = "import-author", name = "임포트작성자", email = "import-author@yona.io"))
+                    val project = projectRepository.save(Project(name = "import-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC, lastIssueNumber = 5))
+
+                    val imported = issueService.createIssue(
+                        issue = Issue(title = "과거 이슈 임포트", body = "본문", project = project),
+                        author = author,
+                        explicitNumber = 42L
+                    )
+
+                    imported.number shouldBe 42L
+                    projectRepository.findById(project.id!!).get().lastIssueNumber shouldBe 5L
+
+                    // explicitNumber 없이 다음 이슈를 만들면 여전히 카운터 기준(6)으로 정상 채번돼야 한다.
+                    val next = issueService.createIssue(
+                        issue = Issue(title = "다음 정상 이슈", body = "본문", project = project),
+                        author = author
+                    )
+                    next.number shouldBe 6L
+                }
+
+                it("sendNotification=false로 생성하면 정식 이슈(state=OPEN)여도 신규 이슈 알림이 발행되지 않아야 한다") {
+                    val author = userRepository.save(User(loginId = "silent-author", name = "무음작성자", email = "silent-author@yona.io"))
+                    val project = projectRepository.save(Project(name = "silent-proj", owner = "owner-a", projectScope = ProjectScope.PUBLIC))
+
+                    val saved = issueService.createIssue(
+                        issue = Issue(title = "알림 없는 이슈", body = "본문", project = project),
+                        author = author,
+                        sendNotification = false
+                    )
+
+                    saved.state shouldBe State.OPEN
+                    notificationEventRepository.findAll().size shouldBe 0
+                }
             }
 
             // yona AbstractPosting.save()/AbstractPostingApp.editPosting()의 TitleHead 연동 대응 (P1-103).

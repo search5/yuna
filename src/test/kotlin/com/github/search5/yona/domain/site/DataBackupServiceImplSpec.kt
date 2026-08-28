@@ -37,6 +37,21 @@ class DataBackupServiceImplSpec : DescribeSpec({
         every { connection.schema } returns "test_schema"
     }
 
+    // hasIdColumn()과 dateTimeColumns() 둘 다 getColumns(catalog, schema, table, null)를 같은
+    // 시그니처로 호출한다(hasIdColumn()이 컬럼명 패턴 대신 전체를 받아 대소문자 무관 비교하도록
+    // 바뀐 뒤부터, H2가 unquoted 컬럼명을 대문자로 저장해 패턴 매칭이 깨지는 문제 수정). 실제
+    // JDBC는 호출마다 커서가 처음으로 초기화된 새 ResultSet을 돌려주므로, 테스트에서도 호출마다
+    // 독립된 새 mock을 만들어야 두 메서드가 커서 상태를 공유해 두 번째 호출이 고갈된 커서를
+    // 받는 문제를 피할 수 있다.
+    fun columnsResultSet(columns: List<Pair<String, Int>>): ResultSet {
+        var idx = -1
+        val rs = mockk<ResultSet>(relaxed = true)
+        every { rs.next() } answers { idx++; idx < columns.size }
+        every { rs.getString("COLUMN_NAME") } answers { columns[idx].first }
+        every { rs.getInt("DATA_TYPE") } answers { columns[idx].second }
+        return rs
+    }
+
     describe("detectDialect & setForeignKeyChecks") {
         it("MySQL/MariaDB인 경우 MYSQL_COMPATIBLE 방언을 사용해야 한다") {
             every { metaData.databaseProductName } returns "MariaDB"
@@ -122,12 +137,10 @@ class DataBackupServiceImplSpec : DescribeSpec({
             every { tablesRs.getString("TABLE_NAME") } returns "users"
 
             // hasIdColumn() 가드 — id 컬럼이 있는 테이블로 취급한다.
-            val idColumnsRs = mockk<ResultSet>(relaxed = true)
-            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
-            every { idColumnsRs.next() } returns true
+            every { metaData.getColumns(any(), any(), any(), null) } answers { columnsResultSet(listOf("id" to Types.INTEGER)) }
 
             every { jdbcTemplate.queryForList("SELECT * FROM users") } returns listOf(mapOf("id" to 1))
-            
+
             every { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, "users") } returns "users_id_seq"
             every { jdbcTemplate.queryForObject("SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END FROM users_id_seq", JLong::class.java) } returns 30L as JLong
 
@@ -166,9 +179,7 @@ class DataBackupServiceImplSpec : DescribeSpec({
             every { tablesRs.next() } returnsMany listOf(true, false)
             every { tablesRs.getString("TABLE_NAME") } returns "join_table"
 
-            val idColumnsRs = mockk<ResultSet>(relaxed = true)
-            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
-            every { idColumnsRs.next() } returns false
+            every { metaData.getColumns(any(), any(), any(), null) } answers { columnsResultSet(emptyList()) }
 
             every { jdbcTemplate.queryForList("SELECT * FROM join_table") } returns listOf(mapOf("a_id" to 1, "b_id" to 2))
 
@@ -186,12 +197,10 @@ class DataBackupServiceImplSpec : DescribeSpec({
             every { tablesRs.next() } returnsMany listOf(true, false)
             every { tablesRs.getString("TABLE_NAME") } returns "users"
 
-            val idColumnsRs = mockk<ResultSet>(relaxed = true)
-            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
-            every { idColumnsRs.next() } returns true
+            every { metaData.getColumns(any(), any(), any(), null) } answers { columnsResultSet(listOf("id" to Types.INTEGER)) }
 
             every { jdbcTemplate.queryForList("SELECT * FROM users") } returns listOf(mapOf("id" to 1))
-            
+
             // sequence_name is null
             every { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, "users") } returns null
 
@@ -265,13 +274,9 @@ class DataBackupServiceImplSpec : DescribeSpec({
                 }
             """.trimIndent().toByteArray()
 
-            val columnsRs = mockk<ResultSet>(relaxed = true)
-            every { metaData.getColumns(any(), any(), any(), null) } returns columnsRs
-            every { columnsRs.next() } returns false
-
-            val idColumnsRs = mockk<ResultSet>(relaxed = true)
-            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
-            every { idColumnsRs.next() } returns true
+            // dateTimeColumns()에는 datetime 컬럼이 없고(id만 있음), hasIdColumn()에는 id 컬럼이
+            // 있어야 한다 — 둘 다 같은 시그니처로 호출되므로 한 컬럼 목록으로 동시에 충족한다.
+            every { metaData.getColumns(any(), any(), any(), null) } answers { columnsResultSet(listOf("id" to Types.INTEGER)) }
 
             every { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, "users") } returns "users_id_seq"
             every { jdbcTemplate.queryForObject("SELECT setval(?, ?, false)", Long::class.java, "users_id_seq", 200L) } returns 200L
@@ -299,13 +304,7 @@ class DataBackupServiceImplSpec : DescribeSpec({
                 }
             """.trimIndent().toByteArray()
 
-            val columnsRs = mockk<ResultSet>(relaxed = true)
-            every { metaData.getColumns(any(), any(), any(), null) } returns columnsRs
-            every { columnsRs.next() } returns false
-
-            val idColumnsRs = mockk<ResultSet>(relaxed = true)
-            every { metaData.getColumns(any(), any(), any(), "id") } returns idColumnsRs
-            every { idColumnsRs.next() } returns true
+            every { metaData.getColumns(any(), any(), any(), null) } answers { columnsResultSet(listOf("id" to Types.INTEGER)) }
 
             every { jdbcTemplate.queryForObject("SELECT pg_get_serial_sequence(?, 'id')", String::class.java, "users") } returns null
 

@@ -43,7 +43,7 @@
 | ORM | Ebean | JPA / Hibernate |
 | 뷰 엔진 | Scala Template(`.scala.html`) | Thymeleaf |
 | JDK | Java 8 | Java 21 |
-| 지원 DB | MariaDB(기본) 또는 H2(내장형) | **MariaDB / PostgreSQL / MySQL / SQL Server / CUBRID** |
+| 지원 DB | MariaDB(기본) 또는 H2(내장형) | **MariaDB / PostgreSQL / MySQL / SQL Server / CUBRID / H2(내장형)** |
 
 포팅 진행 상황과 legacy 대비 의도적으로 남겨둔 차이점은 `docs/PARITY_BACKLOG.md`,
 `docs/TEMPLATE_BACKLOG.md`, `docs/COVERAGE_BACKLOG.md`에 기록돼 있습니다.
@@ -51,7 +51,7 @@
 ## 요구 사항
 
 - JDK 21
-- 운영/테스트 DB 중 하나: MariaDB(기본), PostgreSQL, MySQL, SQL Server, CUBRID
+- 운영/테스트 DB 중 하나: MariaDB(기본), PostgreSQL, MySQL, SQL Server, CUBRID, H2(설치 없이 바로 써보기)
 
 ## 빌드 & 실행
 
@@ -83,9 +83,13 @@ gradlew.bat test       # Windows
 | `mysql` | MySQL |
 | `mssql` | Microsoft SQL Server |
 | `cubrid` | CUBRID |
+| `h2` | H2(내장형) — Docker/별도 서버 설치 없이 파일 기반으로 바로 실행(`./data/h2/yona`) |
 
 ```bash
 java -jar yona.jar --spring.profiles.active=postgres
+
+# 설치 없이 바로 써보기(H2)
+java -jar yona.jar --spring.profiles.active=h2
 ```
 
 통합 테스트는 실제 Docker 컨테이너(Testcontainers) 기준으로 5개 DB 전부 검증돼 있습니다.
@@ -273,7 +277,7 @@ Yona is a web-based project hosting software.
 | ORM | Ebean | JPA / Hibernate |
 | View engine | Scala Template (`.scala.html`) | Thymeleaf |
 | JDK | Java 8 | Java 21 |
-| Supported DB | MariaDB (default) or embedded H2 | **MariaDB / PostgreSQL / MySQL / SQL Server / CUBRID** |
+| Supported DB | MariaDB (default) or embedded H2 | **MariaDB / PostgreSQL / MySQL / SQL Server / CUBRID / embedded H2** |
 
 Porting progress and deliberate differences from legacy are tracked in `docs/PARITY_BACKLOG.md`,
 `docs/TEMPLATE_BACKLOG.md`, and `docs/COVERAGE_BACKLOG.md`.
@@ -281,7 +285,7 @@ Porting progress and deliberate differences from legacy are tracked in `docs/PAR
 ## Requirements
 
 - JDK 21
-- One of the supported/tested DBs: MariaDB (default), PostgreSQL, MySQL, SQL Server, CUBRID
+- One of the supported/tested DBs: MariaDB (default), PostgreSQL, MySQL, SQL Server, CUBRID, or embedded H2 (no install needed)
 
 ## Build & Run
 
@@ -314,17 +318,22 @@ directly from the `docker-compose.yml` at the repository root.
 | `mysql` | MySQL |
 | `mssql` | Microsoft SQL Server |
 | `cubrid` | CUBRID |
+| `h2` | Embedded H2 — runs immediately from a local file (`./data/h2/yona`), no Docker/server install |
 
 ```bash
 java -jar yona.jar --spring.profiles.active=postgres
+
+# Try it with zero setup (H2)
+java -jar yona.jar --spring.profiles.active=h2
 ```
 
-Integration tests are verified against all 5 DBs using real Docker containers (Testcontainers).
-To run tests against a single DB (**never run two or more at once — the gradle build output
-directory gets corrupted; always run one at a time**):
+Integration tests are verified against all 5 server DBs using real Docker containers
+(Testcontainers); H2 is embedded and needs no container. To run tests against a single DB
+(**never run two or more at once — the gradle build output directory gets corrupted; always run
+one at a time**):
 
 ```bash
-./gradlew test -Dyona.it.db=postgres   # mariadb|postgres|mysql|mssql|cubrid
+./gradlew test -Dyona.it.db=postgres   # mariadb|postgres|mysql|mssql|cubrid|h2
 ```
 
 ## Deployment configuration (especially on Windows)

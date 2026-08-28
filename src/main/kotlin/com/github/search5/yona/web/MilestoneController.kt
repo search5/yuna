@@ -128,48 +128,8 @@ class MilestoneController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val createdMilestones = request.milestones.map { createMilestoneNode(it, project) }
+        val createdMilestones = request.milestones.map { createMilestoneNode(it, project, milestoneRepository) }
         return ResponseEntity.status(HttpStatus.CREATED).body(createdMilestones)
-    }
-
-    // yona MilestoneApi.java:52-68 createMilestoneNode() 대응. 제목이 이미 존재하면(프로젝트 내 [GL-controllers_api_MilestoneApi-003]
-    // 유일해야 함) 생성하지 않고 입력값과 메시지를 그대로 돌려주고, 성공하면 MigrationApp.
-    // getMilestoneNode()와 동일한 형식({id, title, state, description, due_on})으로 응답한다.
-    private fun createMilestoneNode(item: BulkMilestoneItem, project: Project): Map<String, Any?> {
-        val title = item.title ?: "No title"
-        if (milestoneRepository.findByProjectAndTitle(project, title) != null) {
-            return mapOf("milestone" to item, "message" to "이미 존재하는 마일스톤 제목입니다.")
-        }
-
-        val state = if (item.state?.equals("closed", ignoreCase = true) == true) State.CLOSED else State.OPEN
-        val milestone = Milestone(
-            title = title,
-            contents = item.description ?: "",
-            project = project,
-            dueDate = parseDueOn(item.due_on),
-            state = state
-        )
-        val saved = milestoneRepository.save(milestone)
-
-        return mapOf(
-            "id" to saved.id,
-            "title" to saved.title,
-            "state" to saved.state.state(),
-            "description" to saved.contents,
-            "due_on" to saved.dueDate?.toString()
-        )
-    }
-
-    // yona utils/JodaDateUtil.java:84-92 lastSecondOfDay() 대응. 날짜만 오든 전체 ISO 일시가 오든 [GL-utils_JodaDateUtil-015]
-    // 유연하게 파싱해 그날의 23:59:59로 정규화한다.
-    private fun parseDueOn(dueOn: String?): Instant? {
-        if (dueOn.isNullOrBlank()) return null
-        val localDate = try {
-            OffsetDateTime.parse(dueOn).toLocalDate()
-        } catch (e: Exception) {
-            LocalDate.parse(dueOn)
-        }
-        return localDate.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
     }
 
     @PutMapping("/{milestoneId}")
@@ -252,4 +212,50 @@ class MilestoneController(
         val due_on: String? = null,
         val state: String? = null
     )
+}
+
+// yona MilestoneApi.java:52-68 createMilestoneNode() 대응. 제목이 이미 존재하면(프로젝트 내
+// 유일해야 함) 생성하지 않고 입력값과 메시지를 그대로 돌려주고, 성공하면 MigrationApp.
+// getMilestoneNode()와 동일한 형식({id, title, state, description, due_on})으로 응답한다.
+// MilestoneController.bulkCreateMilestones()(projectId 기반)와 MilestoneApiController(legacy
+// owner/projectName 기반, P2-58)가 로직 중복 없이 함께 쓰도록 top-level 함수로 분리했다.
+internal fun createMilestoneNode(
+    item: MilestoneController.BulkMilestoneItem,
+    project: Project,
+    milestoneRepository: MilestoneRepository
+): Map<String, Any?> {
+    val title = item.title ?: "No title"
+    if (milestoneRepository.findByProjectAndTitle(project, title) != null) {
+        return mapOf("milestone" to item, "message" to "이미 존재하는 마일스톤 제목입니다.")
+    }
+
+    val state = if (item.state?.equals("closed", ignoreCase = true) == true) State.CLOSED else State.OPEN
+    val milestone = Milestone(
+        title = title,
+        contents = item.description ?: "",
+        project = project,
+        dueDate = parseDueOn(item.due_on),
+        state = state
+    )
+    val saved = milestoneRepository.save(milestone)
+
+    return mapOf(
+        "id" to saved.id,
+        "title" to saved.title,
+        "state" to saved.state.state(),
+        "description" to saved.contents,
+        "due_on" to saved.dueDate?.toString()
+    )
+}
+
+// yona utils/JodaDateUtil.java:84-92 lastSecondOfDay() 대응. 날짜만 오든 전체 ISO 일시가 오든
+// 유연하게 파싱해 그날의 23:59:59로 정규화한다.
+internal fun parseDueOn(dueOn: String?): Instant? {
+    if (dueOn.isNullOrBlank()) return null
+    val localDate = try {
+        OffsetDateTime.parse(dueOn).toLocalDate()
+    } catch (e: Exception) {
+        LocalDate.parse(dueOn)
+    }
+    return localDate.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
 }

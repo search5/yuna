@@ -81,8 +81,9 @@ class ProjectApiController(
         return userRepository.findByLoginId(authentication.name).orElse(null)
     }
 
-    // yona ProjectApi.java:111-161 newProject() 대응 (P2-45). [GL-controllers_api_ProjectApi-007]
-    @PostMapping("/api/projects/{owner}")
+    // yona ProjectApi.java:111-161 newProject() 대응 (P2-45). legacy Open API 경로 별칭은 P2-59 —
+    // 두 경로 모두 동일한 owner 경로변수 + 요청 바디 구조라 핸들러 재작성 없이 매핑만 추가한다.
+    @PostMapping(value = ["/api/projects/{owner}", "/-_-api/v1/owners/{owner}/projects"])
     fun newProject(
         @PathVariable owner: String,
         @RequestBody request: NewProjectApiRequest,
@@ -238,7 +239,8 @@ class ProjectApiController(
     // yona ProjectApi.java:46-72 exports() 대응 (P2-46) — 프로젝트를 이슈/게시글/댓글/마일스톤/라벨까지 [GL-controllers_api_ProjectApi-002;GL-controllers_api_ProjectApi-003]
     // 포함해 JSON으로 전체 직렬화한다. legacy `@IsAllowed(Operation.DELETE)`(프로젝트 매니저/조직관리자
     // 전용)와 동일하게 accessControl.isAllowed(user, project, Operation.DELETE)로 게이트한다.
-    @GetMapping("/api/projects/{owner}/{projectName}/exports")
+    // legacy Open API 경로 별칭은 P2-59 — owner/projectName 경로변수 구조가 동일해 매핑만 추가한다.
+    @GetMapping(value = ["/api/projects/{owner}/{projectName}/exports", "/-_-api/v1/owners/{owner}/projects/{projectName}/exports"])
     fun exports(
         @PathVariable owner: String,
         @PathVariable projectName: String,

@@ -780,6 +780,21 @@ class UserControllerSpec : DescribeSpec({
                 }.message shouldBe "Unauthorized"
             }
 
+            // legacy 경로 별칭 (P2-60) — `/-_-api/v1/user/defultLoginPage`(legacy 오타 포함)로도 동일하게 동작해야 한다
+            it("legacy 경로 /-_-api/v1/user/defultLoginPage로도 동일하게 동작해야 한다") {
+                every { userRepository.findByLoginId("gildong") } returns Optional.of(testUser)
+                every { userSettingRepository.findByUserId(1L) } returns Optional.empty()
+                every { userSettingRepository.save(any()) } answers { firstArg() }
+
+                mockMvc.perform(
+                    post("/-_-api/v1/user/defultLoginPage")
+                        .param("path", "notifications")
+                        .principal(auth)
+                )
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.defaultLoginPage").value("notifications"))
+            }
+
             it("로그인은 되어 있으나 저장소에 사용자가 없으면 IllegalArgumentException을 던져야 한다") {
                 every { userRepository.findByLoginId("gildong") } returns Optional.empty()
 

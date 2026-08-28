@@ -1023,6 +1023,87 @@ class CommentControllerSpec : DescribeSpec({
             }
         }
 
+        // yona controllers/api/IssueApi.java newIssueComment()/updateIssueComment(),
+        // controllers/api/BoardApi.java newPostingComment()/updatePostingComment() 대응 (P2-56/57)
+        describe("legacy Open API 경로 별칭 (-_-api/v1)") {
+            it("POST /-_-api/v1/owners/{owner}/projects/{projectName}/issues/{number}/comments — comment 필드로 이슈 댓글을 생성한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueRepository.findByProjectAndNumber(project, 5L) } returns issue
+                every { commentService.createIssueComment(50L, "레거시댓글", user, null) } returns issueComment
+
+                mockMvc.perform(
+                    post("/-_-api/v1/owners/owner/projects/TestProject/issues/5/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"comment": "레거시댓글"}""")
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("PUT /-_-api/v1/owners/{owner}/projects/{projectName}/issues/{number}/comments/{commentId} — content/sha1 필드로 이슈 댓글을 수정한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+                every { commentService.updateIssueComment(100L, "수정됨", user) } returns issueComment
+
+                mockMvc.perform(
+                    put("/-_-api/v1/owners/owner/projects/TestProject/issues/5/comments/100")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"content": "수정됨", "sha1": "${com.github.search5.yona.domain.support.sha1Hex("이슈댓글")}"}""")
+                )
+                    .andExpect(status().isOk)
+            }
+
+            it("POST /-_-api/v1/owners/{owner}/projects/{projectName}/posts/{number}/comments — body 필드로 게시글 댓글을 생성한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { postingRepository.findByProjectAndNumber(project, 6L) } returns posting
+                every { commentService.createPostingComment(60L, "레거시게시글댓글", user, null) } returns postingComment
+
+                mockMvc.perform(
+                    post("/-_-api/v1/owners/owner/projects/TestProject/posts/6/comments")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"body": "레거시게시글댓글"}""")
+                )
+                    .andExpect(status().isCreated)
+            }
+
+            it("PUT /-_-api/v1/owners/{owner}/projects/{projectName}/posts/{number}/comments/{commentId} — content/sha1 필드로 게시글 댓글을 수정한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { postingCommentRepository.findById(200L) } returns Optional.of(postingComment)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+                every { commentService.updatePostingComment(200L, "수정됨", user) } returns postingComment
+
+                mockMvc.perform(
+                    put("/-_-api/v1/owners/owner/projects/TestProject/posts/6/comments/200")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"content": "수정됨", "sha1": "${com.github.search5.yona.domain.support.sha1Hex("게시판댓글")}"}""")
+                )
+                    .andExpect(status().isOk)
+            }
+
+            it("체크섬이 legacy sha1과 다르면(다른 사람이 이미 수정) 409를 반환한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "TestProject") } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { issueCommentRepository.findById(100L) } returns Optional.of(issueComment)
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/-_-api/v1/owners/owner/projects/TestProject/issues/5/comments/100")
+                        .principal(userAuth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"content": "수정됨", "sha1": "다른체크섬"}""")
+                )
+                    .andExpect(status().isConflict)
+            }
+        }
+
         describe("CommentRequest data class test") {
             it("기본값 및 data class 메서드들이 정상 동작해야 한다") {
                 val req1 = CommentController.CommentRequest()

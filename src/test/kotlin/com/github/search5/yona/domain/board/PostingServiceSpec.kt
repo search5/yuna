@@ -86,6 +86,31 @@ class PostingServiceSpec @Autowired constructor(
             // publishNotification()의 notificationEventRecorder.record(notificationEvent)?.let { ... }는
             // record()가 receivers.isEmpty()일 때 null을 반환해(레거시와 동일) 저장하지 않는데, 기존
             // 테스트는 전부 워처를 하나 이상 둬서 이 null 분기가 비어 있었다.
+            // yona controllers/api/BoardApi.java createPostingNode()의 "number 필드가 있으면
+            // saveWithNumber(number), 없으면 save()" 대응 (P2-57 복원, legacy Open API 마이그레이션
+            // 전용 옵션).
+            it("explicitNumber가 주어지면 project.lastPostingNumber 카운터를 건드리지 않고 그 번호를 그대로 쓴다") {
+                val author = userRepository.save(User(loginId = "import-writer", name = "임포트작성자", email = "import-writer@yona.io"))
+                val project = projectRepository.save(Project(name = "import-board-project", owner = "import-writer", projectScope = ProjectScope.PUBLIC, lastPostingNumber = 5))
+
+                val imported = postingService.createPosting(
+                    project.id!!,
+                    Posting(title = "과거 게시글 임포트", body = "본문", project = project),
+                    author.id!!,
+                    explicitNumber = 42L
+                )
+
+                imported.number shouldBe 42L
+                projectRepository.findById(project.id!!).get().lastPostingNumber shouldBe 5L
+
+                val next = postingService.createPosting(
+                    project.id!!,
+                    Posting(title = "다음 정상 게시글", body = "본문", project = project),
+                    author.id!!
+                )
+                next.number shouldBe 6L
+            }
+
             it("워처도 멘션도 없이 게시글을 작성하면 수신자가 없어 알림 이벤트가 저장되지 않아야 한다") {
                 val author = userRepository.save(User(loginId = "lonely-writer", name = "작성자", email = "lonely-writer@yona.io"))
                 val project = projectRepository.save(Project(name = "lonely-board-project", owner = "lonely-writer", projectScope = ProjectScope.PUBLIC))

@@ -12,13 +12,22 @@ interface IssueService {
 
     // yona AbstractPosting.isPublish(transient)/Issue.isDraft(영속) 대응 (P1-65).
     // isDraft=true면 State.DRAFT로 생성되고(신규 이슈 알림 미발행), 그 외엔 기존과 동일.
+    //
+    // yona controllers/api/IssueApi.java createIssuesNode()의 "number 필드가 있으면
+    // saveWithNumber(number), 없으면 save()" 대응 (P2-56 복원) — explicitNumber가 주어지면
+    // project.lastIssueNumber 카운터를 건드리지 않고 그 번호를 그대로 쓴다(legacy AbstractPosting.
+    // saveWithNumber()와 동일 — 마이그레이션으로 과거 번호를 보존할 때 씀). sendNotification=false면
+    // isDraft 여부와 무관하게 신규 이슈 알림을 발행하지 않는다(legacy "if (sendNotification) {
+    // NotificationEvent.afterNewIssue(issue); }" 대응).
     fun createIssue(
         issue: Issue,
         author: User,
         assigneeUser: User? = null,
         milestoneId: Long? = null,
         labelIds: List<Long>? = null,
-        isDraft: Boolean = false
+        isDraft: Boolean = false,
+        explicitNumber: Long? = null,
+        sendNotification: Boolean = true
     ): Issue
 
     fun updateIssue(

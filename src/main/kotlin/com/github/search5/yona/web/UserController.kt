@@ -430,9 +430,11 @@ class UserController(
 
     data class UpdateUserStateRequest(val state: String)
 
-    // yona UserApp.java:1372-1380 setDefaultLoginPage() 대응 (P2-11). 로그인 후 사이트 루트로
-    // 접속했을 때 이동할 "기본 페이지"를 사용자별로 저장한다(리다이렉트 소비는 IndexController).
-    @PostMapping("/user/setDefaultLoginPage")
+    // yona UserApp.java:1372-1380 setDefaultLoginPage() 대응 (P2-11, 레거시 Open API 경로 별칭은
+    // P2-60). 로그인 후 사이트 루트로 접속했을 때 이동할 "기본 페이지"를 사용자별로 저장한다
+    // (리다이렉트 소비는 IndexController). legacy 경로 `/-_-api/v1/user/defultLoginPage`는 legacy
+    // 자체 오타(defult)까지 그대로 유지한 별칭 — 기존 `/user/setDefaultLoginPage`도 계속 지원한다.
+    @PostMapping(value = ["/user/setDefaultLoginPage", "/-_-api/v1/user/defultLoginPage"])
     fun setDefaultLoginPage(
         @RequestParam(required = false) path: String?,
         authentication: Authentication?

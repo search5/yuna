@@ -239,7 +239,12 @@ class AutoLinkRendererSpec : DescribeSpec({
 
             val result = autoLinkRenderer.render("@chulsoo", null, "ko")
 
-            result shouldContain "<img"
+            // jsoup 1.21.1(1.17.2에서 업그레이드)부터 data-content 속성값 안의 `<img`를 정확히
+            // `&lt;img`로 이스케이프해 직렬화한다(구버전은 속성값 안 `<`를 그대로 남기는 관대한
+            // 동작이었음 — 실측으로 확인, HTML 표준상으로는 어느 쪽이든 브라우저가 속성값을 파싱해
+            // DOM에 저장할 때 디코딩되므로 Bootstrap popover 동작은 동일하다). 이스케이프된 형태로
+            // 검증하도록 갱신.
+            result shouldContain "&lt;img"
             result shouldContain "/files/999"
         }
 

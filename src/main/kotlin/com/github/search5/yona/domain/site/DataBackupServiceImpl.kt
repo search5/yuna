@@ -50,7 +50,7 @@ class DataBackupServiceImpl(
     private val logger = LoggerFactory.getLogger(DataBackupServiceImpl::class.java)
     private val jdbcTemplate = JdbcTemplate(dataSource)
 
-    private enum class Dialect { MYSQL_COMPATIBLE, POSTGRES, OTHER }
+    private enum class Dialect { MYSQL_COMPATIBLE, POSTGRES, H2, OTHER }
 
     override fun exportAll(): ByteArray {
         val tables = listTables()
@@ -183,14 +183,35 @@ class DataBackupServiceImpl(
                     JLong::class.java
                 )?.toLong()
             }
+            // h2 지원 추가(H2는 legacy가 기본값으로 제공하던 임베디드 DB 대응). identity 컬럼이
+            // MariaDB의 AUTO_INCREMENT와 달리 명시적 INSERT 값을 보고 스스로 전진하지 않는다는
+            // 걸 실측으로 확인(DataBackupServiceH2IntegrationSpec — 복원 직후 PK 충돌 재현).
+            // H2는 PostgreSQL의 pg_get_serial_sequence()처럼 identity 컬럼의 "다음 값"을 직접
+            // 조회하는 표준 SQL이 없어(INFORMATION_SCHEMA.SEQUENCES에 identity 컬럼용 항목이
+            // 노출되지 않음, 실측 확인) MAX(id)+1로 근사한다 — MariaDB/PostgreSQL과 달리
+            // export 이전에 이미 삭제된 행으로 생긴 시퀀스 갭까지는 보존하지 못하는 것으로
+            // 알려진 제약(문서화된 한계, docs/PARITY_BACKLOG.md P3 참고).
+            Dialect.H2 -> {
+                if (!hasIdColumn(table)) return null
+                jdbcTemplate.queryForObject(
+                    "SELECT COALESCE(MAX(id), 0) + 1 FROM $table", JLong::class.java
+                )?.toLong()
+            }
             Dialect.OTHER -> null
         }
     }
 
+    // columnNamePattern에 "id"(소문자)를 그대로 넘기면 MariaDB/PostgreSQL(소문자로 컬럼명을
+    // 저장)에서는 맞지만, H2는 unquoted DDL 컬럼명을 대문자로 저장해(실측 확인, COLUMN_NAME=ID)
+    // 패턴이 안 맞아 컬럼이 있어도 없다고 오판한다 — columnNamePattern을 null로 열어 전체를
+    // 받아온 뒤 대소문자 무관 비교로 직접 걸러낸다.
     private fun hasIdColumn(table: String): Boolean {
         dataSource.connection.use { connection ->
-            connection.metaData.getColumns(connection.catalog, connection.schema, table, "id").use { rs ->
-                return rs.next()
+            connection.metaData.getColumns(connection.catalog, connection.schema, table, null).use { rs ->
+                while (rs.next()) {
+                    if (rs.getString("COLUMN_NAME").equals("id", ignoreCase = true)) return true
+                }
+                return false
             }
         }
     }
@@ -216,6 +237,12 @@ class DataBackupServiceImpl(
                     jdbcTemplate.queryForObject("SELECT setval(?, ?, false)", Long::class.java, sequenceName, nextValue)
                 }
             }
+            // ALTER COLUMN ... RESTART WITH — H2 고유 구문(실측 확인, PostgreSQL의 setval()과
+            // 동등한 효과).
+            Dialect.H2 -> {
+                if (!hasIdColumn(table)) return
+                jdbcTemplate.execute("ALTER TABLE $table ALTER COLUMN id RESTART WITH $nextValue")
+            }
             Dialect.OTHER -> logger.warn("알 수 없는 DB 방언이라 $table 의 auto-increment/시퀀스를 재설정하지 않습니다")
         }
     }
@@ -227,6 +254,7 @@ class DataBackupServiceImpl(
                 product.contains("MySQL", ignoreCase = true) || product.contains("MariaDB", ignoreCase = true) ->
                     Dialect.MYSQL_COMPATIBLE
                 product.contains("PostgreSQL", ignoreCase = true) -> Dialect.POSTGRES
+                product.contains("H2", ignoreCase = true) -> Dialect.H2
                 else -> Dialect.OTHER
             }
         }
@@ -236,6 +264,8 @@ class DataBackupServiceImpl(
         when (dialect) {
             Dialect.MYSQL_COMPATIBLE -> jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = ${if (enabled) 1 else 0}")
             Dialect.POSTGRES -> jdbcTemplate.execute("SET session_replication_role = '${if (enabled) "origin" else "replica"}'")
+            // SET REFERENTIAL_INTEGRITY — H2 고유 구문(실측 확인).
+            Dialect.H2 -> jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY ${if (enabled) "TRUE" else "FALSE"}")
             Dialect.OTHER -> logger.warn("알 수 없는 DB 방언이라 외래키 제약을 토글하지 않습니다")
         }
     }

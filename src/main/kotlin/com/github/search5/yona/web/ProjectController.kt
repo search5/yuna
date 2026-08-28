@@ -214,7 +214,9 @@ class ProjectController(
     // yona ProjectApp.attachLabel() 대응 (P1-13). yona AccessControl은 PROJECT_LABELS를
     // 별도 케이스로 다루지 않아 일반 프로젝트 리소스 UPDATE 규칙(user.isMemberOf(project))을 그대로
     // 따른다 - MANAGER가 아니어도 프로젝트 멤버라면 라벨을 붙이고 뗄 수 있다.
-    @PostMapping("/api/{owner}/{projectName}/labels")
+    // legacy controllers/api/ProjectApi.java newLabel() 경로 별칭은 P2-59 — owner/projectName
+    // 경로변수 구조가 동일해 매핑만 추가한다.
+    @PostMapping(value = ["/api/{owner}/{projectName}/labels", "/-_-api/v1/owners/{owner}/projects/{projectName}/labels"])
     fun attachLabel(
         @PathVariable owner: String,
         @PathVariable projectName: String,

@@ -18,11 +18,12 @@ import org.testcontainers.cubrid.CubridContainer
 private class KMSSQLServerContainer(imageName: String) : MSSQLServerContainer<KMSSQLServerContainer>(imageName)
 
 /**
- * yuna가 지원해야 하는 5개 DB(MariaDB/PostgreSQL/MySQL/SQL Server/CUBRID)를 전부 실제 도커
- * 컨테이너 기준으로 동일한 통합테스트 스위트(이 클래스를 상속하는 모든 Spec)로 검증하기 위해
- * 컨테이너 선택을 시스템 프로퍼티로 파라미터화했다.
+ * yuna가 지원해야 하는 6개 DB(MariaDB/PostgreSQL/MySQL/SQL Server/CUBRID/H2)를 전부 동일한
+ * 통합테스트 스위트(이 클래스를 상속하는 모든 Spec)로 검증하기 위해 컨테이너 선택을 시스템
+ * 프로퍼티로 파라미터화했다. H2만 예외 — 임베디드 DB라 도커 컨테이너가 필요 없다(아래
+ * registerProperties()에서 별도 분기).
  *
- * 실행: `./gradlew test -Dyona.it.db=postgres` (기본값은 mariadb). 값: mariadb|postgres|mysql|mssql|cubrid
+ * 실행: `./gradlew test -Dyona.it.db=postgres` (기본값은 mariadb). 값: mariadb|postgres|mysql|mssql|cubrid|h2
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -32,7 +33,9 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
         private const val DB_PROPERTY = "yona.it.db"
         private val selectedDb = System.getProperty(DB_PROPERTY, "mariadb")
 
-        private val container: JdbcDatabaseContainer<*> = when (selectedDb) {
+        // h2는 Testcontainers를 쓰지 않으므로(임베디드 DB, 도커 불필요) container가 없다.
+        private val container: JdbcDatabaseContainer<*>? = when (selectedDb) {
+            "h2" -> null
             "postgres" -> PostgreSQLContainer("postgres:16")
                 .withDatabaseName("yona")
                 .withUsername("yona")
@@ -67,16 +70,31 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
         }
 
         init {
-            container.start()
+            container?.start()
         }
 
         @JvmStatic
         @DynamicPropertySource
         fun registerProperties(registry: DynamicPropertyRegistry) {
-            registry.add("spring.datasource.url") { container.jdbcUrl }
-            registry.add("spring.datasource.username") { container.username }
-            registry.add("spring.datasource.password") { container.password }
-            registry.add("spring.datasource.driver-class-name") { container.driverClassName }
+            if (selectedDb == "h2") {
+                // 임베디드 인메모리 DB — 테스트 프로세스마다(JVM 기동 시점 nanoTime) 별도
+                // 스키마를 써서 병렬/반복 실행 시 이전 실행 데이터와 절대 섞이지 않게 한다.
+                // DB_CLOSE_DELAY=-1은 마지막 커넥션이 끊겨도(테스트 사이 커넥션 풀이 비는
+                // 순간) DB를 닫지 않고 JVM 종료까지 유지한다 — 안 그러면 같은 스펙 안에서도
+                // 커넥션이 비는 순간 스키마가 통째로 사라질 수 있다.
+                registry.add("spring.datasource.url") { "jdbc:h2:mem:yona-it-${System.nanoTime()};DB_CLOSE_DELAY=-1" }
+                registry.add("spring.datasource.username") { "sa" }
+                registry.add("spring.datasource.password") { "" }
+                registry.add("spring.datasource.driver-class-name") { "org.h2.Driver" }
+                registry.add("spring.jpa.database-platform") { "org.hibernate.dialect.H2Dialect" }
+                return
+            }
+
+            val jdbcContainer = container!!
+            registry.add("spring.datasource.url") { jdbcContainer.jdbcUrl }
+            registry.add("spring.datasource.username") { jdbcContainer.username }
+            registry.add("spring.datasource.password") { jdbcContainer.password }
+            registry.add("spring.datasource.driver-class-name") { jdbcContainer.driverClassName }
             // CUBRIDDialect는 hibernate-core가 아니라 hibernate-community-dialects에 있어
             // Hibernate가 JDBC 메타데이터만으로 자동 인식하지 못한다 — 명시적으로 지정해야 한다.
             if (selectedDb == "cubrid") {
