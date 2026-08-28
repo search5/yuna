@@ -3,7 +3,7 @@ type: plan
 id: P3-05
 title: "CI/Actions — GitHub Actions 러너 아키텍처 이식"
 status: planned
-priority: 7
+priority: 8
 depends_on: [p3-01-observability]
 blocks: []
 source: docs/PARITY_BACKLOG.md#P3-05

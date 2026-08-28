@@ -3,7 +3,7 @@ type: plan
 id: P3-03
 title: "SSH git 인증 + GPG 커밋 서명 검증"
 status: planned
-priority: 6
+priority: 7
 depends_on: [p3-02-cli-and-rest-api]
 blocks: [p3-04-branch-protection]
 source: docs/PARITY_BACKLOG.md#P3-03

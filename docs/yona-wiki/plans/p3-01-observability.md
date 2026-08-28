@@ -3,7 +3,7 @@ type: plan
 id: P3-01
 title: "Observability(메트릭/로깅/트레이싱) 인프라 도입"
 status: planned
-priority: 1
+priority: 2
 depends_on: []
 blocks: []
 source: docs/PARITY_BACKLOG.md#P3-01

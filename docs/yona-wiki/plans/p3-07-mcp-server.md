@@ -3,7 +3,7 @@ type: plan
 id: P3-07
 title: "yuna MCP 서버 (이슈/PR 읽기·쓰기)"
 status: planned
-priority: 5
+priority: 6
 depends_on: [p3-02-cli-and-rest-api]
 blocks: []
 source: docs/PARITY_BACKLOG.md#P3-07

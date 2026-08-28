@@ -3,7 +3,7 @@ type: plan
 id: P3-04
 title: "브랜치 보호"
 status: planned
-priority: 3
+priority: 4
 depends_on: []
 blocks: []
 source: docs/PARITY_BACKLOG.md#P3-04

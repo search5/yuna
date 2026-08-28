@@ -3,7 +3,7 @@ type: plan
 id: P3-02
 title: "yuna CLI 설계 (+ 범용 REST API·Fine-grained 토큰 모델 선행 구축)"
 status: planned
-priority: 2
+priority: 3
 depends_on: []
 blocks: [p3-03-ssh-gpg, p3-07-mcp-server, p3-05-ci-actions-runner]
 source: docs/PARITY_BACKLOG.md#P3-02

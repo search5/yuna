@@ -3,7 +3,7 @@ type: plan
 id: P3-06
 title: "엔터프라이즈 SSO(SAML2 / 범용 OIDC)"
 status: planned
-priority: 4
+priority: 5
 depends_on: []
 blocks: []
 source: docs/PARITY_BACKLOG.md#P3-06

@@ -3,7 +3,7 @@ type: plan
 id: P3-09
 title: "Swagger/OpenAPI UI 노출"
 status: planned
-priority: 2
+priority: 1
 depends_on: []
 blocks: []
 source: docs/PARITY_BACKLOG.md#P3-09
