@@ -157,20 +157,17 @@ java -jar yona.jar --spring.profiles.active=postgres
 
 ## Google Analytics
 
-- 기본적으로는 Google Analytics가 활성화되어 함께 배포됩니다.
-- 설치형으로 제공되는 특성상 제품이 지속적으로 개발/유지되기 위해서는 사용자들이 현재 어느 정도
-  내려받아서 사용하고 있는지에 대한 정보가 필요합니다.
-- 만약 이 부분에 대해 도움을 주기 곤란한 경우 `application.yml`에서 아래 항목을 `false`로 수정합니다.
+- legacy와 동일하게 Google Analytics 트래킹 스크립트가 실제로 구현되어 있습니다
+  (`GlobalModelAttributeAdvice`가 `sendYonaUsage` 모델 속성을 채우면 `templates/site/layout.html`이
+  그 값에 따라 GA 스크립트를 렌더링합니다).
+- **다만 기본값은 legacy(`application.send.yona.usage = true`, 기본 켜짐)와 반대로 꺼짐(`false`)
+  입니다.** 켜고 싶다면 `application.yml`에서 아래 항목을 `true`로 설정합니다.
 
   ```yaml
   yona:
     analytics:
-      usage-report-enabled: true
+      send-usage: true
   ```
-
-  (legacy Yona의 `application.send.yona.usage = true` 설정에 대응합니다. 이식판에서는 아직
-  `usage-report-enabled` 값이 실제로 배선되지 않은 상태이며, 진행 상황은 `docs/PARITY_BACKLOG.md`
-  참고.)
 
 ## 마이그레이션
 
@@ -186,6 +183,34 @@ java -jar yona.jar --spring.profiles.active=postgres
 - 코드 기여의 기준이 되는 브랜치는 `main`입니다.
 - 저장소를 fork한 다음 `main` 브랜치를 기준으로 작업하신 다음 `main` 브랜치로 pull request를
   보내주세요.
+
+## 운영 가이드
+
+legacy Yona의 설치/운영 문서를 yuna 기준으로 다시 쓴 것들이다 — `docs/guide/`:
+
+- [설치](docs/guide/install.md)
+- [실행 및 재시작](docs/guide/run-and-restart.md)
+- [실행 옵션](docs/guide/run-options.md)
+- [업그레이드](docs/guide/upgrade.md)
+- [백업 및 복구](docs/guide/backup-restore.md)
+- [메일 알림 설정](docs/guide/mail-settings.md)
+- [소셜 로그인 설정](docs/guide/social-login-settings.md)
+- [트러블슈팅](docs/guide/troubleshooting.md)
+- [설정 레퍼런스(application.yml)](docs/guide/settings-reference.md)
+- [시스템 요구 사항](docs/guide/system-requirements.md)
+- [사용자 가이드](docs/guide/user-manual/TOC.md) — 화면별 사용법
+- [기술 문서](docs/guide/technical/README.md) — 권한 규칙, JS 모듈 구조, 첨부파일/웹훅/마크다운
+  내부 동작 등
+
+영문 버전은 legacy와 동일하게 별도 위치에 있다 — 운영 문서는 [`docs/*.md`](#operations-guide),
+사용자 가이드는 [`docs/userManual/`](docs/userManual/TOC.md), 기술 문서는 legacy에 영문 원본이
+있던 5개(markdown/mailbox/watch/label-typeahead/name-validation)만 [`docs/technical/`](docs/technical/markdown.md)에
+있다(나머지 11개는 legacy도 한글 전용이었다).
+
+서비스로 상시 구동할 때 참고할 systemd 유닛 예시와 DB 튜닝 샘플은 [`support-script/`](support-script/README.md)에 있다.
+
+legacy Yona(Yobi/nFORGE 포함)의 설계 스펙·비전 문서·릴리즈노트는 원문 그대로
+[`docs/legacy-reference/`](docs/legacy-reference/README.md)에 보존되어 있다.
 
 ## 코드 구조 개요
 
@@ -368,19 +393,17 @@ Project Fork does not physically copy the repository — it clones via filesyste
 
 ## Google Analytics
 
-- Google Analytics is enabled by default and shipped with the distribution.
-- Because this is a self-hosted product, keeping it actively developed and maintained depends on
-  having some visibility into how widely it's being downloaded and used.
-- If you'd rather not contribute this data, set the following to `false` in `application.yml`.
+- The Google Analytics tracking script is actually implemented, same as legacy
+  (`GlobalModelAttributeAdvice` populates a `sendYonaUsage` model attribute, and
+  `templates/site/layout.html` renders the GA script based on that value).
+- **Unlike legacy (`application.send.yona.usage = true`, on by default), the default here is
+  off (`false`).** To enable it, set the following to `true` in `application.yml`.
 
   ```yaml
   yona:
     analytics:
-      usage-report-enabled: true
+      send-usage: true
   ```
-
-  (Corresponds to legacy Yona's `application.send.yona.usage = true` setting. In this port,
-  `usage-report-enabled` is not yet actually wired up — see `docs/PARITY_BACKLOG.md` for status.)
 
 ## Migration
 
@@ -396,6 +419,47 @@ Project Fork does not physically copy the repository — it clones via filesyste
 - The branch for contributions is `main`.
 - Fork the repository, work on top of the `main` branch, then send a pull request to the `main`
   branch.
+
+## Operations guide
+
+legacy Yona kept English docs at `docs/*.md` and Korean docs at `docs/ko/*.md`. yona keeps that
+same split: this section lists the English set (same filenames/locations as legacy), rewritten
+for yona. The Korean set lives under `docs/guide/` — see the [운영 가이드](#운영-가이드) section
+above (it's reorganized slightly differently, e.g. install docs merged into one file, so the two
+sets aren't a strict 1:1 file mirror).
+
+- [Install (MariaDB)](docs/install-mariadb.md)
+- [Install (yona server)](docs/install-yona-server.md)
+- [Run and restart](docs/yona-run-and-restart.md)
+- [Run options](docs/yona-run-options.md)
+- [Upgrade](docs/yona-upgrade.md)
+- [Backup and restore](docs/yona-backup-restore.md)
+- [Mail notification settings](docs/yona-mail-settings.md)
+- [Social login settings](docs/yona-social-login-settings.md)
+- [Troubleshooting](docs/trouble-shootings.md)
+- [MariaDB 767 byte error](docs/db-error-767.md)
+- [application.yml reference](docs/application-conf-desc.md)
+- [System requirements](docs/system-requirements.md)
+- [Logging](docs/logging.md)
+
+User manual: legacy's `docs/userManual/` was English-only, so it's ported here at the same
+location — [`docs/userManual/TOC.md`](docs/userManual/TOC.md). (The duplicate
+`projectSetting`/`projectSettings` folders from a legacy typo were merged into one,
+`projectSetting/`.)
+
+Technical docs: legacy's `docs/technical/` (English) and `docs/ko/technical/` (Korean) were two
+different, non-overlapping sets of files. Only the English set is mirrored here at the same
+location — [`docs/technical/`](docs/technical/markdown.md) (markdown, mailbox, watch,
+label-typeahead, name-validation). The Korean set's 11 additional topics (access control, JS
+module conventions, uploader/webhook internals, etc.) only ever existed in Korean, both in
+legacy and here — see [`docs/guide/technical/README.md`](docs/guide/technical/README.md).
+
+For a systemd unit example and DB tuning samples for running this as a standing service, see
+[`support-script/`](support-script/README.md).
+
+Design specs, vision docs, and release notes from legacy Yona (including its Yobi/nFORGE
+predecessors) are preserved verbatim under
+[`docs/legacy-reference/`](docs/legacy-reference/README.md).
 
 ## Code structure overview
 
