@@ -45,3 +45,24 @@ out/
 ### yuna 실사용자 데이터 (legacy yona의 .gitignore "uploads" 규칙 대응) ###
 # yona.upload.base-dir 기본값(data/uploads) — 실사용자 업로드 파일이 저장소에 커밋되면 안 된다.
 /data/
+# 로컬 개발/테스트 중 생성되는 git bare repo, svn repo 등 실행 산출물.
+/yona-data/
+
+### macOS ###
+# AppleDouble 리소스 포크 파일(예: ._foo) — 압축 해제/USB 복사 시 macOS가 자동 생성.
+._*
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+### 임시 스크립트 ###
+# 작업 중 디버깅/일회성 패치·대기용으로 저장소 루트에 만든 스크립트. 정식 빌드/테스트 도구가 아님.
+/*.py
+/*.sh
+/scratch*.kt
+
+### 저장소에서 관리하지 않는 로컬 작업 자료 ###
+/doc2/
+/.agents/
