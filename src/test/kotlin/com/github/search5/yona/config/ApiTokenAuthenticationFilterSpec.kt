@@ -1,5 +1,7 @@
 package com.github.search5.yona.config
 
+import com.github.search5.yona.domain.apitoken.ApiTokenRepository
+import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
@@ -19,14 +21,20 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.core.userdetails.UserDetailsService
 import java.util.Optional
 
+// P3-02 Step3에서 필터가 ApiTokenRepository/ProjectRepository를 추가로 의존하게 됐다 — 이 스펙의
+// 요청들은 전부 requestURI가 비어있어(MockHttpServletRequest 기본값) 신규 `/api/v1/projects/...`
+// 스코프 판정 경로를 타지 않고 기존 레거시 경로(UserRepository.findByToken)로만 흐른다. 스코프
+// 기반 인가(403) 검증은 별도 통합테스트(ApiTokenScopedAuthorizationIntegrationSpec)에서 다룬다.
 class ApiTokenAuthenticationFilterSpec : DescribeSpec({
     val userRepository = mockk<UserRepository>()
     val userDetailsService = mockk<UserDetailsService>()
-    val filter = ApiTokenAuthenticationFilter(userRepository, userDetailsService)
+    val apiTokenRepository = mockk<ApiTokenRepository>()
+    val projectRepository = mockk<ProjectRepository>()
+    val filter = ApiTokenAuthenticationFilter(userRepository, userDetailsService, apiTokenRepository, projectRepository)
     val filterChain = mockk<FilterChain>(relaxed = true)
 
     beforeTest {
-        clearMocks(userRepository, userDetailsService, filterChain)
+        clearMocks(userRepository, userDetailsService, apiTokenRepository, projectRepository, filterChain)
         SecurityContextHolder.clearContext()
     }
 

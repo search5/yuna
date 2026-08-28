@@ -19,7 +19,7 @@
 | — | P3-08 | H2(내장형 DB) 지원 | **완료(2026-08-28)** | — | 계획서 없음 — TDD로 바로 완료, `docs/PARITY_BACKLOG.md#P3-08` 참고 |
 | 1 | P3-09 | Swagger/OpenAPI UI 노출 | **완료(2026-08-28)** | 없음 | [[plans/p3-09-swagger-openapi-ui]] |
 | 2 | P3-01 | Observability(메트릭/로깅/트레이싱) | **완료(2026-08-28)** | 없음 | [[plans/p3-01-observability]] |
-| 3 | P3-02 | yuna CLI + 범용 REST API + 토큰 스코프 모델 | planned | 없음 | [[plans/p3-02-cli-and-rest-api]] |
+| 3 | P3-02 | yuna CLI + 범용 REST API + 토큰 스코프 모델 | **진행 중(Part1 Step1~3 완료, 2026-08-28)** | 없음 | [[plans/p3-02-cli-and-rest-api]] |
 | 4 | P3-04 | 브랜치 보호 | planned | 없음(스파이크 1개) | [[plans/p3-04-branch-protection]] |
 | 5 | P3-06 | 엔터프라이즈 SSO(SAML2/OIDC) | planned | 없음 | [[plans/p3-06-enterprise-sso]] |
 | 6 | P3-07 | yuna MCP 서버(OAuth 2.1 인가 서버 포함) | planned | P3-02 | [[plans/p3-07-mcp-server]] |
