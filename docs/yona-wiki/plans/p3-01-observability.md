@@ -2,7 +2,7 @@
 type: plan
 id: P3-01
 title: "Observability(메트릭/로깅/트레이싱) 인프라 도입"
-status: planned
+status: done
 priority: 2
 depends_on: []
 blocks: []
@@ -73,18 +73,48 @@ tags: [plan, p3, observability]
 
 ## 완료 기준 (Definition of Done)
 
-- [ ] 계측 지점 6곳 모두 `/actuator/prometheus`에 커스텀 지표로 노출
-- [ ] 구조화 JSON 로그 출력 확인
-- [ ] `@Async`/`@EventListener` 체인 최소 1개 경로에서 트레이스 컨텍스트가 끊기지 않음을 확인
-- [ ] 각 계측 지점에 대응하는 단위 테스트(카운터/타이머 값 검증) 존재
-- [ ] `./gradlew test` 전체 GREEN 유지
+- [x] 계측 지점 6곳 모두 `/actuator/prometheus`에 커스텀 지표로 노출(전부 동일한 주입받은 `MeterRegistry` 빈을
+      경유 — Prometheus 스크랩용 `PrometheusMeterRegistry`와 동일 컨테이너에 등록되므로 자동 노출)
+- [x] 구조화 JSON 로그 출력 확인(`LogbackJsonLoggingSpec.kt`)
+- [x] `@Async`/`@EventListener` 체인 최소 1개 경로에서 트레이스 컨텍스트가 끊기지 않음을 확인(`AsyncTraceContextPropagationSpec.kt`, taskExecutor 공유 경로 전체에 적용)
+- [x] 각 계측 지점에 대응하는 단위 테스트(카운터/타이머 값 검증) 존재
+- [x] `./gradlew test` 전체 GREEN 유지(5578건)
+
+## 완료 로그 (2026-08-28)
+
+TDD로 Step 1→2→3→4→5 순서 그대로 진행. 계측 지점 6곳 전부 기존 클래스에 `MeterRegistry` 생성자 주입(확장
+함수인 계측 지점 2는 파라미터로 전달) + `Counter`/`Timer.Sample`/`gauge()` 추가, 각각 `SimpleMeterRegistry`
+(또는 통합 테스트의 경우 실제 Spring 빈)로 카운터/타이머 값을 직접 단언하는 테스트를 먼저 작성해 RED→GREEN.
+
+**TDD 과정에서 발견한 함정 4가지**:
+1. **`LogbackJsonLoggingSpec`의 MDCAdapter NPE**: 독립 `LoggerContext()`는 전역 기본 컨텍스트와 달리
+   `mdcAdapter`가 자동 배선되지 않아 `LoggingEvent.prepareForDeferredProcessing()`에서 NPE가 남 — `context.mdcAdapter
+   = LogbackMDCAdapter()`를 명시적으로 달아 해결.
+2. **ConsoleAppender의 System.out 캡처 시점**: `System.setOut()` 리다이렉트는 `JoranConfigurator.doConfigure()`
+   (appender가 실제로 `start()`되는 시점)보다 반드시 먼저 해야 한다 — 나중에 하면 원래 콘솔로 새어나가 캡처가 항상
+   빈 문자열이 됨.
+3. **`micrometer-tracing-bridge-otel`+`opentelemetry-exporter-otlp`만 추가하면 `Tracer` 빈이 안 만들어짐**: Spring
+   Boot 4.x는 트레이싱 자동구성을 `spring-boot-starter-actuator`에서 분리해 `spring-boot-starter-opentelemetry`
+   스타터로 모듈화했다(공식 문서에 명확히 안 나와 있어 실제로 `NoSuchBeanDefinitionException`을 보고서야 확인) —
+   의존성을 이 스타터 하나로 교체해 해결.
+4. **`Tracer.withSpan()`+`Tracer.currentSpan()`으로는 컨텍스트 전파 테스트가 항상 실패**: `ContextPropagatingTaskDecorator`가
+   쓰는 전역 `ContextRegistry`에는 `micrometer-observation`의 `ObservationThreadLocalAccessor`만 `META-INF/services`로
+   자동 등록돼 있고(jar 안에서 실제 확인), `micrometer-tracing`의 Span 전용 accessor는 자동 등록되지 않는다 —
+   `ObservationRegistry`로 Observation을 시작/스코프 진입하는 방식으로 테스트를 바꿔서 실제 운영 코드
+   (`@Async` 리스너들)가 겪는 전파 경로와 동일하게 맞춰 해결. 부수적으로 `spring-boot-starter-opentelemetry`가
+   OTLP 메트릭 푸시까지 자동구성해, 콜렉터가 없는 이 환경에서 컨텍스트 종료마다 연결 실패 재시도로 지연이
+   발생함을 발견 — `management.otlp.metrics.export.enabled=false`로 명시적으로 꺼서 해결(메트릭은 기존
+   Prometheus 스크랩으로 충분).
+
+**의존성**: `net.logstash.logback:logstash-logback-encoder:9.0`(명시 버전 고정),
+`org.springframework.boot:spring-boot-starter-opentelemetry`(버전은 Spring Boot BOM이 관리).
 
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
 |---|---|---|
-| 착수 우선순위 | "메트릭부터 할지 6곳 한번에 할지" 사용자 결정 대기 상태였음(원본 백로그) | 이 계획서에서는 Step 순서(로깅→계측 6곳→트레이싱)로 확정. 다른 순서를 원하면 조정 |
-| 수집 인프라 | Loki/Promtail, Tempo/Jaeger의 실제 배포는 범위 밖으로 정함 | 별도 인프라 작업으로 분리, 이 계획은 애플리케이션 계측까지만 |
+| ~~착수 우선순위~~ | ~~"메트릭부터 할지 6곳 한번에 할지" 사용자 결정 대기 상태였음(원본 백로그)~~ | **해소** — Step 순서(로깅→계측 6곳→트레이싱)로 진행 완료 |
+| ~~수집 인프라~~ | ~~Loki/Promtail, Tempo/Jaeger의 실제 배포는 범위 밖으로 정함~~ | **해소(범위 밖 확정 유지)** — 별도 인프라 작업으로 분리, 이 계획은 애플리케이션 계측까지만. OTLP tracing endpoint는 `YONA_OTLP_TRACING_ENDPOINT` 환경변수로 실제 배포 시 지정 |
 
 ## 관련
 

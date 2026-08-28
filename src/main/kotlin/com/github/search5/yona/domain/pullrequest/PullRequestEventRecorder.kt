@@ -1,6 +1,7 @@
 package com.github.search5.yona.domain.pullrequest
 
 import com.github.search5.yona.domain.enumeration.EventType
+import io.micrometer.core.instrument.MeterRegistry
 import java.time.Duration
 import java.time.Instant
 
@@ -14,8 +15,11 @@ private val DRAFT_WINDOW: Duration = Duration.ofSeconds(30)
  * 그 외 이벤트 타입은 병합/취소 대상이 아니라 항상 그대로 저장한다.
  *
  * 저장되면 저장된 [PullRequestEvent]를, 상쇄되어 저장되지 않았으면 null을 반환한다.
+ *
+ * [meterRegistry]는 yona-wiki P3-01(Observability) 계측 지점 2 대응(IssueEventRecorder.kt의
+ * 동일 설명 참고) — "새 이벤트 저장" vs "직전 이벤트 상쇄" 비율을 outcome 태그로 카운팅한다.
  */
-fun PullRequestEventRepository.recordWithDraftMerge(event: PullRequestEvent): PullRequestEvent? {
+fun PullRequestEventRepository.recordWithDraftMerge(event: PullRequestEvent, meterRegistry: MeterRegistry): PullRequestEvent? {
     val draftSince = Instant.now().minus(DRAFT_WINDOW)
     val lastEvent = findFirstByPullRequestAndCreatedAfterOrderByCreatedDesc(event.pullRequest, draftSince)
 
@@ -24,10 +28,18 @@ fun PullRequestEventRepository.recordWithDraftMerge(event: PullRequestEvent): Pu
         lastEvent.eventType == EventType.PULL_REQUEST_REVIEW_STATE_CHANGED &&
         lastEvent.senderLoginId == event.senderLoginId
 
-    return if (needToDelete) {
+    val result = if (needToDelete) {
         delete(lastEvent!!)
         null
     } else {
         save(event)
     }
+
+    meterRegistry.counter(
+        "yona.event.draft_merge",
+        "resourceType", "pull_request",
+        "outcome", if (result == null) "merged_or_cancelled" else "saved"
+    ).increment()
+
+    return result
 }

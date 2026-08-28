@@ -14,6 +14,8 @@ import com.github.search5.yona.domain.pullrequest.CommitComment
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.user.User
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -42,7 +44,9 @@ class WebhookServiceImpl(
     // yona Webhook.java:622-658 sendRequest(payload, webhookId, resource) 대응 (P1-143) — Hangout Chat [GL-models_Webhook-046;GL-models_Webhook-047]
     // 응답의 thread.name을 저장하는 쓰기 경로. 비동기 HTTP 콜백 스레드에서도 트랜잭션이 걸리도록 별도
     // Spring 빈으로 분리했다(자세한 이유는 WebhookThreadRecorder 주석 참고).
-    private val webhookThreadRecorder: WebhookThreadRecorder
+    private val webhookThreadRecorder: WebhookThreadRecorder,
+    // yona-wiki P3-01(Observability) 계측 지점 6 대응.
+    private val meterRegistry: MeterRegistry
 ) : WebhookService {
 
     @Transactional(readOnly = true)
@@ -410,6 +414,7 @@ class WebhookServiceImpl(
     }
 
     private fun sendRequestAsync(webhook: Webhook, resource: Any, payload: String) {
+        val sample = Timer.start(meterRegistry)
         try {
             val httpClient = HttpClient.newBuilder().build()
             val requestBuilder = HttpRequest.newBuilder()
@@ -425,7 +430,9 @@ class WebhookServiceImpl(
             val request = requestBuilder.build()
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenAccept { response ->
+                    sample.stop(meterRegistry.timer("yona.webhook.duration"))
                     val statusCode = response.statusCode()
+                    meterRegistry.counter("yona.webhook.sent", "status", statusCode.toString()).increment()
                     if (statusCode < 200 || statusCode >= 300) {
                         println("[Webhook] HTTP 전송 실패: $statusCode - ${response.body()}")
                     } else {
@@ -433,10 +440,13 @@ class WebhookServiceImpl(
                     }
                 }
                 .exceptionally { ex ->
+                    sample.stop(meterRegistry.timer("yona.webhook.duration"))
+                    meterRegistry.counter("yona.webhook.sent", "status", "connection_error").increment()
                     println("[Webhook] 전송 중 예외 발생: ${ex.message}")
                     null
                 }
         } catch (e: Exception) {
+            meterRegistry.counter("yona.webhook.sent", "status", "client_error").increment()
             println("[Webhook] HTTP 클라이언트 생성 중 오류: ${e.message}")
         }
     }

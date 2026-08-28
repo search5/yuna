@@ -20,6 +20,7 @@ import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueEventRepository
 import com.github.search5.yona.domain.issue.IssueReferenceParser
 import com.github.search5.yona.domain.issue.IssueRepository
+import io.micrometer.core.instrument.MeterRegistry
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.*
 import org.eclipse.jgit.merge.MergeStrategy
@@ -49,7 +50,9 @@ class PullRequestServiceImpl(
     private val issueEventRepository: IssueEventRepository,
     private val commentService: CommentService,
     @Value("\${yona.site-name:Yona}")
-    private val siteName: String
+    private val siteName: String,
+    // yona-wiki P3-01(Observability) 계측 지점 2 대응 — PullRequestEventRepository.recordWithDraftMerge()에 그대로 전달한다.
+    private val meterRegistry: MeterRegistry
 ) : PullRequestService {
 
     @Transactional
@@ -814,7 +817,7 @@ class PullRequestServiceImpl(
             newValue = newValue,
             created = Instant.now()
         )
-        pullRequestEventRepository.recordWithDraftMerge(event)
+        pullRequestEventRepository.recordWithDraftMerge(event, meterRegistry)
     }
 
     @Transactional

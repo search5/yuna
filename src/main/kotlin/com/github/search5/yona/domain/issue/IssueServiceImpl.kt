@@ -17,6 +17,7 @@ import com.github.search5.yona.domain.user.FavoriteIssueRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -41,7 +42,10 @@ class IssueServiceImpl(
     private val favoriteIssueRepository: FavoriteIssueRepository,
     private val commentService: CommentService,
     // yona AbstractPosting.updateMention() 대응 (P2-41).
-    private val mentionService: MentionService
+    private val mentionService: MentionService,
+    // yona-wiki P3-01(Observability) 계측 지점 2 대응 — recordIssueEvent()가 위임하는
+    // IssueEventRepository.recordWithDraftMerge()에 그대로 전달한다.
+    private val meterRegistry: MeterRegistry
 ) : IssueService {
 
     // yona models/support/IssueSearchCondition.java:18-44 getExpressionListByFilter() 대응 (P2-52).
@@ -613,7 +617,7 @@ class IssueServiceImpl(
             created = Instant.now(),
             eventType = eventType
         )
-        issueEventRepository.recordWithDraftMerge(issueEvent, skipWaypoint)
+        issueEventRepository.recordWithDraftMerge(issueEvent, skipWaypoint, meterRegistry)
     }
 
     override fun voteIssue(issueId: Long, user: User) {

@@ -15,6 +15,8 @@ import jakarta.mail.event.MessageCountListener
 import jakarta.mail.internet.InternetAddress
 import jakarta.mail.internet.MimeMessage
 import jakarta.mail.internet.MimePart
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.eclipse.angus.mail.imap.IMAPFolder
 import org.eclipse.angus.mail.imap.IMAPStore
 import org.slf4j.LoggerFactory
@@ -54,7 +56,9 @@ class ImapMailboxPoller(
     @Value("\${yona.mailbox.imap.password}") private val password: String,
     @Value("\${yona.mailbox.imap.ssl:true}") private val useSsl: Boolean,
     @Value("\${yona.mailbox.imap.folder:inbox}") private val folderName: String,
-    @Value("\${yona.mailbox.imap.polling-interval-ms:300000}") private val pollingIntervalMs: Long
+    @Value("\${yona.mailbox.imap.polling-interval-ms:300000}") private val pollingIntervalMs: Long,
+    // yona-wiki P3-01(Observability) 계측 지점 4 대응.
+    private val meterRegistry: MeterRegistry
 ) {
     private val logger = LoggerFactory.getLogger(ImapMailboxPoller::class.java)
 
@@ -152,19 +156,31 @@ class ImapMailboxPoller(
         }
     }
 
-    // yona EmailHandler.handleNewMessages(IMAPFolder) 대응.
+    // yona EmailHandler.handleNewMessages(IMAPFolder) 대응. IDLE 콜백과 폴링 폴백(startEmailPolling())
+    // 양쪽 경로가 모두 이 함수를 거치므로, 여기 하나만 계측해도 "폴링 사이클 소요시간"을 놓치지 않는다.
     private fun handleNewMessages(targetFolder: IMAPFolder) {
-        val lastUidValidity = propertyService.getLong(PropertyName.MAILBOX_LAST_UID_VALIDITY)
-        val lastSeenUid = propertyService.getLong(PropertyName.MAILBOX_LAST_SEEN_UID)
+        val sample = Timer.start(meterRegistry)
+        try {
+            val lastUidValidity = propertyService.getLong(PropertyName.MAILBOX_LAST_UID_VALIDITY)
+            val lastSeenUid = propertyService.getLong(PropertyName.MAILBOX_LAST_SEEN_UID)
 
-        val uidValidity = targetFolder.uidValidity
+            val uidValidity = targetFolder.uidValidity
 
-        if (shouldFetchByUidRange(lastUidValidity, lastSeenUid, uidValidity)) {
-            val messages = targetFolder.getMessagesByUID(lastSeenUid!! + 1, targetFolder.uidNext)
-            handleMessages(targetFolder, messages.toList())
+            // UID validity가 이전과 달라졌다는 건 메일함이 재생성돼 기존 UID들이 더 이상 유효하지
+            // 않다는 뜻이다(IMAP 스펙) — 이 경우 워터마크 기준 증분 조회를 포기하고 재동기화가 필요하다.
+            if (lastUidValidity != null && lastUidValidity != uidValidity) {
+                meterRegistry.counter("yona.mailbox.uid.resync").increment()
+            }
+
+            if (shouldFetchByUidRange(lastUidValidity, lastSeenUid, uidValidity)) {
+                val messages = targetFolder.getMessagesByUID(lastSeenUid!! + 1, targetFolder.uidNext)
+                handleMessages(targetFolder, messages.toList())
+            }
+
+            propertyService.set(PropertyName.MAILBOX_LAST_UID_VALIDITY, uidValidity)
+        } finally {
+            sample.stop(meterRegistry.timer("yona.mailbox.poll.duration"))
         }
-
-        propertyService.set(PropertyName.MAILBOX_LAST_UID_VALIDITY, uidValidity)
     }
 
     // yona EmailHandler.handleNewMessages()의 "lastUIDValidity == uidValidity && lastSeenUID != null"
@@ -186,6 +202,7 @@ class ImapMailboxPoller(
     // yona EmailHandler.handleMessage(IMAPMessage) 대응. 실제 리소스 생성 로직은
     // IncomingMailProcessingService(P0-02)에 전부 위임돼 있다 — 중복 메일 판별도 그쪽에서 이미 한다.
     private fun handleMessage(targetFolder: IMAPFolder, message: Message) {
+        meterRegistry.counter("yona.mailbox.messages.processed").increment()
         try {
             val inbound = toInboundEmailMessage(message)
             val outcomes = incomingMailProcessingService.process(inbound)

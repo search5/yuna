@@ -29,6 +29,15 @@ repositories {
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("io.micrometer:micrometer-registry-prometheus")
+	// yona-wiki P3-01(Observability) 대응 — 구조화 JSON 로깅. Spring Boot BOM이 버전을 관리하지
+	// 않는 서드파티 라이브러리라 명시적으로 버전을 고정한다(Maven Central 최신 안정판 9.0 확인).
+	implementation("net.logstash.logback:logstash-logback-encoder:9.0")
+	// yona-wiki P3-01(Observability) 대응 — 분산 트레이싱. Spring Boot 4.x는 트레이싱 자동구성을
+	// spring-boot-starter-actuator에서 분리해 이 스타터로 모듈화했다(micrometer-tracing-bridge-otel/
+	// opentelemetry-exporter-otlp만 추가하면 의존성은 갖춰지지만 자동구성 클래스 자체가 없어 Tracer
+	// 빈이 생성되지 않는다 — 실제로 이렇게 시도했다가 통합 테스트에서 NoSuchBeanDefinitionException으로
+	// 확인). 버전은 Spring Boot의 dependency-management가 관리하는 값을 그대로 쓴다.
+	implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
 	// Swagger/OpenAPI UI 노출 (P3-09, yona 동치성과 무관한 신규 기능) — 기존 @RestController를
 	// 런타임에 자동 스캔해 /swagger-ui.html에 대화형 API 문서를 제공한다. springdoc 3.x가
 	// Spring Boot 4.x/Spring Framework 7.x 계열용 메이저 버전이라 이걸 쓴다(2.x는 Spring Boot 3.x용).

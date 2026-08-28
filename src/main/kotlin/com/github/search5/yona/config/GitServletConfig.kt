@@ -9,6 +9,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.vcs.PushedBranchRepository
 import com.github.search5.yona.domain.vcs.RejectPushToReservedRefsPreReceiveHook
 import com.github.search5.yona.domain.vcs.YonaPostReceiveHook
+import io.micrometer.core.instrument.MeterRegistry
 import org.eclipse.jgit.http.server.GitServlet
 import org.eclipse.jgit.lfs.server.LfsProtocolServlet
 import org.eclipse.jgit.lfs.server.LargeFileRepository
@@ -43,7 +44,8 @@ class GitServletConfig(
     private val userRepository: UserRepository,
     private val pushedBranchRepository: PushedBranchRepository,
     private val eventPublisher: ApplicationEventPublisher,
-    private val gitProjectVisitRecorder: GitProjectVisitRecorder
+    private val gitProjectVisitRecorder: GitProjectVisitRecorder,
+    private val meterRegistry: MeterRegistry
 ) {
     private val logger = LoggerFactory.getLogger(GitServletConfig::class.java)
 
@@ -73,7 +75,7 @@ class GitServletConfig(
                 if (project != null && pusher != null) {
                     receivePack.setPostReceiveHook(
                         YonaPostReceiveHook(
-                            project, pusher, projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher
+                            project, pusher, projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher, meterRegistry
                         )
                     )
                 } else {

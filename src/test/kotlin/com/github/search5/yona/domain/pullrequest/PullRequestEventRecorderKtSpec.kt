@@ -5,6 +5,7 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.user.User
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -18,11 +19,17 @@ import java.time.Instant
 // mockk로 격리해 직접 검증한다.
 class PullRequestEventRecorderKtSpec : DescribeSpec({
     val repository = mockk<PullRequestEventRepository>()
+    lateinit var meterRegistry: SimpleMeterRegistry
 
     beforeTest {
         clearMocks(repository)
         every { repository.delete(any()) } returns Unit
+        meterRegistry = SimpleMeterRegistry()
     }
+
+    // yona-wiki P3-01(Observability) 계측 지점 2 대응 — outcome 태그별 카운터 값 확인 헬퍼.
+    fun draftMergeCount(outcome: String) =
+        meterRegistry.counter("yona.event.draft_merge", "resourceType", "pull_request", "outcome", outcome).count()
     val pullRequest = PullRequest(
         toProject = Project(id = 1L, name = "proj", owner = "owner"),
         fromProject = Project(id = 1L, name = "proj", owner = "owner"),
@@ -49,10 +56,12 @@ class PullRequestEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("OPEN", "CLOSED")
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event)
+            val result = repository.recordWithDraftMerge(event, meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }
+            draftMergeCount("saved") shouldBe 1.0
+            draftMergeCount("merged_or_cancelled") shouldBe 0.0
         }
 
         it("직전 이벤트가 있어도 새 이벤트의 eventType이 REVIEW_STATE_CHANGED가 아니면 그대로 저장해야 한다") {
@@ -61,7 +70,7 @@ class PullRequestEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("a", "b", eventType = EventType.PULL_REQUEST_STATE_CHANGED)
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event)
+            val result = repository.recordWithDraftMerge(event, meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }
@@ -73,7 +82,7 @@ class PullRequestEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("a", "b", eventType = EventType.PULL_REQUEST_REVIEW_STATE_CHANGED)
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event)
+            val result = repository.recordWithDraftMerge(event, meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }
@@ -85,7 +94,7 @@ class PullRequestEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("a", "b", senderLoginId = "other")
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event)
+            val result = repository.recordWithDraftMerge(event, meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }
@@ -96,11 +105,13 @@ class PullRequestEventRecorderKtSpec : DescribeSpec({
             every { repository.findFirstByPullRequestAndCreatedAfterOrderByCreatedDesc(pullRequest, any()) } returns lastEvent
             val event = eventOf("CLOSED", "REJECTED", senderLoginId = "gildong")
 
-            val result = repository.recordWithDraftMerge(event)
+            val result = repository.recordWithDraftMerge(event, meterRegistry)
 
             result shouldBe null
             verify(exactly = 1) { repository.delete(lastEvent) }
             verify(exactly = 0) { repository.save(any()) }
+            draftMergeCount("merged_or_cancelled") shouldBe 1.0
+            draftMergeCount("saved") shouldBe 0.0
         }
     }
 })

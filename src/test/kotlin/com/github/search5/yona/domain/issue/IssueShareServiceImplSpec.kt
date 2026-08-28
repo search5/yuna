@@ -43,6 +43,7 @@ class IssueShareServiceImplSpec : DescribeSpec({
     val notificationEventRecorder = mockk<NotificationEventRecorder>()
     val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
     val issueEventRepository = mockk<IssueEventRepository>()
+    val meterRegistry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
 
     val service = IssueShareServiceImpl(
         userRepository,
@@ -53,7 +54,8 @@ class IssueShareServiceImplSpec : DescribeSpec({
         organizationUserRepository,
         notificationEventRecorder,
         eventPublisher,
-        issueEventRepository
+        issueEventRepository,
+        meterRegistry
     )
 
     val project = Project(id = 1L, name = "TestProject", owner = "gildong", projectScope = ProjectScope.PRIVATE)

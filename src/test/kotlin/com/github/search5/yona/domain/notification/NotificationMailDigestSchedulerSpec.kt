@@ -29,6 +29,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -59,6 +60,7 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
     val commentThreadRepository = mockk<CommentThreadRepository>()
     val projectRepository = mockk<ProjectRepository>()
     val organizationRepository = mockk<OrganizationRepository>()
+    lateinit var meterRegistry: SimpleMeterRegistry
 
     fun scheduler(
         enabled: Boolean = true,
@@ -71,7 +73,8 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
         markdownService, mailService, userRepository, issueRepository, postingRepository,
         issueCommentRepository, postingCommentRepository, pullRequestRepository, commitCommentRepository,
         reviewCommentRepository, commentThreadRepository, projectRepository, organizationRepository,
-        enabled, hideAddress, recipientLimit, 180000L, allowedDomains, imapAddress, "yona.example.com", "Yona"
+        enabled, hideAddress, recipientLimit, 180000L, allowedDomains, imapAddress, "yona.example.com", "Yona",
+        meterRegistry
     )
 
     // resourceType/eventType을 자유롭게 조합할 수 있는 범용 이벤트 빌더.
@@ -114,6 +117,7 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
         every { mailRenderer.renderPlain(any()) } answers { firstArg() }
         every { urlResolver.getUrlToView(any()) } returns null
         every { userRepository.findById(any()) } returns Optional.empty()
+        meterRegistry = SimpleMeterRegistry()
     }
 
     fun receiver(id: Long, email: String = "u$id@yona.io", lang: String? = "ko", state: UserState = UserState.ACTIVE) =
@@ -151,6 +155,46 @@ class NotificationMailDigestSchedulerSpec : DescribeSpec({
 
             verify(exactly = 1) { notificationMailRepository.delete(mail) }
             verify(exactly = 1) { mailService.sendNotificationMail(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        }
+
+        // yona-wiki P3-01(Observability) 계측 지점 3 검증 — 정상 발송 1건은 duration 타이머 1회 기록+
+        // sent 카운터 1 증가로 남아야 한다(1개 원본 이벤트가 병합 없이 1개로 그대로 나갔으므로 merged는 0).
+        it("정상 발송되면 duration 타이머와 sent 카운터가 기록되고 merged는 늘지 않아야 한다") {
+            val receiverUser = receiver(2L)
+            val event = issueEvent(setOf(receiverUser))
+            val mail = NotificationMail(id = 101L, notificationEvent = event)
+            every { notificationMailRepository.findByNotificationEvent_CreatedBeforeOrderByNotificationEvent_CreatedAsc(any()) } returns listOf(mail)
+            every { notificationMailRepository.delete(mail) } returns Unit
+            every { notificationEventMerger.mergeEvents(listOf(event)) } returns listOf(MergedNotificationEvent(event))
+            every { issueRepository.existsById(1L) } returns true
+            every { messageResolver.getMessage(any<MergedNotificationEvent>(), any()) } returns "메시지"
+            every { messageResolver.getPlainMessage(any<MergedNotificationEvent>(), any()) } returns "평문 메시지"
+            every { issueRepository.findById(1L) } returns Optional.empty()
+
+            scheduler().sendMail()
+
+            meterRegistry.timer("yona.notification.digest.duration").count() shouldBe 1L
+            meterRegistry.counter("yona.notification.digest.sent").count() shouldBe 1.0
+            meterRegistry.counter("yona.notification.digest.failed").count() shouldBe 0.0
+            meterRegistry.counter("yona.notification.digest.merged").count() shouldBe 0.0
+        }
+
+        // sendNotification() 내부(mailService 호출)에서 예외가 나면 바깥 for문의 catch에 잡혀
+        // 로깅만 되고 넘어가는데, 이 경로에서도 failed 카운터가 증가해야 대시보드에서 실패를 알 수 있다.
+        it("발송 중 예외가 발생하면 failed 카운터가 증가해야 한다") {
+            val receiverUser = receiver(2L)
+            val event = issueEvent(setOf(receiverUser))
+            val mail = NotificationMail(id = 102L, notificationEvent = event)
+            every { notificationMailRepository.findByNotificationEvent_CreatedBeforeOrderByNotificationEvent_CreatedAsc(any()) } returns listOf(mail)
+            every { notificationMailRepository.delete(mail) } returns Unit
+            every { notificationEventMerger.mergeEvents(listOf(event)) } returns listOf(MergedNotificationEvent(event))
+            every { issueRepository.existsById(1L) } returns true
+            every { messageResolver.getMessage(any<MergedNotificationEvent>(), any()) } throws RuntimeException("boom")
+
+            scheduler().sendMail()
+
+            meterRegistry.counter("yona.notification.digest.failed").count() shouldBe 1.0
+            meterRegistry.counter("yona.notification.digest.sent").count() shouldBe 0.0
         }
 
         it("리소스가 이미 삭제됐으면(resourceExists=false) 메일을 보내지 않는다") {

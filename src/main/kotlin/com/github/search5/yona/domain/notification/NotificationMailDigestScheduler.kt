@@ -21,6 +21,8 @@ import com.github.search5.yona.domain.user.EmailDomainValidator
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
@@ -63,9 +65,19 @@ class NotificationMailDigestScheduler(
     @Value("\${yona.notification.bymail.allowed-domains:}") private val allowedDomains: String,
     @Value("\${yona.mailbox.imap.address:}") private val imapAddress: String,
     @Value("\${yona.hostname:localhost}") private val hostname: String,
-    @Value("\${yona.site-name:Yona}") private val siteName: String
+    @Value("\${yona.site-name:Yona}") private val siteName: String,
+    // yona-wiki P3-01(Observability) 계측 지점 3 대응.
+    private val meterRegistry: MeterRegistry
 ) {
     private val logger = LoggerFactory.getLogger(NotificationMailDigestScheduler::class.java)
+
+    init {
+        // "대기 큐 적체" 게이지 — 아직 발송되지 않은 NotificationMail 마커 수를 스크랩 시점마다 그대로 조회한다.
+        meterRegistry.gauge(
+            "yona.notification.digest.queue_backlog",
+            notificationMailRepository
+        ) { it.count().toDouble() }
+    }
 
     @Scheduled(
         initialDelayString = "\${yona.notification.bymail.initial-delay-ms:5000}",
@@ -84,26 +96,35 @@ class NotificationMailDigestScheduler(
 
     @Transactional
     fun sendMail() {
-        val createdUntil = Instant.now().minusMillis(delayMs)
-        val mails = notificationMailRepository.findByNotificationEvent_CreatedBeforeOrderByNotificationEvent_CreatedAsc(createdUntil)
+        val sample = Timer.start(meterRegistry)
+        try {
+            val createdUntil = Instant.now().minusMillis(delayMs)
+            val mails = notificationMailRepository.findByNotificationEvent_CreatedBeforeOrderByNotificationEvent_CreatedAsc(createdUntil)
 
-        val events = extractEventsAndDelete(mails)
+            val events = extractEventsAndDelete(mails)
 
-        val merged = try {
-            notificationEventMerger.mergeEvents(events)
-        } catch (e: Exception) {
-            logger.warn("Failed to group events", e)
-            events.map { MergedNotificationEvent(it) }
-        }
-
-        for (event in merged) {
-            try {
-                if (resourceExists(event)) {
-                    sendNotification(event)
-                }
+            val merged = try {
+                notificationEventMerger.mergeEvents(events)
             } catch (e: Exception) {
-                logger.warn("Error occurred while sending a notification mail", e)
+                logger.warn("Failed to group events", e)
+                events.map { MergedNotificationEvent(it) }
             }
+            // 병합률 — N개의 원본 이벤트가 M(<=N)개의 발송 단위로 줄어든 만큼이 이번 배치에서 병합된 건수다.
+            meterRegistry.counter("yona.notification.digest.merged").increment((events.size - merged.size).toDouble())
+
+            for (event in merged) {
+                try {
+                    if (resourceExists(event)) {
+                        sendNotification(event)
+                        meterRegistry.counter("yona.notification.digest.sent").increment()
+                    }
+                } catch (e: Exception) {
+                    logger.warn("Error occurred while sending a notification mail", e)
+                    meterRegistry.counter("yona.notification.digest.failed").increment()
+                }
+            }
+        } finally {
+            sample.stop(meterRegistry.timer("yona.notification.digest.duration"))
         }
     }
 

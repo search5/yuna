@@ -10,6 +10,7 @@ import com.github.search5.yona.domain.vcs.PushedBranchRepository
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
 import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
@@ -48,7 +49,8 @@ class GitServletConfigSpec : DescribeSpec({
         userRepository,
         pushedBranchRepository,
         eventPublisher,
-        gitProjectVisitRecorder
+        gitProjectVisitRecorder,
+        SimpleMeterRegistry()
     )
 
     beforeTest {
@@ -155,7 +157,7 @@ class GitServletConfigSpec : DescribeSpec({
             val freshConfig = GitServletConfig(
                 freshBaseDir.absolutePath, tempLfsBaseDir.absolutePath, "http://localhost:8080/git-lfs",
                 projectRepository, pullRequestRepository, userRepository, pushedBranchRepository,
-                eventPublisher, gitProjectVisitRecorder
+                eventPublisher, gitProjectVisitRecorder, SimpleMeterRegistry()
             )
 
             freshBaseDir.exists() shouldBe false

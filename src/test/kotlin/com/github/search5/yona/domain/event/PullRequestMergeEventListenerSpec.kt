@@ -18,6 +18,7 @@ import com.github.search5.yona.domain.pullrequest.PullRequestService
 import com.github.search5.yona.domain.user.User
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -35,10 +36,13 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
     val notificationEventRecorder = mockk<NotificationEventRecorder>()
     val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
     val pullRequestEventRepository = mockk<PullRequestEventRepository>(relaxed = true)
+    // 매 테스트 사이엔 clear()로 리셋한다(listener가 val이라 registry 참조 자체를 나중에 바꿀 수 없음).
+    val meterRegistry = SimpleMeterRegistry()
 
     val listener = PullRequestMergeEventListener(
         pullRequestRepository, pullRequestCommitRepository, issueRepository, issueService,
-        pullRequestService, notificationEventRecorder, eventPublisher, pullRequestEventRepository
+        pullRequestService, notificationEventRecorder, eventPublisher, pullRequestEventRepository,
+        meterRegistry
     )
 
     val project = Project(id = 1L, name = "yona-project", owner = "gildong")
@@ -57,6 +61,7 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
             pullRequestService, notificationEventRecorder, eventPublisher, pullRequestEventRepository, answers = false
         )
         every { notificationEventRecorder.record(any()) } answers { firstArg() }
+        meterRegistry.clear()
     }
 
     describe("PullRequestMergeEventListener.handlePullRequestMergeEvent") {
@@ -94,6 +99,7 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
             captured.captured.eventType.name shouldBe "PULL_REQUEST_STATE_CHANGED"
             captured.captured.newValue shouldBe "MERGED"
             captured.captured.senderLoginId shouldBe "pusher"
+            meterRegistry.counter("yona.pullrequest.merge.processed", "trigger", "direct").count() shouldBe 1.0
         }
     }
 
@@ -222,6 +228,9 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
 
             relatedPr.isMerging shouldBe false
             verify(exactly = 1) { pullRequestService.processMergeCheck(100L, sender, false) }
+            // yona-wiki P3-01(Observability) 계측 지점 5 검증 — 관련 PR 재검사 1건 처리 + 소요시간 기록.
+            meterRegistry.counter("yona.pullrequest.merge.processed", "trigger", "related").count() shouldBe 1.0
+            meterRegistry.timer("yona.pullrequest.merge.check.duration").count() shouldBe 1L
         }
 
         it("충돌이 새로 발생하면(false to true) 알림 이벤트를 발행해야 한다") {
@@ -241,6 +250,7 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
 
             verify(exactly = 1) { eventPublisher.publishEvent(any<NotificationEvent>()) }
             captured.captured.eventType.name shouldBe "PULL_REQUEST_MERGED"
+            meterRegistry.counter("yona.pullrequest.conflict.transition", "direction", "into_conflict").count() shouldBe 1.0
         }
 
         it("충돌이 해소되면(true to false) 알림 이벤트를 발행해야 한다") {
@@ -256,6 +266,7 @@ class PullRequestMergeEventListenerSpec : DescribeSpec({
             listener.handleRelatedPullRequestMergeEvent(RelatedPullRequestMergeEvent(project, "feature", sender))
 
             verify(exactly = 1) { eventPublisher.publishEvent(any<NotificationEvent>()) }
+            meterRegistry.counter("yona.pullrequest.conflict.transition", "direction", "resolved").count() shouldBe 1.0
         }
 
         it("충돌 상태에 변화가 없으면 알림 이벤트를 발행하지 않아야 한다") {

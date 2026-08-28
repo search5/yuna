@@ -6,6 +6,8 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.User
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.eclipse.jgit.transport.PostReceiveHook
 import org.eclipse.jgit.transport.PreReceiveHook
 import org.eclipse.jgit.transport.ReceiveCommand
@@ -48,15 +50,22 @@ class YonaPostReceiveHook(
     private val projectRepository: ProjectRepository,
     private val pullRequestRepository: PullRequestRepository,
     private val pushedBranchRepository: PushedBranchRepository,
-    private val eventPublisher: ApplicationEventPublisher
+    private val eventPublisher: ApplicationEventPublisher,
+    // yona-wiki P3-01(Observability) 계측 지점 6 대응.
+    private val meterRegistry: MeterRegistry
 ) : PostReceiveHook {
 
     override fun onPostReceive(rp: ReceivePack, commands: Collection<ReceiveCommand>) {
-        updateLastPushedDate()
-        notifyPushedCommits(commands)
-        notifyRelatedPullRequestsForUpdatedBranches(commands)
-        cleanupPullRequestsForDeletedBranches(commands)
-        updateRecentlyPushedBranches(commands)
+        val sample = Timer.start(meterRegistry)
+        try {
+            updateLastPushedDate()
+            notifyPushedCommits(commands)
+            notifyRelatedPullRequestsForUpdatedBranches(commands)
+            cleanupPullRequestsForDeletedBranches(commands)
+            updateRecentlyPushedBranches(commands)
+        } finally {
+            sample.stop(meterRegistry.timer("yona.git.push_hook.duration"))
+        }
     }
 
     // yona playRepository/hooks/PullRequestCheck.java의 onPostReceive() 첫 번째 루프
@@ -121,6 +130,8 @@ class YonaPostReceiveHook(
             .filter { it.refName.startsWith(BRANCH_PREFIX) }
             .map { it.refName.removePrefix(BRANCH_PREFIX) }
             .toSet()
+
+        meterRegistry.counter("yona.git.push_hook.pushed_branches").increment(pushedBranches.size.toDouble())
 
         for (branch in pushedBranches) {
             val existing = pushedBranchRepository.findByProjectAndName(project, branch).orElse(null)

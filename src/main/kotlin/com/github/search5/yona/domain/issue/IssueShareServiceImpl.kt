@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -29,7 +30,9 @@ class IssueShareServiceImpl(
     private val organizationUserRepository: OrganizationUserRepository,
     private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
-    private val issueEventRepository: IssueEventRepository
+    private val issueEventRepository: IssueEventRepository,
+    // yona-wiki P3-01(Observability) 계측 지점 2 대응 — IssueEventRepository.recordWithDraftMerge()에 그대로 전달한다.
+    private val meterRegistry: MeterRegistry
 ) : IssueShareService {
 
     private val maxFetchUsers = 50
@@ -238,7 +241,7 @@ class IssueShareServiceImpl(
             created = Instant.now(),
             eventType = EventType.ISSUE_SHARER_CHANGED
         )
-        issueEventRepository.recordWithDraftMerge(issueEvent, skipWaypoint = true)
+        issueEventRepository.recordWithDraftMerge(issueEvent, skipWaypoint = true, meterRegistry = meterRegistry)
     }
 
     private fun getAssignableUsersOfProjectInternal(project: Project, currentUser: User): List<User> {

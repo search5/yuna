@@ -14,6 +14,8 @@ import com.github.search5.yona.domain.pullrequest.PullRequestEvent
 import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestService
 import com.github.search5.yona.domain.user.User
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.scheduling.annotation.Async
@@ -31,7 +33,9 @@ class PullRequestMergeEventListener(
     private val pullRequestService: PullRequestService,
     private val notificationEventRecorder: NotificationEventRecorder,
     private val eventPublisher: ApplicationEventPublisher,
-    private val pullRequestEventRepository: PullRequestEventRepository
+    private val pullRequestEventRepository: PullRequestEventRepository,
+    // yona-wiki P3-01(Observability) 계측 지점 5 대응.
+    private val meterRegistry: MeterRegistry
 ) {
     private val logger = LoggerFactory.getLogger(PullRequestMergeEventListener::class.java)
 
@@ -43,7 +47,8 @@ class PullRequestMergeEventListener(
     @Transactional
     fun handlePullRequestMergeEvent(event: PullRequestMergeEvent) {
         logger.info("Handling PullRequestMergeEvent asynchronously for PR ID: ${event.pullRequestId} by user: ${event.sender.loginId}")
-        
+        meterRegistry.counter("yona.pullrequest.merge.processed", "trigger", "direct").increment()
+
         val pullRequestOptional = pullRequestRepository.findById(event.pullRequestId)
         if (!pullRequestOptional.isPresent) {
             logger.warn("PullRequest with ID ${event.pullRequestId} not found")
@@ -139,7 +144,9 @@ class PullRequestMergeEventListener(
 
             pullRequest.isMerging = true
             pullRequestRepository.save(pullRequest)
+            meterRegistry.counter("yona.pullrequest.merge.processed", "trigger", "related").increment()
 
+            val sample = Timer.start(meterRegistry)
             try {
                 // yona RelatedPullRequestMergingActor도 processPullRequestMerging()을 거치므로,
                 // 새 커밋 발견 시 PullRequestCommit 영속화/PullRequestEvent 기록/리뷰어 초기화/알림
@@ -147,6 +154,8 @@ class PullRequestMergeEventListener(
                 pullRequestService.processMergeCheck(id, event.sender, isNewPullRequest = false)
             } catch (e: Exception) {
                 logger.error("[PR MERGE] Failed to re-check merge for related PR ID: $id", e)
+            } finally {
+                sample.stop(meterRegistry.timer("yona.pullrequest.merge.check.duration"))
             }
 
             val refreshed = pullRequestRepository.findById(id).orElse(pullRequest)
@@ -168,6 +177,11 @@ class PullRequestMergeEventListener(
         sender: User,
         isConflictNow: Boolean
     ) {
+        meterRegistry.counter(
+            "yona.pullrequest.conflict.transition",
+            "direction", if (isConflictNow) "into_conflict" else "resolved"
+        ).increment()
+
         val stateLabel = if (isConflictNow) "충돌이 발생했습니다" else "충돌이 해소되었습니다"
         val title = "[${pullRequest.toProject.name}] PR #${pullRequest.number} 관련 브랜치 변경으로 $stateLabel"
 

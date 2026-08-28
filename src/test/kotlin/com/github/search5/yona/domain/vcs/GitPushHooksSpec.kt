@@ -9,6 +9,7 @@ import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.user.User
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -60,13 +61,15 @@ class GitPushHooksSpec : DescribeSpec({
         val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
         val project = Project(id = 1L, name = "yona-project", owner = "gildong")
         val pusher = User(id = 9L, loginId = "gildong", name = "길동")
+        lateinit var meterRegistry: SimpleMeterRegistry
 
         fun newHook() = YonaPostReceiveHook(
-            project, pusher, projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher
+            project, pusher, projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher, meterRegistry
         )
 
         beforeTest {
             clearMocks(projectRepository, pullRequestRepository, pushedBranchRepository, eventPublisher)
+            meterRegistry = SimpleMeterRegistry()
             every { projectRepository.save(any()) } returns project
             every { pushedBranchRepository.findByProjectAndPushedDateBefore(any(), any()) } returns emptyList()
             every { pushedBranchRepository.findByProjectAndName(any(), any()) } returns Optional.empty()
@@ -84,6 +87,10 @@ class GitPushHooksSpec : DescribeSpec({
 
             project.lastPushedDate shouldBe project.lastPushedDate
             verify { projectRepository.save(project) }
+            // yona-wiki P3-01(Observability) 계측 지점 6 검증 — push 훅 1회 처리시간 기록 +
+            // 브랜치 1개(main) push 카운트.
+            meterRegistry.timer("yona.git.push_hook.duration").count() shouldBe 1L
+            meterRegistry.counter("yona.git.push_hook.pushed_branches").count() shouldBe 1.0
         }
 
         it("push가 일어나면 GitPostReceiveEvent가 발행되어야 한다 (커밋 알림 트리거)") {

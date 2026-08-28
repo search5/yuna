@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.project.Project
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -18,11 +19,17 @@ class IssueEventRecorderKtSpec : DescribeSpec({
     val repository = mockk<IssueEventRepository>()
     val project = Project(id = 1L, name = "proj", owner = "owner")
     val issue = Issue(id = 100L, title = "이슈", project = project, number = 1L)
+    lateinit var meterRegistry: SimpleMeterRegistry
 
     beforeTest {
         clearMocks(repository)
         every { repository.delete(any()) } returns Unit
+        meterRegistry = SimpleMeterRegistry()
     }
+
+    // yona-wiki P3-01(Observability) 계측 지점 2 대응 — outcome 태그별 카운터 값 확인 헬퍼.
+    fun draftMergeCount(outcome: String) =
+        meterRegistry.counter("yona.event.draft_merge", "resourceType", "issue", "outcome", outcome).count()
 
     fun eventOf(oldValue: String?, newValue: String?, eventType: EventType = EventType.ISSUE_STATE_CHANGED, senderLoginId: String? = "gildong") =
         IssueEvent(
@@ -40,10 +47,12 @@ class IssueEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("OPEN", "CLOSED")
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event, skipWaypoint = true)
+            val result = repository.recordWithDraftMerge(event, skipWaypoint = true, meterRegistry = meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }
+            draftMergeCount("saved") shouldBe 1.0
+            draftMergeCount("merged_or_cancelled") shouldBe 0.0
         }
 
         it("직전 이벤트가 있어도 eventType이 다르면 병합 없이 그대로 저장해야 한다") {
@@ -52,7 +61,7 @@ class IssueEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("a", "b", eventType = EventType.ISSUE_ASSIGNEE_CHANGED)
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event, skipWaypoint = true)
+            val result = repository.recordWithDraftMerge(event, skipWaypoint = true, meterRegistry = meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }
@@ -64,7 +73,7 @@ class IssueEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("a", "b", senderLoginId = "other")
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event, skipWaypoint = true)
+            val result = repository.recordWithDraftMerge(event, skipWaypoint = true, meterRegistry = meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }
@@ -76,7 +85,7 @@ class IssueEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("CLOSED", "REJECTED")
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event, skipWaypoint = true)
+            val result = repository.recordWithDraftMerge(event, skipWaypoint = true, meterRegistry = meterRegistry)
 
             result shouldBe event
             event.oldValue shouldBe "OPEN"
@@ -89,12 +98,14 @@ class IssueEventRecorderKtSpec : DescribeSpec({
             every { repository.findFirstByIssueAndCreatedAfterOrderByIdDesc(issue, any()) } returns lastEvent
             val event = eventOf("CLOSED", "OPEN")
 
-            val result = repository.recordWithDraftMerge(event, skipWaypoint = true)
+            val result = repository.recordWithDraftMerge(event, skipWaypoint = true, meterRegistry = meterRegistry)
 
             result shouldBe null
             event.oldValue shouldBe "OPEN"
             verify(exactly = 1) { repository.delete(lastEvent) }
             verify(exactly = 0) { repository.save(any()) }
+            draftMergeCount("merged_or_cancelled") shouldBe 1.0
+            draftMergeCount("saved") shouldBe 0.0
         }
 
         it("skipWaypoint=false이고 정확히 되돌아오면 직전 이벤트를 지우고 저장 없이 null을 반환해야 한다") {
@@ -102,7 +113,7 @@ class IssueEventRecorderKtSpec : DescribeSpec({
             every { repository.findFirstByIssueAndCreatedAfterOrderByIdDesc(issue, any()) } returns lastEvent
             val event = eventOf("sharer1", "")
 
-            val result = repository.recordWithDraftMerge(event, skipWaypoint = false)
+            val result = repository.recordWithDraftMerge(event, skipWaypoint = false, meterRegistry = meterRegistry)
 
             result shouldBe null
             verify(exactly = 1) { repository.delete(lastEvent) }
@@ -115,7 +126,7 @@ class IssueEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("unrelated", "sharer3")
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event, skipWaypoint = false)
+            val result = repository.recordWithDraftMerge(event, skipWaypoint = false, meterRegistry = meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }
@@ -127,7 +138,7 @@ class IssueEventRecorderKtSpec : DescribeSpec({
             val event = eventOf("sharer1", "sharer2")
             every { repository.save(event) } returns event
 
-            val result = repository.recordWithDraftMerge(event, skipWaypoint = false)
+            val result = repository.recordWithDraftMerge(event, skipWaypoint = false, meterRegistry = meterRegistry)
 
             result shouldBe event
             verify(exactly = 0) { repository.delete(any()) }

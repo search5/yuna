@@ -1,5 +1,6 @@
 package com.github.search5.yona.domain.notification
 
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
@@ -26,10 +27,19 @@ private val DRAFT_WINDOW: Duration = Duration.ofSeconds(30)
 @Component
 class NotificationEventRecorder(
     private val notificationEventRepository: NotificationEventRepository,
-    private val notificationMailRepository: NotificationMailRepository
+    private val notificationMailRepository: NotificationMailRepository,
+    // yona-wiki P3-01(Observability) 계측 지점 1 — record()는 전체 알림이 거치는 단일 지점이라
+    // 여기 하나만 계측해도 시스템 전체 알림 활동량을 eventType/resourceType별로 볼 수 있다.
+    private val meterRegistry: MeterRegistry
 ) {
     @Transactional
     fun record(event: NotificationEvent, skipWaypoint: Boolean = true): NotificationEvent? {
+        meterRegistry.counter(
+            "yona.notification.events",
+            "eventType", event.eventType.name,
+            "resourceType", event.resourceType.name
+        ).increment()
+
         val draftSince = Instant.now().minus(DRAFT_WINDOW)
         val lastEvent = notificationEventRepository
             .findFirstByResourceTypeAndResourceIdAndCreatedAfterOrderByIdDesc(event.resourceType, event.resourceId, draftSince)

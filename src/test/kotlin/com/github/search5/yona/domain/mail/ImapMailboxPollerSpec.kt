@@ -6,6 +6,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -43,6 +44,7 @@ import java.util.concurrent.ScheduledFuture
 class ImapMailboxPollerSpec : DescribeSpec({
     val propertyService = mockk<PropertyService>(relaxed = true)
     val taskScheduler = mockk<TaskScheduler>(relaxed = true)
+    val meterRegistry = SimpleMeterRegistry()
     val poller = ImapMailboxPoller(
         incomingMailProcessingService = mockk(relaxed = true),
         propertyService = propertyService,
@@ -52,7 +54,8 @@ class ImapMailboxPollerSpec : DescribeSpec({
         password = "secret",
         useSsl = true,
         folderName = "inbox",
-        pollingIntervalMs = 300000L
+        pollingIntervalMs = 300000L,
+        meterRegistry = meterRegistry
     )
     val session = Session.getDefaultInstance(Properties())
 
@@ -91,7 +94,8 @@ class ImapMailboxPollerSpec : DescribeSpec({
         useSsl: Boolean = true,
         propertyService: PropertyService = mockk(relaxed = true),
         taskScheduler: TaskScheduler = mockk(relaxed = true),
-        incomingMailProcessingService: IncomingMailProcessingService = mockk(relaxed = true)
+        incomingMailProcessingService: IncomingMailProcessingService = mockk(relaxed = true),
+        meterRegistry: SimpleMeterRegistry = SimpleMeterRegistry()
     ) = ImapMailboxPoller(
         incomingMailProcessingService = incomingMailProcessingService,
         propertyService = propertyService,
@@ -101,7 +105,8 @@ class ImapMailboxPollerSpec : DescribeSpec({
         password = "secret",
         useSsl = useSsl,
         folderName = "inbox",
-        pollingIntervalMs = 300000L
+        pollingIntervalMs = 300000L,
+        meterRegistry = meterRegistry
     )
 
     // yona MailboxService.java:176-188 Diagnostic checkOne() 대응 (P1-137).
@@ -450,7 +455,8 @@ class ImapMailboxPollerSpec : DescribeSpec({
         it("UID 구간의 신규 메일을 UID 오름차순으로 처리하고 워터마크를 전진시켜야 한다") {
             val incomingMailProcessingService = mockk<IncomingMailProcessingService>(relaxed = true)
             val propertyService = mockk<PropertyService>(relaxed = true)
-            val p = freshPoller(propertyService = propertyService, incomingMailProcessingService = incomingMailProcessingService)
+            val testMeterRegistry = SimpleMeterRegistry()
+            val p = freshPoller(propertyService = propertyService, incomingMailProcessingService = incomingMailProcessingService, meterRegistry = testMeterRegistry)
             val mockFolder = mockk<IMAPFolder>(relaxed = true)
 
             val msg1 = MimeMessage(session).apply {
@@ -477,6 +483,11 @@ class ImapMailboxPollerSpec : DescribeSpec({
             verify(exactly = 1) { incomingMailProcessingService.process(match { it.subject == "1" }) }
             verify(exactly = 1) { propertyService.set(PropertyName.MAILBOX_LAST_SEEN_UID, 8L) }
             verify(exactly = 1) { propertyService.set(PropertyName.MAILBOX_LAST_UID_VALIDITY, 100L) }
+            // yona-wiki P3-01(Observability) 계측 지점 4 검증 — 메시지 2건 처리 + 폴링 사이클 1회 기록,
+            // uidValidity가 그대로(100L)였으므로 재동기화는 발생하지 않아야 한다.
+            testMeterRegistry.counter("yona.mailbox.messages.processed").count() shouldBe 2.0
+            testMeterRegistry.timer("yona.mailbox.poll.duration").count() shouldBe 1L
+            testMeterRegistry.counter("yona.mailbox.uid.resync").count() shouldBe 0.0
         }
 
         it("이전 기록이 없으면(uidValidity만 다르거나 최초) UID 구간 조회 없이 uidValidity만 갱신해야 한다") {
@@ -491,6 +502,22 @@ class ImapMailboxPollerSpec : DescribeSpec({
 
             verify(exactly = 0) { mockFolder.getMessagesByUID(any(), any()) }
             verify(exactly = 1) { propertyService.set(PropertyName.MAILBOX_LAST_UID_VALIDITY, 100L) }
+        }
+
+        // yona-wiki P3-01(Observability) 계측 지점 4 검증 — lastUidValidity가 있는데 현재 uidValidity와
+        // 다르면(메일함 재생성 등으로 UID가 더 이상 유효하지 않음) 재동기화 카운터가 증가해야 한다.
+        it("lastUidValidity가 현재 uidValidity와 다르면 재동기화 카운터가 증가해야 한다") {
+            val propertyService = mockk<PropertyService>(relaxed = true)
+            val testMeterRegistry = SimpleMeterRegistry()
+            val p = freshPoller(propertyService = propertyService, meterRegistry = testMeterRegistry)
+            val mockFolder = mockk<IMAPFolder>(relaxed = true)
+            every { propertyService.getLong(PropertyName.MAILBOX_LAST_UID_VALIDITY) } returns 100L
+            every { propertyService.getLong(PropertyName.MAILBOX_LAST_SEEN_UID) } returns 5L
+            every { mockFolder.uidValidity } returns 200L
+
+            p.callPrivate("handleNewMessages", arrayOf(IMAPFolder::class.java), mockFolder)
+
+            testMeterRegistry.counter("yona.mailbox.uid.resync").count() shouldBe 1.0
         }
 
         it("메일 처리(process) 중 예외가 발생해도 워터마크는 전진시켜야 한다") {

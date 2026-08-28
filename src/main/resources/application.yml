@@ -108,6 +108,22 @@ management:
   metrics:
     tags:
       application: yona
+  # yona-wiki P3-01(Observability) 계측 지점 4(트레이싱) 대응 — 별도 수집 인프라(Tempo/Jaeger)의
+  # 실제 배포는 이 계획의 범위 밖이라(docs/yona-wiki/plans/p3-01-observability.md 참고), OTLP
+  # 엔드포인트가 없는 환경에서도 애플리케이션 기동에는 영향이 없다(비동기 전송 실패는 로그만 남김).
+  tracing:
+    sampling:
+      probability: "${YONA_TRACING_SAMPLING_PROBABILITY:1.0}"
+  otlp:
+    tracing:
+      endpoint: "${YONA_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}"
+    # spring-boot-starter-opentelemetry는 트레이싱뿐 아니라 OTLP 메트릭 푸시 레지스트리도 함께
+    # 자동구성한다 — 메트릭은 이미 /actuator/prometheus 스크랩으로 충분하고(P3-01 설계 개요 참고),
+    # OTLP 콜렉터가 없는 환경에서 애플리케이션 컨텍스트 종료 시마다 연결 실패 재시도로 종료가
+    # 지연되는 현상이 실제로 관측돼(테스트 스위트에서 확인) 명시적으로 꺼둔다.
+    metrics:
+      export:
+        enabled: false
 
 ---
 spring:

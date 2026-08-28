@@ -22,6 +22,7 @@ import com.github.search5.yona.domain.user.UserState
 import com.sun.net.httpserver.HttpServer
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -106,6 +107,17 @@ private fun findUnusedPort(): Int {
     ServerSocket(0).use { return it.localPort }
 }
 
+// yona-wiki P3-01(Observability) 계측 지점 6 검증용 — 서버가 요청을 받았다는 latch(요청 수신 시점)와
+// 클라이언트의 thenAccept/exceptionally 콜백(응답 수신 후, 카운터 증가 시점)은 서로 다른 시점이라
+// latch.await()만으로는 카운터 반영을 보장하지 못한다(실제로 이 순서로 처음 실패해 확인). 콜백이
+// 비동기로 완료될 때까지 짧게 폴링한다.
+private fun awaitCounterAtLeast(supplier: () -> Double, expected: Double, timeoutMs: Long = 5000) {
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (supplier() < expected && System.currentTimeMillis() < deadline) {
+        Thread.sleep(20)
+    }
+}
+
 class WebhookServiceSpec : DescribeSpec({
     val webhookRepository = mockk<WebhookRepository>()
     val webhookThreadRepository = mockk<WebhookThreadRepository>()
@@ -114,13 +126,15 @@ class WebhookServiceSpec : DescribeSpec({
     // 흘러가게 두고, 링크 자체를 검증하는 테스트에서만 개별적으로 every {}를 재정의한다.
     val notificationUrlResolver = mockk<NotificationUrlResolver>(relaxed = true)
     val webhookThreadRecorder = mockk<WebhookThreadRecorder>(relaxed = true)
+    val meterRegistry = SimpleMeterRegistry()
 
     val webhookService = WebhookServiceImpl(
-        webhookRepository, webhookThreadRepository, "https://yona.example.com", notificationUrlResolver, webhookThreadRecorder
+        webhookRepository, webhookThreadRepository, "https://yona.example.com", notificationUrlResolver, webhookThreadRecorder, meterRegistry
     )
 
     beforeTest {
         clearMocks(webhookRepository, webhookThreadRepository, projectRepository, notificationUrlResolver, webhookThreadRecorder)
+        meterRegistry.clear()
     }
 
     describe("WebhookService 비즈니스 테스트") {
@@ -1069,6 +1083,10 @@ class WebhookServiceSpec : DescribeSpec({
 
                     latch.await(5, TimeUnit.SECONDS) shouldBe true
                     synchronized(received) { received[0].authorizationHeader } shouldBe "token supersecret"
+                    // yona-wiki P3-01(Observability) 계측 지점 6 검증 — 2xx 응답은 status=200 태그로 집계된다.
+                    awaitCounterAtLeast({ meterRegistry.counter("yona.webhook.sent", "status", "200").count() }, 1.0)
+                    meterRegistry.counter("yona.webhook.sent", "status", "200").count() shouldBe 1.0
+                    meterRegistry.timer("yona.webhook.duration").count() shouldBe 1L
                 } finally {
                     server.stop(0)
                 }
@@ -1116,6 +1134,8 @@ class WebhookServiceSpec : DescribeSpec({
                     // 실패 응답 처리(println 분기)가 끝날 시간을 잠깐 더 준 뒤에도 저장 요청이 없어야 한다.
                     Thread.sleep(300)
                     verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
+                    awaitCounterAtLeast({ meterRegistry.counter("yona.webhook.sent", "status", "500").count() }, 1.0)
+                    meterRegistry.counter("yona.webhook.sent", "status", "500").count() shouldBe 1.0
                 } finally {
                     server.stop(0)
                 }
@@ -1171,6 +1191,8 @@ class WebhookServiceSpec : DescribeSpec({
 
                 Thread.sleep(1000)
                 verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
+                awaitCounterAtLeast({ meterRegistry.counter("yona.webhook.sent", "status", "connection_error").count() }, 1.0)
+                meterRegistry.counter("yona.webhook.sent", "status", "connection_error").count() shouldBe 1.0
             }
 
             it("payloadUrl이 잘못된 URI 형식이면 동기적으로 예외를 삼키고 처리되어야 한다") {
@@ -1187,6 +1209,7 @@ class WebhookServiceSpec : DescribeSpec({
 
                 verify(exactly = 1) { webhookRepository.findByProjectId(1L) }
                 verify(exactly = 0) { webhookThreadRecorder.recordThreadIfAbsent(any(), any(), any(), any()) }
+                meterRegistry.counter("yona.webhook.sent", "status", "client_error").count() shouldBe 1.0
             }
         }
 

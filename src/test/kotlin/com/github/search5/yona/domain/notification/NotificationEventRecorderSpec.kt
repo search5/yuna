@@ -7,6 +7,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -17,7 +18,10 @@ class NotificationEventRecorderSpec @Autowired constructor(
     private val recorder: NotificationEventRecorder,
     private val notificationEventRepository: NotificationEventRepository,
     private val notificationMailRepository: NotificationMailRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    // yona-wiki P3-01(Observability) 계측 지점 1 검증용 — 실제 애플리케이션 컨텍스트가 관리하는
+    // MeterRegistry 빈을 그대로 주입받아 record() 호출 후 카운터가 실제로 증가하는지 확인한다.
+    private val meterRegistry: MeterRegistry
 ) : AbstractIntegrationTest() {
 
     init {
@@ -40,6 +44,24 @@ class NotificationEventRecorderSpec @Autowired constructor(
                     newValue = newValue,
                     receivers = mutableSetOf(receiver)
                 )
+
+            it("record() 호출 시 yona.notification.events 카운터가 eventType/resourceType 태그로 증가해야 한다") {
+                val sender = userRepository.save(User(loginId = "sender-metric", name = "발신자", email = "sm@yona.io"))
+                val receiver = userRepository.save(User(loginId = "receiver-metric", name = "수신자", email = "rm@yona.io"))
+                val before = meterRegistry.counter(
+                    "yona.notification.events",
+                    "eventType", EventType.ISSUE_STATE_CHANGED.name,
+                    "resourceType", ResourceType.ISSUE_POST.name
+                ).count()
+
+                recorder.record(eventOf(sender, receiver, "metric-1", "OPEN", "CLOSED"))
+
+                meterRegistry.counter(
+                    "yona.notification.events",
+                    "eventType", EventType.ISSUE_STATE_CHANGED.name,
+                    "resourceType", ResourceType.ISSUE_POST.name
+                ).count() shouldBe before + 1.0
+            }
 
             it("저장되면 NotificationMail 마커도 함께 생성해야 한다") {
                 val sender = userRepository.save(User(loginId = "sender1", name = "발신자1", email = "s1@yona.io"))
