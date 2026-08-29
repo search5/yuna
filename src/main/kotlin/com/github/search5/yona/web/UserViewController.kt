@@ -14,6 +14,9 @@ import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.issue.RecentIssueService
 import com.github.search5.yona.config.security.AccessControl
 import com.github.search5.yona.domain.mention.MentionService
+import com.github.search5.yona.domain.apitoken.ApiTokenPermission
+import com.github.search5.yona.domain.apitoken.ApiTokenScopeGroup
+import com.github.search5.yona.domain.apitoken.ApiTokenService
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
@@ -69,6 +72,8 @@ class UserViewController(
     private val mentionService: MentionService,
     // yona User.getVisitedIssues() 대응.
     private val recentIssueService: RecentIssueService,
+    // yona-wiki P3-02 Step6.6 — Fine-grained API 토큰 발급/관리 웹 UI.
+    private val apiTokenService: ApiTokenService,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
     @Value("\${yona.application.hide-project-listing:false}")
     private val hideProjectListing: Boolean = false
@@ -572,6 +577,87 @@ class UserViewController(
         model.addAttribute("currentUser", loginUser)
 
         return "user/edit_token"
+    }
+
+    // yona-wiki P3-02 Step6.6 — 레거시 전권 토큰 화면(edit_token.html, 위 editUserTokenForm)과는
+    // 완전히 별개인 Fine-grained 토큰 발급/관리 화면. 발급/폐기 후에도 같은 뷰로 돌아와야 해서
+    // 모델 채우기를 fillTokensFormModel()로 뽑아 재사용한다.
+    @GetMapping("/user/editform/tokens")
+    fun editApiTokensForm(
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return "error/403"
+
+        fillAvatarId(loginUser)
+        fillTokensFormModel(loginUser, model)
+
+        return "user/edit_tokens"
+    }
+
+    @PostMapping("/user/editform/tokens")
+    fun issueApiToken(
+        @RequestParam("name") name: String,
+        @RequestParam(value = "allRepositories", defaultValue = "false") allRepositories: Boolean,
+        @RequestParam(value = "scopedProjectIds", required = false) scopedProjectIds: List<Long>?,
+        @RequestParam("expiresInDays") expiresInDays: Long,
+        request: HttpServletRequest,
+        authentication: Authentication?,
+        model: Model
+    ): String {
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return "error/403"
+
+        // 권한 매트릭스(그룹 × 없음/읽기/쓰기)는 라디오 그룹이 그룹 수만큼 생기므로
+        // scope_<GROUP_NAME> 파라미터 각각으로 넘어온다(예: scope_ISSUES=WRITE).
+        val scopePermissions = ApiTokenScopeGroup.entries.associateWith { group ->
+            val raw = request.getParameter("scope_${group.name}")
+            ApiTokenPermission.entries.find { it.name == raw } ?: ApiTokenPermission.NONE
+        }
+
+        fillAvatarId(loginUser)
+        try {
+            val issued = apiTokenService.issue(
+                owner = loginUser,
+                name = name,
+                allRepositories = allRepositories,
+                scopedProjectIds = scopedProjectIds ?: emptyList(),
+                scopePermissions = scopePermissions,
+                expiresInDays = expiresInDays
+            )
+            model.addAttribute("issuedRawToken", issued.rawToken)
+            model.addAttribute("issuedTokenName", issued.apiToken.name)
+        } catch (e: IllegalArgumentException) {
+            model.addAttribute("tokenIssueError", e.message)
+        }
+
+        fillTokensFormModel(loginUser, model)
+        return "user/edit_tokens"
+    }
+
+    @PostMapping("/user/editform/tokens/{id}/revoke")
+    fun revokeApiToken(
+        @PathVariable id: Long,
+        authentication: Authentication?
+    ): String {
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+            ?: return "error/403"
+
+        apiTokenService.revoke(loginUser, id)
+        return "redirect:/user/editform/tokens"
+    }
+
+    private fun fillTokensFormModel(loginUser: User, model: Model) {
+        model.addAttribute("user", loginUser)
+        model.addAttribute("currentUser", loginUser)
+        model.addAttribute("tokens", apiTokenService.listByOwner(loginUser))
+        model.addAttribute("scopeGroups", ApiTokenScopeGroup.entries)
+        // 토큰의 선택 저장소 범위로 고를 수 있는 후보 — 사용자가 멤버로 속한 프로젝트만
+        // 노출한다(본인이 소속되지 않은 남의 저장소를 스코프에 담을 이유가 없다).
+        val candidateProjects: List<com.github.search5.yona.domain.project.Project> =
+            loginUser.id?.let { userId -> projectUserRepository.findByUserId(userId).map { it.project } } ?: emptyList()
+        model.addAttribute("candidateProjects", candidateProjects)
     }
 
     @GetMapping("/user/files")

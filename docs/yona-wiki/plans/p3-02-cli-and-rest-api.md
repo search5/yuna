@@ -216,8 +216,8 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] `ApiToken` 엔티티가 `expires_at` 필수로 강제됨을 테스트로 보장 (1라운드 — Step 1)
 - [x] `ApiTokenAuthenticationFilter`가 스코프 밖 요청을 403으로 거부함을 테스트로 보장 (1라운드 — Step 3, 신규 `/api/v1/projects/...` 네임스페이스 한정)
 - [x] 이슈/PR/프로젝트 REST API가 CRUD 전체를 커버하고, 각 엔드포인트에 권한 스코프 검증 테스트 존재 (2라운드 — Step 4~6, 단 프로젝트 조회 API는 스코프 토큰이 아닌 AccessControl 기반 검증 — 아래 로그/리스크 표 참고)
-- [ ] 프로젝트 조회/목록 API가 Fine-grained 스코프 토큰으로 완전히 동작함 (Step 6.5, 설계 확정·구현 대기 — 위 "설계 개요" 참고)
-- [ ] Fine-grained 토큰을 웹 UI에서 발급/조회/폐기할 수 있음 (Step 6.6, 설계 확정·구현 대기 — 위 "설계 개요" 참고)
+- [x] 프로젝트 조회/목록 API가 Fine-grained 스코프 토큰으로 완전히 동작함 (3라운드 — Step 6.5)
+- [x] Fine-grained 토큰을 웹 UI에서 발급/조회/폐기할 수 있음 (3라운드 — Step 6.6)
 - [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (Part 2, 다음 라운드)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
 
@@ -309,6 +309,81 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
   추가했다(GET은 기존 공개 프로젝트 익명 조회 컨벤션을 깨지 않기 위해 제외).
 - **전체 스위트**: `./gradlew test` 전체 GREEN(회귀 없음) — 상세 수치는 이 라운드의 커밋 메시지 참고.
 
+### 3라운드 (2026-08-29) — Part 1 Step 6.5~6.6
+
+2라운드가 남긴 두 갭(프로젝트 조회/목록 API의 스코프 패턴 불일치, 토큰 발급/관리 UI 부재)을
+`fbeb589`(계획 문서에 이미 확정된 설계) 그대로 구현했다. 둘 다 설계 문서를 그대로 따랐고, 설계를
+벗어난 판단이 필요했던 지점은 "metadata 세그먼트를 URL에 실제로 넣을지" 하나뿐(아래 Step 6.5 참고).
+
+- **Step 6.5 — 스코프 패턴 갭 해소**:
+  - `domain/apitoken/ApiTokenAuthorizer.kt`: `isAuthorized()`의 `resourceType` 파라미터를
+    `ResourceType?`로 바꾸고, null이면(= "metadata" 스코프) 그룹/권한 매트릭스를 전혀 보지 않고
+    만료 여부 + repo scope 일치 여부만으로 판정하도록 분리(`isProjectInRepoScope()` 추출). 기존
+    호출부(비-null 인자)는 전부 그대로 통과 — 회귀 없음.
+  - `config/ApiTokenAuthenticationFilter.kt`:
+    - **설계 문서와 실제 URL 구조 사이의 유일한 판단 지점**: 설계는 "resourceSegmentToResourceType에
+      metadata to null을 추가하고, 실제 URL은 바꾸지 않는다"고 했는데, 기존 `scopedApiPattern`은
+      3세그먼트(owner/project/resource)를 **문자 그대로** 요구해 개별 프로젝트 조회
+      (`/api/v1/projects/{owner}/{project}`, 2세그먼트)와 애초에 매칭될 수 없다 — "metadata"라는
+      문자열이 URL 어디에도 없기 때문이다. 그래서 신규 `individualProjectPattern`(정확히
+      2세그먼트)을 별도로 두고, 이 패턴에 매칭되면 `resourceSegmentToResourceType.getValue("metadata")`
+      (= null)를 대입하는 방식으로 "URL은 안 바꾸면서 개념적으로 metadata 스코프를 쓴다"는 설계
+      의도를 그대로 지켰다. `resourceSegmentToResourceType`는 `Map<String, ResourceType?>`로 바뀌었고
+      조회는 전부 `containsKey` 기반(설계가 지적한 "map[key] ?: return null이 키 없음/값 null을
+      구분 못 하는" 문제를 그대로 회피).
+    - 목록(`/api/v1/projects/{owner}`, 1세그먼트) 전용 `ownerOnlyPattern` + `authenticateScopedList()`
+      신설 — 403을 내지 않고 `setAuthenticatedIdentity()`(기존 `authenticateScoped()`의 신원 설정
+      로직을 추출해 공유)로 SecurityContext만 세팅한 뒤, 인증된 `ApiToken`을 request attribute
+      `SCOPED_API_TOKEN_ATTRIBUTE`("SCOPED_API_TOKEN")로 다운스트림에 넘긴다. 3세그먼트 경로
+      (`authenticateScoped()`)에도 같은 attribute를 세팅해 재사용 가능하게 했다(설계 문서 그대로).
+  - `web/ProjectRestApiController.kt`: `list()`가 request attribute로 넘어온 `ApiToken`을 읽어
+    `scopedToken == null`(세션/레거시/비로그인 — 기존 동작 100% 유지) / `allRepositories`(전체
+    반환) / 선택 스코프(`scopedProjects` 교집합) 3분기로 필터링(설계 문서의 `when` 블록 그대로).
+    `get()`(개별 조회)은 컨트롤러 변경이 필요 없었다 — 필터가 이미 스코프 밖이면 403으로 막아준다.
+  - 검증: `domain/apitoken/ApiTokenAuthorizerSpec.kt`에 metadata(resourceType=null) 3케이스 추가,
+    신규 `config/ApiTokenScopedMetadataAndListAuthorizationIntegrationSpec.kt`(실제 시큐리티 필터
+    체인을 태운 MockMvc, ApiTokenScopedAuthorizationIntegrationSpec과 동일 패턴) 5케이스(개별 조회
+    허용/거부 각 1 + 목록 전체스코프/선택스코프/세션로그인 각 1), `web/ProjectRestApiControllerSpec.kt`
+    에 목록 필터링 3케이스(속성 없음/전체스코프/선택스코프) 추가. 신규 8 + 기존 파일에 추가된 6 =
+    총 14개 테스트로 검증.
+- **Step 6.6 — Fine-grained 토큰 발급/관리 웹 UI**: 레거시 전권 토큰 화면(`user/edit_token.html`,
+  `/user/editform/token_reset`)은 전혀 손대지 않았다(계획 지시대로 완전히 별개 화면으로 신설).
+  - `domain/apitoken/ApiToken.kt`: `name: String` 필드 추가(owner/tokenHash 옆, `nullable = false`).
+    기존 테스트가 전부 named argument로 `ApiToken(...)`을 생성해 위치 무관하게 안전함을 사전 확인.
+  - `domain/apitoken/ApiTokenRepository.kt`: `findByOwner(owner): List<ApiToken>` 추가(scopes/
+    scopedProjects까지 JOIN FETCH — 목록 화면이 권한 뱃지/저장소 범위 요약을 렌더링해야 하므로
+    `findByTokenHash()`와 동일한 이유로 즉시 로딩).
+  - 신규 `domain/apitoken/ApiTokenService.kt`(인터페이스, `IssuedApiToken` DTO 포함) +
+    `ApiTokenServiceImpl.kt` — `issue()`는 `LdapUserProvisioningService.generateSalt()`와 동일한
+    `SecureRandom` 패턴으로 원문 토큰을 만들고 `ApiTokenHasher.hashApiToken()`으로 해시만 저장,
+    이름 공백 검증 + **만료일 366일 상한 검증**(갭 분석 4번 "만료일 상한 없음"을 이번에 함께 해소 —
+    설계 문서에 명시된 항목). `revoke()`는 owner 소유가 아니면 조용히 무시(존재 여부 비노출).
+  - `web/UserController.kt`(기존 레거시 전권 토큰 `@RestController`)는 손대지 않고, 계획이 제시한
+    대안대로 기존 `web/UserViewController.kt`(`@Controller`, 세션 기반 `/user/editform/*` 화면
+    전체를 담당)를 확장했다 — `GET /user/editform/tokens`(목록+발급폼), `POST
+    /user/editform/tokens`(발급, 권한 매트릭스는 `scope_<GROUP_NAME>` 파라미터로 그룹 수만큼 수신),
+    `POST /user/editform/tokens/{id}/revoke`(폐기, `/user/editform/tokens`로 리다이렉트).
+  - `user/partial_edit_tabmenu.html`에 "API 토큰(세분화)" 탭 추가, 신규 `user/edit_tokens.html`
+    (목록 테이블 + 저장소범위 라디오/select2 다중선택 + 8개 그룹×3단 권한 라디오 매트릭스 + 만료일
+    프리셋 + 발급 직후 "지금 한 번만 표시됩니다" 배너). **설계에서 벗어난 지점 하나**: 폐기
+    confirm을 `common/commentDeleteModal.html`류 모달 대신 네이티브 `confirm()` + 이벤트 위임
+    스크립트로 구현했다(`th:onsubmit`에 `#{message}`를 문자열 결합해 넣는 방식이 따옴표 이스케이프로
+    깨지기 쉬워, `data-confirm-message` attribute + 전역 `submit` 리스너로 대체) — 기능적으로는
+    "폐기 전 확인" 요구사항을 동일하게 충족한다.
+  - i18n 메시지 키 `apitoken.*`/`userinfo.tokens`/`button.copy`를 `messages.properties`,
+    `messages_ko_KR.properties`에 추가(다른 로케일 파일은 Thymeleaf가 기본 `messages.properties`로
+    폴백하므로 추가하지 않음).
+  - 검증: 신규 `domain/apitoken/ApiTokenServiceImplSpec.kt`(발급/스코프 저장/이름공백거부/
+    366일상한거부/목록조회/폐기소유권검증 7케이스), `web/UserViewControllerSpec.kt`에 3개
+    엔드포인트의 미인증/성공/실패 분기 7케이스 추가, 신규
+    `web/ApiTokenEditFormTemplateRenderingSpec.kt`(webAppContextSetup + 실제 시큐리티로 Thymeleaf
+    렌더링까지 확인 — standaloneSetup MockMvc는 실제 뷰 리졸버를 안 태워 템플릿 문법 오류를 못
+    잡으므로 `PostingHistoryTemplateRenderingSpec` 패턴을 그대로 따름) 3케이스(발급폼 렌더링/발급
+    직후 배너+목록 반영/폐기 후 목록에서 제거). 총 17개 테스트로 검증.
+- **전체 스위트**: `./gradlew test` 전체 GREEN — 유일한 실패는 2라운드에도 있었던 사전 존재 이슈
+  (`ApiTokenSpec.kt`, MariaDB 컬럼 타임스탬프 마이크로초 절삭으로 인한 `Instant` 나노초 정밀도
+  불일치, 이번 라운드가 손대지 않은 Step1 코드)뿐 — 회귀 아님.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
@@ -316,8 +391,8 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 | 스코프 카테고리 확정 | `ResourceType` 33종을 어떻게 그룹핑할지 최종 미확정 | **1라운드에서 해소** — `ApiTokenScopeGroup.kt`(8개 그룹)로 전수 확정, 근거는 위 완료 로그 참고 |
 | 기존 전권 토큰 마이그레이션 | 이미 발급된 `User.token` 보유자 처리 방침 미정 | **미해결(다음 라운드로 이월)** — 1라운드는 문서화만 함: 신규 `/api/v1/...` 네임스페이스는 스코프 토큰만 인증하고, 그 외 기존 URL은 레거시 전권 토큰 경로를 그대로 유지하는 co-existence로 임시 처리(`ApiTokenAuthenticationFilter.kt` 주석 참고). 자동 재발급 vs 만료 후 재발급 안내 중 무엇을 택할지, 그리고 레거시 경로를 언제 끊을지는 여전히 미정 |
 | 관리자 API 존재 여부 | 백업/웹훅/권한 관리용 서버 API가 이미 있는지 미확인 | Step 9 착수 전 코드 재확인 필요 |
-| 프로젝트 조회 API의 스코프 패턴 불일치 | Step6의 `/api/v1/projects/{owner}`(목록)와 `/api/v1/projects/{owner}/{project}`(조회)는 리소스 세그먼트가 없어 `ApiTokenAuthenticationFilter.scopedApiPattern`(owner/project/resource 3단 필수)과 매칭되지 않는다 — Fine-grained 스코프 토큰으로 호출 불가(세션/전권 토큰만 가능), 이슈/PR API는 "issues"/"pull-requests" 세그먼트가 있어 이 문제가 없다 | **설계 확정, 구현은 Step 6.5로 이월(2026-08-29)** — 개별 조회는 "설계 개요"의 `metadata` 스코프 세그먼트(대안 (2) 채택 확정), 목록은 request attribute 기반 필터링으로 설계 확정. 2라운드는 문서화 + AccessControl 기반 대체 검증만 함(`ProjectRestApiController.kt`/`ProjectRestApiControllerSpec.kt` 상단 주석 참고) |
-| 토큰 발급/관리 UI 부재 | `ApiTokenRepository`엔 조회 메서드 하나뿐, 사용자가 `ApiToken`을 발급/조회/폐기할 UI·컨트롤러·서비스가 전혀 없어 실사용자는 Fine-grained 토큰을 발급받을 방법이 없다 | **설계 확정, 구현은 Step 6.6으로 이월(2026-08-29)** — 위 "토큰 발급/관리 웹 UI 설계" 참고 |
+| 프로젝트 조회 API의 스코프 패턴 불일치 | Step6의 `/api/v1/projects/{owner}`(목록)와 `/api/v1/projects/{owner}/{project}`(조회)는 리소스 세그먼트가 없어 `ApiTokenAuthenticationFilter.scopedApiPattern`(owner/project/resource 3단 필수)과 매칭되지 않는다 — Fine-grained 스코프 토큰으로 호출 불가(세션/전권 토큰만 가능), 이슈/PR API는 "issues"/"pull-requests" 세그먼트가 있어 이 문제가 없다 | **3라운드에서 해소** — 개별 조회는 `metadata` 스코프(그룹/권한 매트릭스 없이 repo scope만 확인), 목록은 request attribute(`SCOPED_API_TOKEN_ATTRIBUTE`) 기반 필터링으로 구현 완료. 상세는 아래 "3라운드" 로그 참고 |
+| 토큰 발급/관리 UI 부재 | `ApiTokenRepository`엔 조회 메서드 하나뿐, 사용자가 `ApiToken`을 발급/조회/폐기할 UI·컨트롤러·서비스가 전혀 없어 실사용자는 Fine-grained 토큰을 발급받을 방법이 없다 | **3라운드에서 해소** — `ApiTokenService`/`ApiTokenServiceImpl` + `UserViewController` 확장 + `user/edit_tokens.html` 신설로 발급/조회/폐기 가능. 상세는 아래 "3라운드" 로그 참고 |
 
 ## 관련
 

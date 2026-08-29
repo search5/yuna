@@ -27,6 +27,11 @@
       사용자토큰
     </a>
   </li>
+  <li th:class="${tabId == 'tokens'} ? 'active' : ''">
+    <a th:href="@{/user/editform/tokens}" th:text="#{userinfo.tokens}">
+      API 토큰(세분화)
+    </a>
+  </li>
 </ul>
 </body>
 </html>

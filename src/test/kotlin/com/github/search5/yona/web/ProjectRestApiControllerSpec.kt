@@ -1,6 +1,8 @@
 package com.github.search5.yona.web
 
+import com.github.search5.yona.config.ApiTokenAuthenticationFilter
 import com.github.search5.yona.config.security.AccessControl
+import com.github.search5.yona.domain.apitoken.ApiToken
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.organization.OrganizationUserRepository
 import com.github.search5.yona.domain.issue.IssueRepository
@@ -29,11 +31,15 @@ import java.util.Optional
 // 서비스 로직 없이 ProjectRepository + 실제 AccessControl(웹 UI와 동일한 가시성 규칙)만으로
 // 구성된다. 이 스펙은 공개/비공개 프로젝트 가시성 규칙과 404/403 분기를 검증한다.
 //
-// [설계상 알려진 한계] 이 컨트롤러의 URL은 ApiTokenAuthenticationFilter의 scopedApiPattern(owner/
-// project/resource 3단 세그먼트 필수)과 맞지 않아 Fine-grained 스코프 토큰으로는 아직 호출할 수
-// 없다(컨트롤러 파일 상단 주석 및 계획 문서 "리스크/미결정 사항" 참고) — 그래서 이 스펙은
-// ApiTokenScopedAuthorizationIntegrationSpec 패턴(스코프 토큰 403) 대신, 이 API가 실제로 적용하는
-// 인가 메커니즘인 AccessControl 기반 익명/비멤버 403·404 케이스로 "권한 없는 요청 거부"를 검증한다.
+// AccessControl 기반 익명/비멤버 403·404 케이스로 "권한 없는 요청 거부"를 검증한다(개별 조회는
+// ApiTokenAuthenticationFilter가 이미 스코프 밖 요청을 403으로 막으므로 이 컨트롤러 자체는 별도
+// 스코프 검증이 필요 없다 — 필터 레벨 검증은 config/ApiTokenScopedMetadataAndListAuthorizationIntegrationSpec
+// 참고).
+//
+// yona-wiki P3-02 Step6.5 — 목록(list())은 request attribute(SCOPED_API_TOKEN_ATTRIBUTE)로 넘어온
+// ApiToken에 따라 AccessControl 통과 목록을 한 번 더 좁힌다. 아래 "GET /api/v1/projects/{owner} -
+// 스코프 토큰 기반 필터링(Step6.5)" describe가 이 분기(속성 없음/전체스코프/선택스코프)를 컨트롤러
+// 단위로 검증한다.
 class ProjectRestApiControllerSpec : DescribeSpec({
     val projectRepository = mockk<ProjectRepository>()
     val userRepository = mockk<UserRepository>()
@@ -99,6 +105,51 @@ class ProjectRestApiControllerSpec : DescribeSpec({
 
             mockMvc.perform(get("/api/v1/projects/yona/private-repo").principal(auth))
                 .andExpect(status().isForbidden)
+        }
+    }
+
+    // yona-wiki P3-02 Step6.5 — "프로젝트 목록 API 스코프 필터링 설계" 검증. request attribute에
+    // ApiTokenAuthenticationFilter.SCOPED_API_TOKEN_ATTRIBUTE로 넘어온 ApiToken 유무/종류에 따라
+    // AccessControl 통과 목록을 한 번 더 좁혀야 한다.
+    describe("GET /api/v1/projects/{owner} - 스코프 토큰 기반 필터링(Step6.5)") {
+        val otherPublicProject = Project(id = 3L, owner = "yona", name = "public-repo-2", projectScope = ProjectScope.PUBLIC)
+
+        it("SCOPED_API_TOKEN 속성이 없으면(세션/레거시 인증) 기존 AccessControl 통과 목록을 그대로 반환한다") {
+            every { projectRepository.findByOwner("yona") } returns listOf(publicProject, otherPublicProject)
+
+            mockMvc.perform(get("/api/v1/projects/yona"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.length()").value(2))
+        }
+
+        it("전체 저장소 스코프(allRepositories=true) 토큰이면 AccessControl 통과 목록을 모두 반환한다") {
+            every { projectRepository.findByOwner("yona") } returns listOf(publicProject, otherPublicProject)
+            val allRepoToken = ApiToken(owner = null, tokenHash = "irrelevant", allRepositories = true)
+
+            mockMvc.perform(
+                get("/api/v1/projects/yona")
+                    .requestAttr(ApiTokenAuthenticationFilter.SCOPED_API_TOKEN_ATTRIBUTE, allRepoToken)
+            )
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.length()").value(2))
+        }
+
+        it("선택 저장소 스코프 토큰이면 scopedProjects에 포함된 프로젝트만 반환한다") {
+            every { projectRepository.findByOwner("yona") } returns listOf(publicProject, otherPublicProject)
+            val selectiveToken = ApiToken(
+                owner = null,
+                tokenHash = "irrelevant",
+                allRepositories = false,
+                scopedProjects = mutableSetOf(otherPublicProject)
+            )
+
+            mockMvc.perform(
+                get("/api/v1/projects/yona")
+                    .requestAttr(ApiTokenAuthenticationFilter.SCOPED_API_TOKEN_ATTRIBUTE, selectiveToken)
+            )
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("public-repo-2"))
         }
     }
 })

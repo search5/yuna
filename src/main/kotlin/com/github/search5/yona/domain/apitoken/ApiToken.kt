@@ -23,6 +23,13 @@ class ApiToken(
     @JoinColumn(name = "owner_id", nullable = false)
     var owner: User? = null,
 
+    // yona-wiki P3-02 Step6.6 — GitHub Fine-grained PAT은 토큰마다 이름을 강제한다(여러 토큰을
+    // 발급/관리하는 화면에서 구분할 유일한 사용자용 식별자). 기존 Step1~3 테스트가 positional이 아닌
+    // named argument로만 ApiToken(...)을 생성하므로 어느 위치에 넣어도 안전하지만, owner/tokenHash
+    // 바로 다음에 둬 "토큰을 식별하는 정보"끼리 묶었다.
+    @Column(name = "name", nullable = false)
+    var name: String = "",
+
     @Column(name = "token_hash", nullable = false, unique = true, length = 128)
     var tokenHash: String = "",
 

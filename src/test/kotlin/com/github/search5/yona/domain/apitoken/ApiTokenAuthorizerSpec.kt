@@ -167,5 +167,59 @@ class ApiTokenAuthorizerSpec : DescribeSpec({
 
             allowed shouldBe true
         }
+
+        // yona-wiki P3-02 Step6.5 — "metadata" 스코프(resourceType == null)는 GitHub의 "Metadata:
+        // Read-only" 자동 부여와 동일한 개념이라 그룹/권한 매트릭스를 전혀 보지 않고 repo scope +
+        // 만료 여부만으로 판정해야 한다.
+        it("resourceType이 null(metadata)이면 그룹 권한이 하나도 없어도 repo scope만 있으면 허용되어야 한다") {
+            val token = tokenWithScope(group = null, permission = ApiTokenPermission.NONE, allRepositories = true)
+
+            val allowed = ApiTokenAuthorizer.isAuthorized(
+                token = token,
+                resourceType = null,
+                project = Project(id = 1L, owner = "owner", name = "some-repo"),
+                requiredPermission = ApiTokenPermission.READ
+            )
+
+            allowed shouldBe true
+        }
+
+        it("resourceType이 null(metadata)이어도 repo scope 자체가 없으면(선택 저장소 밖) 거부되어야 한다") {
+            val scopedProject = Project(id = 1L, owner = "owner", name = "allowed-repo")
+            val token = tokenWithScope(
+                group = null,
+                permission = ApiTokenPermission.NONE,
+                allRepositories = false,
+                scopedProjects = mutableSetOf(scopedProject)
+            )
+            val otherProject = Project(id = 2L, owner = "owner", name = "other-repo")
+
+            val allowed = ApiTokenAuthorizer.isAuthorized(
+                token = token,
+                resourceType = null,
+                project = otherProject,
+                requiredPermission = ApiTokenPermission.READ
+            )
+
+            allowed shouldBe false
+        }
+
+        it("resourceType이 null(metadata)이어도 만료된 토큰은 거부되어야 한다") {
+            val token = tokenWithScope(
+                group = null,
+                permission = ApiTokenPermission.NONE,
+                allRepositories = true,
+                expiresAt = Instant.now().minus(1, ChronoUnit.DAYS)
+            )
+
+            val allowed = ApiTokenAuthorizer.isAuthorized(
+                token = token,
+                resourceType = null,
+                project = Project(id = 1L, owner = "owner", name = "some-repo"),
+                requiredPermission = ApiTokenPermission.READ
+            )
+
+            allowed shouldBe false
+        }
     }
 })

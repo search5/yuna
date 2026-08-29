@@ -11,9 +11,13 @@ import java.time.Instant
 // 얇은 @Service 래퍼를 얹을 수 있다.
 object ApiTokenAuthorizer {
 
+    // resourceType이 null이면 "metadata" 스코프(GitHub의 "Metadata: Read-only" 자동 부여와 동일한
+    // 개념 — 어떤 그룹/권한도 없이 그 저장소가 스코프에 포함되기만 하면 통과)로 취급한다. 이 경우
+    // 그룹/권한 매트릭스는 아예 보지 않고 만료 여부 + repo scope 일치 여부만 확인한다(P3-02 Step6.5,
+    // "metadata 스코프 세그먼트 설계" 참고).
     fun isAuthorized(
         token: ApiToken,
-        resourceType: ResourceType,
+        resourceType: ResourceType?,
         project: Project?,
         requiredPermission: ApiTokenPermission,
         now: Instant = Instant.now()
@@ -23,15 +27,20 @@ object ApiTokenAuthorizer {
         val expiresAt = token.expiresAt ?: return false
         if (!expiresAt.isAfter(now)) return false
 
-        val group = resourceType.toApiTokenScopeGroup() ?: return false
-        val grantedPermission = token.scopes.find { it.scopeGroup == group }?.permission ?: ApiTokenPermission.NONE
-        if (grantedPermission.ordinal < requiredPermission.ordinal) return false
+        if (resourceType != null) {
+            val group = resourceType.toApiTokenScopeGroup() ?: return false
+            val grantedPermission = token.scopes.find { it.scopeGroup == group }?.permission ?: ApiTokenPermission.NONE
+            if (grantedPermission.ordinal < requiredPermission.ordinal) return false
+        }
 
+        return isProjectInRepoScope(token, project)
+    }
+
+    private fun isProjectInRepoScope(token: ApiToken, project: Project?): Boolean {
         if (project != null && !token.allRepositories) {
             val projectId = project.id ?: return false
             if (token.scopedProjects.none { it.id == projectId }) return false
         }
-
         return true
     }
 }

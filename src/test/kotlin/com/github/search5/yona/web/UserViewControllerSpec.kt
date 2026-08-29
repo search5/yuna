@@ -76,6 +76,7 @@ class UserViewControllerSpec : DescribeSpec({
     val accessControl = mockk<AccessControl>()
     val mentionService = mockk<MentionService>(relaxed = true)
     val recentIssueService = mockk<RecentIssueService>(relaxed = true)
+    val apiTokenService = mockk<com.github.search5.yona.domain.apitoken.ApiTokenService>()
 
     val userViewController = UserViewController(
         userRepository,
@@ -94,7 +95,8 @@ class UserViewControllerSpec : DescribeSpec({
         userService,
         accessControl,
         mentionService,
-        recentIssueService
+        recentIssueService,
+        apiTokenService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(userViewController)
         .setCustomArgumentResolvers(PageableHandlerMethodArgumentResolver())
@@ -131,7 +133,8 @@ class UserViewControllerSpec : DescribeSpec({
             organizationUserRepository,
             organizationRepository,
             accessControl,
-            mentionService
+            mentionService,
+            apiTokenService
         )
         every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
         every { accessControl.isAllowedToReadProject(any(), any()) } returns true
@@ -276,7 +279,8 @@ class UserViewControllerSpec : DescribeSpec({
             userRepository, projectUserRepository, issueRepository, pullRequestRepository, watchRepository,
             projectRepository, userProjectNotificationRepository, attachmentRepository, postingRepository,
             favoriteProjectRepository, favoriteOrganizationRepository, organizationUserRepository,
-            organizationRepository, userService, accessControl, mentionService, recentIssueService, hideProjectListing = true
+            organizationRepository, userService, accessControl, mentionService, recentIssueService,
+            apiTokenService, hideProjectListing = true
         )
         val model = ExtendedModelMap()
 
@@ -553,6 +557,101 @@ class UserViewControllerSpec : DescribeSpec({
             val view = userViewController.editUserTokenForm(UsernamePasswordAuthenticationToken("testuser", "password"), authedModel)
             view shouldBe "user/edit_token"
             authedModel.getAttribute("user") shouldNotBe null
+        }
+    }
+
+    // yona-wiki P3-02 Step6.6 — Fine-grained API 토큰 발급/관리 화면(레거시 edit_token.html과는
+    // 별개). editApiTokensForm(목록+발급폼)/issueApiToken(발급)/revokeApiToken(폐기) 세 엔드포인트의
+    // 미인증/성공/실패 분기.
+    describe("GET/POST /user/editform/tokens (Fine-grained API 토큰)") {
+        val loginUser = User(id = 10L, loginId = "testuser", name = "테스트유저")
+        val userAuth = UsernamePasswordAuthenticationToken("testuser", "password")
+
+        it("editApiTokensForm은 미인증 시 error/403을 반환해야 한다") {
+            userViewController.editApiTokensForm(authentication = null, model = ExtendedModelMap()) shouldBe "error/403"
+        }
+
+        it("editApiTokensForm은 인증 시 user/edit_tokens 뷰와 tokens/scopeGroups/candidateProjects 모델을 채워야 한다") {
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+            every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
+            every { apiTokenService.listByOwner(loginUser) } returns emptyList()
+            every { projectUserRepository.findByUserId(10L) } returns emptyList()
+
+            val model = ExtendedModelMap()
+            val view = userViewController.editApiTokensForm(userAuth, model)
+
+            view shouldBe "user/edit_tokens"
+            model.getAttribute("tokens") shouldBe emptyList<Any>()
+            model.getAttribute("scopeGroups") shouldNotBe null
+            model.getAttribute("candidateProjects") shouldBe emptyList<Any>()
+        }
+
+        it("issueApiToken은 미인증 시 error/403을 반환해야 한다") {
+            val request = mockk<HttpServletRequest>(relaxed = true)
+            userViewController.issueApiToken(
+                name = "토큰", allRepositories = false, scopedProjectIds = null,
+                expiresInDays = 30, request = request, authentication = null, model = ExtendedModelMap()
+            ) shouldBe "error/403"
+        }
+
+        it("issueApiToken은 발급에 성공하면 issuedRawToken을 모델에 채우고 user/edit_tokens 뷰를 반환해야 한다") {
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+            every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
+            every { apiTokenService.listByOwner(loginUser) } returns emptyList()
+            every { projectUserRepository.findByUserId(10L) } returns emptyList()
+            val issued = com.github.search5.yona.domain.apitoken.IssuedApiToken(
+                apiToken = com.github.search5.yona.domain.apitoken.ApiToken(owner = loginUser, name = "CI 토큰", tokenHash = "hash"),
+                rawToken = "raw-token-value"
+            )
+            every {
+                apiTokenService.issue(loginUser, "CI 토큰", true, emptyList(), any(), 30)
+            } returns issued
+            val request = mockk<HttpServletRequest>(relaxed = true)
+            every { request.getParameter(any()) } returns null
+
+            val model = ExtendedModelMap()
+            val view = userViewController.issueApiToken(
+                name = "CI 토큰", allRepositories = true, scopedProjectIds = null,
+                expiresInDays = 30, request = request, authentication = userAuth, model = model
+            )
+
+            view shouldBe "user/edit_tokens"
+            model.getAttribute("issuedRawToken") shouldBe "raw-token-value"
+        }
+
+        it("issueApiToken은 발급이 거부되면(IllegalArgumentException) tokenIssueError를 모델에 채워야 한다") {
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+            every { attachmentRepository.findByContainerTypeAndContainerId(any(), any()) } returns emptyList()
+            every { apiTokenService.listByOwner(loginUser) } returns emptyList()
+            every { projectUserRepository.findByUserId(10L) } returns emptyList()
+            every {
+                apiTokenService.issue(loginUser, "", true, emptyList(), any(), 30)
+            } throws IllegalArgumentException("토큰 이름은 필수입니다.")
+            val request = mockk<HttpServletRequest>(relaxed = true)
+            every { request.getParameter(any()) } returns null
+
+            val model = ExtendedModelMap()
+            val view = userViewController.issueApiToken(
+                name = "", allRepositories = true, scopedProjectIds = null,
+                expiresInDays = 30, request = request, authentication = userAuth, model = model
+            )
+
+            view shouldBe "user/edit_tokens"
+            model.getAttribute("tokenIssueError") shouldBe "토큰 이름은 필수입니다."
+        }
+
+        it("revokeApiToken은 미인증 시 error/403을 반환해야 한다") {
+            userViewController.revokeApiToken(id = 1L, authentication = null) shouldBe "error/403"
+        }
+
+        it("revokeApiToken은 인증 시 서비스에 위임하고 /user/editform/tokens로 리다이렉트해야 한다") {
+            every { userRepository.findByLoginId("testuser") } returns Optional.of(loginUser)
+            every { apiTokenService.revoke(loginUser, 5L) } just Runs
+
+            val view = userViewController.revokeApiToken(id = 5L, authentication = userAuth)
+
+            view shouldBe "redirect:/user/editform/tokens"
+            verify(exactly = 1) { apiTokenService.revoke(loginUser, 5L) }
         }
     }
 
