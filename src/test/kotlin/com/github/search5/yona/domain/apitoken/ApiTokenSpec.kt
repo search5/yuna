@@ -50,7 +50,10 @@ class ApiTokenSpec @Autowired constructor(
                 val owner = userRepository.save(
                     User(loginId = "token-owner2", name = "토큰소유자2", email = "token-owner2@example.com")
                 )
-                val expiry = Instant.now().plus(30, ChronoUnit.DAYS)
+                // MariaDB datetime 컬럼은 마이크로초까지만 저장한다 — Instant.now()가 나노초 정밀도를
+                // 가지면 저장 후 재조회 시 미세하게 달라져 shouldBe가 실패한다(실측 확인). 기대값을
+                // 미리 마이크로초로 절삭해 DB 왕복 후에도 동일하게 비교되도록 한다.
+                val expiry = Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.MICROS)
                 val token = ApiToken(
                     owner = owner,
                     tokenHash = "hash-with-expiry",
