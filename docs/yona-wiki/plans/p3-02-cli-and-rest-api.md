@@ -8,7 +8,7 @@ depends_on: []
 blocks: [p3-03-ssh-gpg, p3-07-mcp-server, p3-05-ci-actions-runner]
 source: docs/PARITY_BACKLOG.md#P3-02
 created: 2026-08-28
-updated: 2026-08-29
+updated: 2026-08-30
 tags: [plan, p3, cli, api, auth]
 ---
 
@@ -218,7 +218,9 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] 이슈/PR/프로젝트 REST API가 CRUD 전체를 커버하고, 각 엔드포인트에 권한 스코프 검증 테스트 존재 (2라운드 — Step 4~6, 단 프로젝트 조회 API는 스코프 토큰이 아닌 AccessControl 기반 검증 — 아래 로그/리스크 표 참고)
 - [x] 프로젝트 조회/목록 API가 Fine-grained 스코프 토큰으로 완전히 동작함 (3라운드 — Step 6.5)
 - [x] Fine-grained 토큰을 웹 UI에서 발급/조회/폐기할 수 있음 (3라운드 — Step 6.6)
-- [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (Part 2, 다음 라운드)
+- [x] Go CLI 본체(`yona auth/issue/pr/project/admin/api`)가 1부 REST API를 감싸는 형태로 구현됨 (4라운드 — Step7~10, 별도 저장소 `yona-cli`)
+- [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (다음 라운드로 이월 — 4라운드는 httptest 기반 단위/통합 테스트만 수행)
+- [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (다음 라운드)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
 
 ## 완료 로그
@@ -384,13 +386,79 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
   (`ApiTokenSpec.kt`, MariaDB 컬럼 타임스탬프 마이크로초 절삭으로 인한 `Instant` 나노초 정밀도
   불일치, 이번 라운드가 손대지 않은 Step1 코드)뿐 — 회귀 아님.
 
+### 4라운드 (2026-08-30) — Part2 Step7~10 (Go CLI)
+
+yuna와 완전히 별개인 새 git 저장소 `~/yona-convert/yona-cli`(`github.com/search5/yona-cli`
+모듈)에 Go 1.26 + Cobra 1.10 스택으로 CLI 본체를 구현했다. 배포(Step 11)는 이번 라운드
+범위 밖이라 손대지 않았다. 커밋 3개로 진행: 설정/HTTP 클라이언트 코어 → REST API 클라이언트
+→ Cobra 명령 트리. Go 표준 `testing` + `stretchr/testify` + `net/http/httptest`로 TDD,
+실제 yuna 서버 없이 63개 테스트 전체 GREEN(`go test ./...`), `go build ./...`/`gofmt -l .`/
+`go vet ./...` 클린.
+
+- **Step 7 — CLI 스캐폴딩**: `internal/config`(`~/.config/yona-cli/config.yml`, gh의
+  `hosts.yml` 패턴 참고 — 서버 URL을 키로 삼아 여러 호스트의 토큰을 동시에 보관) +
+  `yona auth login/logout/status`. "CLI 로그인 토큰의 기본 스코프"(위 2026-08-28 결정) 그대로,
+  yuna 서버엔 OAuth 유사 로그인 플로우가 없어 **로그인 자체가 아니라 "이미 발급받은 토큰 값을
+  CLI에 알려주는" `gh auth login --with-token`류 흐름으로 구현했다** — 스코프가 얼마나
+  넓은지는 사용자가 웹 UI에서 어떤 토큰(레거시 전권 토큰 또는 전체 스코프 Fine-grained 토큰)을
+  발급해 붙여넣는지에 달려 있고, CLI는 그 값을 그대로 저장할 뿐 스코프를 계산하지 않는다.
+  `--token`으로 제한된 토큰을 그때그때 넘기는 경로도 함께 구현(설정 파일에 저장하지 않음).
+  서버/토큰 결정 순서는 `--server`/`--token` 플래그 > `YONA_HOST`/`YONA_TOKEN` 환경변수 >
+  설정 파일.
+- **Step 8 — `yona issue`/`yona pr`/`yona project`**: `internal/api`에 2라운드가 만든 REST API
+  엔드포인트를 그대로 감싸는 얇은 클라이언트를 구현. **응답 파싱 설계 결정**: `ProjectRestApiController`
+  응답(`web/ProjectRestApiController.kt`의 `toProjectNode()`)은 컨트롤러가 직접 조립한 맵이라
+  필드가 안정적이어서 타입 있는 `Project` 구조체로 받았지만, Issue/PullRequest 응답은 JPA
+  엔티티를 그대로 직렬화한 결과라 필드 구성이 코드 변경에 취약하다고 판단해 의도적으로
+  `map[string]interface{}`로 느슨하게 받고 CLI 출력은 `number`/`title`/`state`/`body` 등
+  흔한 키만 방어적으로 꺼내 쓰게 했다(모든 view/list 명령에 `--json` 플래그로 원본 그대로
+  출력하는 탈출구를 남김). 요청 바디(`CreateIssueRequest`/`UpdateIssueRequest`/
+  `CommentRequest`/`CreatePullRequestRequest`)는 실제 yuna Kotlin DTO 필드명을 그대로
+  맞췄다(`web/IssueController.kt`/`web/CommentController.kt`/`web/PullRequestController.kt`
+  Serena LSP로 직접 대조 확인). `yona pr review`는 계획 문서 원문의 "리뷰"가 실제로는
+  리뷰어 지정이 아니라 인증된 본인을 리뷰어로 자기등록하는 동작임을 코드로 확인하고
+  (`PullRequestController.addReviewer`) 그대로 반영했다. 프로젝트 주소 지정은 계획 문서
+  예시(`yona project view <name>`)와 달리 서버 API가 owner도 요구해 gh 관례인
+  `owner/project` 단일 인자(이슈/PR은 `-R/--repo` 플래그)로 통일했다 — **계획 문서 예시와
+  실제 구현이 다른 지점**.
+- **Step 9 — `yona admin backup/webhook/permission`**: 착수 전 `web/` 패키지를 grep +
+  Serena LSP로 전수 조사한 결과:
+  - **백업**: `web/SiteApiController.kt`에 `GET /site/export`(전체 DB JSON 백업 다운로드,
+    `checkAdmin()`으로 사이트매니저만 허용)와 `POST /site/import`(멀티파트 업로드, 전체
+    테이블 교체 복원)가 실제로 존재해 그대로 연결했다(`yona admin backup export/import`).
+  - **웹훅**: `web/WebhookController.kt`에 CRUD가 있지만 **세션/폼 기반 레거시 MVC
+    컨트롤러**다(`/projects/{owner}/{projectName}/webhooks`, `/api/v1` 네임스페이스 밖,
+    JSON이 아닌 form-urlencoded 요청/HTML 또는 빈 응답). 생성(POST)과 삭제(DELETE)는 구조상
+    CLI에서도 그대로 호출 가능해 연결했지만(`yona admin webhook create/delete`), **목록
+    조회(GET)는 Thymeleaf가 렌더링한 HTML 페이지(`project/setting_webhook`)만 반환**해 CLI가
+    파싱할 구조화된 데이터가 전혀 없다 — `yona admin webhook list`는 명확한 안내 메시지와
+    함께 미구현 스텁으로 남겼다.
+  - **권한**: `web/ProjectMemberController.kt`에 멤버 추가/역할변경/삭제가
+    `/api/projects/{projectId}(숫자 ID)/members/...`로 JSON 응답(`Map<String,String>`)과 함께
+    존재해 연결했다(`yona admin permission add/update-role/remove`) — 다만 이 컨트롤러가
+    숫자 `projectId`를 요구해, CLI는 먼저 `GET /api/v1/projects/{owner}/{project}`로 id를
+    조회한 뒤 그 값을 넘기는 2단계로 구현했다(`resolveProjectID` 헬퍼). **"현재 멤버+역할
+    목록"을 내려주는 엔드포인트는 존재하지 않는다** — 가장 가까운 `assignableUsers`는 "할당
+    가능한 후보" 목록이지 이미 배정된 권한 매트릭스가 아니다 — `yona admin permission list`도
+    미구현 스텁으로 남겼다.
+  - 위 두 "미구현" 결정은 지시사항대로 yuna 쪽에 새 API를 추가해 임의로 해소하지 않고 그대로
+    보고한다 — 이 CLI 프로젝트의 범위를 넘는 서버 쪽 변경이 필요하다.
+- **Step 10 — `yona api <path>`**: `gh api`와 동일한 컨셉의 원시 HTTP 호출(`-X` 메서드,
+  `-f key=value` 반복으로 JSON 바디 조립, `-H`로 추가 헤더, `--input`으로 파일/표준입력을
+  바디로 그대로 전달). 상태 코드 4xx/5xx는 응답 본문을 그대로 출력한 뒤 0이 아닌 종료 코드로
+  끝난다.
+- **Step 11(배포)은 착수하지 않음** — 계획 문서 지시대로 이번 라운드 범위 밖.
+- **저장소/커밋**: `yona-cli`는 yuna와 무관한 독립 git 저장소(원격 없음, 로컬 전용)로
+  커밋 3개(설정+HTTP 클라이언트 코어 / REST API 클라이언트 / Cobra 명령 트리)로 나눠
+  진행했다. 상세 커밋 이력과 파일 경로는 이 작업을 지시한 세션의 최종 보고 참고.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
 |---|---|---|
 | 스코프 카테고리 확정 | `ResourceType` 33종을 어떻게 그룹핑할지 최종 미확정 | **1라운드에서 해소** — `ApiTokenScopeGroup.kt`(8개 그룹)로 전수 확정, 근거는 위 완료 로그 참고 |
 | 기존 전권 토큰 마이그레이션 | 이미 발급된 `User.token` 보유자 처리 방침 미정 | **미해결(다음 라운드로 이월)** — 1라운드는 문서화만 함: 신규 `/api/v1/...` 네임스페이스는 스코프 토큰만 인증하고, 그 외 기존 URL은 레거시 전권 토큰 경로를 그대로 유지하는 co-existence로 임시 처리(`ApiTokenAuthenticationFilter.kt` 주석 참고). 자동 재발급 vs 만료 후 재발급 안내 중 무엇을 택할지, 그리고 레거시 경로를 언제 끊을지는 여전히 미정 |
-| 관리자 API 존재 여부 | 백업/웹훅/권한 관리용 서버 API가 이미 있는지 미확인 | Step 9 착수 전 코드 재확인 필요 |
+| 관리자 API 존재 여부 | 백업/웹훅/권한 관리용 서버 API가 이미 있는지 미확인 | **4라운드에서 해소** — 백업(`GET /site/export`, `POST /site/import`)은 실사용 가능한 형태로 존재해 CLI에 완전히 연결. 웹훅(`web/WebhookController.kt`)·권한(`web/ProjectMemberController.kt`)은 생성/변경/삭제 API는 있지만 세션·폼 기반 레거시라 목록 조회용 JSON API가 없다(웹훅 목록은 HTML 렌더링 전용, 권한 목록은 엔드포인트 자체가 없음) — `yona admin webhook list`/`yona admin permission list`는 명확한 안내 메시지의 미구현 스텁으로 유지. 새 JSON API를 yuna에 추가하는 것은 CLI 프로젝트 범위 밖이라 이번 라운드는 시도하지 않음. 상세는 위 "4라운드" 로그 참고 |
 | 프로젝트 조회 API의 스코프 패턴 불일치 | Step6의 `/api/v1/projects/{owner}`(목록)와 `/api/v1/projects/{owner}/{project}`(조회)는 리소스 세그먼트가 없어 `ApiTokenAuthenticationFilter.scopedApiPattern`(owner/project/resource 3단 필수)과 매칭되지 않는다 — Fine-grained 스코프 토큰으로 호출 불가(세션/전권 토큰만 가능), 이슈/PR API는 "issues"/"pull-requests" 세그먼트가 있어 이 문제가 없다 | **3라운드에서 해소** — 개별 조회는 `metadata` 스코프(그룹/권한 매트릭스 없이 repo scope만 확인), 목록은 request attribute(`SCOPED_API_TOKEN_ATTRIBUTE`) 기반 필터링으로 구현 완료. 상세는 아래 "3라운드" 로그 참고 |
 | 토큰 발급/관리 UI 부재 | `ApiTokenRepository`엔 조회 메서드 하나뿐, 사용자가 `ApiToken`을 발급/조회/폐기할 UI·컨트롤러·서비스가 전혀 없어 실사용자는 Fine-grained 토큰을 발급받을 방법이 없다 | **3라운드에서 해소** — `ApiTokenService`/`ApiTokenServiceImpl` + `UserViewController` 확장 + `user/edit_tokens.html` 신설로 발급/조회/폐기 가능. 상세는 아래 "3라운드" 로그 참고 |
 
