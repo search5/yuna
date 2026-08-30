@@ -8,6 +8,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldStartWith
 import org.springframework.beans.factory.annotation.Autowired
 
 // yona-wiki P3-02 Step6.6 — ApiTokenService 발급/조회/폐기 로직 검증. OrganizationRepositorySpec/
@@ -54,6 +55,25 @@ class ApiTokenServiceImplSpec @Autowired constructor(
                 val found = apiTokenRepository.findByTokenHash(hashApiToken(issued.rawToken)).orElse(null)
                 found shouldNotBe null
                 found.scopes.find { it.scopeGroup == ApiTokenScopeGroup.ISSUES }?.permission shouldBe ApiTokenPermission.WRITE
+            }
+
+            // 갭 분석 5번("토큰 형식에 식별 프리픽스 없음") 해소 — GitHub의 github_pat_/ghp_처럼,
+            // 시크릿 스캐닝 툴이 인식하고 로그/코드에 노출됐을 때 육안으로도 식별 가능하게 한다.
+            it("발급된 토큰 원문은 yona_pat_ 프리픽스로 시작해야 한다") {
+                val owner = userRepository.save(
+                    User(loginId = "prefix-owner", name = "발급자P", email = "prefix-owner@example.com")
+                )
+
+                val issued = apiTokenService.issue(
+                    owner = owner,
+                    name = "프리픽스 확인용 토큰",
+                    allRepositories = true,
+                    scopedProjectIds = emptyList(),
+                    scopePermissions = emptyMap(),
+                    expiresInDays = 30
+                )
+
+                issued.rawToken shouldStartWith "yona_pat_"
             }
 
             it("permission이 NONE인 그룹은 ApiTokenScope로 저장하지 않아야 한다") {

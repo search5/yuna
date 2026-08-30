@@ -67,13 +67,17 @@ class ApiTokenServiceImpl(
         apiTokenRepository.delete(token)
     }
 
+    // 갭 분석 5번("토큰 형식에 식별 프리픽스 없음") 해소 — GitHub의 github_pat_/ghp_처럼, 시크릿
+    // 스캐닝 툴이 토큰 종류를 인식하고 로그/코드에 우연히 노출됐을 때도 육안으로 식별 가능하게 한다.
+    // 해시는 프리픽스를 포함한 원문 전체로 계산되므로 인증 로직에는 영향이 없다.
     private fun generateRawToken(): String {
         val bytes = ByteArray(32)
         SecureRandom().nextBytes(bytes)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        return TOKEN_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
     companion object {
         const val MAX_EXPIRES_IN_DAYS = 366L
+        const val TOKEN_PREFIX = "yona_pat_"
     }
 }
