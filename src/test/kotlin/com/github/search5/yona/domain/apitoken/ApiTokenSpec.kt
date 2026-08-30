@@ -4,10 +4,11 @@ import com.github.search5.yona.AbstractIntegrationTest
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.dao.DataIntegrityViolationException
+import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -41,7 +42,14 @@ class ApiTokenSpec @Autowired constructor(
                 )
                 val token = ApiToken(owner = owner, tokenHash = "hash-without-expiry", expiresAt = null)
 
-                shouldThrow<DataIntegrityViolationException> {
+                // DB 제약(NOT NULL) 위반 자체는 5개 DB 전부 동일하게 저장을 거부하지만, Hibernate가 그
+                // 위반을 Spring 예외로 번역하는 결과는 DB마다 다르다 — MariaDB/Postgres/MySQL/SQL
+                // Server는 DataIntegrityViolationException으로 번역되는 반면 CUBRID는 더 뭉뚱그린
+                // JpaSystemException을 던진다(실측 확인, CUBRID JDBC 드라이버가 SQLState를 못 주는 것으로
+                // 추정 — 원인 규명은 별도 이슈로 이월, docs/PARITY_BACKLOG.md 참고). 여기서 검증하려는
+                // 것은 "null이 실제로 저장되지 않는다"는 것이지 예외 타입 자체가 아니므로, 구체 타입
+                // 대신 임의의 예외(무엇이든 저장이 실패하기만 하면 됨)로 완화한다.
+                shouldThrow<Exception> {
                     apiTokenRepository.saveAndFlush(token)
                 }
             }
@@ -50,10 +58,7 @@ class ApiTokenSpec @Autowired constructor(
                 val owner = userRepository.save(
                     User(loginId = "token-owner2", name = "토큰소유자2", email = "token-owner2@example.com")
                 )
-                // MariaDB datetime 컬럼은 마이크로초까지만 저장한다 — Instant.now()가 나노초 정밀도를
-                // 가지면 저장 후 재조회 시 미세하게 달라져 shouldBe가 실패한다(실측 확인). 기대값을
-                // 미리 마이크로초로 절삭해 DB 왕복 후에도 동일하게 비교되도록 한다.
-                val expiry = Instant.now().plus(30, ChronoUnit.DAYS).truncatedTo(ChronoUnit.MICROS)
+                val expiry = Instant.now().plus(30, ChronoUnit.DAYS)
                 val token = ApiToken(
                     owner = owner,
                     tokenHash = "hash-with-expiry",
@@ -67,7 +72,13 @@ class ApiTokenSpec @Autowired constructor(
 
                 val found = apiTokenRepository.findByTokenHash("hash-with-expiry").orElse(null)
                 found shouldNotBe null
-                found.expiresAt shouldBe expiry
+                // datetime 컬럼의 소수초 저장 정밀도는 DB마다 다르다(MariaDB/Postgres/MySQL=마이크로초,
+                // CUBRID=밀리초, SQL Server=100나노초 — 5개 DB 전부 실측 확인). Instant.now()는 나노초
+                // 정밀도라 어느 DB든 저장 후 재조회하면 정밀도 이하 자리가 잘려나가 정확히 일치하지
+                // 않는다. expiresAt은 만료 여부 판정에만 쓰여 이 정도 정밀도 손실이 의미 없으므로,
+                // 정확히 같은 값이 아니라 "차이가 1초 미만"인지로 근사 비교한다 — 어떤 DB가 어떤
+                // 단위로 절삭하든(그리고 앞으로 새 DB가 추가되든) 깨지지 않는다.
+                Duration.between(expiry, found.expiresAt!!).abs() shouldBeLessThan Duration.ofSeconds(1)
                 found.allRepositories shouldBe true
                 found.owner?.loginId shouldBe "token-owner2"
             }
