@@ -17,29 +17,32 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
 // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `yona label list/create/edit/delete`.
 // 감사표는 원래 web/LabelController.kt(전역 라벨 자동완성 `/labels`, `/categories`)로 안내했지만,
-// 실제 프로젝트 스코프 라벨 CRUD는 그 파일에 없다 - list는 ProjectController.getProjectLabels(),
-// create/edit/delete는 ProjectViewController.newLabel()/updateLabelForm()/deleteLabelForm()
+// 실제 프로젝트 스코프 라벨 CRUD는 그 파일에 없다 - create/edit/delete/list 전부
+// ProjectViewController.newLabel()/updateLabelForm()/deleteLabelForm()/getIssueLabelsForRestApi()
 // (ISSUE_LABEL 기준 AccessControl 체크, `/{owner}/{projectName}/issue/label(s)/...`)에 있다.
 // 이 컨트롤러는 그 메서드들에 위임하는 얇은 어댑터다(재검증 후 재분류 - 계획 문서 참고).
+//
+// Step8.7 1번(2026-09-01) — list()는 원래 ProjectController.getProjectLabels()(다른 엔티티인
+// domain/project/Label)에 위임해 create/update/delete와 엔티티가 어긋나는 버그가 있었다.
+// ProjectViewController.getIssueLabelsForRestApi()(IssueLabel 기준)로 교체해 통일했다.
 class LabelRestApiControllerSpec : DescribeSpec({
-    val projectController = mockk<ProjectController>()
     val projectViewController = mockk<ProjectViewController>()
 
-    val controller = LabelRestApiController(projectController, projectViewController)
+    val controller = LabelRestApiController(projectViewController)
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 
     beforeTest {
-        clearMocks(projectController, projectViewController)
+        clearMocks(projectViewController)
     }
 
     describe("GET /api/v1/projects/{owner}/{project}/labels") {
-        it("ProjectController.getProjectLabels에 위임한다") {
-            every { projectController.getProjectLabels("yona", "yuna", any()) } returns ResponseEntity.ok(emptySet<Any>())
+        it("ProjectViewController.getIssueLabelsForRestApi에 위임한다") {
+            every { projectViewController.getIssueLabelsForRestApi("yona", "yuna", any()) } returns ResponseEntity.ok(emptyList<Any>())
 
             mockMvc.perform(get("/api/v1/projects/yona/yuna/labels"))
                 .andExpect(status().isOk)
 
-            verify(exactly = 1) { projectController.getProjectLabels("yona", "yuna", any()) }
+            verify(exactly = 1) { projectViewController.getIssueLabelsForRestApi("yona", "yuna", any()) }
         }
     }
 

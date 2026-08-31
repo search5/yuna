@@ -953,6 +953,37 @@ class ProjectViewController(
     }
 
 
+    // yona-wiki P3-02 Step8.7 1번(최우선 실제 버그 수정) — LabelRestApiController.list()가
+    // ProjectController.getProjectLabels()(domain/project/Label, 프로젝트 홈 화면의 토픽 태그)를
+    // 응답해왔는데, create()/update()/delete()는 이 아래 IssueLabel(카테고리 기반 이슈 라벨링,
+    // 실제 CLI/이슈 화면이 쓰는 진짜 라벨) 기준이라 `yona label create`로 만든 라벨이
+    // `yona label list`엔 절대 뜨지 않는 버그가 있었다. list도 동일한 IssueLabel 기준으로
+    // 통일한다. newLabel/updateLabelForm/deleteLabelForm과 달리 대응하는 legacy HTML 세션
+    // 라우트가 없어 @GetMapping을 붙이지 않고 LabelRestApiController 전용 위임 대상으로만 둔다.
+    fun getIssueLabelsForRestApi(
+        owner: String,
+        projectName: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val loginUser = authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
+        if (!accessControl.isAllowed(loginUser, project, Operation.READ)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val labels = issueLabelService.getLabels(project.id!!).map { label ->
+            mapOf(
+                "id" to label.id,
+                "name" to label.name,
+                "color" to label.color,
+                "category" to label.category.name,
+                "categoryId" to label.category.id
+            )
+        }
+        return ResponseEntity.ok(labels)
+    }
+
     // yona IssueLabelApp.newLabel() 대응 (POST /{owner}/{projectName}/issue/labels) — 신규 라벨 추가.
     // categoryName으로 카테고리를 찾거나 새로 만든다. ISSUE_LABEL 생성 권한은 프로젝트 멤버 전원에게
     // 있다(매니저 전용 아님, P1-94 — 기존 IssueLabelController.createLabel()과 동일한 게이트).
