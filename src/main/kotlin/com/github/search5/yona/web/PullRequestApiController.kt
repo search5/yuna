@@ -4,9 +4,12 @@ import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
+import com.github.search5.yona.domain.pullrequest.ReviewComment
+import com.github.search5.yona.domain.vcs.FileDiff
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -32,16 +35,19 @@ class PullRequestApiController(
     private val pullRequestController: PullRequestController
 ) {
 
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr list --author` 대응(PR 모델엔 label/
+    // assignee가 없어 author만 지원 - PullRequestController.getPullRequests() 주석 참고).
     @GetMapping
     fun list(
         @PathVariable owner: String,
         @PathVariable project: String,
         @RequestParam(required = false) state: State?,
+        @RequestParam(required = false) author: String?,
         authentication: Authentication?
     ): ResponseEntity<List<PullRequest>> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.getPullRequests(found.id!!, state, authentication)
+        return pullRequestController.getPullRequests(found.id!!, state, author, authentication)
     }
 
     @PostMapping
@@ -93,5 +99,76 @@ class PullRequestApiController(
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
         return pullRequestController.addReviewer(found.id!!, number, authentication)
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr edit`. PullRequestController.
+    // updatePullRequest()가 이미 PUT으로 존재해(Step5 완료 로그가 "PATCH 없음"으로 적었던 건
+    // 재검증 결과 오분류 - 실제로는 제목/본문/브랜치 수정 API 자체가 이미 있었고, 이 신규 REST API에
+    // PATCH 어댑터만 없었을 뿐이다) 그대로 위임한다.
+    @PatchMapping("/{number}")
+    fun update(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        @RequestBody request: PullRequestController.UpdatePullRequestRequest,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.updatePullRequest(found.id!!, number, request, authentication)
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr close`/`gh pr reopen`. 서버는 이미
+    // PullRequestController.changeState()(범용 상태변경 POST)로 양방향 지원하고 있어(계획 문서가
+    // "서버에 대응 상태변경 API 존재 여부 확인 필요"로 남겨둔 항목 - 재검증 결과 이미 존재) 값만
+    // 고정해 위임하는 어댑터만 추가한다.
+    @PostMapping("/{number}/close")
+    fun close(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.changeState(found.id!!, number, State.CLOSED, authentication)
+    }
+
+    @PostMapping("/{number}/reopen")
+    fun reopen(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.changeState(found.id!!, number, State.OPEN, authentication)
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr diff`/`gh pr comment`.
+    @GetMapping("/{number}/diff")
+    fun diff(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<List<FileDiff>> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.getDiff(found.id!!, number, authentication)
+    }
+
+    @PostMapping("/{number}/comments")
+    fun addComment(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        @RequestBody request: PullRequestController.PullRequestCommentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<ReviewComment> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.addComment(found.id!!, number, request, authentication)
     }
 }

@@ -8,11 +8,14 @@ import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
+import com.github.search5.yona.domain.pullrequest.CodeReviewService
+import com.github.search5.yona.domain.vcs.FileDiff
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestEvent
 import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
 import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
 import com.github.search5.yona.domain.pullrequest.PullRequestService
+import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -29,7 +32,8 @@ class PullRequestController(
     private val projectUserRepository: ProjectUserRepository,
     private val userRepository: UserRepository,
     private val pullRequestEventRepository: PullRequestEventRepository,
-    private val accessControl: AccessControl
+    private val accessControl: AccessControl,
+    private val codeReviewService: CodeReviewService
 ) {
 
     private fun getLoginUser(authentication: Authentication?): User? {
@@ -59,6 +63,11 @@ class PullRequestController(
     fun getPullRequests(
         @PathVariable projectId: Long,
         @RequestParam(required = false) state: State?,
+        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr list --author` 대응. yona PullRequest
+        // 엔티티엔 이슈처럼 labels/assignee 개념이 없어(reviewers/contributor만 존재) --label/
+        // --assignee는 PR에는 적용하지 않는다(계획 문서에 근거 남김 - 실제 모델에 없는 필드를
+        // 인위적으로 만들지 않음). --author만 contributor.loginId 등가비교로 지원한다.
+        @RequestParam(required = false) author: String?,
         authentication: Authentication?
     ): ResponseEntity<List<PullRequest>> {
         val project = projectRepository.findById(projectId).orElse(null)
@@ -70,7 +79,12 @@ class PullRequestController(
         }
 
         val pullRequests = pullRequestService.getPullRequests(projectId, state)
-        return ResponseEntity.ok(pullRequests)
+        val filtered = if (author != null) {
+            pullRequests.filter { it.contributor.loginId == author }
+        } else {
+            pullRequests
+        }
+        return ResponseEntity.ok(filtered)
     }
 
     @GetMapping("/{number}")
@@ -216,6 +230,76 @@ class PullRequestController(
         val updated = pullRequestService.changeState(pullRequest.id!!, state, user.loginId)
         return ResponseEntity.ok(updated)
     }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr diff` 대응. PullRequestViewController.
+    // viewChangesInternal()이 화면 렌더링에 쓰는 것과 동일한 pullRequestService.getDiff()를
+    // JSON으로 그대로 노출한다(신규 서비스 로직 없음).
+    @GetMapping("/{number}/diff")
+    fun getDiff(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<List<FileDiff>> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!checkReadPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val diffs = try {
+            pullRequestService.getDiff(pullRequest)
+        } catch (e: Exception) {
+            emptyList()
+        }
+        return ResponseEntity.ok(diffs)
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr comment` 대응. yona PR은 "PR 전체에 붙는
+    // 일반 댓글"과 "코드 라인 단위 리뷰 댓글"을 CodeReviewService.createReviewComment() 한 메서드로
+    // 함께 처리한다(commitId/codeRange가 둘 다 null이면 PR 전체에 붙는 NonRangedCodeCommentThread로
+    // 귀결됨, CodeReviewServiceImpl 참고) - ReviewViewController.newPullRequestComment()와 같은
+    // 서비스를 재사용하되, 그 메서드는 브라우저 폼 제출 전용(redirect 응답, CodeRangeRequest 등
+    // 리뷰 UI 전용 파라미터 필요)이라 이 REST API는 JSON 요청/응답에 맞춰 새로 얇게 감싼다.
+    @PostMapping("/{number}/comments")
+    fun addComment(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        @RequestBody request: PullRequestCommentRequest,
+        authentication: Authentication?
+    ): ResponseEntity<ReviewComment> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        // ReviewViewController.newPullRequestComment()의 IsCreatable(ResourceType.REVIEW_COMMENT)
+        // 권한 체크와 동일하다(P0-24 대응 원본 그대로).
+        if (!accessControl.isProjectResourceCreatable(user, project, ResourceType.REVIEW_COMMENT)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val comment = codeReviewService.createReviewComment(
+            project = project,
+            pullRequest = pullRequest,
+            commitId = null,
+            contents = request.body,
+            codeRange = null,
+            threadId = null,
+            currentUser = user
+        )
+        return ResponseEntity.status(HttpStatus.CREATED).body(comment)
+    }
+
+    data class PullRequestCommentRequest(
+        val body: String
+    )
 
     // yona PullRequestApp.deleteFromBranch 대응
     @DeleteMapping("/{number}/fromBranch")

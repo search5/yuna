@@ -82,13 +82,17 @@ class IssueController(
             .orElse(false)
     }
 
-    // yona AbstractPostingApp.java:35 ITEMS_PER_PAGE(15)/IssueApp.java:46,166-177
-    // ITEMS_PER_PAGE_MAX(45) 대응 (P1-105). 이슈 목록은 클라이언트가 페이지 크기를 요청할 수 있되
-    // 45를 넘기지 못하도록 상한을 건다 — Spring Pageable은 이 상한을 기본 제공하지 않아 직접 clamp.
     @GetMapping
     fun getIssues(
         @PathVariable projectId: Long,
         @RequestParam(required = false) state: State?,
+        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh issue list --assignee/--label/--author`
+        // 대응. 셋 다 없으면(기존 호출부 100% 유지) 기존 findByProject(AndState)로, 하나라도 있으면
+        // JpaSpecificationExecutor 기반 동적 조건으로 좁힌다(IssueRepository는 이미
+        // JpaSpecificationExecutor<Issue>를 구현하고 있어 신규 리포지토리 메서드가 필요 없다).
+        @RequestParam(required = false) assignee: String?,
+        @RequestParam(required = false) label: String?,
+        @RequestParam(required = false) author: String?,
         @PageableDefault(size = ITEMS_PER_PAGE) pageable: Pageable,
         authentication: Authentication?
     ): ResponseEntity<Page<Issue>> {
@@ -105,12 +109,47 @@ class IssueController(
             minOf(pageable.pageSize, ITEMS_PER_PAGE_MAX),
             pageable.sort
         )
-        val page = if (state != null) {
-            issueRepository.findByProjectAndState(project, state, clampedPageable)
-        } else {
-            issueRepository.findByProject(project, clampedPageable)
+
+        if (assignee == null && label == null && author == null) {
+            val page = if (state != null) {
+                issueRepository.findByProjectAndState(project, state, clampedPageable)
+            } else {
+                issueRepository.findByProject(project, clampedPageable)
+            }
+            return ResponseEntity.ok(page)
         }
-        return ResponseEntity.ok(page)
+
+        val spec = buildIssueFilterSpecification(project, state, assignee, label, author)
+        return ResponseEntity.ok(issueRepository.findAll(spec, clampedPageable))
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — 위 getIssues()의 assignee/label/author 필터
+    // 조합을 위한 동적 Specification. author는 Issue.authorLoginId(비정규화 필드) 등가비교,
+    // assignee는 Assignee.user.loginId 등가비교, label은 IssueLabel.name 등가비교(ManyToMany라
+    // distinct 필요).
+    private fun buildIssueFilterSpecification(
+        project: Project,
+        state: State?,
+        assignee: String?,
+        label: String?,
+        author: String?
+    ): org.springframework.data.jpa.domain.Specification<Issue> {
+        return org.springframework.data.jpa.domain.Specification { root, query, cb ->
+            val predicates = mutableListOf(cb.equal(root.get<Project>("project"), project))
+            state?.let { predicates.add(cb.equal(root.get<State>("state"), it)) }
+            author?.let { predicates.add(cb.equal(root.get<String>("authorLoginId"), it)) }
+            assignee?.let {
+                val assigneeJoin = root.join<Issue, com.github.search5.yona.domain.issue.Assignee>("assignee")
+                val userJoin = assigneeJoin.join<com.github.search5.yona.domain.issue.Assignee, User>("user")
+                predicates.add(cb.equal(userJoin.get<String>("loginId"), it))
+            }
+            label?.let {
+                val labelJoin = root.join<Issue, com.github.search5.yona.domain.issue.IssueLabel>("labels")
+                predicates.add(cb.equal(labelJoin.get<String>("name"), it))
+                query?.distinct(true)
+            }
+            cb.and(*predicates.toTypedArray())
+        }
     }
 
     @GetMapping("/{number}")

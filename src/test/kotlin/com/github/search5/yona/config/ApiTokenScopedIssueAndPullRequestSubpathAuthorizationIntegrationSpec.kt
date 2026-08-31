@@ -21,6 +21,7 @@ import io.kotest.matchers.shouldNotBe
 import jakarta.servlet.Filter
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -193,6 +194,145 @@ class ApiTokenScopedIssueAndPullRequestSubpathAuthorizationIntegrationSpec @Auto
                 ).andReturn()
 
                 result.response.status shouldNotBe 403
+            }
+        }
+
+        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — 이슈 reopen/transfer, PR edit/close/reopen/
+        // diff/comment 하위 경로도 동일한 scopedApiPattern 접미부((?:/.*)?)로 매칭되는지 확인한다.
+        describe("이슈 하위 경로(reopen/transfer)의 스코프 기반 인가") {
+            it("issues 쓰기 권한이 없는 토큰은 이슈 재오픈 요청을 403으로 거부해야 한다") {
+                val raw = "subpath-issues-reopen-readonly"
+                tokenWith(raw, ApiTokenScopeGroup.ISSUES, ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    post("/api/v1/projects/${owner.loginId}/${project.name}/issues/1/reopen")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("issues 쓰기 권한이 있는 토큰은 이슈 재오픈 요청에서 필터를 통과해야 한다") {
+                val raw = "subpath-issues-reopen-write"
+                tokenWith(raw, ApiTokenScopeGroup.ISSUES, ApiTokenPermission.WRITE)
+
+                val result = mockMvc.perform(
+                    post("/api/v1/projects/${owner.loginId}/${project.name}/issues/1/reopen")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldNotBe 403
+            }
+
+            it("issues 쓰기 권한이 없는 토큰은 이슈 이관 요청을 403으로 거부해야 한다") {
+                val raw = "subpath-issues-transfer-readonly"
+                tokenWith(raw, ApiTokenScopeGroup.ISSUES, ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    post("/api/v1/projects/${owner.loginId}/${project.name}/issues/1/transfer")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("issues 쓰기 권한이 있는 토큰은 이슈 이관 요청에서 필터를 통과해야 한다") {
+                val raw = "subpath-issues-transfer-write"
+                tokenWith(raw, ApiTokenScopeGroup.ISSUES, ApiTokenPermission.WRITE)
+
+                val result = mockMvc.perform(
+                    post("/api/v1/projects/${owner.loginId}/${project.name}/issues/1/transfer")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldNotBe 403
+            }
+        }
+
+        describe("PR 하위 경로(edit/close/reopen/diff/comments)의 스코프 기반 인가") {
+            it("pull-requests 쓰기 권한이 없는 토큰은 PR 수정 요청을 403으로 거부해야 한다") {
+                val raw = "subpath-pr-edit-readonly"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("pull-requests 쓰기 권한이 있는 토큰은 PR 수정 요청에서 필터를 통과해야 한다") {
+                val raw = "subpath-pr-edit-write"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.WRITE)
+
+                val result = mockMvc.perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldNotBe 403
+            }
+
+            it("pull-requests 읽기 권한만 있는 토큰도 diff 조회는 허용해야 한다") {
+                val raw = "subpath-pr-diff-readonly"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    get("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/diff")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldNotBe 403
+            }
+
+            it("pull-requests 그룹에 스코프가 전혀 없으면 diff 조회도 403이어야 한다") {
+                val raw = "subpath-pr-diff-no-scope"
+                val token = ApiToken(
+                    owner = owner,
+                    tokenHash = hashApiToken(raw),
+                    allRepositories = true,
+                    expiresAt = Instant.now().plus(30, ChronoUnit.DAYS)
+                )
+                apiTokenRepository.save(token)
+
+                val result = mockMvc.perform(
+                    get("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/diff")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("pull-requests 쓰기 권한이 없는 토큰은 PR 댓글 작성 요청을 403으로 거부해야 한다") {
+                val raw = "subpath-pr-comments-readonly"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    post("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/comments")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("pull-requests 쓰기 권한이 있는 토큰은 PR close/reopen 요청에서 필터를 통과해야 한다") {
+                val raw = "subpath-pr-close-reopen-write"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.WRITE)
+
+                val closeResult = mockMvc.perform(
+                    post("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/close")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+                closeResult.response.status shouldNotBe 403
+
+                val reopenResult = mockMvc.perform(
+                    post("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/reopen")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+                reopenResult.response.status shouldNotBe 403
             }
         }
     }

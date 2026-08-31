@@ -62,13 +62,32 @@ class IssueRestApiControllerSpec : DescribeSpec({
             val issue = Issue(id = 5L, number = 5L, title = "제목", project = project)
             val page = PageImpl(listOf(issue), PageRequest.of(0, 15), 1)
             every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
-            every { issueController.getIssues(1L, null, any<Pageable>(), any()) } returns ResponseEntity.ok(page)
+            every { issueController.getIssues(1L, null, null, null, null, any<Pageable>(), any()) } returns ResponseEntity.ok(page)
 
             mockMvc.perform(get("/api/v1/projects/yona/yuna/issues"))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.content[0].id").value(5))
 
-            verify(exactly = 1) { issueController.getIssues(1L, null, any<Pageable>(), any()) }
+            verify(exactly = 1) { issueController.getIssues(1L, null, null, null, null, any<Pageable>(), any()) }
+        }
+
+        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `--assignee`/`--label`/`--author` 필터.
+        it("assignee/label/author 쿼리 파라미터를 IssueController.getIssues에 그대로 전달한다") {
+            val issue = Issue(id = 5L, number = 5L, title = "제목", project = project)
+            val page = PageImpl(listOf(issue), PageRequest.of(0, 15), 1)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every {
+                issueController.getIssues(1L, null, "alice", "bug", "bob", any<Pageable>(), any())
+            } returns ResponseEntity.ok(page)
+
+            mockMvc.perform(
+                get("/api/v1/projects/yona/yuna/issues")
+                    .param("assignee", "alice")
+                    .param("label", "bug")
+                    .param("author", "bob")
+            ).andExpect(status().isOk)
+
+            verify(exactly = 1) { issueController.getIssues(1L, null, "alice", "bug", "bob", any<Pageable>(), any()) }
         }
     }
 
@@ -143,6 +162,63 @@ class IssueRestApiControllerSpec : DescribeSpec({
                 .andExpect(jsonPath("$.state").value("CLOSED"))
 
             verify(exactly = 1) { issueController.changeState(1L, 5L, State.CLOSED, any()) }
+        }
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh issue reopen`.
+    describe("POST /api/v1/projects/{owner}/{project}/issues/{number}/reopen") {
+        it("IssueController.changeState를 OPEN으로 호출한다") {
+            val issue = Issue(id = 5L, number = 5L, title = "제목", state = State.OPEN, project = project)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { issueController.changeState(1L, 5L, State.OPEN, any()) } returns ResponseEntity.ok(issue)
+
+            mockMvc.perform(post("/api/v1/projects/yona/yuna/issues/5/reopen"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.state").value("OPEN"))
+
+            verify(exactly = 1) { issueController.changeState(1L, 5L, State.OPEN, any()) }
+        }
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh issue transfer`.
+    describe("POST /api/v1/projects/{owner}/{project}/issues/{number}/transfer") {
+        it("대상 프로젝트 이름을 ID로 변환해 IssueController.moveIssue에 위임한다") {
+            val targetProject = Project(id = 2L, owner = "other", name = "target", projectScope = ProjectScope.PUBLIC)
+            val moved = Issue(id = 5L, number = 1L, title = "제목", project = targetProject)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndName("other", "target") } returns Optional.of(targetProject)
+            every {
+                issueController.moveIssue(1L, 5L, IssueController.MoveIssueRequest(2L), any())
+            } returns ResponseEntity.ok(moved)
+
+            mockMvc.perform(
+                post("/api/v1/projects/yona/yuna/issues/5/transfer")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"targetOwner":"other","targetProject":"target"}""")
+            ).andExpect(status().isOk)
+
+            verify(exactly = 1) { issueController.moveIssue(1L, 5L, IssueController.MoveIssueRequest(2L), any()) }
+        }
+
+        it("대상 프로젝트가 없으면 400을 반환한다") {
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { projectRepository.findByOwnerAndName("other", "unknown") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/api/v1/projects/yona/yuna/issues/5/transfer")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"targetOwner":"other","targetProject":"unknown"}""")
+            ).andExpect(status().isBadRequest)
+        }
+
+        it("원본 프로젝트가 없으면 404를 반환한다") {
+            every { projectRepository.findByOwnerAndName("yona", "unknown") } returns Optional.empty()
+
+            mockMvc.perform(
+                post("/api/v1/projects/yona/unknown/issues/5/transfer")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"targetOwner":"other","targetProject":"target"}""")
+            ).andExpect(status().isNotFound)
         }
     }
 })

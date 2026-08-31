@@ -38,6 +38,7 @@ import com.github.search5.yona.domain.pullrequest.PullRequestEvent
 import com.github.search5.yona.domain.enumeration.EventType
 import com.github.search5.yona.domain.pullrequest.DuplicatedPullRequestException
 import com.github.search5.yona.domain.pullrequest.LackingReviewerException
+import com.github.search5.yona.domain.pullrequest.CodeReviewService
 
 class PullRequestControllerSpec : DescribeSpec({
     val pullRequestService = mockk<PullRequestService>()
@@ -45,6 +46,7 @@ class PullRequestControllerSpec : DescribeSpec({
     val projectUserRepository = mockk<ProjectUserRepository>()
     val userRepository = mockk<UserRepository>()
     val pullRequestEventRepository = mockk<PullRequestEventRepository>()
+    val codeReviewService = mockk<CodeReviewService>()
     val organizationUserRepository = mockk<OrganizationUserRepository>()
     every { organizationUserRepository.findByOrganizationIdAndUserId(any(), any()) } returns Optional.empty()
     val userRepositoryForAccessControl = mockk<UserRepository>()
@@ -68,12 +70,13 @@ class PullRequestControllerSpec : DescribeSpec({
         projectUserRepository,
         userRepository,
         pullRequestEventRepository,
-        accessControl
+        accessControl,
+        codeReviewService
     )
     val mockMvc = MockMvcBuilders.standaloneSetup(pullRequestController).build()
 
     beforeTest {
-        clearMocks(pullRequestService, projectRepository, projectUserRepository, userRepository, pullRequestEventRepository)
+        clearMocks(pullRequestService, projectRepository, projectUserRepository, userRepository, pullRequestEventRepository, codeReviewService)
     }
 
     describe("PullRequestController 웹 API 테스트") {
@@ -144,6 +147,24 @@ class PullRequestControllerSpec : DescribeSpec({
 
                 mockMvc.perform(get("/api/projects/1/pullrequests"))
                     .andExpect(status().isForbidden)
+            }
+
+            // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr list --author` 대응.
+            it("author 파라미터가 있으면 contributor.loginId가 일치하는 PR만 반환해야 한다") {
+                val otherContributor = User(id = 30L, loginId = "othercontributor", name = "다른기여자")
+                val otherPr = PullRequest(
+                    id = 51L, title = "다른 PR", toProject = project, fromProject = fromProject,
+                    contributor = otherContributor, state = State.OPEN, number = 2L
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequests(1L, null) } returns listOf(pullRequest, otherPr)
+
+                mockMvc.perform(get("/api/projects/1/pullrequests").param("author", "testuser").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].title").value("PR 제목"))
             }
         }
 
@@ -918,6 +939,80 @@ class PullRequestControllerSpec : DescribeSpec({
 
                 mockMvc.perform(post("/api/projects/1/pullrequests/999/state").param("state", "CLOSED").principal(userAuth))
                     .andExpect(status().isNotFound)
+            }
+        }
+
+        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr diff` 대응.
+        describe("GET /api/projects/{projectId}/pullrequests/{number}/diff") {
+            it("PR의 diff 목록을 반환해야 한다") {
+                val diffs = listOf(com.github.search5.yona.domain.vcs.FileDiff())
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.getDiff(pullRequest) } returns diffs
+
+                mockMvc.perform(get("/api/projects/1/pullrequests/1/diff").principal(userAuth))
+                    .andExpect(status().isOk)
+
+                verify(exactly = 1) { pullRequestService.getDiff(pullRequest) }
+            }
+
+            it("존재하지 않는 프로젝트의 diff를 조회하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(get("/api/projects/999/pullrequests/1/diff").principal(userAuth))
+                    .andExpect(status().isNotFound)
+            }
+
+            it("비공개 프로젝트를 비멤버가 diff 조회하면 403 Forbidden을 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("outsider") } returns Optional.of(outsiderUser)
+
+                mockMvc.perform(get("/api/projects/1/pullrequests/1/diff").principal(outsiderAuth))
+                    .andExpect(status().isForbidden)
+            }
+        }
+
+        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr comment` 대응.
+        describe("POST /api/projects/{projectId}/pullrequests/{number}/comments") {
+            it("로그인한 사용자는 PR에 댓글을 남길 수 있다(멤버십과 무관 - REVIEW_COMMENT는 항상 생성 가능)") {
+                val comment = com.github.search5.yona.domain.pullrequest.ReviewComment(id = 5L, contents = "댓글")
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every {
+                    codeReviewService.createReviewComment(project, pullRequest, null, "댓글", null, null, user)
+                } returns comment
+
+                mockMvc.perform(
+                    post("/api/projects/1/pullrequests/1/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"body":"댓글"}""")
+                        .principal(userAuth)
+                ).andExpect(status().isCreated)
+                    .andExpect(jsonPath("$.id").value(5))
+            }
+
+            it("비로그인 사용자가 댓글을 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    post("/api/projects/1/pullrequests/1/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"body":"댓글"}""")
+                ).andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 프로젝트에 댓글을 시도하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    post("/api/projects/999/pullrequests/1/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"body":"댓글"}""")
+                        .principal(userAuth)
+                ).andExpect(status().isNotFound)
             }
         }
     }

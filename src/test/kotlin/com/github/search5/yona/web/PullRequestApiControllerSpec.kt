@@ -6,7 +6,9 @@ import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
+import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.vcs.FileDiff
 import io.kotest.core.spec.style.DescribeSpec
 import io.mockk.clearMocks
 import io.mockk.every
@@ -16,6 +18,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -52,13 +55,24 @@ class PullRequestApiControllerSpec : DescribeSpec({
         it("PullRequestController.getPullRequests에 위임한다") {
             val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
             every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
-            every { pullRequestController.getPullRequests(1L, null, any()) } returns ResponseEntity.ok(listOf(pr))
+            every { pullRequestController.getPullRequests(1L, null, null, any()) } returns ResponseEntity.ok(listOf(pr))
 
             mockMvc.perform(get("/api/v1/projects/yona/yuna/pull-requests"))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$[0].id").value(3))
 
-            verify(exactly = 1) { pullRequestController.getPullRequests(1L, null, any()) }
+            verify(exactly = 1) { pullRequestController.getPullRequests(1L, null, null, any()) }
+        }
+
+        it("author 쿼리 파라미터를 PullRequestController.getPullRequests에 그대로 전달한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.getPullRequests(1L, null, "contributor", any()) } returns ResponseEntity.ok(listOf(pr))
+
+            mockMvc.perform(get("/api/v1/projects/yona/yuna/pull-requests").param("author", "contributor"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.getPullRequests(1L, null, "contributor", any()) }
         }
     }
 
@@ -112,6 +126,95 @@ class PullRequestApiControllerSpec : DescribeSpec({
                 .andExpect(status().isOk)
 
             verify(exactly = 1) { pullRequestController.addReviewer(1L, 1L, any()) }
+        }
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr edit`. 재검증 결과 서비스/컨트롤러 로직
+    // 자체는 이미 있었고(PullRequestController.updatePullRequest, PUT) 이 신규 REST API에 PATCH
+    // 위임 어댑터만 없었다.
+    describe("PATCH /api/v1/projects/{owner}/{project}/pull-requests/{number}") {
+        it("PullRequestController.updatePullRequest에 위임한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "수정된 PR", fromProject = project, toProject = project, contributor = contributor)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.updatePullRequest(1L, 1L, any(), any()) } returns ResponseEntity.ok(pr)
+
+            mockMvc.perform(
+                patch("/api/v1/projects/yona/yuna/pull-requests/1")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"title":"수정된 PR","body":"내용"}""")
+            ).andExpect(status().isOk)
+                .andExpect(jsonPath("$.title").value("수정된 PR"))
+
+            verify(exactly = 1) { pullRequestController.updatePullRequest(1L, 1L, any(), any()) }
+        }
+
+        it("프로젝트가 없으면 404를 반환한다") {
+            every { projectRepository.findByOwnerAndName("yona", "unknown") } returns Optional.empty()
+
+            mockMvc.perform(
+                patch("/api/v1/projects/yona/unknown/pull-requests/1")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"title":"t","body":"b"}""")
+            ).andExpect(status().isNotFound)
+        }
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr close`/`gh pr reopen`. 재검증 결과
+    // 서버에는 이미 범용 상태변경 API(PullRequestController.changeState)가 존재했다.
+    describe("POST /api/v1/projects/{owner}/{project}/pull-requests/{number}/close") {
+        it("PullRequestController.changeState(CLOSED)에 위임한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor, state = State.CLOSED)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.changeState(1L, 1L, State.CLOSED, any()) } returns ResponseEntity.ok(pr)
+
+            mockMvc.perform(post("/api/v1/projects/yona/yuna/pull-requests/1/close"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.changeState(1L, 1L, State.CLOSED, any()) }
+        }
+    }
+
+    describe("POST /api/v1/projects/{owner}/{project}/pull-requests/{number}/reopen") {
+        it("PullRequestController.changeState(OPEN)에 위임한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor, state = State.OPEN)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.changeState(1L, 1L, State.OPEN, any()) } returns ResponseEntity.ok(pr)
+
+            mockMvc.perform(post("/api/v1/projects/yona/yuna/pull-requests/1/reopen"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.changeState(1L, 1L, State.OPEN, any()) }
+        }
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr diff`.
+    describe("GET /api/v1/projects/{owner}/{project}/pull-requests/{number}/diff") {
+        it("PullRequestController.getDiff에 위임한다") {
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.getDiff(1L, 1L, any()) } returns ResponseEntity.ok(listOf(FileDiff()))
+
+            mockMvc.perform(get("/api/v1/projects/yona/yuna/pull-requests/1/diff"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.getDiff(1L, 1L, any()) }
+        }
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr comment`.
+    describe("POST /api/v1/projects/{owner}/{project}/pull-requests/{number}/comments") {
+        it("PullRequestController.addComment에 위임한다") {
+            val comment = ReviewComment(id = 9L, contents = "댓글")
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.addComment(1L, 1L, any(), any()) } returns ResponseEntity.status(HttpStatus.CREATED).body(comment)
+
+            mockMvc.perform(
+                post("/api/v1/projects/yona/yuna/pull-requests/1/comments")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"body":"댓글"}""")
+            ).andExpect(status().isCreated)
+                .andExpect(jsonPath("$.id").value(9))
+
+            verify(exactly = 1) { pullRequestController.addComment(1L, 1L, any(), any()) }
         }
     }
 })

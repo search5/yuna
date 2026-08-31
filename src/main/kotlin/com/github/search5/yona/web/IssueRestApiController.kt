@@ -40,17 +40,23 @@ class IssueRestApiController(
     private val commentController: CommentController
 ) {
 
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh issue list --assignee/--label/--author`
+    // 대응. IssueController.getIssues()에 이미 추가한 동일한 이름의 선택 파라미터를 그대로 전달만
+    // 한다(신규 서비스 로직 없음, 얇은 어댑터 원칙 유지).
     @GetMapping
     fun list(
         @PathVariable owner: String,
         @PathVariable project: String,
         @RequestParam(required = false) state: State?,
+        @RequestParam(required = false) assignee: String?,
+        @RequestParam(required = false) label: String?,
+        @RequestParam(required = false) author: String?,
         @PageableDefault(size = IssueController.ITEMS_PER_PAGE) pageable: Pageable,
         authentication: Authentication?
     ): ResponseEntity<Page<Issue>> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return issueController.getIssues(found.id!!, state, pageable, authentication)
+        return issueController.getIssues(found.id!!, state, assignee, label, author, pageable, authentication)
     }
 
     @PostMapping
@@ -118,4 +124,45 @@ class IssueRestApiController(
             ?: return ResponseEntity.notFound().build()
         return issueController.changeState(found.id!!, number, State.CLOSED, authentication)
     }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh issue reopen`. IssueController.changeState()가
+    // close와 동일한 범용 상태변경 API라 값만 OPEN으로 고정해 위임한다.
+    @PostMapping("/{number}/reopen")
+    fun reopen(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Issue> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return issueController.changeState(found.id!!, number, State.OPEN, authentication)
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh issue transfer`. 서버 기능(IssueController.
+    // moveIssue(), MoveIssueRequest(targetProjectId: Long))은 이미 있지만 숫자 ID를 요구한다 - CLI가
+    // 매번 대상 프로젝트의 숫자 ID를 미리 조회하지 않아도 되도록, 이 어댑터가 owner/project 이름
+    // 쌍을 받아 내부에서 ID로 resolve한 뒤 위임한다(신규 서비스 로직 없음).
+    @PostMapping("/{number}/transfer")
+    fun transfer(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        @RequestBody request: TransferIssueRequest,
+        authentication: Authentication?
+    ): ResponseEntity<Issue> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val targetProject = projectRepository.findByOwnerAndName(request.targetOwner, request.targetProject).orElse(null)
+            ?: return ResponseEntity.badRequest().build()
+
+        return issueController.moveIssue(
+            found.id!!, number, IssueController.MoveIssueRequest(targetProject.id!!), authentication
+        )
+    }
+
+    data class TransferIssueRequest(
+        val targetOwner: String,
+        val targetProject: String
+    )
 }
