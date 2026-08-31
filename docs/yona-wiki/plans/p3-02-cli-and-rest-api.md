@@ -283,7 +283,9 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
    - **기존 서버 API 연결만 하면 되는 것**: `yona project fork/create/edit/delete`, `yona label
      list/create/edit/delete`, `yona issue edit/reopen/transfer`, `yona pr checkout/diff/comment`,
      `yona search issues/prs/projects`, `yona org list/view`, `issue/pr list`의 `--assignee`/
-     `--label`/`--author` 필터
+     `--label`/`--author` 필터, `pr create`의 `--from-project-id`(숫자 ID 수동 조회) 요구 제거 —
+     `--repo`(from) + `--from-branch`만 받고 CLI 내부에서 기존 프로젝트 조회 API(`GET
+     /api/v1/projects/{owner}/{project}`, Step6)로 ID를 알아서 resolve(신규 서버 API 불필요)
    - **서버(1부)에 신규 API가 필요한 것**: `gh pr edit` 대응(PR 제목/본문 PATCH — Step5에 없음),
      `gh issue status` 대응(사용자 대시보드 REST API — 범위 클 수 있어 별도 하위 스텝으로 쪼갤 수 있음),
      `gh pr close/reopen`(서버에 대응 상태변경 API 존재 여부 착수 전 확인 필요)
