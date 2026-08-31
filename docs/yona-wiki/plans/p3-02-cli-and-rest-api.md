@@ -8,7 +8,7 @@ depends_on: []
 blocks: [p3-03-ssh-gpg, p3-07-mcp-server, p3-05-ci-actions-runner]
 source: docs/PARITY_BACKLOG.md#P3-02
 created: 2026-08-28
-updated: 2026-08-30
+updated: 2026-08-31
 tags: [plan, p3, cli, api, auth]
 ---
 
@@ -170,6 +170,75 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
   - 신규 컨트롤러(`UserController.kt` 확장 또는 별도 클래스): `GET /user/editform/tokens`(목록+발급폼),
     `POST /user/editform/tokens`(발급), `POST /user/editform/tokens/{id}/revoke`(폐기)
 
+### CLI `gh` 명령 체계 대조 감사 (2026-08-31, 사용자 지적 — "핵심만 뽑지 말고 철저히")
+
+지난 대화에서 `--json`/`-L`/`--web`/`pr create` 번거로움/필터 부족/`--repo` 자동감지/`server` 커맨드 등
+몇 개만 뽑았던 걸, `gh` CLI의 전체 명령 체계와 yona-cli(`cmd/*.go`, `internal/api/*.go` 전체 재확인)를
+하나하나 대조해 전면 재감사했다. 분류 기준: **(A)** yuna에 대응 기능이 있고 P3-02 범위인데 미구현(진짜 갭),
+**(B)** yuna에 대응 기능은 있지만 다른 P3 계획 범위, **(C)** yuna에 대응 개념 자체가 없어 적용 불가.
+
+#### (A) 진짜 갭 — P3-02 범위, 구현 필요
+
+| 분류 | 항목 | 근거 |
+|---|---|---|
+| 사용성(지난 대화) | `--json`이 불리언(전체 덤프)이 아니라 `gh`처럼 `--json field1,field2` 필드선택 방식이어야 함 | `cmd/output.go`의 `printJSON()` |
+| 사용성(지난 대화) | `-L/--limit` 페이지네이션 플래그 없음 | `cmd/issue.go`/`cmd/pr.go`/`cmd/project.go`의 list 계열 |
+| 사용성(지난 대화) | `--web` 플래그(브라우저로 열기) 없음 | 전 명령 공통 |
+| 사용성(지난 대화) | `pr create`가 `--from-project-id`(숫자 ID를 `project view`로 미리 조회해야 함)를 요구 — `gh pr create`는 현재 git 체크아웃의 브랜치만으로 동작 | `cmd/pr.go:131` |
+| 사용성(지난 대화) | `issue list`/`pr list`에 `--assignee`/`--label`/`--author` 등 필터 부족(`--state`만 있음) | `cmd/issue.go`, `internal/api/issue.go:56` |
+| 사용성(지난 대화) | `--repo` 로컬 git 컨텍스트 자동감지 없음(매번 명시 필수) — yuna clone URL은 `http://{owner}@호스트/{owner}/{project}`(`TemplateHelper.getCloneUrl`)라 `github.com/owner/repo` 파싱과 동일한 방식(호스트 뒤 마지막 두 경로 세그먼트)으로 `git remote get-url origin`을 파싱하면 됨 | `cmd/output.go`의 `parseRepo()` 호출부 전체 |
+| 사용성(지난 대화) | 멀티 서버 전환 커맨드 없음(`config.go`에 `Hosts`+`CurrentHost`는 이미 있으나 전환 커맨드가 없음) — `gh auth switch`에 대응하되, yuna는 자체호스팅이라 회사/개인마다 완전히 다른 인스턴스를 오갈 일이 `gh`보다 많아 `auth`가 아닌 별도 **`yona server list/use <호스트>`** 커맨드로 신설 | `internal/config/config.go`(`Hosts map[string]Host`, `CurrentHost`) |
+| `gh repo fork` | `yona project fork` 없음 — 서버에 fork 기능 존재(`ProjectViewController.fork()`/`doClone()`, 그룹11 #172) | yuna `web/ProjectViewController.kt` |
+| `gh repo create` | `yona project create` 없음 — 서버에 프로젝트 생성 존재(`ProjectController`) | yuna `web/ProjectController.kt` |
+| `gh repo clone` | `yona project clone <owner/project>` 없음 — clone URL 계산(`getCloneUrl`)만 있으면 `git clone`을 그대로 실행시키는 얇은 래퍼로 충분 | yuna `TemplateHelper.getCloneUrl()` |
+| `gh repo edit` | `yona project edit`(개요/공개범위 등 설정 변경) 없음 — 서버에 설정 변경 API 존재(project/setting 화면) | yuna `web/ProjectController.kt`/`ProjectViewController.kt` |
+| `gh repo delete`/`archive` | `yona project delete` 없음 — 서버에 삭제 기능 존재(그룹6 #101~106, TEMPLATE_BACKLOG 완료 항목) | yuna project 삭제 관련 컨트롤러 |
+| `gh label list/create/edit/delete` | `yona label` 커맨드 자체가 없음 — 서버에 라벨 관리 존재 | yuna `web/LabelController.kt` |
+| `gh issue edit` | 이슈 제목/본문/라벨/담당자 수정 커맨드 없음(`create`/`comment`/`close`만 있음) — REST API는 이미 PATCH 지원(Step4) | yuna `web/IssueRestApiController.kt`(PATCH `/{number}`) |
+| `gh issue reopen` | 없음(`close`만 있음) — 서버는 상태 변경 API가 이미 양방향 지원 | yuna `IssueController.changeState()` |
+| `gh issue transfer` | 이슈를 다른 프로젝트로 이동하는 커맨드 없음 — 서버 기능 존재(`IssueService.moveIssue`, 이전 세션에서 죽은 UI였다가 복구된 P1-66) | yuna `domain/issue/IssueService.kt` |
+| `gh issue status` | "내게 배정/멘션/내가 만든" 이슈 개요 커맨드 없음 — 서버엔 사용자 대시보드는 있으나 REST API 미노출(신규 API 필요할 수 있음, 범위 큼) | yuna `web/UserViewController.kt` 대시보드 |
+| `gh pr edit` | PR 제목/본문 수정 커맨드 없음 — REST API 자체도 PATCH 없음(Step5가 list/create/get/merge/reviewers만 구현) → **서버 API도 함께 추가 필요** | `docs/yona-wiki/plans/p3-02-cli-and-rest-api.md` 완료 로그 2라운드 |
+| `gh pr close`/`reopen` | 없음 — 서버에 대응 상태 변경 존재할 가능성 높음(`PullRequestController` 확인 필요) | yuna `web/PullRequestController.kt` |
+| `gh pr checkout` | PR 브랜치를 로컬로 체크아웃하는 커맨드 없음 — yuna PR은 GitHub의 `refs/pull/N/head` 같은 특수 ref가 아니라 **실제 `fromProject`/`fromBranch`(평범한 브랜치)**라 `git fetch <fromProject 클론URL> <fromBranch>`로 구현 가능(오히려 `gh`보다 단순) | yuna PR 모델(`fromProject`/`fromBranch` 필드) |
+| `gh pr diff` | PR 변경사항 diff 출력 커맨드 없음 — 서버에 코드 비교 기능 존재 | yuna `web/CodeController.kt`/`CompareViewController.kt` |
+| `gh pr comment` | PR에 댓글 다는 커맨드 없음(`issue comment`만 있음) — 서버는 이슈/PR 댓글 API 공유 가능성 높음 | yuna `web/CommentController.kt` |
+| `gh search issues/prs/repos` | `yona search` 커맨드 자체가 없음 — 서버에 통합검색 기능 존재 | yuna `web/SearchController.kt` |
+| `gh org` | `yona org`(조직 목록/조회) 없음 — 서버에 조직 기능 존재, 다른 P3 계획에 배정 안 됨 | yuna `web/OrganizationController.kt`/`OrganizationViewController.kt` |
+| `gh browse` | 브라우저로 현재 프로젝트/이슈/PR 열기 — 서버 API 불필요(URL 계산만), CLI 로컬 기능으로 바로 추가 가능 | 없음(순수 CLI 기능) |
+| `gh completion` | 쉘 자동완성 서브커맨드 없음 — Cobra가 기본 제공하는 기능이라 `root.go`에 등록만 하면 됨(구현 비용 거의 0) | `cmd/root.go`(`NewRootCmd()`에 미등록) |
+| `--version`/`gh version` | 버전 출력 플래그/커맨드 없음 | `cmd/root.go` |
+| `gh config` | 에디터/페이저 등 CLI 로컬 설정 커맨드 없음 — 우선순위 낮음(nice-to-have) | 없음(순수 CLI 기능) |
+| `gh alias` | 사용자 정의 별칭 커맨드 없음 — 우선순위 낮음(nice-to-have) | 없음(순수 CLI 기능) |
+
+#### (B) yuna에 대응 기능은 있으나 다른 P3 계획 범위
+
+| gh 명령군 | 배정된 계획 |
+|---|---|
+| `gh ssh-key`/`gh gpg-key`(SSH 인증, GPG 서명 검증) | [[p3-03-ssh-gpg]] |
+| `gh workflow`/`gh run`/`gh cache`(Actions 워크플로/실행/캐시) | [[p3-05-ci-actions-runner]] |
+| `gh secret`/`gh variable`(Actions 시크릿/변수) | [[p3-05-ci-actions-runner]](Actions 부속 기능) |
+| `gh ruleset`(브랜치 보호 규칙) | [[p3-04-branch-protection]] |
+| `gh attestation`(커밋/아티팩트 서명 검증) | [[p3-03-ssh-gpg]](GPG 서명 검증과 개념 겹침) |
+
+#### (C) yuna에 대응 개념 없어 적용 불가
+
+| gh 명령군 | 사유 |
+|---|---|
+| `gh gist` | yuna에 gist/스니펫 개념 없음 |
+| `gh codespace` | 클라우드 개발 환경 개념 없음(자체호스팅 서버일 뿐) |
+| `gh project`(Projects 칸반보드, "저장소"와 별개 개념) | yuna의 "Project"는 저장소 자체를 가리켜 이름이 겹칠 뿐, GitHub Projects(칸반보드) 같은 별도 기능 없음 |
+| `gh release` | yuna에 릴리즈/태그 배포 개념 없음(전수 확인 — `Release`/`ReleaseController` 0건) |
+| `gh extension` | CLI 플러그인 생태계 — yona-cli 규모상 시기상조, 서버와 무관 |
+| `gh sponsors`류 | GitHub 특유 기능, yuna에 대응 없음 |
+
+`gh watch`(저장소 알림 구독)에 가장 가까운 yuna 기능은 `WatchController`/`WatchService`이지만, `gh` 자체엔
+"watch" 최상위 명령이 없어(웹 UI 전용 기능) 대조 대상에서 제외했다 — 필요하면 (A)에 추가 검토 가능.
+
+이 표의 (A) 항목은 아래 "단계별 작업 계획"의 신규 **Step 8.5**로 구체화했다. 서버 쪽 신규 API가 필요한 항목
+(`gh pr edit`용 PATCH, `gh issue status`용 대시보드 API)은 별도로 표시해뒀다 — CLI 클라이언트 코드만으로
+안 끝나고 yuna 서버(1부)에도 손을 대야 한다.
+
 ## 단계별 작업 계획 (TDD)
 
 ### 1부 — REST API + 토큰 모델
@@ -207,6 +276,18 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 
 7. **Step 7 — CLI 스캐폴딩**: `yona auth login/logout/status`(Personal Access Token 입력·저장, 위 기본 스코프 원칙 적용)
 8. **Step 8 — `yona issue`/`yona pr`/`yona project` 하위 명령**: 1부 API를 감싸는 얇은 HTTP 클라이언트
+8.5. **Step 8.5 — `gh` 명령 체계 정합화**: 위 "CLI `gh` 명령 체계 대조 감사"의 (A) 항목 구현.
+   - **CLI 로컬 기능만으로 되는 것**(서버 변경 불필요): `--json <fields>` 필드선택 전환, `-L/--limit`,
+     `--web`, `--repo` 로컬 git 컨텍스트 자동감지, `yona server list/use`, `yona browse`,
+     `yona completion`(Cobra 기본 제공 등록만), `--version`
+   - **기존 서버 API 연결만 하면 되는 것**: `yona project fork/create/edit/delete`, `yona label
+     list/create/edit/delete`, `yona issue edit/reopen/transfer`, `yona pr checkout/diff/comment`,
+     `yona search issues/prs/projects`, `yona org list/view`, `issue/pr list`의 `--assignee`/
+     `--label`/`--author` 필터
+   - **서버(1부)에 신규 API가 필요한 것**: `gh pr edit` 대응(PR 제목/본문 PATCH — Step5에 없음),
+     `gh issue status` 대응(사용자 대시보드 REST API — 범위 클 수 있어 별도 하위 스텝으로 쪼갤 수 있음),
+     `gh pr close/reopen`(서버에 대응 상태변경 API 존재 여부 착수 전 확인 필요)
+   - **낮은 우선순위**(nice-to-have, 다음 라운드 이후로 미뤄도 무방): `yona config`, `yona alias`
 9. **Step 9 — `yona admin backup/webhook/permission`**: 기존 관리자 API 확인 후 연결(신규 서버 API 필요 시 1부 패턴으로 추가)
 10. **Step 10 — `yona api <method> <path>`**: 저수준 원시 호출 명령(디버깅/스크립팅용)
 11. **Step 11 — 배포**: `goreleaser`로 GitHub Releases + Homebrew tap + Scoop bucket + `.deb`/`.rpm`
@@ -219,6 +300,7 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] 프로젝트 조회/목록 API가 Fine-grained 스코프 토큰으로 완전히 동작함 (3라운드 — Step 6.5)
 - [x] Fine-grained 토큰을 웹 UI에서 발급/조회/폐기할 수 있음 (3라운드 — Step 6.6)
 - [x] Go CLI 본체(`yona auth/issue/pr/project/admin/api`)가 1부 REST API를 감싸는 형태로 구현됨 (4라운드 — Step7~10, 별도 저장소 `yona-cli`)
+- [ ] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (Step 8.5, 다음 라운드 — 위 "CLI `gh` 명령 체계 대조 감사" 참고)
 - [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (다음 라운드로 이월 — 4라운드는 httptest 기반 단위/통합 테스트만 수행)
 - [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (다음 라운드)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
