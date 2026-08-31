@@ -496,10 +496,18 @@ class ProjectViewControllerSpec : DescribeSpec({
             val outsider = User(id = 60L, loginId = "labeloutsider", name = "외부인")
             val outsiderAuth = UsernamePasswordAuthenticationToken("labeloutsider", "password")
 
+            val labelCategory = IssueLabelCategory(id = 1L, name = "카테고리", project = labelProject)
+            val existingLabel = IssueLabel(id = 10L, name = "기존라벨", color = "#ff0000", category = labelCategory, project = labelProject)
+
             beforeTest {
                 every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "LabelProj") } returns Optional.of(labelProject)
                 every { userRepository.findByLoginId("labelmanager") } returns Optional.of(labelManager)
                 every { userRepository.findByLoginId("labeloutsider") } returns Optional.of(outsider)
+                // yona-wiki P3-02 12라운드 — update/deleteLabelForm()이 id(및 category.id)가 project
+                // 소속인지 확인하는 가드를 추가했으므로, 기본값으로 "10번 라벨/1번 카테고리는 이
+                // 프로젝트 소속"이라고 스텁해둔다(교차 프로젝트 가드 테스트는 이 기본값을 덮어쓴다).
+                every { issueLabelService.getLabels(5L) } returns listOf(existingLabel)
+                every { issueLabelService.getCategories(5L) } returns listOf(labelCategory)
             }
 
             describe("POST /{owner}/{projectName}/issue/labels") {
@@ -578,6 +586,21 @@ class ProjectViewControllerSpec : DescribeSpec({
                             .param("_method", "delete")
                     ).andExpect(status().isForbidden)
                 }
+
+                // yona-wiki P3-02 12라운드(실서버+실 CLI로 재현한 실제 버그) — bob이 자기 프로젝트
+                // (bob/repo-b)에 대한 라벨 삭제 권한만으로, URL의 project는 자기 것을 그대로 두고
+                // id만 alice 프로젝트의 라벨 번호로 바꿔 호출해 alice의 라벨을 지울 수 있었다.
+                it("id가 이 프로젝트 소속 라벨이 아니면 404 Not Found를 반환하고 삭제하지 않아야 한다") {
+                    every { issueLabelService.getLabels(5L) } returns emptyList()
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.post("/owner/LabelProj/issue/label/10/delete")
+                            .principal(labelManagerAuth)
+                            .param("_method", "delete")
+                    ).andExpect(status().isNotFound)
+
+                    verify(exactly = 0) { issueLabelService.deleteLabel(any()) }
+                }
             }
 
             describe("PUT /{owner}/{projectName}/issue/label/{id}") {
@@ -596,6 +619,40 @@ class ProjectViewControllerSpec : DescribeSpec({
                     ).andExpect(status().isOk)
 
                     verify(exactly = 1) { issueLabelService.updateLabel(10L, "수정된이름", "#ff0000", 1L) }
+                }
+
+                // yona-wiki P3-02 12라운드 — delete와 동일한 근본원인의 update 버전. id가 이 프로젝트
+                // 소속이 아니면 수정 자체를 거부해야 한다(그렇지 않으면 남의 라벨을 자기 프로젝트
+                // 권한만으로 덮어쓸 수 있다 — 실서버+실 CLI로 재현 확인).
+                it("id가 이 프로젝트 소속 라벨이 아니면 404 Not Found를 반환하고 수정하지 않아야 한다") {
+                    every { issueLabelService.getLabels(5L) } returns emptyList()
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.put("/owner/LabelProj/issue/label/10")
+                            .principal(labelManagerAuth)
+                            .param("name", "해킹된이름")
+                            .param("color", "#000000")
+                            .param("category.id", "1")
+                    ).andExpect(status().isNotFound)
+
+                    verify(exactly = 0) { issueLabelService.updateLabel(any(), any(), any(), any()) }
+                }
+
+                // category.id 쪽 교차 프로젝트 가드 — id는 이 프로젝트 소속이지만 category.id를 다른
+                // 프로젝트의 카테고리 번호로 바꿔치기하면 라벨이 남의 프로젝트 카테고리로 재배정될 수
+                // 있었다.
+                it("category.id가 이 프로젝트 소속 카테고리가 아니면 400 Bad Request를 반환하고 수정하지 않아야 한다") {
+                    every { issueLabelService.getCategories(5L) } returns emptyList()
+
+                    mockMvc.perform(
+                        MockMvcRequestBuilders.put("/owner/LabelProj/issue/label/10")
+                            .principal(labelManagerAuth)
+                            .param("name", "수정된이름")
+                            .param("color", "#ff0000")
+                            .param("category.id", "999")
+                    ).andExpect(status().isBadRequest)
+
+                    verify(exactly = 0) { issueLabelService.updateLabel(any(), any(), any(), any()) }
                 }
             }
 

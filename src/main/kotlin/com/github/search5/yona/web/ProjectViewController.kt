@@ -1043,6 +1043,14 @@ class ProjectViewController(
         if (!accessControl.isAllowed(loginUser, project, ResourceType.ISSUE_LABEL, Operation.DELETE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
+        // yona-wiki P3-02 12라운드 — accessControl.isAllowed()는 URL 경로의 project(owner/projectName)에
+        // 대한 권한만 확인하고, 실제 삭제 대상인 id(라벨 PK)가 그 project 소속인지는 전혀 검증하지
+        // 않았다. 이 때문에 자기 프로젝트에 대한 라벨 삭제 권한만 있으면 URL의 project는 자기 것으로
+        // 두고 id만 다른 프로젝트의 라벨 번호로 바꿔 호출하는 것으로 남의 프로젝트 라벨을 삭제할 수
+        // 있었다(실서버+실 CLI로 재현 확인). id가 project 소속 라벨 목록에 있는지 먼저 확인한다.
+        if (issueLabelService.getLabels(project.id!!).none { it.id == id }) {
+            return ResponseEntity.notFound().build()
+        }
 
         issueLabelService.deleteLabel(id)
         return ResponseEntity.ok().build()
@@ -1066,6 +1074,15 @@ class ProjectViewController(
             ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         if (!accessControl.isAllowed(loginUser, project, ResourceType.ISSUE_LABEL, Operation.UPDATE)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+        // yona-wiki P3-02 12라운드 — deleteLabelForm()과 동일한 근본원인(위 주석 참고). id뿐 아니라
+        // category.id로 넘어온 값도 다른 프로젝트의 카테고리로 바꿔치기하면 라벨이 남의 프로젝트
+        // 카테고리로 재배정될 수 있어 둘 다 project 소속인지 확인한다.
+        if (issueLabelService.getLabels(project.id!!).none { it.id == id }) {
+            return ResponseEntity.notFound().build()
+        }
+        if (issueLabelService.getCategories(project.id!!).none { it.id == categoryId }) {
+            return ResponseEntity.badRequest().body("category.id가 이 프로젝트에 속하지 않습니다.")
         }
 
         issueLabelService.updateLabel(id, name, color, categoryId)
