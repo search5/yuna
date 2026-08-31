@@ -1324,7 +1324,13 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { projectRepository.findById(1L) } returns Optional.of(project)
             every { projectRepository.delete(project) } returns Unit
 
+            // TASK-0421(버그9) — 물리 git 저장소도 함께 삭제돼야 한다(changeVCS()와 동일한 패턴).
+            val repo = mockk<PlayRepository>(relaxed = true)
+            every { repositoryService.getRepository(project) } returns repo
+
             projectService.deleteProject(1L)
+
+            verify(exactly = 1) { repo.delete() }
 
             verify(exactly = 1) { projectTransferRepository.deleteAll(listOf(transfer)) }
             verify(exactly = 1) { commentThreadRepository.deleteAll(listOf(thread)) }
@@ -1381,6 +1387,10 @@ class ProjectServiceImplSpec : DescribeSpec({
 
             every { projectRepository.findById(1L) } returns Optional.of(project)
             every { projectRepository.delete(project) } returns Unit
+
+            // TASK-0421(버그9) — 물리 git 저장소도 함께 삭제돼야 한다(fork 자식의 저장소는 건드리지
+            // 않는다 — 이 프로젝트 것만 조회되도록 project로만 스텁한다).
+            every { repositoryService.getRepository(project) } returns mockk<PlayRepository>(relaxed = true)
 
             projectService.deleteProject(1L)
 

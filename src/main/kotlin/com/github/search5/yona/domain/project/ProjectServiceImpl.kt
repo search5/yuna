@@ -254,6 +254,20 @@ class ProjectServiceImpl(
         // yona models/resource/ResourcePersistAdapter.java postDelete() 대응 (P1-147).
         watchService.deleteAll(ResourceType.PROJECT, projectId.toString())
 
+        // TASK-0421(P3-02 11라운드, 버그9) — DB Project 행만 지우고 물리 bare 저장소 디렉터리
+        // ({git|svn}.base-dir/{owner}/{name}.git)를 그대로 남겨두면, 같은 owner/name으로 재생성하거나
+        // (createProject의 repositoryService.getRepository(project).create()) 그 이름으로 새로 fork를
+        // 시도할 때(forkProject의 cloneHardLinkedRepository -> Files.createLink) 이미 존재하는
+        // 디렉터리/파일과 충돌해 FileAlreadyExistsException이 그대로 500으로 튄다(우아한 4xx 거절이
+        // 아님). changeVCS()가 VCS 전환 시 이미 이 패턴(getRepository(project).delete() 후 재생성)을
+        // 쓰고 있어 동일하게 맞춘다 — 물리 저장소가 이미 없거나 삭제 중 오류가 나도(예: 권한 문제)
+        // DB 정리 자체는 막지 않는다.
+        try {
+            repositoryService.getRepository(project).delete()
+        } catch (e: Exception) {
+            // 물리 저장소 삭제 실패는 DB 삭제를 막지 않는다(changeVCS()와 동일한 방어적 처리).
+        }
+
         projectRepository.delete(project)
     }
 
