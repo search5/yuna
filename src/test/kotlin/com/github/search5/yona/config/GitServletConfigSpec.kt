@@ -248,5 +248,33 @@ class GitServletConfigSpec : DescribeSpec({
 
             gitBaseDir.deleteRecursively()
         }
+
+        // yona-wiki P3-02 12라운드(2026-09-01) 회귀 방지 — ".git" 접미어가 없는 name으로 호출해도
+        // 접미어가 있는 name과 동일한 디렉터리로 resolve돼야 한다(실제 bare 저장소는 항상
+        // "owner/name.git"로 생성되므로, 여기서만 접미어를 안 붙이면 존재하지 않는 경로를 가리키게
+        // 된다 — 실서버+실 git push 바이너리로 재현한 실제 버그, 상세 경위는
+        // GitSmartHttpProtocolIntegrationSpec 참고).
+        it("저장소 리졸버 람다 - name에 \".git\" 접미어가 없어도 접미어를 붙인 것과 같은 경로로 resolve해야 한다") {
+            val lambda = GitServletConfig::class.java.getDeclaredMethod(
+                "gitServletRegistrationBean\$lambda\$0\$0",
+                File::class.java, HttpServletRequest::class.java, String::class.java
+            )
+            lambda.isAccessible = true
+
+            val gitBaseDir = File.createTempFile("resolver-base-nosuffix", "").apply { delete(); mkdirs() }
+            val req = mockk<HttpServletRequest>(relaxed = true)
+
+            val repoWithSuffix = lambda.invoke(null, gitBaseDir, req, "owner/some-repo.git") as Repository
+            val resolvedWithSuffix = repoWithSuffix.directory
+            repoWithSuffix.close()
+
+            val repoWithoutSuffix = lambda.invoke(null, gitBaseDir, req, "owner/some-repo") as Repository
+            val resolvedWithoutSuffix = repoWithoutSuffix.directory
+            repoWithoutSuffix.close()
+
+            resolvedWithoutSuffix shouldBe resolvedWithSuffix
+
+            gitBaseDir.deleteRecursively()
+        }
     }
 })

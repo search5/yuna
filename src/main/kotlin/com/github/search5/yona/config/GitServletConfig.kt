@@ -62,7 +62,19 @@ class GitServletConfig(
 
         val gitServlet = GitServlet().apply {
             setRepositoryResolver { _, name ->
-                val repoFile = File(gitBaseDir, name)
+                // yona-wiki P3-02 12라운드(2026-09-01) — 이 코드베이스 전역에서 물리 bare 저장소는
+                // 항상 "owner/name.git"로 생성된다(GitServiceImpl.createRepository(),
+                // GitRepository.create() 등). 그런데 이 리졸버는 JGit이 URL에서 파싱해 넘겨주는
+                // name을 가공 없이 그대로 파일 경로로 썼다 — 클라이언트가 ".git" 접미어 없이
+                // clone/push URL을 쓰면(예: "git clone http://host/git/owner/repo", GitHub 등에서
+                // 흔한 축약 표기) 존재하지 않는 "owner/repo" 경로로 잘못 resolve됐다. clone(읽기)은
+                // 존재하지 않는 저장소를 빈 저장소처럼 조용히 취급해 성공한 것처럼 보이지만, push
+                // (쓰기)는 ObjectDirectoryPackParser.parse()가 그 존재하지 않는 objects
+                // 디렉터리에 임시 팩 파일을 만들려다 IOException을 던져 "unpacker error"로
+                // 거절됐다(실서버+실 git 바이너리로 재현, GitSmartHttpProtocolIntegrationSpec에
+                // 회귀 테스트 고정). ".git" 접미어를 정규화해 항상 같은 경로로 resolve한다.
+                val normalizedName = if (name.endsWith(".git")) name else "$name.git"
+                val repoFile = File(gitBaseDir, normalizedName)
                 val builder = FileRepositoryBuilder()
                 builder.setGitDir(repoFile).build()
             }
