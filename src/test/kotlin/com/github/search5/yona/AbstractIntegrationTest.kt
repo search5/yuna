@@ -34,16 +34,32 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
         private val selectedDb = System.getProperty(DB_PROPERTY, "mariadb")
 
         // h2는 Testcontainers를 쓰지 않으므로(임베디드 DB, 도커 불필요) container가 없다.
+        //
+        // 전 컨테이너에 .withReuse(true)를 붙여 로컬 개발 시 반복 실행 속도를 크게 개선한다 —
+        // CUBRID는 특히 컨테이너 부팅(로케일 설정 등) 자체가 느려 매번 새로 띄우면 실행마다
+        // 수 분이 그냥 낭비된다. reuse는 Testcontainers 전역 스위치
+        // (~/.testcontainers.properties의 testcontainers.reuse.enable=true)가 켜져 있어야만
+        // 실제로 동작하는 opt-in 메커니즘이라, 그 파일이 없는 CI 환경에서는 이 플래그가 있어도
+        // 자동으로 무시되고 기존과 동일하게 매번 새 컨테이너를 띄운다(안전) — 로컬 전용 최적화다.
+        // 단, 테스트 프로파일의 ddl-auto=create-drop은 그대로 유지되므로(스키마 정합성 검증이
+        // CI에서 여전히 필요) 컨테이너 자체의 기동 비용만 절약되고, 매 실행마다 스키마를 새로
+        // 만드는 비용은 재사용 여부와 무관하게 남는다.
+        //
+        // 주의: 컨테이너가 재사용되면 이전 실행이 남긴 데이터가 계속 쌓인다 — 각 Spec의
+        // beforeEach/afterSpec에서 deleteAll()로 정리하는 기존 관례를 지키지 않은 스펙이 있으면
+        // 로컬에서만 재현되는 새로운 실패가 날 수 있다.
         private val container: JdbcDatabaseContainer<*>? = when (selectedDb) {
             "h2" -> null
             "postgres" -> PostgreSQLContainer("postgres:16")
                 .withDatabaseName("yona")
                 .withUsername("yona")
                 .withPassword("yona_password")
+                .withReuse(true)
             "mysql" -> MySQLContainer("mysql:8.4")
                 .withDatabaseName("yona")
                 .withUsername("yona")
                 .withPassword("yona_password")
+                .withReuse(true)
             // SQL Server 공식 이미지는 고정 계정(sa)/DB(master)만 지원해 withDatabaseName이 없다.
             // sendStringParametersAsUnicode=true가 없으면(mssql-jdbc 기본값은 false) 문자열
             // 파라미터가 클라이언트 쪽에서 비유니코드로 좁혀져 전송돼, varchar 컬럼과 LIKE 비교 시
@@ -52,6 +68,7 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
             "mssql" -> KMSSQLServerContainer("mcr.microsoft.com/mssql/server:2022-latest")
                 .acceptLicense()
                 .withUrlParam("sendStringParametersAsUnicode", "true")
+                .withReuse(true)
             // CUBRID 공식 Testcontainers 모듈(org.cubrid:testcontainers-cubrid, CUBRID사 직접 관리).
             // 공식 도커 이미지(cubrid/cubrid-docker)의 CUBRID_LOCALE 기본값이 "en_US"(UTF-8이
             // 아님)라 한글 등 비ASCII 문자열이 깨져서 저장된다(실측 확인 — "홍길동"이 다른
@@ -63,10 +80,12 @@ abstract class AbstractIntegrationTest : DescribeSpec() {
                 .withPassword("yona_password")
                 .withUrlParam("charSet", "utf-8")
                 .withEnv("CUBRID_LOCALE", "en_US.utf8")
+                .withReuse(true)
             else -> MariaDBContainer("mariadb:10.11")
                 .withDatabaseName("yona")
                 .withUsername("yona")
                 .withPassword("yona_password")
+                .withReuse(true)
         }
 
         init {
