@@ -337,7 +337,7 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (6라운드 + 직후 보완 — 아래 완료 로그 참고. `yona config`/`yona alias`는 낮은 우선순위 항목이라 다음 라운드 이후로 이월)
 - [x] Step8.6 백로그 4개 항목(admin webhook/permission 목록 API, `gh issue status` 필터/페이지네이션 전체, `yona search prs`, PR 라벨/담당자) 전부 해소 (7라운드 — 아래 완료 로그 참고. PR 라벨/담당자의 웹 UI만 명시적으로 범위 밖, 다음 라운드 이후로 이월)
 - [x] Step8.7 백로그 2개 항목(`LabelRestApiController` list vs create/update/delete 엔티티 불일치 버그, PR 라벨/담당자 웹 UI) 전부 해소 (8라운드 — 아래 완료 로그 참고. PR 목록 생성/수정 폼까지는 범위 밖으로 유지, 상세 화면+목록 화면 표시까지만)
-- [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (2026-09-01 사용자 지시로 보류 — httptest 기반 단위/통합 테스트로 대체된 상태를 잠정 인정하고, 재개 시점은 별도 지시로 결정)
+- [x] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (9라운드, 2026-09-01 — 아래 완료 로그 참고. 실제 서버로 부트스트랩 관리자 생성 → 로그인 → 프로젝트 생성 → 토큰 발급 → `yona auth login` → `yona issue create/list` → `yona pr create/list`까지 전부 성공 확인. 검증 과정에서 순환 직렬화 심각 버그를 발견·수정함)
 - [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (2026-09-01 사용자 지시로 보류 — 아직 외부 배포 대상 사용자가 없어 실제로 필요해지는 시점까지 미룸)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
 
@@ -946,6 +946,99 @@ yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤
   `CodeBrowserListWrapRenderingSpec` 3개, 코드 브라우저 CSS 렌더링, 이번 라운드가 전혀 손대지
   않은 영역)뿐 — 신규 실패 없음, 회귀 아님.
 
+### 9라운드 (2026-09-01) — Step8.7 3번(최우선, 실제 버그) 순환 직렬화 수정 + 골든패스 수동검증
+
+실서버(H2 프로파일)로 부트스트랩 관리자 생성 → 로그인 → 프로젝트 생성 → Fine-grained 토큰
+발급까지는 정상 동작했으나, **이슈 생성**(`POST /api/v1/projects/{owner}/{project}/issues`)에서
+yona-cli가 "JSON을 해석할 수 없습니다: invalid character ']'"로 실패했다. curl로 원본 응답을
+직접 확인한 결과 60KB가 넘는, 깨진 채로 끊긴 JSON이었다.
+
+- **재현(RED)**: mockk로 서비스 계층을 목킹한 기존 `*RestApiControllerSpec.kt`들은 순환이 실제로
+  발생할 연관관계 그래프가 없어 이 버그를 잡지 못했다는 게 확인된 사실이라, `AbstractIntegrationTest`
+  (실제 DB) + `MockMvc`(`webAppContextSetup`, 실제 Jackson `HttpMessageConverter`)로 실제
+  `User`/`Project`/`ProjectUser`/`Issue`/`PullRequest` 엔티티 그래프를 직렬화해 재현하는 신규
+  `IssueAndPullRequestCircularSerializationIntegrationSpec`(5케이스: 이슈 단건/목록, PR 단건/목록,
+  검색 프로젝트)를 먼저 작성했다. 수정 전 5케이스 전부 `JsonParseException`으로 실패함을 확인(RED).
+- **근본 원인**: `IssueRestApiController`/`PullRequestApiController`/`SearchRestApiController`가
+  위임 대상(`IssueController`/`PullRequestController`/`SearchService`)이 돌려주는
+  `Issue`/`PullRequest`/`Project` 엔티티를 가공 없이 그대로 반환한다. `Issue.project`/
+  `PullRequest.toProject`/`fromProject`(모두 `@ManyToOne`)가 각각 `Project.projectUsers`
+  (`@OneToMany mappedBy="project"`)로 이어지고, 그 `ProjectUser.user`(`@ManyToOne`)가 다시
+  `User.projectUsers`(`@OneToMany mappedBy="user"`)로 돌아오는 완전한 순환이다.
+  `spring.jpa.open-in-view`가 기본 true(명시적 설정 없음)라 응답 직렬화 시점까지 Hibernate
+  세션이 열려있어 이 lazy 컬렉션들이 실제로 초기화되며 무한 재귀에 빠진다(Jackson은 일반 POJO의
+  참조 사이클을 자동 감지하지 않는다) — StackOverflowError가 나기 전까지 이미 스트리밍된
+  수만 바이트가 그대로 응답으로 나가버려 "60KB 넘는 깨진 JSON"이라는 증상과 정확히 들어맞는다.
+- **수정**: `ProjectRestApiController.toProjectNode()`가 이미 쓰고 있던 "엔티티 대신 응답 전용
+  모델을 반환" 패턴을 그대로 따라 신규 `web/RestApiResponseDto.kt`를 추가했다 —
+  `IssueResponse`/`IssueCommentResponse`/`PullRequestResponse`/`PullRequestMergeResultResponse`/
+  `ReviewCommentResponse`/`GitCommitResponse`/`PullRequestCommitResponse`와, 이들 안에 중첩되는
+  `UserRefResponse`(id/loginId/name만)/`AssigneeResponse`/`IssueLabelResponse`/
+  `ProjectRefResponse`(id/owner/name/overview/vcs/scope만, `ProjectRestApiController`와 동일
+  필드). `User`/`Project` 엔티티를 통째로 중첩하는 지점(작성자/담당자/리뷰어/받는사람/from·to
+  프로젝트)은 전부 이 최소 참조 DTO로 대체했다. 필드명은 yona-cli(`internal/api/issue.go`,
+  `pr.go`, `cmd/issue.go`, `cmd/pr.go`)가 실제로 읽는 키(number/title/state/body/fromBranch/
+  toBranch/createdDate 등 기존 필드 + Step7~8의 assignee/labels)와 정확히 동일한 camelCase를
+  유지했다(CLI가 `map[string]interface{}`로 느슨하게 파싱하므로 필드명만 일치하면 CLI 코드 변경
+  불필요 — 실제로 변경하지 않았다).
+  - `IssueRestApiController`/`PullRequestApiController`는 위임 대상 메서드가 반환하는
+    `ResponseEntity<Issue>`/`ResponseEntity<PullRequest>` 등을 그대로 넘기는 대신, 컨트롤러
+    경계에서 `mapBody { it.toResponse() }` 확장 함수로 감싸 응답 상태 코드는 그대로 유지한 채
+    본문만 DTO로 바꿔 반환한다 — 기존 `IssueController`/`PullRequestController`(웹 프런트엔드
+    전용, `/api/projects/{projectId}/...`)는 건드리지 않아 그쪽 동작은 완전히 보존했다.
+  - `SearchRestApiController.searchIssues/searchProjects/searchPullRequests`도 `Page<T>.map { }`로
+    동일하게 DTO 변환.
+  - **PR 머지 결과의 부가 발견(별개 잠재 버그)**: `PullRequestMergeResult.conflicts()`는 Kotlin
+    에서 `get`/`is` 접두사가 없는 일반 메서드라 Jackson 빈 컨벤션상 프로퍼티로 노출되지 않는다 —
+    DTO로 바꾸지 않았다면 yona-cli `cmd/pr.go`의 `newPRMergeCmd()`가 `result["conflicts"]`를
+    영원히 못 찾아 충돌 여부를 감지하지 못했을 것(순환 직렬화와 무관한 별개의 잠재 버그). DTO에
+    `conflicts: Boolean` 필드를 명시적으로 채워 함께 해소했다.
+  - **점검 결과 문제 없음으로 확인된 지점**: `.../labels`(`LabelRestApiController` → `ProjectViewController.
+    getIssueLabelsForRestApi()`), `.../webhooks`(`WebhookRestApiController` → `WebhookController.
+    listWebhooksJson()`)는 이미 `Map<String, Any?>` 기반으로 직접 조립해 반환하고 있어 순환
+    직렬화 문제 자체가 없다 — 코드 검토뿐 아니라 실서버에 실제 라벨/웹훅을 만들어 curl로 직접
+    재검증했다(아래 골든패스 로그 참고). `.../pull-requests/{number}/diff`(`FileDiff`)는 JPA
+    엔티티가 아니라 JGit 값 객체라 User/Project 연관관계 자체가 없어 대상 밖으로 확인.
+- **GREEN 확인**: RED로 작성한 5케이스 전부 통과. 기존 `IssueRestApiControllerSpec`/
+  `PullRequestApiControllerSpec`/`SearchRestApiControllerSpec`(mockk 기반)과
+  `web`/`config` 패키지 전체(인가 스코프 회귀 포함) 재실행해 회귀 없음 확인.
+- **실서버 골든패스 수동검증**(H2 프로파일, `-Dspring.profiles.active=h2`, `server.port=18080`):
+  1. `POST /bootstrap-setup`으로 관리자(`admin`) 생성 → `POST /users/login`
+     (`loginIdOrEmail`/`password`)으로 세션 로그인 → `POST /projectform`으로 `admin/demo-repo`
+     프로젝트 생성 → `POST /user/editform/tokens`로 Fine-grained 토큰(ISSUES/PULL_REQUESTS/CODE
+     WRITE) 발급, `yona_pat_` 프리픽스 토큰 문자열 확보(TASK-0388 반영 확인).
+  2. `yona auth login --token <token>` 성공 → `yona issue create -R admin/demo-repo --title
+     "골든패스 테스트 이슈" --body ...` → `이슈 #1 생성됨` 출력, `yona issue list`에서 `#1 OPEN
+     골든패스 테스트 이슈` 정상 표시. curl로 원본 응답 재확인 시 475바이트의 유효한 JSON
+     (수정 전 60KB+ 깨진 JSON과 대비).
+  3. `yona pr create -R admin/demo-repo --title "골든패스 테스트 PR" --from admin/demo-repo
+     --from-branch feature --to-branch main` → `풀 리퀘스트 #1 생성됨` → `yona pr list`에서
+     `#1 OPEN 골든패스 테스트 PR` 정상 표시. curl 원본 응답 658바이트, `fromProject.owner`/
+     `fromProject.name`이 정확히 채워져 있음을 확인(`yona pr checkout`의 `planCheckout()`이
+     이 필드에 의존).
+  4. 추가 검증: `yona search projects demo` → `admin/demo-repo` 정상 표시.
+     `GET /api/v1/search/issues?q=...`/`GET /api/v1/search/projects?q=...` 원본 응답 모두 유효한
+     JSON(각 791/431바이트). `yona label create`/`yona label list`로 라벨 CRUD 정상 동작(431바이트
+     응답). 웹 UI로 웹훅 생성 후 `GET /api/v1/projects/admin/demo-repo/webhooks` 원본 응답
+     147바이트 유효 JSON. `yona pr diff`(빈 diff, 정상), `POST .../pull-requests/1/merge`는
+     `TransportException: Remote does not have feature available for fetch`로 500 — 이 프로젝트가
+     실제 git 커밋 없이 만든 저장소라 발생하는 기존 `PullRequestServiceImpl.merge()`의 git
+     트랜스포트 레벨 동작이고(스택트레이스 확인, DTO 변환 코드에 도달하기 전에 예외 발생) 이번
+     버그와 무관 — 골든패스 필수 검증 범위(로그인→이슈 생성→PR 목록 조회)에도 포함되지 않아
+     추가 조치 없이 기록만 남긴다.
+  5. 검증 후 서버 프로세스 종료, golden-path 전용 H2 데이터 디렉터리(`data/h2-goldenpath/`,
+     gitignore 대상) 삭제.
+- **전체 스위트**: `./gradlew test` 5789개 중 4개 실패(`IssueServiceImplSpec`/`IssueServiceSpec`
+  각 2케이스) — 두 스펙 모두 단독 실행하면 GREEN임을 확인했고, 8라운드 로그도 매 라운드 서로 다른
+  무관한 스펙(`CodeSwallowedStyleRenderingSpec` 등)이 전체 스위트에서만 실패하는 동일한 패턴을
+  기록해왔다 — `AbstractIntegrationTest`가 같은 forked 테스트 JVM 안의 스펙끼리 H2 인메모리 DB를
+  공유하는 구조적 특성상의 사전 존재 플레이키니스이지, 이번 라운드가 만든 회귀가 아니다(이번 라운드
+  변경분은 `Role`/`ProjectUser`/`OrganizationUser` 저장 로직을 전혀 건드리지 않았다).
+- **신규/수정 파일**: 신규 `web/RestApiResponseDto.kt`, 신규
+  `web/IssueAndPullRequestCircularSerializationIntegrationSpec.kt`(+5), 수정
+  `web/IssueRestApiController.kt`/`web/PullRequestApiController.kt`/`web/SearchRestApiController.kt`
+  (엔티티 반환 → DTO 반환으로 전환, 신규 서비스 로직 없음).
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
@@ -961,6 +1054,7 @@ yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤
 | PR에 라벨/담당자 개념 없음 | `PullRequest.kt`에 `labels`/`assignee` 필드가 없어(Issue엔 있음) `pr list --label/--assignee`를 지원할 수 없었다. 레거시 Play `yona`에도 원래 없던 개념인지 확인 필요했다 | **7라운드에서 해소** — 레거시 조사 결과 원래부터 없던 개념(포팅 누락 아님)임을 확정한 뒤, `Assignee`(재사용)/`IssueLabel`(재사용, 신규 조인테이블 `pull_request_issue_label`)로 백엔드 엔티티+서비스+REST API+list 필터 전체 구현. 웹 UI만 범위 밖으로 이월. 상세는 아래 "7라운드" 로그 참고 |
 | `LabelRestApiController` list vs create/update/delete 엔티티 불일치(실제 버그) | `list()`는 `ProjectController.getProjectLabels()`(`domain/project/Label`, 프로젝트 홈 화면 토픽 태그)를 반환하는데 `create/update/delete`는 `domain/issue/IssueLabel`을 다뤄, `yona label create`로 만든 라벨이 `yona label list`엔 절대 보이지 않았다(TASK-0397부터 있던 버그) | **8라운드에서 해소** — `list()`의 위임 대상을 `ProjectViewController.getIssueLabelsForRestApi()`(신설, `IssueLabelService.getLabels()` 기반)로 교체해 create/update/delete와 엔티티를 통일했다. `ProjectController.getProjectLabels()`/`domain/project/Label` 자체는 `project/home.html`의 토픽 태그(`sURLProjectLabels`)가 여전히 실사용 중이라 그대로 유지. 상세는 아래 "8라운드" 로그 참고 |
 | PR 라벨/담당자 웹 UI 부재 | 7라운드가 백엔드(엔티티/서비스/REST API/list 필터)는 완료했지만 Thymeleaf 화면(`pullrequest/view.html`, `partial_list.html`)은 명시적으로 범위 밖에 뒀다 | **8라운드에서 해소** — PR 상세 화면에 담당자 선택 `<select>`(Issue 마일스톤 select와 동일 패턴 재사용, round7의 userId 기반 REST 계약에 맞춤) + 라벨 다중선택(`issue/partial_select_label.html`/`partial_show_selected_label.html` 프래그먼트 100% 재사용)을 추가하고, PR 목록 화면에도 Issue 목록과 동일한 마크업으로 담당자 아바타/라벨 배지(읽기전용)를 추가했다. PR 생성/수정 폼은 범위 밖으로 유지(다음 라운드 이후로 이월). 상세는 아래 "8라운드" 로그 참고 |
+| `IssueRestApiController`/`PullRequestApiController`/`SearchRestApiController`의 순환 직렬화(실제 버그, 심각도 높음) | 세 컨트롤러가 JPA 엔티티(`Issue`/`PullRequest`/`Project`)를 가공 없이 그대로 반환하는데, `User.projectUsers`(`@OneToMany mappedBy="user"`) ↔ `ProjectUser.user`(`@ManyToOne`)가 양방향 연관관계라 Jackson이 무한 순환 직렬화한다 — 실서버 골든패스 수동검증 중 `POST .../issues`가 60KB 넘는 깨진 JSON을 반환하는 것으로 처음 발견(`spring.jpa.open-in-view` 기본 true라 응답 작성 시점까지 세션이 열려있어 lazy 컬렉션이 실제로 초기화되며 재현). mockk로 서비스 계층을 목킹한 기존 `*RestApiControllerSpec.kt`들은 순환이 발생할 실제 연관관계 그래프가 없어 이 버그를 전혀 잡지 못했다 | **9라운드에서 해소** — `ProjectRestApiController`가 이미 쓰던 "엔티티 대신 응답 DTO 반환" 패턴을 `IssueRestApiController`/`PullRequestApiController`/`SearchRestApiController`에도 적용(`web/RestApiResponseDto.kt` 신설). `labels`/`webhooks`/`search/issues` 등 나머지 엔드포인트는 이미 map 기반 DTO를 쓰고 있어 문제가 없음을 실제 데이터로 재검증 완료. 상세는 아래 "9라운드" 로그 참고 |
 
 ## Step 8.6 — 실서버 기능 부재로 미룬 4개 항목 (2026-09-01, 사용자 지시로 백로그화)
 
