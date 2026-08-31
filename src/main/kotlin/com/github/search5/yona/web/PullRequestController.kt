@@ -10,6 +10,7 @@ import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.pullrequest.CodeReviewService
 import com.github.search5.yona.domain.vcs.FileDiff
+import com.github.search5.yona.domain.pullrequest.LackingReviewerException
 import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.PullRequestEvent
 import com.github.search5.yona.domain.pullrequest.PullRequestEventRepository
@@ -201,7 +202,7 @@ class PullRequestController(
         @PathVariable projectId: Long,
         @PathVariable number: Long,
         authentication: Authentication?
-    ): ResponseEntity<PullRequestMergeResult> {
+    ): ResponseEntity<Any> {
         val project = projectRepository.findById(projectId).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
@@ -213,17 +214,43 @@ class PullRequestController(
         val pullRequest = pullRequestService.getPullRequest(projectId, number)
             ?: return ResponseEntity.notFound().build()
 
-        val result = pullRequestService.merge(pullRequest.id!!, user)
-        return ResponseEntity.ok(result)
+        // TASK-0424(P3-02 11라운드) — 이미 MERGED/CLOSED인 PR을 다시 머지하려 하면
+        // PullRequestServiceImpl.merge()가 IllegalArgumentException을, 리뷰어 수가 부족하면
+        // LackingReviewerException을 던진다. 여기서 잡지 않으면 둘 다 컨테이너 기본 500으로
+        // 튀었다(실서버+실 yona-cli로 재현 확인) — 다른 컨트롤러의 기존 관례(badRequest + error
+        // 메시지)와 동일하게 400으로 응답한다.
+        //
+        // TASK-0424 추가 발견(버그8/버그"project edit"와 동일한 근본원인) — 성공 시 raw
+        // PullRequestMergeResult(내부에 raw PullRequest -> contributor: User)를 그대로 반환하면
+        // 이 엔드포인트가 pullrequest/view.html의 머지 버튼이 직접 호출하는 레거시 웹 API임에도
+        // 동일한 순환 직렬화로 password/passwordSalt가 노출된다(실측: curl로 60KB 응답에서
+        // "password" 값 확인). RestApiResponseDto.kt의 PullRequestMergeResult.toResponse()로 감싼다
+        // — PullRequestApiController.merge()는 이제 이 메서드가 이미 변환한 결과를 그대로
+        // 전달하도록 자신의 .mapBody{it.toResponse()} 호출을 제거했다(아래 참고).
+        return try {
+            val result = pullRequestService.merge(pullRequest.id!!, user)
+            ResponseEntity.ok(result.toResponse())
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        } catch (e: LackingReviewerException) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
     }
 
+    // TASK-0424(P3-02 11라운드) — 이미 MERGED된 PR을 close/reopen하려 하면
+    // PullRequestServiceImpl.changeState()가 이제 IllegalArgumentException을 던진다(실서버+실
+    // yona-cli로 "이미 머지된 PR을 close→reopen"을 실측하다가 발견: 가드가 없으면 물리적으로는
+    // 이미 병합 완료된 PR이 CLOSED/OPEN 사이를 오가며 상태만 바뀌었다). 여기서 잡지 않으면 400 대신
+    // 컨테이너 기본 500으로 튄다. 성공 시에도 raw PullRequest 엔티티를 그대로 반환하면 버그8/버그
+    // "project edit"/버그"pr merge"와 동일한 근본원인으로 password/passwordSalt가 노출된다(실측:
+    // curl로 60KB 응답에서 "password" 값 확인) — PullRequest.toResponse()로 감싼다.
     @PostMapping("/{number}/state")
     fun changeState(
         @PathVariable projectId: Long,
         @PathVariable number: Long,
         @RequestParam state: State,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val project = projectRepository.findById(projectId).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
@@ -235,8 +262,12 @@ class PullRequestController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val updated = pullRequestService.changeState(pullRequest.id!!, state, user.loginId)
-        return ResponseEntity.ok(updated)
+        return try {
+            val updated = pullRequestService.changeState(pullRequest.id!!, state, user.loginId)
+            ResponseEntity.ok(updated.toResponse())
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
+        }
     }
 
     // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr diff` 대응. PullRequestViewController.

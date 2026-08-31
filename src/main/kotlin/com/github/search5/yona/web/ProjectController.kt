@@ -113,7 +113,12 @@ class ProjectController(
         } catch (e: IllegalStateException) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("error" to e.message))
         }
-        return ResponseEntity.ok(updated)
+        // TASK-0424(P3-02 11라운드, 버그8과 동일 근본원인의 별도 발생 지점) — 실서버+실 yona-cli로
+        // `project edit`(PATCH .../settings, ProjectRestApiController.updateSettings()가 이 메서드에
+        // 그대로 위임)을 실측하다가 발견: 여기서도 raw Project 엔티티를 그대로 반환해 fork와 동일한
+        // 순환 직렬화 경로로 User.password/passwordSalt가 응답에 수백 번 반복 노출됐다(실측: curl로
+        // 60KB 응답에서 "password" 값 확인). fork와 동일하게 toRefResponse()로 감싼다.
+        return ResponseEntity.ok(updated.toRefResponse())
     }
 
     @DeleteMapping("/api/projects/{projectId}")

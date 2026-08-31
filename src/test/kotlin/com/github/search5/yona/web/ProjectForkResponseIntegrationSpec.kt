@@ -17,9 +17,11 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.security.core.authority.AuthorityUtils
+import org.springframework.http.MediaType
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
 import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -158,6 +160,40 @@ class ProjectForkResponseIntegrationSpec @Autowired constructor(
                 body.length shouldBeLessThan maxSaneResponseLength
                 body shouldNotContain "password"
                 body shouldNotContain "super-secret-hash"
+            }
+        }
+
+        // TASK-0424(P3-02 11라운드, 버그8과 동일 근본원인의 별도 발생 지점) — 실서버+실 yona-cli로
+        // `project edit`를 실측하다가 발견. ProjectController.updateProject()
+        // (PATCH .../settings가 위임하는 대상)도 성공 시 raw Project 엔티티를 그대로 반환해 동일한
+        // 순환 직렬화로 password/passwordSalt가 노출됐다(실측: curl로 60KB 응답에서 "password" 값
+        // 수백 회 반복 확인).
+        describe("PATCH /api/v1/projects/{owner}/{project}/settings") {
+            it("순환 직렬화 없이 작은 JSON으로 응답하고 password/passwordSalt를 노출하지 않아야 한다") {
+                val owner = userRepository.findByLoginId(ownerName).orElseThrow()
+
+                val result = mockMvc.perform(
+                    patch("/api/v1/projects/$ownerName/$projName/settings")
+                        .with(user(userDetails(ownerName, owner.id!!)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(
+                            """{"overview":"수정된 설명","projectScope":"PUBLIC"}"""
+                        )
+                ).andReturn()
+
+                result.response.status shouldBe 200
+                val body = result.response.contentAsString
+
+                objectMapper.readTree(body)
+                body.length shouldBeLessThan maxSaneResponseLength
+                body shouldNotContain "password"
+                body shouldNotContain "passwordSalt"
+                body shouldNotContain "super-secret-hash"
+                body shouldNotContain "projectUsers"
+
+                val node = objectMapper.readTree(body)
+                node.path("owner").asText() shouldBe ownerName
+                node.path("overview").asText() shouldBe "수정된 설명"
             }
         }
     }

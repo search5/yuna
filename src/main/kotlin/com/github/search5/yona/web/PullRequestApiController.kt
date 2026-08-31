@@ -92,7 +92,10 @@ class PullRequestApiController(
     ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.mergePullRequest(found.id!!, number, authentication).mapBody { it.toResponse() }
+        // TASK-0424(P3-02 11라운드) — mergePullRequest()가 이제 성공 시 이미 PullRequestMergeResultResponse로
+        // 변환해서 돌려준다(위 주석 참고, 순환직렬화 보안 수정과 함께 반환 타입이 ResponseEntity<Any>로
+        // 바뀌어 여기서 다시 .toResponse()를 호출할 정적 타입 정보가 없다) — 그대로 전달만 한다.
+        return pullRequestController.mergePullRequest(found.id!!, number, authentication)
     }
 
     // yona-wiki 계획 원문 "리뷰" 대응 — PullRequestService가 제공하는 리뷰 단위는 리뷰어
@@ -194,7 +197,10 @@ class PullRequestApiController(
     ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.changeState(found.id!!, number, State.CLOSED, authentication).mapBody { it.toResponse() }
+        // TASK-0424(P3-02 11라운드) — changeState()가 이제 성공/실패 모두 이미 변환된 본문
+        // (PullRequestResponse 또는 error map)을 담은 ResponseEntity<Any>를 돌려준다 — 위 merge()와
+        // 동일한 이유로 여기서 다시 .mapBody{it.toResponse()}를 호출할 정적 타입 정보가 없다.
+        return pullRequestController.changeState(found.id!!, number, State.CLOSED, authentication)
     }
 
     @PostMapping("/{number}/reopen")
@@ -206,7 +212,7 @@ class PullRequestApiController(
     ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.changeState(found.id!!, number, State.OPEN, authentication).mapBody { it.toResponse() }
+        return pullRequestController.changeState(found.id!!, number, State.OPEN, authentication)
     }
 
     // yona-wiki P3-02 10라운드(TASK-0419) — 위 4라운드 주석("FileDiff는 순환 직렬화 문제가 없어

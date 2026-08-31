@@ -345,6 +345,17 @@ class PullRequestServiceImpl(
         val pullRequest = pullRequestRepository.findById(pullRequestId)
             .orElseThrow { IllegalArgumentException("PullRequest with ID $pullRequestId not found") }
 
+        // TASK-0424(P3-02 11라운드) — 실서버+실 yona-cli로 "이미 MERGED된 PR을 다시 merge"를
+        // 실측하다가 발견: 이 가드가 없으면 매번 새 머지 커밋을 만들어 refs/heads/{toBranch}에
+        // 또 이어붙인다(실측: 동일 PR에 `pr merge`를 두 번 호출하니 대상 브랜치에 병합 커밋이
+        // 중복으로 2개 쌓임). 머지는 OPEN 상태에서만 의미가 있으므로 그 외 상태(MERGED/CLOSED)면
+        // 여기서 즉시 거절한다.
+        if (pullRequest.state != State.OPEN) {
+            throw IllegalArgumentException(
+                "이미 ${pullRequest.state} 상태인 풀 리퀘스트는 머지할 수 없습니다."
+            )
+        }
+
         // 최소 리뷰어 검증 조건 체크
         val project = pullRequest.toProject
         if (project.isUsingReviewerCount) {
@@ -820,6 +831,17 @@ class PullRequestServiceImpl(
         val oldState = pr.state
         if (oldState == state) {
             return pr
+        }
+
+        // TASK-0424(P3-02 11라운드) — 실서버+실 yona-cli로 "이미 MERGED된 PR을 close/reopen"을
+        // 실측하다가 발견: 가드가 없으면 이미 실제 git 커밋까지 병합 완료된 PR이 CLOSED/OPEN을
+        // 오가며 상태만 바뀌어(물리적으로는 여전히 병합된 채로) 화면/CLI에 "OPEN"으로 잘못
+        // 표시된다. MERGED는 이 서비스 안에서 종결 상태다 — 여기로 들어오는 CLOSED/OPEN 전환
+        // 요청(close/reopen 명령이 유일한 호출부, 위 merge()는 이 메서드를 거치지 않고 직접
+        // pullRequestRepository.save()로 MERGED를 반영한다)만 막고, MERGED로의 전환 자체는
+        // (State.MERGED 파라미터로 이 메서드를 호출하는 다른 내부 경로가 있을 수 있어) 막지 않는다.
+        if (oldState == State.MERGED) {
+            throw IllegalArgumentException("이미 머지된 풀 리퀘스트의 상태는 변경할 수 없습니다.")
         }
 
         pr.state = state

@@ -269,6 +269,84 @@ class PullRequestServiceSpec @Autowired constructor(
                 }
             }
 
+            // TASK-0424(P3-02 11라운드) — 실서버+실 yona-cli로 "이미 MERGED된 PR을 다시 merge"를
+            // 실측하다가 발견: 가드가 없으면 merge()를 다시 호출할 때마다 대상 브랜치에 병합
+            // 커밋이 계속 쌓였다(실측: 동일 PR로 `pr merge`를 두 번 호출하니 refs/heads/master에
+            // 병합 커밋이 중복 2개). 이제 OPEN이 아닌 PR에 merge()를 호출하면 예외가 발생하고
+            // 대상 브랜치가 더 이상 움직이지 않아야 한다.
+            it("1-2. 이미 MERGED된 PR을 다시 merge하려 하면 예외가 발생하고 중복 머지 커밋이 생기지 않아야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature", "test3.txt", "source modification", "Update source")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "재머지 방지 테스트 PR",
+                        body = "이미 머지된 PR 재머지 시도",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature",
+                        contributor = contributor,
+                        receiver = receiver,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                pullRequestService.merge(pr.id!!, receiver)
+                val refAfterFirstMerge = Git.open(toBareDir).use { it.repository.resolve("master")!!.name }
+
+                shouldThrow<IllegalArgumentException> {
+                    pullRequestService.merge(pr.id!!, receiver)
+                }
+
+                Git.open(toBareDir).use { git ->
+                    git.repository.resolve("master")!!.name shouldBe refAfterFirstMerge
+                }
+            }
+
+            // TASK-0424(P3-02 11라운드) — 실서버+실 yona-cli로 "이미 MERGED된 PR을 close/reopen"을
+            // 실측하다가 발견: 가드가 없으면 물리적으로는 이미 병합 완료된 PR이 CLOSED/OPEN을
+            // 오가며 상태만 바뀐다(실제로는 되돌릴 수 없는 병합인데도).
+            it("1-3. 이미 MERGED된 PR을 close/reopen하려 하면 예외가 발생해야 한다") {
+                val toBareDir = repositoryService.getRepository(toProject).getDirectory()
+                val fromBareDir = repositoryService.getRepository(fromProject).getDirectory()
+
+                createCommit(toBareDir, "master", "test.txt", "hello common", "Initial commit")
+                syncRepository(toBareDir, fromBareDir, "master")
+                createCommit(fromBareDir, "feature", "test3.txt", "source modification", "Update source")
+
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "머지 후 상태변경 방지 테스트 PR",
+                        body = "이미 머지된 PR 상태변경 시도",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature",
+                        contributor = contributor,
+                        receiver = receiver,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                pullRequestService.merge(pr.id!!, receiver)
+
+                shouldThrow<IllegalArgumentException> {
+                    pullRequestService.changeState(pr.id!!, State.CLOSED, receiver.loginId)
+                }
+                shouldThrow<IllegalArgumentException> {
+                    pullRequestService.changeState(pr.id!!, State.OPEN, receiver.loginId)
+                }
+
+                pullRequestRepository.findById(pr.id!!).orElse(null).state shouldBe State.MERGED
+            }
+
             // yona PullRequestMerger의 refs/yobi/pull/{id}/merged 캐시 재사용 대응 — getMergedTreeIfReusable()가
             // 이전 attemptMerge()가 만든 병합 커밋의 부모 2개가 이번 부모와 동일하면 재계산 없이 그 tree를
             // 재사용하는 분기는, 기존 테스트가 전부 동일 PR에 attemptMerge를 단 한 번만 호출해서 비어 있었다.
