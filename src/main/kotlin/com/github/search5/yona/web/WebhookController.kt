@@ -130,4 +130,40 @@ class WebhookController(
         webhookService.deleteWebhook(id)
         return ResponseEntity.ok().build()
     }
+
+
+    // yona-wiki P3-02 Step8.6 항목1(2026-09-01) — `yona admin webhook list`용 신규 JSON API
+    // (`web/WebhookRestApiController.kt`, `/api/v1/projects/{owner}/{project}/webhooks`)가
+    // 위임하는 대상. 기존 `webhooks()`는 Thymeleaf 뷰 이름을 반환해 JSON 클라이언트가 파싱할 수
+    // 없었다 — 동일한 프로젝트 조회 + 권한 체크(`checkWebhookPermission`, Operation.UPDATE) 로직을
+    // 재사용하되 결과를 JSON으로 직렬화 가능한 형태로 반환한다. secret은 이 화면(`setting_webhook.
+    // html`)에서도 매니저에게 그대로 노출되므로(비어있으면 "NONE") API 응답에서도 동일한 노출
+    // 수준을 유지한다.
+    fun listWebhooksJson(
+        owner: String,
+        projectName: String,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val project = projectRepository.findByOwnerAndNameOrPreviousPlace(owner, projectName).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication)
+        if (!checkWebhookPermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val webhooks = webhookService.findByProject(project.id ?: 0L)
+        return ResponseEntity.ok(webhooks.map { toWebhookNode(it) })
+    }
+
+    private fun toWebhookNode(webhook: com.github.search5.yona.domain.webhook.Webhook): Map<String, Any?> {
+        return mapOf(
+            "id" to webhook.id,
+            "payloadUrl" to webhook.payloadUrl,
+            "secret" to webhook.secret,
+            "gitPush" to webhook.gitPush,
+            "webhookType" to webhook.webhookType.name,
+            "createdAt" to webhook.createdAt.toString()
+        )
+    }
 }

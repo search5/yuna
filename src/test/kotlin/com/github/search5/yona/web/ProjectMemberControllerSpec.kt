@@ -746,4 +746,48 @@ class ProjectMemberControllerSpec : DescribeSpec({
             (body.any { it["name"] == "나에게 할당하기" }) shouldBe true
         }
     }
+
+    // yona-wiki P3-02 Step8.6 항목1(2026-09-01) — `yona admin permission list`용 신규 목록 API.
+    describe("GET /api/projects/{projectId}/members") {
+        val manager = User(id = 300L, loginId = "manager", name = "매니저")
+        val managerAuth = UsernamePasswordAuthenticationToken("manager", "password")
+        val member = User(id = 301L, loginId = "member1", name = "멤버1")
+        val managerRole = Role(id = RoleType.MANAGER.roleType, name = "manager")
+        val memberRole = Role(id = RoleType.MEMBER.roleType, name = "member")
+        val project = Project(id = 50L, name = "proj50", owner = "owner")
+
+        it("프로젝트 매니저는 현재 멤버+역할 목록을 조회할 수 있다") {
+            every { userRepository.findByLoginId("manager") } returns Optional.of(manager)
+            every { projectUserRepository.findByProjectIdAndUserId(50L, 300L) } returns
+                Optional.of(ProjectUser(id = 1L, user = manager, project = project, role = managerRole))
+            every { projectUserRepository.findByProjectId(50L) } returns listOf(
+                ProjectUser(id = 1L, user = manager, project = project, role = managerRole),
+                ProjectUser(id = 2L, user = member, project = project, role = memberRole)
+            )
+
+            val result = mockMvc.perform(get("/api/projects/50/members").principal(managerAuth))
+                .andExpect(status().isOk)
+                .andReturn()
+
+            val body = result.response.contentAsString
+            (body.contains("manager")) shouldBe true
+            (body.contains("member1")) shouldBe true
+        }
+
+        it("프로젝트 매니저가 아닌 로그인 사용자는 403으로 거부된다") {
+            val stranger = User(id = 302L, loginId = "stranger", name = "이방인")
+            val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+
+            every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+            every { projectUserRepository.findByProjectIdAndUserId(50L, 302L) } returns Optional.empty()
+
+            mockMvc.perform(get("/api/projects/50/members").principal(strangerAuth))
+                .andExpect(status().isForbidden)
+        }
+
+        it("비로그인 사용자는 401로 거부된다") {
+            mockMvc.perform(get("/api/projects/50/members"))
+                .andExpect(status().isUnauthorized)
+        }
+    }
 })

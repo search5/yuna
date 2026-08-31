@@ -10,6 +10,7 @@ import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.webhook.Webhook
 import com.github.search5.yona.domain.webhook.WebhookService
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -327,6 +328,45 @@ class WebhookControllerSpec : DescribeSpec({
                     .andExpect(status().isForbidden)
 
                 verify(exactly = 0) { webhookService.deleteWebhook(any()) }
+            }
+        }
+
+        // yona-wiki P3-02 Step8.6 항목1(2026-09-01) — `web/WebhookRestApiController.kt`가 위임하는
+        // JSON 전용 메서드. 기존 webhooks()와 동일한 프로젝트 조회 + 권한 체크를 재사용하지만
+        // Thymeleaf 뷰 대신 JSON 바디를 반환한다.
+        describe("listWebhooksJson") {
+            it("웹훅 목록을 JSON으로 반환한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
+                every { webhookService.findByProject(1L) } returns listOf(webhook)
+
+                val result = webhookController.listWebhooksJson("owner", "test-project", userAuth)
+
+                result.statusCode.value() shouldBe 200
+                @Suppress("UNCHECKED_CAST")
+                val body = result.body as List<Map<String, Any?>>
+                body.size shouldBe 1
+                body[0]["id"] shouldBe 10L
+                body[0]["payloadUrl"] shouldBe "http://localhost:8080/hook"
+            }
+
+            it("존재하지 않는 프로젝트면 404를 반환한다") {
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "nosuch") } returns Optional.empty()
+
+                val result = webhookController.listWebhooksJson("owner", "nosuch", userAuth)
+
+                result.statusCode.value() shouldBe 404
+            }
+
+            it("권한이 없으면 403을 반환한다") {
+                val strangerAuth = UsernamePasswordAuthenticationToken("stranger", "password")
+                val stranger = User(id = 200L, loginId = "stranger", name = "stranger")
+                every { projectRepository.findByOwnerAndNameOrPreviousPlace("owner", "test-project") } returns Optional.of(project)
+                every { userRepository.findByLoginId("stranger") } returns Optional.of(stranger)
+                every { accessControl.isAllowed(stranger, project, Operation.UPDATE) } returns false
+
+                val result = webhookController.listWebhooksJson("owner", "test-project", strangerAuth)
+
+                result.statusCode.value() shouldBe 403
             }
         }
     }

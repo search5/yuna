@@ -179,6 +179,10 @@ class ApiTokenAuthenticationFilter(
         // 맞춘다 - 필터가 부여하는 스코프와 컨트롤러가 실제로 요구하는 AccessControl 권한이 같은
         // 그룹이어야 "스코프는 통과했는데 컨트롤러가 거부"/그 반대의 불일치가 없다. fork는
         // ResourceType.FORK(CODE 그룹) - 저장소 코드를 복제하는 행위라 CODE 스코프가 자연스럽다.
+        // yona-wiki P3-02 Step8.6 항목1(2026-09-01) — "permissions" 세그먼트 추가.
+        // ProjectPermissionRestApiController가 위임하는 ProjectMemberController.listMembers()가
+        // 프로젝트 매니저 권한을 요구하므로 "settings"와 동일하게 ResourceType.PROJECT_SETTING
+        // (ADMINISTRATION 그룹)으로 맞춘다.
         private val resourceSegmentToResourceType: Map<String, ResourceType?> = mapOf(
             "issues" to ResourceType.ISSUE_POST,
             "pull-requests" to ResourceType.PULL_REQUEST,
@@ -189,7 +193,8 @@ class ApiTokenAuthenticationFilter(
             "settings" to ResourceType.PROJECT_SETTING,
             "metadata" to null,
             "labels" to ResourceType.ISSUE_LABEL,
-            "fork" to ResourceType.FORK
+            "fork" to ResourceType.FORK,
+            "permissions" to ResourceType.PROJECT_SETTING
         )
 
         private fun parseScopedApiTarget(requestUri: String?): ScopedApiTarget? {

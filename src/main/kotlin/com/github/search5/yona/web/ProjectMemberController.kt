@@ -165,6 +165,38 @@ class ProjectMemberController(
         }
     }
 
+
+    // yona-wiki P3-02 Step8.6 항목1(2026-09-01) — `yona admin permission list`용 신규 JSON API
+    // (`web/ProjectPermissionRestApiController.kt`, `/api/v1/projects/{owner}/{project}/permissions`)가
+    // 위임하는 대상. 이 컨트롤러엔 멤버 추가/역할변경/삭제만 있고 "현재 멤버+역할 목록" 자체를
+    // 내려주는 엔드포인트가 없었다(가장 가까운 `assignableUsers`는 배정 후보 목록이지 이미 배정된
+    // 권한 매트릭스가 아니다) — 4라운드 완료 로그가 이 갭을 그대로 기록해뒀다.
+    @GetMapping("/members")
+    fun listMembers(
+        @PathVariable projectId: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Any> {
+        val currentUserId = try {
+            getLoginUserId(authentication)
+        } catch (e: IllegalArgumentException) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        }
+        if (!isProjectManager(projectId, currentUserId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val members = projectUserRepository.findByProjectId(projectId).map { projectUser ->
+            mapOf(
+                "userId" to projectUser.user.id,
+                "loginId" to projectUser.user.loginId,
+                "name" to projectUser.user.getDisplayName(),
+                "roleId" to projectUser.role.id,
+                "roleName" to projectUser.role.name
+            )
+        }
+        return ResponseEntity.ok(members)
+    }
+
     @GetMapping("/assignableUsers")
     fun assignableUsers(
         @PathVariable projectId: Long,
