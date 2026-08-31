@@ -336,6 +336,7 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] 서버(1부)가 Step8.5의 "기존 서버 API 연결"/"신규 API 필요" 두 그룹을 커버함 — project fork/create/edit/delete, label CRUD, issue reopen/transfer, PR edit/close/reopen/diff/comment, issue/pr list 필터, search issues/projects, org list/view, 사용자 이슈 대시보드 최소 버전 (5라운드 — 아래 완료 로그 참고. `yona search prs`는 서버에 대응 SearchType이 없어 이월)
 - [x] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (6라운드 + 직후 보완 — 아래 완료 로그 참고. `yona config`/`yona alias`는 낮은 우선순위 항목이라 다음 라운드 이후로 이월)
 - [x] Step8.6 백로그 4개 항목(admin webhook/permission 목록 API, `gh issue status` 필터/페이지네이션 전체, `yona search prs`, PR 라벨/담당자) 전부 해소 (7라운드 — 아래 완료 로그 참고. PR 라벨/담당자의 웹 UI만 명시적으로 범위 밖, 다음 라운드 이후로 이월)
+- [x] Step8.7 백로그 2개 항목(`LabelRestApiController` list vs create/update/delete 엔티티 불일치 버그, PR 라벨/담당자 웹 UI) 전부 해소 (8라운드 — 아래 완료 로그 참고. PR 목록 생성/수정 폼까지는 범위 밖으로 유지, 상세 화면+목록 화면 표시까지만)
 - [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (다음 라운드로 이월 — 4라운드는 httptest 기반 단위/통합 테스트만 수행)
 - [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (다음 라운드)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
@@ -851,6 +852,100 @@ yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤
   브라우저 CSS 렌더링, 이번 라운드가 전혀 손대지 않은 영역)뿐 — 회귀 아님. 상세는 이 라운드의
   커밋 메시지 참고.
 
+### 8라운드 (2026-09-01) — Step8.7 백로그 2개 항목 전부 해소
+
+착수 전 이 문서의 "Step 8.7" 절 전체와 7라운드 완료 로그(PR 라벨/담당자 백엔드 구현 상세 —
+`PullRequest.kt`, `PullRequestService(Impl).kt`, `PullRequestApiController.kt`,
+`PullRequestController.kt`, 신규 조인테이블 `pull_request_issue_label`)를 재확인한 뒤, 지시된
+우선순위 순서(1→2) 그대로 진행했다.
+
+- **항목1(최우선, 실제 버그) — `LabelRestApiController` list vs create/update/delete 엔티티
+  불일치 수정**:
+  - `web/LabelRestApiController.kt`, `web/ProjectController.kt`(`getProjectLabels()`),
+    `web/ProjectViewController.kt`(`newLabel()`/`updateLabelForm()`/`deleteLabelForm()`),
+    `domain/project/ProjectServiceImpl.kt`(`getProjectLabels()` → `Set<Label>`),
+    `domain/issue/IssueLabel.kt`/`IssueLabelRepository.kt`를 코드로 대조해 재확인 — `IssueLabel`을
+    프로젝트 기준으로 조회하는 리포지토리 메서드(`IssueLabelRepository.findByProject(project):
+    List<IssueLabel>`)와 서비스 메서드(`IssueLabelService.getLabels(projectId):
+    List<IssueLabel>`)가 **이미 존재**해 신설이 불필요했다.
+  - 먼저 실패 테스트(RED)를 실제 REST 엔드포인트 end-to-end로 작성했다 — 신규
+    `LabelRestApiControllerIntegrationSpec`(1케이스, POST로 라벨 생성 후 GET 목록 조회 시 방금
+    만든 라벨이 안 보임을 실제로 재현·확인).
+  - `ProjectViewController`에 `getIssueLabelsForRestApi(owner, projectName, authentication)`
+    신설(`ProjectController.getProjectLabels()`의 `checkReadPermission`과 동일한
+    `accessControl.isAllowed(user, project, Operation.READ)` 게이트 + `IssueLabelService.
+    getLabels()` 조회, 응답 필드를 `create()`가 반환하는 형태(id/name/color/category/categoryId)와
+    맞춤 — `/home/jiho/yona-convert/yona-cli/internal/api/label.go`의 `ListLabels()`가 `id`/`name`
+    필드를 느슨한 `map[string]interface{}`로 읽으므로 필드명 일치만으로 호환). `newLabel`/
+    `updateLabelForm`/`deleteLabelForm`과 달리 대응하는 legacy HTML 세션 라우트가 없어
+    `@GetMapping`을 붙이지 않고 `LabelRestApiController` 전용 위임 대상으로만 뒀다(불필요한 신규
+    공개 HTTP 엔드포인트 방지).
+  - `LabelRestApiController.list()`의 위임 대상을 `projectController.getProjectLabels()`에서
+    `projectViewController.getIssueLabelsForRestApi()`로 교체 — 이제 더 이상 `ProjectController`를
+    참조하지 않아 그 생성자 파라미터도 제거했다.
+  - **부수 확인(그레핑으로 실사용처 확인)**: `ProjectController.getProjectLabels()`
+    (`/api/{owner}/{projectName}/labels`)와 `domain/project/Label`/`ProjectServiceImpl.
+    getProjectLabels()`는 **`LabelRestApiController`가 유일한 사용처가 아니었다** —
+    `project/home.html`(324번째 줄, `sURLProjectLabels` JS 변수로 프로젝트 홈 화면의 토픽 태그
+    자동완성에 실사용 중)이 이 REST 엔드포인트를 직접 호출한다. 그래서 지시대로 `Label`/
+    `getProjectLabels()` 자체는 건드리지 않았다.
+  - GREEN 확인 후 `LabelRestApiControllerSpec`(기존 4케이스를 `getIssueLabelsForRestApi` mock으로
+    갱신)과 `ApiTokenScopedProjectForkAndLabelSubpathAuthorizationIntegrationSpec`(라벨 스코프
+    인가 회귀, 기존 2케이스)을 재실행해 회귀 없음을 확인.
+  - 신규/수정 파일: `web/ProjectViewController.kt`(+`getIssueLabelsForRestApi`),
+    `web/LabelRestApiController.kt`(위임 대상 교체, `ProjectController` 의존성 제거),
+    `web/LabelRestApiControllerSpec.kt`(mock 갱신), 신규
+    `web/LabelRestApiControllerIntegrationSpec.kt`(+1). 테스트 총 5개(신규 1 + 기존 갱신 4).
+- **항목2 — PR 라벨/담당자 웹 UI**:
+  - Issue의 담당자/라벨 UI 위치를 grep으로 재확인: 담당자는 `issue/view.html`의 `dl`/`dt`/`dd`
+    블록(`usf-group`/`avatar-wrap smaller`/`name`/`loginid` CSS 클래스, 편집 가능일 땐
+    `yonaAssgineeModule` select2 AJAX 위젯), 라벨은 `issue/partial_select_label.html`(편집,
+    select2 다중선택)/`issue/partial_show_selected_label.html`(읽기전용, `data-label-id` 포함
+    배지) 프래그먼트, 목록은 `issue/partial_list.html`의 라벨 배지(79~81행)/담당자 아바타
+    (152~154행).
+  - **PR 상세(`pullrequest/view.html`)**: `issue/view.html`의 담당자 표시 마크업(usf-group 등)과
+    라벨 프래그먼트 2개를 그대로 재사용해 새 `<div class="issue-info pr-assignee-label-info">`
+    블록을 추가했다. 담당자 **입력**만은 Issue의 select2 위젯을 그대로 재사용하지 않았다 —
+    Issue의 담당자 위젯은 로그인ID 기반 AJAX 검색(`yonaAssgineeModule`, Issue 전용
+    `assignableUsers`/`assignees` 엔드포인트)인데, round7이 만든 PR의 `setAssignee` REST
+    API(`PullRequestController`)는 숫자 `userId`를 받는 별도 계약이라 그대로 이어붙일 수
+    없었다 — 대신 같은 issue/view.html 안에 있는 마일스톤 select(정적 `<option>` +
+    `data-toggle="select2"`)와 동일한 패턴으로 `project.projectUsers`를 서버 렌더링하는
+    `<select id="pr-assignee-select">`를 추가했다(신규 AJAX 검색 엔드포인트 설계 회피). 라벨은
+    백엔드 계약이 Issue와 동일(라벨 ID)이라 프래그먼트를 100% 그대로 재사용했다. 편집 가능
+    여부는 `PullRequestController.checkWritePermission()`(프로젝트 멤버 여부)과 동일한
+    `@templateHelper.isMember(project, currentUser)`로 게이트해 백엔드 권한 체크와 일치시켰다.
+    저장은 `view.html`의 기존 `$.ajax` 관례(예: `#btnAccept`)를 그대로 따라 select `change`
+    이벤트에서 round7의 `PUT/DELETE .../assignee`, `POST/DELETE .../labels(/{labelId})`
+    엔드포인트를 호출하고 성공 시 페이지를 새로고침한다(라벨은 이전 선택값과의 diff를 계산해
+    추가/삭제 요청을 나눠 보냄). select2 초기화를 위해 `common/select2 :: select2` fragment와
+    라벨 색상용 `issue/labels.css` 링크(둘 다 프로젝트 스코프 기존 자원, PR 전용 신규 자원
+    없음)를 view.html에 추가했다.
+  - **PR 목록(`pullrequest/partial_list.html`)**: Issue 목록(`issue/partial_list.html`)의 라벨
+    배지 마크업(`label issue-label list-label active`, `data-category-id`/`data-label-id`)과
+    담당자 아바타 마크업(`avatar-wrap assignee`)을 그대로 복사해 각 PR 행에 추가했다(읽기전용 —
+    Issue 목록도 여기서는 편집하지 않는다). 기존에 이미 있던 `avatar-wrap assinee`(오탈자,
+    legacy 그대로 유지) 아바타는 `req.receiver`(병합한 사람)이고 이번에 추가한 `req.assignee`
+    (담당자)와는 다른 개념이라 나란히 뒀다.
+  - **범위를 좁힌 지점**: PR 생성/수정 폼(`pullrequest/create.html`/`edit.html`)에 담당자/라벨
+    입력을 추가하는 것은 이번 라운드 범위에서 제외했다(지시사항의 "상세 화면에서 보기+변경 정도의
+    합리적 최소 범위"를 적용) — 다음 라운드 이후로 이월.
+  - 검증(TDD, RED→GREEN): 신규 `PullRequestAssigneeAndLabelTemplateRenderingSpec`(3케이스 —
+    프로젝트 멤버는 담당자 select/라벨 다중선택을 볼 수 있음, 기존 배정된 담당자/라벨이 선택된
+    상태로 렌더링됨, 쓰기 권한 없는 비로그인 방문자는 읽기전용으로만 보임), 신규
+    `PullRequestListAssigneeAndLabelTemplateRenderingSpec`(1케이스 — 목록에 담당자 아바타/라벨
+    배지 표시). 기존 `PullRequestListTemplateEquivalenceSpec`/`PullRequestViewControllerSpec`/
+    `PullRequestViewControllerMoreSpec`/`TimelineTemplateRenderingSpec`/
+    `PullRequestMergeResultTemplateRenderingSpec` 재실행으로 회귀 없음 확인. 총 4개.
+  - 신규/수정 파일: `pullrequest/view.html`(담당자/라벨 블록 + JS 배선 + select2/labels.css
+    include), `pullrequest/partial_list.html`(라벨 배지 + 담당자 아바타), 신규
+    `PullRequestAssigneeAndLabelTemplateRenderingSpec.kt`(+3), 신규
+    `PullRequestListAssigneeAndLabelTemplateRenderingSpec.kt`(+1).
+- **전체 스위트**: `./gradlew test` 전체 실행 결과 5788개 테스트 중 4개 실패 — 전부
+  5~7라운드에도 있었던 사전 존재 이슈(`CodeSwallowedStyleRenderingSpec` 1개,
+  `CodeBrowserListWrapRenderingSpec` 3개, 코드 브라우저 CSS 렌더링, 이번 라운드가 전혀 손대지
+  않은 영역)뿐 — 신규 실패 없음, 회귀 아님.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
@@ -864,6 +959,8 @@ yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤
 | `yona search prs` 대응 서버 기능 없음 | yona `SearchType` enum(PROJECT/ISSUE/USER/POST/MILESTONE/ISSUE_COMMENT/POST_COMMENT/REVIEW)에 PR 전용 값이 없어 PR 자체를 색인하는 통합검색이 서버에 없다 | **7라운드에서 해소** — `SearchType.PULL_REQUEST` 추가 + `PullRequestRepository`에 Issue와 동일한 패턴의 인덱싱/검색 쿼리 신설, `web/SearchRestApiController`에 `GET /api/v1/search/prs` 추가. 상세는 아래 "7라운드" 로그 참고 |
 | `gh issue status` 최소 버전만 구현 | `UserIssueStatusRestApiController`는 담당/작성 이슈 개수·목록만 제공 | **7라운드에서 해소** — `UserViewController.userIssues()`가 지원하는 mentioned/favorite/shared/commenter 필터와 pageNum/state/filter/orderBy/orderDir 파라미터를 신규 백엔드 로직 없이 기존 IssueRepository 메서드 호출에 그대로 전달해 노출했다. 상세는 아래 "7라운드" 로그 참고 |
 | PR에 라벨/담당자 개념 없음 | `PullRequest.kt`에 `labels`/`assignee` 필드가 없어(Issue엔 있음) `pr list --label/--assignee`를 지원할 수 없었다. 레거시 Play `yona`에도 원래 없던 개념인지 확인 필요했다 | **7라운드에서 해소** — 레거시 조사 결과 원래부터 없던 개념(포팅 누락 아님)임을 확정한 뒤, `Assignee`(재사용)/`IssueLabel`(재사용, 신규 조인테이블 `pull_request_issue_label`)로 백엔드 엔티티+서비스+REST API+list 필터 전체 구현. 웹 UI만 범위 밖으로 이월. 상세는 아래 "7라운드" 로그 참고 |
+| `LabelRestApiController` list vs create/update/delete 엔티티 불일치(실제 버그) | `list()`는 `ProjectController.getProjectLabels()`(`domain/project/Label`, 프로젝트 홈 화면 토픽 태그)를 반환하는데 `create/update/delete`는 `domain/issue/IssueLabel`을 다뤄, `yona label create`로 만든 라벨이 `yona label list`엔 절대 보이지 않았다(TASK-0397부터 있던 버그) | **8라운드에서 해소** — `list()`의 위임 대상을 `ProjectViewController.getIssueLabelsForRestApi()`(신설, `IssueLabelService.getLabels()` 기반)로 교체해 create/update/delete와 엔티티를 통일했다. `ProjectController.getProjectLabels()`/`domain/project/Label` 자체는 `project/home.html`의 토픽 태그(`sURLProjectLabels`)가 여전히 실사용 중이라 그대로 유지. 상세는 아래 "8라운드" 로그 참고 |
+| PR 라벨/담당자 웹 UI 부재 | 7라운드가 백엔드(엔티티/서비스/REST API/list 필터)는 완료했지만 Thymeleaf 화면(`pullrequest/view.html`, `partial_list.html`)은 명시적으로 범위 밖에 뒀다 | **8라운드에서 해소** — PR 상세 화면에 담당자 선택 `<select>`(Issue 마일스톤 select와 동일 패턴 재사용, round7의 userId 기반 REST 계약에 맞춤) + 라벨 다중선택(`issue/partial_select_label.html`/`partial_show_selected_label.html` 프래그먼트 100% 재사용)을 추가하고, PR 목록 화면에도 Issue 목록과 동일한 마크업으로 담당자 아바타/라벨 배지(읽기전용)를 추가했다. PR 생성/수정 폼은 범위 밖으로 유지(다음 라운드 이후로 이월). 상세는 아래 "8라운드" 로그 참고 |
 
 ## Step 8.6 — 실서버 기능 부재로 미룬 4개 항목 (2026-09-01, 사용자 지시로 백로그화)
 
@@ -908,6 +1005,10 @@ Step8.5 완료 후 "CLI 배선 문제가 아니라 서버 자체에 없어서 �
      근거를 남겨라.
 
 ## Step 8.7 — 7라운드에서 발견/이월된 2개 항목 (2026-09-01, 사용자 지시로 백로그화)
+
+**상태: 8라운드(2026-09-01)에서 2개 항목 전부 지시된 우선순위(1→2) 그대로 해소 완료.** 아래
+목록은 착수 전 백로그 원문을 그대로 보존한다(각 항목의 실제 구현 결과는 아래 "8라운드" 완료
+로그 참고).
 
 7라운드(Step8.6 구현) 검증 과정에서 발견한 실제 버그 1건과, 7라운드가 명시적으로 범위 밖에
 둔 웹 UI 1건을 우선순위와 함께 백로그로 확정한다. 버그가 이미 배포된 기능을 깨뜨리고 있어
