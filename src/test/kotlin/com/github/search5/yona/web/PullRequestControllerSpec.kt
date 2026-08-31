@@ -166,6 +166,51 @@ class PullRequestControllerSpec : DescribeSpec({
                     .andExpect(jsonPath("$.length()").value(1))
                     .andExpect(jsonPath("$[0].title").value("PR 제목"))
             }
+
+            // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — `gh pr list --assignee/--label` 대응.
+            it("assignee 파라미터가 있으면 담당자 loginId가 일치하는 PR만 반환해야 한다") {
+                val assignedPr = PullRequest(
+                    id = 52L, title = "담당자 있는 PR", toProject = project, fromProject = fromProject,
+                    contributor = user, state = State.OPEN, number = 3L,
+                    assignee = com.github.search5.yona.domain.issue.Assignee(user = user, project = project)
+                )
+                val unassignedPr = PullRequest(
+                    id = 53L, title = "담당자 없는 PR", toProject = project, fromProject = fromProject,
+                    contributor = user, state = State.OPEN, number = 4L
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequests(1L, null) } returns listOf(assignedPr, unassignedPr)
+
+                mockMvc.perform(get("/api/projects/1/pullrequests").param("assignee", "testuser").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].title").value("담당자 있는 PR"))
+            }
+
+            it("label 파라미터가 있으면 해당 이름의 라벨이 붙은 PR만 반환해야 한다") {
+                val category = com.github.search5.yona.domain.issue.IssueLabelCategory(id = 1L, name = "type", project = project)
+                val bugLabel = com.github.search5.yona.domain.issue.IssueLabel(id = 1L, name = "bug", color = "red", category = category, project = project)
+                val labeledPr = PullRequest(
+                    id = 54L, title = "라벨 있는 PR", toProject = project, fromProject = fromProject,
+                    contributor = user, state = State.OPEN, number = 5L,
+                    labels = mutableSetOf(bugLabel)
+                )
+                val unlabeledPr = PullRequest(
+                    id = 55L, title = "라벨 없는 PR", toProject = project, fromProject = fromProject,
+                    contributor = user, state = State.OPEN, number = 6L
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequests(1L, null) } returns listOf(labeledPr, unlabeledPr)
+
+                mockMvc.perform(get("/api/projects/1/pullrequests").param("label", "bug").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].title").value("라벨 있는 PR"))
+            }
         }
 
         describe("GET /api/projects/{projectId}/pullrequests/{number}") {
@@ -709,6 +754,187 @@ class PullRequestControllerSpec : DescribeSpec({
 
                 mockMvc.perform(delete("/api/projects/1/pullrequests/999/reviewers").principal(userAuth))
                     .andExpect(status().isNotFound)
+            }
+        }
+
+        // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자 지정/해제.
+        // addReviewer/removeReviewer와 동일한 권한 체크(checkWritePermission) 패턴을 그대로 검증한다.
+        describe("PUT /api/projects/{projectId}/pullrequests/{number}/assignee") {
+            it("로그인한 프로젝트 멤버가 담당자를 지정하면 200 OK와 갱신된 PR을 반환해야 한다") {
+                val assigned = PullRequest(
+                    id = 50L, title = "PR 제목", toProject = project, fromProject = fromProject,
+                    toBranch = "master", fromBranch = "feature", contributor = user, number = 1L
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { userRepository.findById(10L) } returns Optional.of(user)
+                every { pullRequestService.setAssignee(50L, user) } returns assigned
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/1/assignee")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"userId":10}""")
+                        .principal(userAuth)
+                ).andExpect(status().isOk)
+            }
+
+            it("존재하지 않는 사용자를 담당자로 지정하려 하면 400 Bad Request를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { userRepository.findById(999L) } returns Optional.empty()
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/1/assignee")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"userId":999}""")
+                        .principal(userAuth)
+                ).andExpect(status().isBadRequest)
+
+                verify(exactly = 0) { pullRequestService.setAssignee(any(), any()) }
+            }
+
+            it("PUBLIC 프로젝트여도 멤버가 아니면 담당자를 지정할 수 없어야 한다(인가 우회 방지)") {
+                val publicProject = Project(id = 2L, name = "PublicProject", projectScope = ProjectScope.PUBLIC)
+                val otherUser = User(id = 30L, loginId = "otheruser", name = "외부유저")
+                val otherAuth = UsernamePasswordAuthenticationToken("otheruser", "password")
+
+                every { projectRepository.findById(2L) } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 30L) } returns false
+
+                mockMvc.perform(
+                    put("/api/projects/2/pullrequests/1/assignee")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"userId":10}""")
+                        .principal(otherAuth)
+                ).andExpect(status().isForbidden)
+
+                verify(exactly = 0) { pullRequestService.setAssignee(any(), any()) }
+            }
+
+            it("비로그인 사용자가 담당자 지정을 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/1/assignee")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"userId":10}""")
+                ).andExpect(status().isUnauthorized)
+            }
+
+            it("존재하지 않는 PR 번호에 담당자를 지정하면 404 Not Found를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 999L) } returns null
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/999/assignee")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"userId":10}""")
+                        .principal(userAuth)
+                ).andExpect(status().isNotFound)
+            }
+        }
+
+        describe("DELETE /api/projects/{projectId}/pullrequests/{number}/assignee") {
+            it("로그인한 프로젝트 멤버가 담당자 해제를 요청하면 200 OK를 반환해야 한다") {
+                val cleared = PullRequest(
+                    id = 50L, title = "PR 제목", toProject = project, fromProject = fromProject,
+                    toBranch = "master", fromBranch = "feature", contributor = user, number = 1L
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.setAssignee(50L, null) } returns cleared
+
+                mockMvc.perform(
+                    delete("/api/projects/1/pullrequests/1/assignee").principal(userAuth)
+                ).andExpect(status().isOk)
+            }
+
+            it("비로그인 사용자가 담당자 해제를 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(delete("/api/projects/1/pullrequests/1/assignee"))
+                    .andExpect(status().isUnauthorized)
+            }
+        }
+
+        // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 라벨 추가/제거.
+        describe("POST /api/projects/{projectId}/pullrequests/{number}/labels") {
+            it("로그인한 프로젝트 멤버가 라벨을 추가하면 200 OK와 갱신된 PR을 반환해야 한다") {
+                val labeled = PullRequest(
+                    id = 50L, title = "PR 제목", toProject = project, fromProject = fromProject,
+                    toBranch = "master", fromBranch = "feature", contributor = user, number = 1L
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.addLabel(50L, 5L) } returns labeled
+
+                mockMvc.perform(
+                    post("/api/projects/1/pullrequests/1/labels")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"labelId":5}""")
+                        .principal(userAuth)
+                ).andExpect(status().isOk)
+            }
+
+            it("존재하지 않는 라벨을 추가하려 하면 400 Bad Request를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.addLabel(50L, 999L) } throws IllegalArgumentException("IssueLabel not found: 999")
+
+                mockMvc.perform(
+                    post("/api/projects/1/pullrequests/1/labels")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"labelId":999}""")
+                        .principal(userAuth)
+                ).andExpect(status().isBadRequest)
+            }
+
+            it("비로그인 사용자가 라벨 추가를 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(
+                    post("/api/projects/1/pullrequests/1/labels")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""{"labelId":5}""")
+                ).andExpect(status().isUnauthorized)
+            }
+        }
+
+        describe("DELETE /api/projects/{projectId}/pullrequests/{number}/labels/{labelId}") {
+            it("로그인한 프로젝트 멤버가 라벨을 제거하면 200 OK를 반환해야 한다") {
+                val unlabeled = PullRequest(
+                    id = 50L, title = "PR 제목", toProject = project, fromProject = fromProject,
+                    toBranch = "master", fromBranch = "feature", contributor = user, number = 1L
+                )
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.removeLabel(50L, 5L) } returns unlabeled
+
+                mockMvc.perform(
+                    delete("/api/projects/1/pullrequests/1/labels/5").principal(userAuth)
+                ).andExpect(status().isOk)
+            }
+
+            it("비로그인 사용자가 라벨 제거를 시도하면 401 Unauthorized를 반환해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+
+                mockMvc.perform(delete("/api/projects/1/pullrequests/1/labels/5"))
+                    .andExpect(status().isUnauthorized)
             }
         }
 

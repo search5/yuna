@@ -334,6 +334,71 @@ class ApiTokenScopedIssueAndPullRequestSubpathAuthorizationIntegrationSpec @Auto
                 ).andReturn()
                 reopenResult.response.status shouldNotBe 403
             }
+
+            // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자/라벨 하위 경로도
+            // 기존 scopedApiPattern에 그대로 매칭돼 PULL_REQUESTS 그룹으로 인가되는지 확인한다.
+            it("pull-requests 쓰기 권한이 없는 토큰은 담당자 지정 요청을 403으로 거부해야 한다") {
+                val raw = "subpath-pr-assignee-readonly"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/assignee")
+                        .header("Yona-Token", raw)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""{"userId":1}""")
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("pull-requests 쓰기 권한이 있는 토큰은 담당자 지정/해제 요청에서 필터를 통과해야 한다") {
+                val raw = "subpath-pr-assignee-write"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.WRITE)
+
+                val setResult = mockMvc.perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/assignee")
+                        .header("Yona-Token", raw)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""{"userId":${owner.id}}""")
+                ).andReturn()
+                setResult.response.status shouldNotBe 403
+
+                val removeResult = mockMvc.perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/assignee")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+                removeResult.response.status shouldNotBe 403
+            }
+
+            it("pull-requests 쓰기 권한이 없는 토큰은 라벨 추가 요청을 403으로 거부해야 한다") {
+                val raw = "subpath-pr-labels-readonly"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    post("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/labels")
+                        .header("Yona-Token", raw)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""{"labelId":1}""")
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("pull-requests 쓰기 권한이 있는 토큰은 라벨 제거 요청에서 필터를 통과해야 한다") {
+                val raw = "subpath-pr-labels-remove-write"
+                tokenWith(raw, ApiTokenScopeGroup.PULL_REQUESTS, ApiTokenPermission.WRITE)
+
+                val result = mockMvc.perform(
+                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/v1/projects/${owner.loginId}/${project.name}/pull-requests/1/labels/1")
+                        .header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldNotBe 403
+            }
         }
     }
 }

@@ -77,6 +77,18 @@ interface PullRequestService {
     fun addReviewer(pullRequestId: Long, reviewer: User)
     fun removeReviewer(pullRequestId: Long, reviewer: User)
 
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자 지정/해제. Issue의
+    // assigneeId 갱신 로직(IssueServiceImpl.updateIssue())과 동일하게, 담당자를 바꿀 때마다 기존
+    // Assignee 로우를 재사용하지 않고 새로 만든다(Assignee는 (user, project) 값 객체에 가까워
+    // Issue도 동일하게 매번 새로 생성). assigneeUser가 null이면 담당자를 해제한다.
+    fun setAssignee(pullRequestId: Long, assigneeUser: User?): PullRequest
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 라벨 추가/제거. 라벨은
+    // 프로젝트에 이미 정의된 IssueLabel(ProjectViewController.newLabel() 등으로 관리)을 그대로
+    // 참조만 한다(신규 라벨 정의 기능이 아니다).
+    fun addLabel(pullRequestId: Long, labelId: Long): PullRequest
+    fun removeLabel(pullRequestId: Long, labelId: Long): PullRequest
+
     fun getDiff(pullRequest: PullRequest): List<FileDiff>
     fun getDiff(pullRequest: PullRequest, commitId: String): List<FileDiff>
 

@@ -10,6 +10,10 @@ import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.ProjectScope
 import com.github.search5.yona.domain.vcs.RepositoryService
 import com.github.search5.yona.domain.issue.IssueEvent
+import com.github.search5.yona.domain.issue.IssueLabel
+import com.github.search5.yona.domain.issue.IssueLabelCategory
+import com.github.search5.yona.domain.issue.IssueLabelCategoryRepository
+import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.issue.IssueRepository
 import com.github.search5.yona.domain.issue.IssueService
 import com.github.search5.yona.domain.issue.Issue
@@ -46,7 +50,10 @@ class PullRequestServiceSpec @Autowired constructor(
     private val pullRequestEventRepository: PullRequestEventRepository,
     private val notificationEventRepository: NotificationEventRepository,
     private val watchRepository: WatchRepository,
-    private val issueEventRepository: IssueEventRepository
+    private val issueEventRepository: IssueEventRepository,
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — setAssignee/addLabel/removeLabel 검증용.
+    private val issueLabelRepository: IssueLabelRepository,
+    private val issueLabelCategoryRepository: IssueLabelCategoryRepository
 ) : AbstractIntegrationTest() {
 
     init {
@@ -64,6 +71,8 @@ class PullRequestServiceSpec @Autowired constructor(
                 pullRequestRepository.deleteAll()
                 issueEventRepository.deleteAll()
                 issueRepository.deleteAll()
+                issueLabelRepository.deleteAll()
+                issueLabelCategoryRepository.deleteAll()
                 projectRepository.deleteAll()
                 userRepository.deleteAll()
 
@@ -458,6 +467,88 @@ class PullRequestServiceSpec @Autowired constructor(
                 val prEventsAfterAdd = pullRequestEventRepository.findByPullRequestOrderByCreatedAsc(pr)
                 prEventsAfterAdd.size shouldBe 1
                 prEventsAfterAdd.first().eventType shouldBe EventType.PULL_REQUEST_REVIEW_STATE_CHANGED
+            }
+
+            // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자 지정/해제.
+            // 레거시 Play `yona`의 PullRequest.java에는 이 개념 자체가 없었음을 확인했다(신규 기능
+            // 확장). IssueServiceImpl.updateIssue()와 동일하게 담당자를 바꿀 때마다 새 Assignee를
+            // 만든다.
+            it("PR 담당자를 지정하고 해제할 수 있어야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "담당자 테스트 PR",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature",
+                        contributor = contributor,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                val updated = pullRequestService.setAssignee(pr.id!!, receiver)
+                updated.assignee shouldNotBe null
+                updated.assignee?.user?.id shouldBe receiver.id
+                updated.assignee?.project?.id shouldBe toProject.id
+
+                val cleared = pullRequestService.setAssignee(pr.id!!, null)
+                cleared.assignee shouldBe null
+            }
+
+            it("존재하지 않는 PR의 담당자를 지정하려 하면 예외가 발생해야 한다") {
+                shouldThrow<IllegalArgumentException> {
+                    pullRequestService.setAssignee(999999L, receiver)
+                }
+            }
+
+            // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 라벨 추가/제거. 라벨
+            // 정의 자체는 만들지 않고(project.labels/IssueLabel과 무관한 신규 개념 도입 없음) 이미
+            // 존재하는 IssueLabel만 참조한다.
+            it("PR에 라벨을 추가하고 제거할 수 있어야 한다") {
+                val category = issueLabelCategoryRepository.save(
+                    IssueLabelCategory(name = "type", project = toProject)
+                )
+                val label = issueLabelRepository.save(
+                    IssueLabel(name = "bug", color = "red", category = category, project = toProject)
+                )
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "라벨 테스트 PR",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature",
+                        contributor = contributor,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                val added = pullRequestService.addLabel(pr.id!!, label.id!!)
+                added.labels.map { it.id } shouldBe listOf(label.id)
+
+                val removed = pullRequestService.removeLabel(pr.id!!, label.id!!)
+                removed.labels.size shouldBe 0
+            }
+
+            it("존재하지 않는 라벨을 PR에 추가하려 하면 예외가 발생해야 한다") {
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "존재하지 않는 라벨 테스트 PR",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature",
+                        contributor = contributor,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                shouldThrow<IllegalArgumentException> {
+                    pullRequestService.addLabel(pr.id!!, 999999L)
+                }
             }
 
             it("5. 최소 리뷰어 수 미달 시 머지 실패 검증") {

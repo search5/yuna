@@ -16,8 +16,10 @@ import com.github.search5.yona.domain.event.PullRequestMergeEvent
 import com.github.search5.yona.domain.notification.NotificationEvent
 import com.github.search5.yona.domain.notification.NotificationEventRecorder
 import com.github.search5.yona.domain.watch.WatchService
+import com.github.search5.yona.domain.issue.Assignee
 import com.github.search5.yona.domain.issue.IssueEvent
 import com.github.search5.yona.domain.issue.IssueEventRepository
+import com.github.search5.yona.domain.issue.IssueLabelRepository
 import com.github.search5.yona.domain.issue.IssueReferenceParser
 import com.github.search5.yona.domain.issue.IssueRepository
 import io.micrometer.core.instrument.MeterRegistry
@@ -49,6 +51,8 @@ class PullRequestServiceImpl(
     private val issueRepository: IssueRepository,
     private val issueEventRepository: IssueEventRepository,
     private val commentService: CommentService,
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 라벨 추가/제거용(addLabel/removeLabel).
+    private val issueLabelRepository: IssueLabelRepository,
     @Value("\${yona.site-name:Yona}")
     private val siteName: String,
     // yona-wiki P3-01(Observability) 계측 지점 2 대응 — PullRequestEventRepository.recordWithDraftMerge()에 그대로 전달한다.
@@ -844,6 +848,48 @@ class PullRequestServiceImpl(
             pullRequestRepository.save(pr)
             notifyReviewerChanged(pr, user, "CANCEL")
         }
+    }
+
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자 지정/해제.
+    // IssueServiceImpl.updateIssue()의 assigneeId 처리와 동일하게, 기존 Assignee 로우를 재사용하지
+    // 않고 매번 새로 만든다(Assignee는 (user, project) 값 객체에 가까움).
+    @Transactional
+    override fun setAssignee(pullRequestId: Long, assigneeUser: User?): PullRequest {
+        val pr = pullRequestRepository.findById(pullRequestId)
+            .orElseThrow { IllegalArgumentException("PullRequest not found: $pullRequestId") }
+
+        pr.assignee = if (assigneeUser != null) {
+            Assignee(user = assigneeUser, project = pr.toProject)
+        } else {
+            null
+        }
+        pr.updated = Instant.now()
+        return pullRequestRepository.save(pr)
+    }
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 라벨 추가/제거. 라벨 정의 자체는
+    // 만들지 않고 프로젝트에 이미 존재하는 IssueLabel만 참조한다.
+    @Transactional
+    override fun addLabel(pullRequestId: Long, labelId: Long): PullRequest {
+        val pr = pullRequestRepository.findById(pullRequestId)
+            .orElseThrow { IllegalArgumentException("PullRequest not found: $pullRequestId") }
+        val label = issueLabelRepository.findById(labelId)
+            .orElseThrow { IllegalArgumentException("IssueLabel not found: $labelId") }
+
+        pr.labels.add(label)
+        pr.updated = Instant.now()
+        return pullRequestRepository.save(pr)
+    }
+
+    @Transactional
+    override fun removeLabel(pullRequestId: Long, labelId: Long): PullRequest {
+        val pr = pullRequestRepository.findById(pullRequestId)
+            .orElseThrow { IllegalArgumentException("PullRequest not found: $pullRequestId") }
+
+        pr.labels.removeIf { it.id == labelId }
+        pr.updated = Instant.now()
+        return pullRequestRepository.save(pr)
     }
 
     // yona CodeReviewServiceImpl.addReviewer/removeReviewer와 동일한 알림/타임라인 기록 (P1-49).

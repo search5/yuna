@@ -63,11 +63,14 @@ class PullRequestController(
     fun getPullRequests(
         @PathVariable projectId: Long,
         @RequestParam(required = false) state: State?,
-        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr list --author` 대응. yona PullRequest
-        // 엔티티엔 이슈처럼 labels/assignee 개념이 없어(reviewers/contributor만 존재) --label/
-        // --assignee는 PR에는 적용하지 않는다(계획 문서에 근거 남김 - 실제 모델에 없는 필드를
-        // 인위적으로 만들지 않음). --author만 contributor.loginId 등가비교로 지원한다.
+        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr list --author` 대응.
         @RequestParam(required = false) author: String?,
+        // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — `gh pr list --assignee/--label`
+        // 대응. PullRequest에 assignee/labels 필드가 신설돼 이제 Issue와 동일하게 지원 가능하다.
+        // PR 목록은 프로젝트당 크지 않아(기존 author 필터와 동일하게) 신규 리포지토리 쿼리 없이
+        // 인메모리 필터링으로 처리한다.
+        @RequestParam(required = false) assignee: String?,
+        @RequestParam(required = false) label: String?,
         authentication: Authentication?
     ): ResponseEntity<List<PullRequest>> {
         val project = projectRepository.findById(projectId).orElse(null)
@@ -79,11 +82,10 @@ class PullRequestController(
         }
 
         val pullRequests = pullRequestService.getPullRequests(projectId, state)
-        val filtered = if (author != null) {
-            pullRequests.filter { it.contributor.loginId == author }
-        } else {
-            pullRequests
-        }
+        val filtered = pullRequests
+            .let { list -> if (author != null) list.filter { it.contributor.loginId == author } else list }
+            .let { list -> if (assignee != null) list.filter { it.assignee?.user?.loginId == assignee } else list }
+            .let { list -> if (label != null) list.filter { pr -> pr.labels.any { it.name == label } } else list }
         return ResponseEntity.ok(filtered)
     }
 
@@ -398,6 +400,105 @@ class PullRequestController(
         return ResponseEntity.ok().build()
     }
 
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자 지정/해제.
+    // addReviewer/removeReviewer와 동일한 권한 체크(checkWritePermission) 패턴을 그대로 따른다.
+    @PutMapping("/{number}/assignee")
+    fun setAssignee(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        @RequestBody request: SetAssigneeRequest,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!checkWritePermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val assigneeUser = userRepository.findById(request.userId).orElse(null)
+            ?: return ResponseEntity.badRequest().build()
+
+        val updated = pullRequestService.setAssignee(pullRequest.id!!, assigneeUser)
+        return ResponseEntity.ok(updated)
+    }
+
+    @DeleteMapping("/{number}/assignee")
+    fun removeAssignee(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!checkWritePermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val updated = pullRequestService.setAssignee(pullRequest.id!!, null)
+        return ResponseEntity.ok(updated)
+    }
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 라벨 추가/제거. 라벨 정의 자체는
+    // 만들지 않고 프로젝트에 이미 있는 IssueLabel(web/LabelRestApiController.kt로 CRUD)을 참조만 한다.
+    @PostMapping("/{number}/labels")
+    fun addLabel(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        @RequestBody request: AddPullRequestLabelRequest,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!checkWritePermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        return try {
+            val updated = pullRequestService.addLabel(pullRequest.id!!, request.labelId)
+            ResponseEntity.ok(updated)
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().build()
+        }
+    }
+
+    @DeleteMapping("/{number}/labels/{labelId}")
+    fun removeLabel(
+        @PathVariable projectId: Long,
+        @PathVariable number: Long,
+        @PathVariable labelId: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val project = projectRepository.findById(projectId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+
+        val user = getLoginUser(authentication) ?: return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+        if (!checkWritePermission(project, user)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
+        }
+
+        val pullRequest = pullRequestService.getPullRequest(projectId, number)
+            ?: return ResponseEntity.notFound().build()
+
+        val updated = pullRequestService.removeLabel(pullRequest.id!!, labelId)
+        return ResponseEntity.ok(updated)
+    }
+
     data class UpdatePullRequestRequest(
         val title: String,
         val body: String?,
@@ -405,4 +506,9 @@ class PullRequestController(
         val fromBranch: String? = null,
         val toBranch: String? = null
     )
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자/라벨 CRUD 요청 DTO.
+    data class SetAssigneeRequest(val userId: Long)
+
+    data class AddPullRequestLabelRequest(val labelId: Long)
 }

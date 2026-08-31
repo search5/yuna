@@ -8,10 +8,12 @@ import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.vcs.FileDiff
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -35,19 +37,21 @@ class PullRequestApiController(
     private val pullRequestController: PullRequestController
 ) {
 
-    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr list --author` 대응(PR 모델엔 label/
-    // assignee가 없어 author만 지원 - PullRequestController.getPullRequests() 주석 참고).
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr list --author` 대응.
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — `--assignee`/`--label` 추가.
     @GetMapping
     fun list(
         @PathVariable owner: String,
         @PathVariable project: String,
         @RequestParam(required = false) state: State?,
         @RequestParam(required = false) author: String?,
+        @RequestParam(required = false) assignee: String?,
+        @RequestParam(required = false) label: String?,
         authentication: Authentication?
     ): ResponseEntity<List<PullRequest>> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.getPullRequests(found.id!!, state, author, authentication)
+        return pullRequestController.getPullRequests(found.id!!, state, author, assignee, label, authentication)
     }
 
     @PostMapping
@@ -99,6 +103,59 @@ class PullRequestApiController(
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
         return pullRequestController.addReviewer(found.id!!, number, authentication)
+    }
+
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자/라벨 CRUD 어댑터.
+    @PutMapping("/{number}/assignee")
+    fun setAssignee(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        @RequestBody request: PullRequestController.SetAssigneeRequest,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.setAssignee(found.id!!, number, request, authentication)
+    }
+
+    @DeleteMapping("/{number}/assignee")
+    fun removeAssignee(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.removeAssignee(found.id!!, number, authentication)
+    }
+
+    @PostMapping("/{number}/labels")
+    fun addLabel(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        @RequestBody request: PullRequestController.AddPullRequestLabelRequest,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.addLabel(found.id!!, number, request, authentication)
+    }
+
+    @DeleteMapping("/{number}/labels/{labelId}")
+    fun removeLabel(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        @PathVariable labelId: Long,
+        authentication: Authentication?
+    ): ResponseEntity<PullRequest> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.removeLabel(found.id!!, number, labelId, authentication)
     }
 
     // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr edit`. PullRequestController.

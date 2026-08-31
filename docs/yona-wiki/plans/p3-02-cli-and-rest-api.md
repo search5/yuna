@@ -335,6 +335,7 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] Go CLI 본체(`yona auth/issue/pr/project/admin/api`)가 1부 REST API를 감싸는 형태로 구현됨 (4라운드 — Step7~10, 별도 저장소 `yona-cli`)
 - [x] 서버(1부)가 Step8.5의 "기존 서버 API 연결"/"신규 API 필요" 두 그룹을 커버함 — project fork/create/edit/delete, label CRUD, issue reopen/transfer, PR edit/close/reopen/diff/comment, issue/pr list 필터, search issues/projects, org list/view, 사용자 이슈 대시보드 최소 버전 (5라운드 — 아래 완료 로그 참고. `yona search prs`는 서버에 대응 SearchType이 없어 이월)
 - [x] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (6라운드 + 직후 보완 — 아래 완료 로그 참고. `yona config`/`yona alias`는 낮은 우선순위 항목이라 다음 라운드 이후로 이월)
+- [x] Step8.6 백로그 4개 항목(admin webhook/permission 목록 API, `gh issue status` 필터/페이지네이션 전체, `yona search prs`, PR 라벨/담당자) 전부 해소 (7라운드 — 아래 완료 로그 참고. PR 라벨/담당자의 웹 UI만 명시적으로 범위 밖, 다음 라운드 이후로 이월)
 - [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (다음 라운드로 이월 — 4라운드는 httptest 기반 단위/통합 테스트만 수행)
 - [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (다음 라운드)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
@@ -743,6 +744,113 @@ yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤
   GREEN**(`go build ./...`/`go vet ./...`/`gofmt -l .` 전부 클린). 상세 커밋 이력은 이 작업을
   지시한 세션의 최종 보고 참고.
 
+### 7라운드 (2026-09-01) — Step8.6 백로그 4개 항목 전부 해소
+
+착수 전 이 절 전체와 6라운드까지의 완료 로그, `config/ApiTokenAuthenticationFilter.kt`의 스코프
+인가 메커니즘(`scopedApiPattern`/`resourceSegmentToResourceType`)을 재확인한 뒤, 지시된 우선순위
+순서(1→2→3→4) 그대로 진행했다 — 순서를 바꾸지 않았다.
+
+- **항목1(최우선) — admin webhook/permission 목록 JSON API 신설**:
+  - `WebhookController.kt`에 `listWebhooksJson()` 신설(기존 `webhooks()`와 동일한 프로젝트 조회 +
+    권한 체크(`checkWebhookPermission`, Operation.UPDATE) 재사용, JSON 응답만 다름 — secret도
+    기존 HTML 화면(`setting_webhook.html`)과 동일한 노출 수준으로 그대로 포함). 신규
+    `web/WebhookRestApiController.kt`(`GET /api/v1/projects/{owner}/{project}/webhooks`)가 위임.
+  - `ProjectMemberController.kt`에 `listMembers()` 신설(`isProjectManager` 권한 체크 재사용, 기존
+    `findByProjectId()` 결과를 loginId/역할명 포함 JSON으로 변환). 신규
+    `web/ProjectPermissionRestApiController.kt`(`GET /api/v1/projects/{owner}/{project}/permissions`)가
+    owner/project 이름을 숫자 projectId로 바꿔 위임.
+  - `ApiTokenAuthenticationFilter.resourceSegmentToResourceType`에 `"permissions" ->
+    ResourceType.PROJECT_SETTING`(ADMINISTRATION 그룹) 추가 — `"webhooks"`는 Step1~3부터 이미
+    매핑돼 있어 변경 불필요.
+  - 검증: `WebhookControllerSpec`(+3, `listWebhooksJson` 성공/404/403), 신규
+    `WebhookRestApiControllerSpec`(1), `ProjectMemberControllerSpec`(+3, `listMembers` 성공/403/401),
+    신규 `ProjectPermissionRestApiControllerSpec`(2), 신규
+    `ApiTokenScopedWebhookAndPermissionSubpathAuthorizationIntegrationSpec`(4, webhooks/permissions
+    각 스코프 없음 403·있음 200). 총 13개.
+- **항목2 — `gh issue status` 필터/페이지네이션 전체 노출**: `UserViewController.userIssues()`와
+  `UserIssueStatusRestApiController`를 코드로 대조한 결과, 지시대로 신규 백엔드 로직 없이 이미 있는
+  `IssueRepository` 메서드(`findCommentedByState`/`findMentionedByState`/`findFavoriteByState`/
+  `findSharedByState` + 대응 count 쌍, `MentionService.getMentioningIssueIds`)에 쿼리 파라미터만
+  추가로 전달해 해소했다. `/status` 엔드포인트에 `pageNum`/`state`/`filter`/`orderBy`/`orderDir`
+  (userIssues()와 동일한 이름·기본값) + `commenterId`/`mentionId`/`sharerId`/`favoriteId`(명시하지
+  않으면 로그인 사용자 자신으로 기본값)를 추가하고, 응답에 기존 `assigned`/`created`(하위호환
+  유지) 외에 `commented`/`mentioned`/`favorite`/`shared` 4개 섹션을 추가했다. 각 섹션은
+  `openCount`/`closedCount`/`items`/`totalElements`/`totalPages`/`page`를 담는다. 검증: 기존 스펙에
+  +3케이스(commented/mentioned/favorite/shared 동시 반환, 페이지네이션/정렬/검색 파라미터 전달,
+  타 사용자 id override) = 총 5개.
+- **항목3 — search prs 서버 지원**: `domain/enumeration/SearchType`에 `PULL_REQUEST` 추가.
+  `domain/pullrequest/PullRequestRepository`에 기존 `SearchType.ISSUE`(`IssueRepository.
+  searchIssues()`)와 동일한 패턴(Postgres Hibernate 7.2.x가 한 쿼리에 LIKE 술어 2개 이상이면
+  실패하는 버그를 피하기 위한 네이티브 쿼리)의 `searchPullRequests`/`countSearchPullRequests`(전역
+  — toProject가 허용 프로젝트 목록에 있거나 내가 contributor인 PR까지 포함, Issue의
+  author/assignee 대응 개념으로 contributor 하나만 존재)와
+  `searchPullRequestsInProject`/`countSearchPullRequestsInProject`(프로젝트 내부)를 신설했다.
+  `SearchServiceImpl`의 `searchInAll`/`searchInAProject`/`searchInAGroup` 3개 메서드와
+  `SearchResult`에 `pullRequestsCount`/`pullRequests` 필드 추가(우선순위는 기존 8개 타입 뒤,
+  기본값 ISSUE 폴백 앞). `web/SearchRestApiController`에 `GET /api/v1/search/prs` 추가(issues/
+  projects와 동일한 얇은 어댑터). 검증: `SearchResultSpec`(+1), `SearchServiceSpec`(+3, 전역/
+  프로젝트내부/그룹 각 1케이스), `SearchRestApiControllerSpec`(+2), 신규
+  `PullRequestRepositorySpec`(+2, 실제 DB로 네이티브 쿼리 검증 — 프로젝트 소속/contributor 매칭,
+  프로젝트 내부 검색). 총 8개.
+- **항목4(가장 신중하게) — PR에 라벨/담당자 개념 추가**:
+  - **레거시 조사 결과(착수 전 필수 확인)**: `/home/jiho/yona-convert/legacy-yona/app/models/
+    PullRequest.java`를 전수 확인(`grep -i "label\|assignee"` 0건 — 필드/컨트롤러/뷰 템플릿
+    (`app/controllers/PullRequestApp.java`, `app/views/organization/group_pullrequest_list*.
+    scala.html` 등) 전부 0건). **레거시 Play `yona`의 PR 모델에도 원래부터 label/assignee
+    개념이 전혀 없었음을 확정** — 이번 작업은 포팅 누락 버그가 아니라 순수 신규 기능 확장이다
+    (`docs/yona-wiki/index.md` 서문이 허용하는 범위).
+  - **`Assignee` 재사용 가능성 확인**: `domain/issue/Assignee.kt`는 정말로 `(user, project)`만
+    갖는 범용 엔티티이고 Issue 전용 FK/제약이 전혀 없음을 확인 — Issue와 동일한 패턴
+    (`@ManyToOne(cascade=[CascadeType.ALL])`, `@JoinColumn(name="assignee_id")`, nullable)으로
+    그대로 재사용 가능해 재사용했다.
+  - **라벨 엔티티 선택**: `domain/issue/IssueLabel`(카테고리에 종속, `issue_issue_label` 조인
+    테이블로 Issue와 연결, `ProjectViewController.newLabel()`/`updateLabelForm()`/
+    `deleteLabelForm()`이 실제로 관리하는 "진짜" 프로젝트별 이슈 라벨)과 `domain/project/Label`
+    (카테고리 없는 단순 태그, `project_label` 조인테이블로 **Project 자신**에 직접 붙는 프로젝트
+    레벨 토픽/분류용, Step8.5 1라운드 도입)의 용도가 서로 다름을 코드로 확인했다. **부수 발견**:
+    `web/LabelRestApiController.kt`는 `list()`(`ProjectController.getProjectLabels()`)가
+    `domain/project/Label`을 반환하는데 `create/update/delete`(`ProjectViewController.
+    newLabel/updateLabelForm/deleteLabelForm`)는 `domain/issue/IssueLabel`을 다뤄 **같은 REST
+    리소스 안에서 조회와 변경이 서로 다른 엔티티를 가리키는 기존 불일치**가 있다(이번 작업
+    범위 밖이라 수정하지 않고 여기 기록만 남긴다 — 별도 이슈/다음 라운드 후보). PR은 "프로젝트
+    안의 개별 항목"이라는 점에서 Issue와 성격이 같으므로 `IssueLabel`을 재사용하는 것이
+    개념적으로 맞고, 프로젝트마다 이미 라벨 정의(이름/색상/카테고리)가 있어 신규
+    `PullRequestLabel` 엔티티를 만들 필요가 없다고 판단 — Issue.labels와 동일한 패턴(신규
+    조인테이블 `pull_request_issue_label`)으로 재사용했다.
+  - **스키마 변경 리스크 재평가**: `application.yml`이 전 프로파일에서 `ddl-auto: update`를
+    쓰고 있어(수동 마이그레이션 스크립트 없음, 지금까지 이 계획의 모든 라운드가 신규 엔티티/
+    컬럼을 추가할 때 동일하게 의존해온 방식) 스키마 변경 자체의 리스크는 계획 문서가 우려했던
+    것보다 낮다고 재평가 — 이 판단 때문에 "최소 구현으로 축소"가 아니라 지시된 범위(엔티티+
+    서비스+REST API+목록 필터) 전체를 이번 라운드에 완료했다(웹 UI만 범위 밖으로 유지).
+  - **구현**: `PullRequest.kt`에 `assignee: Assignee? = null`, `labels: MutableSet<IssueLabel> =
+    mutableSetOf()` 추가. `PullRequestService`/`PullRequestServiceImpl`에 `setAssignee()`(null이면
+    해제, IssueServiceImpl.updateIssue()와 동일하게 기존 Assignee를 재사용하지 않고 매번 새로
+    만듦)/`addLabel()`/`removeLabel()`(둘 다 라벨 "정의" 자체는 만들지 않고 프로젝트에 이미 있는
+    `IssueLabel`만 참조) 신설. `PullRequestController`에 `PUT/DELETE /{number}/assignee`,
+    `POST /{number}/labels`, `DELETE /{number}/labels/{labelId}`(addReviewer/removeReviewer와
+    동일한 `checkWritePermission` 패턴) 추가, `getPullRequests()`에 `--assignee`/`--label` 필터
+    추가(기존 `--author`와 동일하게 인메모리 필터링 — PR 목록은 프로젝트당 크지 않음).
+    `PullRequestApiController`에 대응 어댑터(`PUT/DELETE .../assignee`, `POST/DELETE
+    .../labels(/{labelId})`) + 목록 필터 파라미터 전달 추가. 별도 필터 세그먼트 추가는
+    불필요(`pull-requests` 세그먼트가 이미 `scopedApiPattern`의 `(?:/.*)?` 접미부로 모든 하위
+    경로를 PULL_REQUESTS 그룹으로 인가하고 있음 — 이슈 comments/close, PR merge/reviewers와
+    동일한 기존 메커니즘 재사용).
+  - 검증: `PullRequest.kt` 필드 추가에 대한 실제 DB 검증은 `PullRequestServiceSpec`의 신규
+    4케이스(담당자 지정/해제, 존재하지 않는 PR 예외, 라벨 추가/제거, 존재하지 않는 라벨 예외,
+    real DB 기반)로 확보. `PullRequestControllerSpec`(+14, assignee PUT 5케이스/DELETE 2케이스,
+    labels POST 3케이스/DELETE 2케이스, list 필터 assignee/label 각 1케이스),
+    `PullRequestApiControllerSpec`(+6, assignee PUT/DELETE 어댑터 3개 + labels POST/DELETE
+    어댑터 2개 + 목록 필터 파라미터 전달 1개), `ApiTokenScopedIssueAndPullRequestSubpath
+    AuthorizationIntegrationSpec`(+4, assignee/labels 하위경로 스코프 403/통과). 총 28개.
+  - **웹 UI는 명시적으로 범위 밖**: PR 상세/목록 화면에 담당자·라벨을 표시·편집하는 Thymeleaf
+    UI는 이번 라운드에서 손대지 않았다(지시사항의 "범위가 크면 최소 구현 + 웹 UI는 범위 밖" 대안을
+    적용 — 다만 백엔드는 전체를 완료했으므로 실제로 축소된 것은 웹 UI뿐이다). 다음 라운드 이후로
+    이월.
+- **전체 스위트**: `./gradlew test` 전체 실행 결과 3280여 개 테스트 중 실패는 5라운드에도 있었던
+  사전 존재 이슈(`CodeSwallowedStyleRenderingSpec`/`CodeBrowserListWrapRenderingSpec`, 코드
+  브라우저 CSS 렌더링, 이번 라운드가 전혀 손대지 않은 영역)뿐 — 회귀 아님. 상세는 이 라운드의
+  커밋 메시지 참고.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
@@ -753,10 +861,15 @@ yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤
 | 프로젝트 조회 API의 스코프 패턴 불일치 | Step6의 `/api/v1/projects/{owner}`(목록)와 `/api/v1/projects/{owner}/{project}`(조회)는 리소스 세그먼트가 없어 `ApiTokenAuthenticationFilter.scopedApiPattern`(owner/project/resource 3단 필수)과 매칭되지 않는다 — Fine-grained 스코프 토큰으로 호출 불가(세션/전권 토큰만 가능), 이슈/PR API는 "issues"/"pull-requests" 세그먼트가 있어 이 문제가 없다 | **3라운드에서 해소** — 개별 조회는 `metadata` 스코프(그룹/권한 매트릭스 없이 repo scope만 확인), 목록은 request attribute(`SCOPED_API_TOKEN_ATTRIBUTE`) 기반 필터링으로 구현 완료. 상세는 아래 "3라운드" 로그 참고 |
 | 토큰 발급/관리 UI 부재 | `ApiTokenRepository`엔 조회 메서드 하나뿐, 사용자가 `ApiToken`을 발급/조회/폐기할 UI·컨트롤러·서비스가 전혀 없어 실사용자는 Fine-grained 토큰을 발급받을 방법이 없다 | **3라운드에서 해소** — `ApiTokenService`/`ApiTokenServiceImpl` + `UserViewController` 확장 + `user/edit_tokens.html` 신설로 발급/조회/폐기 가능. 상세는 아래 "3라운드" 로그 참고 |
 | 전역/사용자 단위 엔드포인트의 스코프 인가 갭 | `search`/`organizations`/`user` 네임스페이스(5라운드 신설)는 특정 저장소 하나에 속한 리소스가 아니라 `/api/v1/projects/{owner}/{project}/{resource}` 3세그먼트 스코프 모델에 맞지 않는다 | **미해결(다음 라운드 이후로 이월)** — 현재는 세션 로그인/레거시 전권 토큰으로만 인증되고 Fine-grained 스코프 토큰은 인증되지 않는다(구멍은 아니고 기능 제한). 해소하려면 이 계획의 8개 스코프 그룹과 별개로 "저장소 비종속" 스코프 개념을 새로 설계해야 한다 — 이번 라운드 지시사항대로 무리하게 밀어붙이지 않고 문서화만 함 |
-| `yona search prs` 대응 서버 기능 없음 | yona `SearchType` enum(PROJECT/ISSUE/USER/POST/MILESTONE/ISSUE_COMMENT/POST_COMMENT/REVIEW)에 PR 전용 값이 없어 PR 자체를 색인하는 통합검색이 서버에 없다 | **미해결(다음 라운드 이후로 이월)** — `SearchService`에 `SearchType.PULL_REQUEST` 추가 + PR 인덱싱 쿼리 신설이 필요한 별도 규모의 작업이라 이번 라운드 범위 밖으로 뒀다 |
-| `gh issue status` 최소 버전만 구현 | `UserIssueStatusRestApiController`는 담당/작성 이슈 개수·목록만 제공 | **미해결(다음 라운드 이후로 이월)** — `UserViewController.userIssues()`가 지원하는 mentioned/favorite/shared/commenter 필터, 페이지네이션/정렬 파라미터는 계획 문서 지시대로(범위가 커질 수 있어 최소 버전만) 이번 라운드에 포함하지 않았다 |
+| `yona search prs` 대응 서버 기능 없음 | yona `SearchType` enum(PROJECT/ISSUE/USER/POST/MILESTONE/ISSUE_COMMENT/POST_COMMENT/REVIEW)에 PR 전용 값이 없어 PR 자체를 색인하는 통합검색이 서버에 없다 | **7라운드에서 해소** — `SearchType.PULL_REQUEST` 추가 + `PullRequestRepository`에 Issue와 동일한 패턴의 인덱싱/검색 쿼리 신설, `web/SearchRestApiController`에 `GET /api/v1/search/prs` 추가. 상세는 아래 "7라운드" 로그 참고 |
+| `gh issue status` 최소 버전만 구현 | `UserIssueStatusRestApiController`는 담당/작성 이슈 개수·목록만 제공 | **7라운드에서 해소** — `UserViewController.userIssues()`가 지원하는 mentioned/favorite/shared/commenter 필터와 pageNum/state/filter/orderBy/orderDir 파라미터를 신규 백엔드 로직 없이 기존 IssueRepository 메서드 호출에 그대로 전달해 노출했다. 상세는 아래 "7라운드" 로그 참고 |
+| PR에 라벨/담당자 개념 없음 | `PullRequest.kt`에 `labels`/`assignee` 필드가 없어(Issue엔 있음) `pr list --label/--assignee`를 지원할 수 없었다. 레거시 Play `yona`에도 원래 없던 개념인지 확인 필요했다 | **7라운드에서 해소** — 레거시 조사 결과 원래부터 없던 개념(포팅 누락 아님)임을 확정한 뒤, `Assignee`(재사용)/`IssueLabel`(재사용, 신규 조인테이블 `pull_request_issue_label`)로 백엔드 엔티티+서비스+REST API+list 필터 전체 구현. 웹 UI만 범위 밖으로 이월. 상세는 아래 "7라운드" 로그 참고 |
 
 ## Step 8.6 — 실서버 기능 부재로 미룬 4개 항목 (2026-09-01, 사용자 지시로 백로그화)
+
+**상태: 7라운드(2026-09-01)에서 4개 항목 전부 우선순위 순서(1→2→3→4) 그대로 해소 완료.** 아래
+목록은 착수 전 백로그 원문을 그대로 보존한다(각 항목의 실제 구현/조사 결과는 위 "7라운드" 완료
+로그 참고).
 
 Step8.5 완료 후 "CLI 배선 문제가 아니라 서버 자체에 없어서 못 넣은 것도 있을 텐데?"라는 질문으로
 정리된, 위 리스크 표에 이미 개별 기록된 4개 항목을 우선순위와 함께 백로그로 확정한다. 착수 비용/
@@ -798,4 +911,4 @@ Step8.5 완료 후 "CLI 배선 문제가 아니라 서버 자체에 없어서 �
 
 - 백로그 원본: [`docs/PARITY_BACKLOG.md`](../../PARITY_BACKLOG.md#p3-02)
 - 관련 계획: [[p3-03-ssh-gpg]], [[p3-07-mcp-server]], [[p3-05-ci-actions-runner]]
-- 관련 소스: `config/ApiTokenAuthenticationFilter.kt`, `config/SecurityConfig.kt`, `domain/enumeration/ResourceType.kt`, `web/ProjectApiController.kt`, `web/IssueRestApiController.kt`, `web/PullRequestApiController.kt`, `web/ProjectRestApiController.kt`, `web/LabelRestApiController.kt`, `web/SearchRestApiController.kt`, `web/OrganizationRestApiController.kt`, `web/UserIssueStatusRestApiController.kt`, `domain/pullrequest/PullRequestServiceImpl.kt`
+- 관련 소스: `config/ApiTokenAuthenticationFilter.kt`, `config/SecurityConfig.kt`, `domain/enumeration/ResourceType.kt`, `web/ProjectApiController.kt`, `web/IssueRestApiController.kt`, `web/PullRequestApiController.kt`, `web/ProjectRestApiController.kt`, `web/LabelRestApiController.kt`, `web/SearchRestApiController.kt`, `web/OrganizationRestApiController.kt`, `web/UserIssueStatusRestApiController.kt`, `domain/pullrequest/PullRequestServiceImpl.kt`, `web/WebhookRestApiController.kt`, `web/ProjectPermissionRestApiController.kt`, `domain/pullrequest/PullRequest.kt`, `domain/pullrequest/PullRequestRepository.kt`, `domain/enumeration/SearchType.kt`

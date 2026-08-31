@@ -17,9 +17,11 @@ import io.mockk.verify
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -55,24 +57,24 @@ class PullRequestApiControllerSpec : DescribeSpec({
         it("PullRequestController.getPullRequests에 위임한다") {
             val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
             every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
-            every { pullRequestController.getPullRequests(1L, null, null, any()) } returns ResponseEntity.ok(listOf(pr))
+            every { pullRequestController.getPullRequests(1L, null, null, null, null, any()) } returns ResponseEntity.ok(listOf(pr))
 
             mockMvc.perform(get("/api/v1/projects/yona/yuna/pull-requests"))
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$[0].id").value(3))
 
-            verify(exactly = 1) { pullRequestController.getPullRequests(1L, null, null, any()) }
+            verify(exactly = 1) { pullRequestController.getPullRequests(1L, null, null, null, null, any()) }
         }
 
         it("author 쿼리 파라미터를 PullRequestController.getPullRequests에 그대로 전달한다") {
             val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
             every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
-            every { pullRequestController.getPullRequests(1L, null, "contributor", any()) } returns ResponseEntity.ok(listOf(pr))
+            every { pullRequestController.getPullRequests(1L, null, "contributor", null, null, any()) } returns ResponseEntity.ok(listOf(pr))
 
             mockMvc.perform(get("/api/v1/projects/yona/yuna/pull-requests").param("author", "contributor"))
                 .andExpect(status().isOk)
 
-            verify(exactly = 1) { pullRequestController.getPullRequests(1L, null, "contributor", any()) }
+            verify(exactly = 1) { pullRequestController.getPullRequests(1L, null, "contributor", null, null, any()) }
         }
     }
 
@@ -215,6 +217,92 @@ class PullRequestApiControllerSpec : DescribeSpec({
                 .andExpect(jsonPath("$.id").value(9))
 
             verify(exactly = 1) { pullRequestController.addComment(1L, 1L, any(), any()) }
+        }
+    }
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자/라벨 CRUD 어댑터.
+    describe("PUT /api/v1/projects/{owner}/{project}/pull-requests/{number}/assignee") {
+        it("PullRequestController.setAssignee에 위임한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.setAssignee(1L, 1L, any(), any()) } returns ResponseEntity.ok(pr)
+
+            mockMvc.perform(
+                put("/api/v1/projects/yona/yuna/pull-requests/1/assignee")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"userId":10}""")
+            ).andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.setAssignee(1L, 1L, any(), any()) }
+        }
+
+        it("프로젝트가 없으면 404를 반환한다") {
+            every { projectRepository.findByOwnerAndName("yona", "unknown") } returns Optional.empty()
+
+            mockMvc.perform(
+                put("/api/v1/projects/yona/unknown/pull-requests/1/assignee")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"userId":10}""")
+            ).andExpect(status().isNotFound)
+        }
+    }
+
+    describe("DELETE /api/v1/projects/{owner}/{project}/pull-requests/{number}/assignee") {
+        it("PullRequestController.removeAssignee에 위임한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.removeAssignee(1L, 1L, any()) } returns ResponseEntity.ok(pr)
+
+            mockMvc.perform(delete("/api/v1/projects/yona/yuna/pull-requests/1/assignee"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.removeAssignee(1L, 1L, any()) }
+        }
+    }
+
+    describe("POST /api/v1/projects/{owner}/{project}/pull-requests/{number}/labels") {
+        it("PullRequestController.addLabel에 위임한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.addLabel(1L, 1L, any(), any()) } returns ResponseEntity.ok(pr)
+
+            mockMvc.perform(
+                post("/api/v1/projects/yona/yuna/pull-requests/1/labels")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"labelId":5}""")
+            ).andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.addLabel(1L, 1L, any(), any()) }
+        }
+    }
+
+    describe("DELETE /api/v1/projects/{owner}/{project}/pull-requests/{number}/labels/{labelId}") {
+        it("PullRequestController.removeLabel에 위임한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.removeLabel(1L, 1L, 5L, any()) } returns ResponseEntity.ok(pr)
+
+            mockMvc.perform(delete("/api/v1/projects/yona/yuna/pull-requests/1/labels/5"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.removeLabel(1L, 1L, 5L, any()) }
+        }
+    }
+
+    // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — `gh pr list --assignee/--label` 위임 확인.
+    describe("GET /api/v1/projects/{owner}/{project}/pull-requests (assignee/label 필터)") {
+        it("assignee/label 쿼리 파라미터를 PullRequestController.getPullRequests에 그대로 전달한다") {
+            val pr = PullRequest(id = 3L, number = 1L, title = "PR", fromProject = project, toProject = project, contributor = contributor)
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.getPullRequests(1L, null, null, "assignee-login", "bug", any()) } returns ResponseEntity.ok(listOf(pr))
+
+            mockMvc.perform(
+                get("/api/v1/projects/yona/yuna/pull-requests")
+                    .param("assignee", "assignee-login")
+                    .param("label", "bug")
+            ).andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.getPullRequests(1L, null, null, "assignee-login", "bug", any()) }
         }
     }
 })
