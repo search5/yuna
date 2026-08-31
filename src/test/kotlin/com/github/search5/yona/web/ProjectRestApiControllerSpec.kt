@@ -13,15 +13,24 @@ import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.project.ProjectService
 import com.github.search5.yona.domain.project.ProjectUserRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
+import com.github.search5.yona.domain.watch.WatchService
 import io.kotest.core.spec.style.DescribeSpec
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
@@ -60,11 +69,19 @@ class ProjectRestApiControllerSpec : DescribeSpec({
         milestoneRepository
     )
 
-    val controller = ProjectRestApiController(projectRepository, userRepository, accessControl)
+    val projectService = mockk<ProjectService>()
+    val watchService = mockk<WatchService>()
+    val projectController = mockk<ProjectController>()
+
+    val controller = ProjectRestApiController(
+        projectRepository, userRepository, accessControl,
+        projectService, organizationRepository, watchService, projectController
+    )
     val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 
     beforeTest {
-        clearMocks(projectRepository, userRepository, projectUserRepository)
+        clearMocks(projectRepository, userRepository, projectUserRepository, projectService, watchService, projectController)
+        every { organizationRepository.findByName(any()) } returns Optional.empty()
     }
 
     val publicProject = Project(id = 1L, owner = "yona", name = "public-repo", overview = "공개 저장소", projectScope = ProjectScope.PUBLIC)
@@ -150,6 +167,108 @@ class ProjectRestApiControllerSpec : DescribeSpec({
                 .andExpect(status().isOk)
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("public-repo-2"))
+        }
+    }
+
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `yona project create`. 이 엔드포인트는
+    // ApiTokenAuthenticationFilter의 어떤 패턴과도 매칭되지 않는 `POST /api/v1/projects`(세그먼트
+    // 없음)라 Fine-grained 스코프 토큰으로는 호출할 수 없고 세션/레거시 전권 토큰만 가능하다
+    // (GitHub Fine-grained PAT도 저장소 생성 자체는 지원하지 않는 것과 동일한 제약 - 의도적 설계,
+    // 계획 문서 리스크 표 참고).
+    describe("POST /api/v1/projects") {
+        it("로그인하지 않으면 401을 반환한다") {
+            mockMvc.perform(
+                post("/api/v1/projects")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"owner":"outsider","name":"new-repo","overview":"설명","projectScope":"PUBLIC","vcs":"GIT"}""")
+            ).andExpect(status().isUnauthorized)
+        }
+
+        it("owner가 기존 조직명이고 조직 관리자가 아니면 403을 반환한다") {
+            every { userRepository.findByLoginId("outsider") } returns Optional.of(outsider)
+            val org = com.github.search5.yona.domain.organization.Organization(id = 1L, name = "someorg")
+            every { organizationRepository.findByName("someorg") } returns Optional.of(org)
+
+            mockMvc.perform(
+                post("/api/v1/projects")
+                    .principal(auth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"owner":"someorg","name":"new-repo","overview":"설명","projectScope":"PUBLIC","vcs":"GIT"}""")
+            ).andExpect(status().isForbidden)
+        }
+
+        it("ProjectService.createProject에 위임하고 생성된 프로젝트를 반환한다") {
+            every { userRepository.findByLoginId("outsider") } returns Optional.of(outsider)
+            val created = Project(id = 5L, owner = "outsider", name = "new-repo", overview = "설명", projectScope = ProjectScope.PUBLIC)
+            every { projectService.createProject(any(), any()) } returns created
+            every { watchService.watch(any(), any(), any()) } returns Unit
+
+            mockMvc.perform(
+                post("/api/v1/projects")
+                    .principal(auth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"owner":"outsider","name":"new-repo","overview":"설명","projectScope":"PUBLIC","vcs":"GIT"}""")
+            ).andExpect(status().isCreated)
+                .andExpect(jsonPath("$.name").value("new-repo"))
+
+            verify(exactly = 1) { projectService.createProject(any(), any()) }
+            verify(exactly = 1) { watchService.watch(outsider, any(), "5") }
+        }
+    }
+
+    describe("POST /api/v1/projects/{owner}/{project}/fork") {
+        it("ProjectController.forkProject에 위임한다") {
+            every { projectController.forkProject("yona", "public-repo", any()) } returns ResponseEntity.ok(publicProject)
+
+            mockMvc.perform(post("/api/v1/projects/yona/public-repo/fork").principal(auth))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { projectController.forkProject("yona", "public-repo", any()) }
+        }
+    }
+
+    describe("PATCH /api/v1/projects/{owner}/{project}/settings") {
+        it("프로젝트가 없으면 404를 반환한다") {
+            every { projectRepository.findByOwnerAndName("yona", "unknown") } returns Optional.empty()
+
+            mockMvc.perform(
+                patch("/api/v1/projects/yona/unknown/settings")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"overview":"설명","projectScope":"PUBLIC"}""")
+            ).andExpect(status().isNotFound)
+        }
+
+        it("ProjectController.updateProject에 위임한다") {
+            every { projectRepository.findByOwnerAndName("yona", "public-repo") } returns Optional.of(publicProject)
+            every { projectController.updateProject(1L, any(), any()) } returns ResponseEntity.ok(publicProject)
+
+            mockMvc.perform(
+                patch("/api/v1/projects/yona/public-repo/settings")
+                    .principal(auth)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"overview":"새 설명","projectScope":"PUBLIC"}""")
+            ).andExpect(status().isOk)
+
+            verify(exactly = 1) { projectController.updateProject(1L, any(), any()) }
+        }
+    }
+
+    describe("DELETE /api/v1/projects/{owner}/{project}/settings") {
+        it("프로젝트가 없으면 404를 반환한다") {
+            every { projectRepository.findByOwnerAndName("yona", "unknown") } returns Optional.empty()
+
+            mockMvc.perform(delete("/api/v1/projects/yona/unknown/settings"))
+                .andExpect(status().isNotFound)
+        }
+
+        it("ProjectController.deleteProject에 위임한다") {
+            every { projectRepository.findByOwnerAndName("yona", "public-repo") } returns Optional.of(publicProject)
+            every { projectController.deleteProject(1L, any()) } returns ResponseEntity.ok(mapOf("status" to "success"))
+
+            mockMvc.perform(delete("/api/v1/projects/yona/public-repo/settings").principal(auth))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { projectController.deleteProject(1L, any()) }
         }
     }
 })

@@ -173,6 +173,12 @@ class ApiTokenAuthenticationFilter(
         // "metadata" -> null은 리소스 그룹과 무관하게 repo scope만 확인하는 GitHub "Metadata:
         // Read-only" 자동 부여 대응이다 — 값 자체가 null이므로 조회는 반드시 containsKey로 해야
         // 한다(map[key] ?: return null은 "키 없음"과 "값이 null"을 구분하지 못한다).
+        // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — "labels"/"fork" 세그먼트 추가.
+        // labels는 실제 위임 대상(ProjectViewController.newLabel/updateLabelForm/deleteLabelForm)이
+        // 전부 ResourceType.ISSUE_LABEL 기준 AccessControl 체크를 쓰고 있어(ISSUES 그룹) 그대로
+        // 맞춘다 - 필터가 부여하는 스코프와 컨트롤러가 실제로 요구하는 AccessControl 권한이 같은
+        // 그룹이어야 "스코프는 통과했는데 컨트롤러가 거부"/그 반대의 불일치가 없다. fork는
+        // ResourceType.FORK(CODE 그룹) - 저장소 코드를 복제하는 행위라 CODE 스코프가 자연스럽다.
         private val resourceSegmentToResourceType: Map<String, ResourceType?> = mapOf(
             "issues" to ResourceType.ISSUE_POST,
             "pull-requests" to ResourceType.PULL_REQUEST,
@@ -181,7 +187,9 @@ class ApiTokenAuthenticationFilter(
             "wiki" to ResourceType.WIKI_PAGE,
             "webhooks" to ResourceType.WEBHOOK,
             "settings" to ResourceType.PROJECT_SETTING,
-            "metadata" to null
+            "metadata" to null,
+            "labels" to ResourceType.ISSUE_LABEL,
+            "fork" to ResourceType.FORK
         )
 
         private fun parseScopedApiTarget(requestUri: String?): ScopedApiTarget? {

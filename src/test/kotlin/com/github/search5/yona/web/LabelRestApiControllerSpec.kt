@@ -1,0 +1,90 @@
+package com.github.search5.yona.web
+
+import io.kotest.core.spec.style.DescribeSpec
+import io.mockk.clearMocks
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.setup.MockMvcBuilders
+
+// yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `yona label list/create/edit/delete`.
+// 감사표는 원래 web/LabelController.kt(전역 라벨 자동완성 `/labels`, `/categories`)로 안내했지만,
+// 실제 프로젝트 스코프 라벨 CRUD는 그 파일에 없다 - list는 ProjectController.getProjectLabels(),
+// create/edit/delete는 ProjectViewController.newLabel()/updateLabelForm()/deleteLabelForm()
+// (ISSUE_LABEL 기준 AccessControl 체크, `/{owner}/{projectName}/issue/label(s)/...`)에 있다.
+// 이 컨트롤러는 그 메서드들에 위임하는 얇은 어댑터다(재검증 후 재분류 - 계획 문서 참고).
+class LabelRestApiControllerSpec : DescribeSpec({
+    val projectController = mockk<ProjectController>()
+    val projectViewController = mockk<ProjectViewController>()
+
+    val controller = LabelRestApiController(projectController, projectViewController)
+    val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
+
+    beforeTest {
+        clearMocks(projectController, projectViewController)
+    }
+
+    describe("GET /api/v1/projects/{owner}/{project}/labels") {
+        it("ProjectController.getProjectLabels에 위임한다") {
+            every { projectController.getProjectLabels("yona", "yuna", any()) } returns ResponseEntity.ok(emptySet<Any>())
+
+            mockMvc.perform(get("/api/v1/projects/yona/yuna/labels"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { projectController.getProjectLabels("yona", "yuna", any()) }
+        }
+    }
+
+    describe("POST /api/v1/projects/{owner}/{project}/labels") {
+        it("ProjectViewController.newLabel에 위임한다") {
+            every {
+                projectViewController.newLabel("yona", "yuna", "bug", "red", "type", false, any())
+            } returns ResponseEntity.status(HttpStatus.CREATED).body(mapOf("id" to 1L))
+
+            mockMvc.perform(
+                post("/api/v1/projects/yona/yuna/labels")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"name":"bug","color":"red","category":"type"}""")
+            ).andExpect(status().isCreated)
+
+            verify(exactly = 1) { projectViewController.newLabel("yona", "yuna", "bug", "red", "type", false, any()) }
+        }
+    }
+
+    describe("PATCH /api/v1/projects/{owner}/{project}/labels/{id}") {
+        it("ProjectViewController.updateLabelForm에 위임한다") {
+            every {
+                projectViewController.updateLabelForm("yona", "yuna", 1L, "bug", "blue", 2L, any())
+            } returns ResponseEntity.ok().build()
+
+            mockMvc.perform(
+                patch("/api/v1/projects/yona/yuna/labels/1")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"name":"bug","color":"blue","categoryId":2}""")
+            ).andExpect(status().isOk)
+
+            verify(exactly = 1) { projectViewController.updateLabelForm("yona", "yuna", 1L, "bug", "blue", 2L, any()) }
+        }
+    }
+
+    describe("DELETE /api/v1/projects/{owner}/{project}/labels/{id}") {
+        it("ProjectViewController.deleteLabelForm에 위임한다") {
+            every {
+                projectViewController.deleteLabelForm("yona", "yuna", 1L, "delete", any())
+            } returns ResponseEntity.ok().build()
+
+            mockMvc.perform(delete("/api/v1/projects/yona/yuna/labels/1"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { projectViewController.deleteLabelForm("yona", "yuna", 1L, "delete", any()) }
+        }
+    }
+})
