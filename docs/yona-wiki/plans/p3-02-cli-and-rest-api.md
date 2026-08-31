@@ -334,7 +334,7 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] Fine-grained 토큰을 웹 UI에서 발급/조회/폐기할 수 있음 (3라운드 — Step 6.6)
 - [x] Go CLI 본체(`yona auth/issue/pr/project/admin/api`)가 1부 REST API를 감싸는 형태로 구현됨 (4라운드 — Step7~10, 별도 저장소 `yona-cli`)
 - [x] 서버(1부)가 Step8.5의 "기존 서버 API 연결"/"신규 API 필요" 두 그룹을 커버함 — project fork/create/edit/delete, label CRUD, issue reopen/transfer, PR edit/close/reopen/diff/comment, issue/pr list 필터, search issues/projects, org list/view, 사용자 이슈 대시보드 최소 버전 (5라운드 — 아래 완료 로그 참고. `yona search prs`는 서버에 대응 SearchType이 없어 이월)
-- [x] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (6라운드 — 아래 완료 로그 참고. `pr create`의 `--from-project-id` 요구 제거와 `yona config`/`yona alias`는 낮은 우선순위 항목이라 다음 라운드 이후로 이월)
+- [x] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (6라운드 + 직후 보완 — 아래 완료 로그 참고. `yona config`/`yona alias`는 낮은 우선순위 항목이라 다음 라운드 이후로 이월)
 - [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (다음 라운드로 이월 — 4라운드는 httptest 기반 단위/통합 테스트만 수행)
 - [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (다음 라운드)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
@@ -729,10 +729,12 @@ yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤
   같은 단순 필드만 안전하게 쓰고 나머지는 `--json` 탈출구로만 노출하는 방어적 설계로 대응했다
   (`internal/api/pr.go`의 `GetPullRequestDiff()` 주석 참고). 실제 서버로 호출해 직렬화
   결과를 확인하지는 못했다(이번 라운드는 httptest 목킹만 수행) — 실서버 검증 시 재확인 필요.
+- **후속 보완(6라운드 직후)**: `pr create`의 `--from-project-id` 요구 제거 — 6라운드 위임
+  프롬프트에 빠뜨려 이월됐던 것을 바로 마저 구현. `--from "owner/project"`를 받아 CLI가
+  기존 프로젝트 조회 API(`GET /api/v1/projects/{owner}/{project}`)로 내부에서 ID를
+  resolve하도록 `cmd/pr.go`의 `newPRCreateCmd`를 수정(TDD, RED→GREEN, `go test ./...`
+  전체 통과). `yona-cli` 커밋 `2ce3881`.
 - **이월 항목**:
-  - `pr create`의 `--from-project-id` 요구 제거(TASK-0396이 계획 문서만 먼저 반영해뒀던
-    항목) — 이번 라운드 지시 범위에 명시적으로 포함되지 않아 손대지 않았다. 현재 그대로
-    `--from-project-id`(fork 프로젝트의 숫자 ID)가 필수다.
   - `yona config`, `yona alias` — 계획 문서 지시대로 낮은 우선순위, 미착수.
   - Go CLI 실서버 골든 패스(`auth login` → 이슈 생성 → PR 목록 조회) 수동 검증 — 여전히
     미착수(httptest 기반 단위/통합 테스트만 수행).
