@@ -338,8 +338,9 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] Step8.6 백로그 4개 항목(admin webhook/permission 목록 API, `gh issue status` 필터/페이지네이션 전체, `yona search prs`, PR 라벨/담당자) 전부 해소 (7라운드 — 아래 완료 로그 참고. PR 라벨/담당자의 웹 UI만 명시적으로 범위 밖, 다음 라운드 이후로 이월)
 - [x] Step8.7 백로그 2개 항목(`LabelRestApiController` list vs create/update/delete 엔티티 불일치 버그, PR 라벨/담당자 웹 UI) 전부 해소 (8라운드 — 아래 완료 로그 참고. PR 목록 생성/수정 폼까지는 범위 밖으로 유지, 상세 화면+목록 화면 표시까지만)
 - [x] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (9라운드, 2026-09-01 — 아래 완료 로그 참고. 실제 서버로 부트스트랩 관리자 생성 → 로그인 → 프로젝트 생성 → 토큰 발급 → `yona auth login` → `yona issue create/list` → `yona pr create/list`까지 전부 성공 확인. 검증 과정에서 순환 직렬화 심각 버그를 발견·수정함)
+- [x] yona-cli 전체 명령(git clone/push, pr checkout/merge/diff/edit, project fork, admin backup/permission/webhook, label edit 포함)이 실서버에 대고 정상 동작함 (10라운드, 2026-09-01 — 아래 완료 로그 참고. 실측으로 7개 실버그 발견·수정. 특히 스마트 HTTP git 프로토콜이 완전히 깨져 있던 심각한 버그를 포함)
 - [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (2026-09-01 사용자 지시로 보류 — 아직 외부 배포 대상 사용자가 없어 실제로 필요해지는 시점까지 미룸)
-- [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
+- [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증 — 10라운드 기준 `./gradlew test`(H2) 5807개 중 4개 실패, 전부 `IssueServiceImplSpec`/`IssueServiceSpec` 각 2케이스로 9라운드 로그에도 이미 기록된 사전 존재 플레이키니스(단독 실행 시 GREEN 재확인) — 이번 라운드가 만든 회귀 아님)
 
 ## 완료 로그
 
@@ -1038,6 +1039,224 @@ yona-cli가 "JSON을 해석할 수 없습니다: invalid character ']'"로 실�
   `web/IssueAndPullRequestCircularSerializationIntegrationSpec.kt`(+5), 수정
   `web/IssueRestApiController.kt`/`web/PullRequestApiController.kt`/`web/SearchRestApiController.kt`
   (엔티티 반환 → DTO 반환으로 전환, 신규 서비스 로직 없음).
+
+### 10라운드 (2026-09-01) — yona-cli 전체 명령 실서버 수동 골든패스에서 발견한 7개 실버그 수정
+
+9라운드까지는 REST API 배선/직렬화 위주로 검증해왔는데, 이번 라운드는 실제 `yona-cli` 바이너리로
+전체 명령(`project create/fork`, `git clone/push`, `pr create/diff/edit/checkout/merge`,
+`issue status`, `admin backup/permission/webhook`, `label create/edit`)을 하나씩 손으로 실행하며
+골든패스를 재현했다. 전부 mockk 기반 스펙으로는 놓쳤던 버그였다 — 실제 서블릿 생명주기/실제
+파일시스템/실제 git 트랜스포트/여러 스펙이 공유하는 실제 H2 DB가 얽혀야 드러나는 문제들이었다.
+
+**공통 원칙**: 7개 항목 전부 RED(실제 서버 + 실제 `yona-cli` 바이너리로 재현) → 최소 구현 →
+GREEN(같은 방식 재검증) → 단위/통합 테스트 추가 순서로 진행했다. 서버는 h2 프로파일+
+`-Dyona.data=<격리된 tmp 경로>`(TASK-0415 반영, DB까지 확실히 격리됨)로 매번 새로 띄우고 검증 후
+종료했다.
+
+#### 항목1(최우선) — 스마트 HTTP git 프로토콜이 완전히 깨져 있음
+
+- **근본원인**: `GitServletConfig.kt`의 디스패처 서블릿이 JGit `GitServlet`/`LfsProtocolServlet`을
+  컨테이너에 실제 서블릿으로 등록하지 않고, 자기 자신의 `service()`에서 `gitServlet.service(req,res)`를
+  수동으로만 호출해왔다. 그런데 JGit `GitServlet`은 `MetaServlet`을 상속하며, 내부 `GitFilter`가
+  upload-pack/receive-pack/info-refs 등 URL 파이프라인(`bindings`)을 실제로 구성하는 시점은
+  `init(ServletConfig)`이 호출될 때뿐이다(`GitFilter.init()` 소스 직접 대조로 확인). 컨테이너가
+  이 디스패처 서블릿에게 보장하는 `init(ServletConfig)` 호출이 `gitServlet`/`lfsServlet`에는 전혀
+  전달되지 않았으므로, `GitFilter`의 파이프라인이 텅 빈 채로 남아 모든 요청이 첫 매치 실패로 기본
+  체인(`chain.doFilter`)에 떨어져 `RepositoryResolver`에 도달하지도 못한 채 조용히 404를 반환했다
+  (그래서 서버 로그에 예외 스택트레이스가 전혀 안 남았다 — `RepositoryNotFoundException`이 조용히
+  404로 변환되는 정상 경로조차 타지 않았던 것).
+- **수정**: `GitServletConfig.kt`의 디스패처 서블릿에 `init()`(무인자, `GenericServlet.init(ServletConfig)`가
+  자동 위임하는 템플릿 메서드)을 override해 `gitServlet.init(servletConfig)`/
+  `lfsServlet.init(servletConfig)`를 명시적으로 호출하도록 고쳤다 — 컨테이너가 디스패처 자신에게
+  주는 정상적인 서블릿 생명주기를 그대로 두 서블릿에 전달하는 최소 수정.
+- **RED/GREEN**: 신규 `config/GitSmartHttpProtocolIntegrationSpec.kt`
+  (`@SpringBootTest(webEnvironment = RANDOM_PORT)`로 실제 임베디드 톰캣을 띄우고, 실제 `git clone`
+  바이너리로 스마트 HTTP clone까지 검증 — 기존 `GitAuthorizationFilterIntegrationSpec`은 MockMvc가
+  `DispatcherServlet`만 태우고 이 raw 서블릿을 우회해 이 버그를 검증할 수 없었다). 수정 전
+  `git clone` 프로세스가 실제로 실패함을 확인(RED) → 수정 후 성공(GREEN).
+- **실서버+실CLI 골든패스**: bootstrap-setup으로 관리자 생성 → `yona project create admin/golden-repo`
+  → 실제 `git clone http://.../git/admin/golden-repo.git` 성공 → `main` 브랜치에 커밋 후 실제
+  `git push` 성공 → `feature-1` 브랜치 생성/push 성공 → `yona pr create` → `yona pr checkout 1`
+  성공 → `yona pr merge 1` 성공까지 전부 실측 검증.
+- **부수 발견 1(같은 근본원인 계열) — 클론 URL에 `/git/` 세그먼트 누락**: 서버가 실제로 서빙하는
+  git 스마트 HTTP 경로는 `GitServletConfig`가 등록한 `/git/*`인데, `TemplateHelper.getCloneUrl()`
+  (PR 화면의 "git remote add upstream ..." 안내 문구가 쓰는 헬퍼)과 yona-cli의
+  `cmd/pr.go`의 `planCheckout()`이 둘 다 `scheme://host/owner/name.git`(← `/git/` 없음) 형태로
+  URL을 만들고 있었다 — 실제로 존재하지 않는 경로라 `pr checkout`이 처음엔 항상
+  "저장소를 찾지 못했습니다" 오류로 실패했다(항목1 본 수정 뒤에도 남아있던 별도 버그, 실측으로
+  발견). `TemplateHelper.getCloneUrl()`과 `planCheckout()` 양쪽에 `/git/` 세그먼트를 추가해
+  수정했고, `TemplateHelperBranchSpec.kt`의 기존 9개 단언과 yona-cli
+  `TestPlanCheckout_ComputesRemoteURLBranchAndLocalBranch`를 새 URL 형식에 맞춰 갱신했다.
+- **부수 발견 2(별도 근본원인) — `pr merge`의 fetch가 짧은 브랜치 이름으로 항상 실패**: 부수 발견
+  1을 고친 뒤에도 `pr merge`가 `TransportException: Remote does not have <branch> available for
+  fetch`로 계속 실패했다(9라운드 완료 로그도 이 동일 증상을 "빈 저장소라 그런 것, 골든패스
+  범위 밖"으로 잘못 판단하고 넘어간 적이 있었다). 실제 원인: `yona pr create --from-branch
+  feature-1`(그리고 세션 웹 UI의 PR 생성 폼도 동일 — `PullRequestViewController.branchNamesOf()`가
+  `refs/heads/` 접두어를 미리 벗겨 select 옵션을 채운다)처럼 실제 운영 경로는 항상 **짧은** 브랜치
+  이름을 `PullRequest.fromBranch`/`toBranch`에 그대로 저장하는데, JGit의 로컬(파일시스템) fetch
+  연결(`BaseConnection.getRef()`, 소스 직접 대조로 확인)은 광고된 ref 맵에서 정확히 일치하는
+  **전체** 이름만 찾고 짧은 이름을 `refs/heads/`로 보정해주지 않는다. `PullRequestServiceImpl.kt`의
+  `attemptMerge`/`previewMerge`/`merge`/`updateMerge` 네 메서드 전부가 이 취약한 패턴을 반복하고
+  있었다(이 파일의 기존 단위 테스트들이 전부 `PullRequestService.createPullRequest()`를 직접
+  "refs/heads/..." 형태로만 호출해왔기 때문에 지금까지 안 잡혔다). 공용 `qualifyBranchRef()`
+  헬퍼(`GitRepository.kt setDefaultBranch()`가 쓰는 것과 동일한 `startsWith("refs/")` 패턴)를
+  추가해 fetch RefSpec 소스에만 적용했다(저장 형식/화면 표시는 그대로 유지). 신규 테스트 1개
+  (`PullRequestServiceSpec` — 짧은 이름으로 만든 PR의 merge 성공 검증, 수정 전 RED 확인).
+- **막힘 아님이지만 범위 밖으로 남긴 발견**: 위 두 버그를 고치고 `pr merge`가 성공한 뒤 병합 결과를
+  직접 까본 결과, `PullRequestServiceImpl.createMergeCommitAndUpdateRef()`가 병합 커밋을 만들어
+  `refs/yobi/pull/{id}/merged`에는 반영하지만 **실제 대상 브랜치(`refs/heads/main` 등)의 ref는
+  갱신하지 않는다** — `yona pr merge`가 성공 메시지를 내고 DB의 PR 상태도 MERGED로 바뀌지만, 실제
+  `git pull`로 그 브랜치를 받으면 병합된 변경사항이 전혀 보이지 않는다(실측: `git --git-dir=...
+  show-ref`로 `refs/heads/main`이 여전히 병합 전 커밋을 가리키는 것을 직접 확인). 이건 이번
+  7개 항목에 없던 별개의, 상당히 큰 버그(머지의 실제 효과 자체에 대한 것)라 이번 라운드 범위로
+  다루지 않고 여기 기록만 남긴다 — 다음 라운드에서 최우선으로 다룰 것을 제안한다(브랜치를
+  fast-forward할지, 새 병합 커밋으로 갱신할지, 보호된 브랜치/동시 push와의 충돌은 어떻게 다룰지
+  설계 결정이 필요해 보인다).
+
+#### 항목2+3 — Fine-grained PAT이 `/api/v1/projects/{owner}/...` 밖 URL을 전혀 인식 못 함
+
+지시사항대로 한 번에 처리했다. 공통 근본원인: `ApiTokenAuthenticationFilter`의
+`scopedApiPattern`/`individualProjectPattern`/`ownerOnlyPattern` 셋 다 `/api/v1/projects/{owner}/...`
+(최소 owner 세그먼트 필요) 형태만 인식해, 그 밖의 URL(세그먼트가 아예 없거나, prefix가 다르거나,
+숫자 PK 기반인 URL)로 들어온 요청은 전부 `authenticateLegacy`(레거시 전권 토큰 조회)로 새 버려
+fine-grained PAT을 전혀 인식하지 못했다.
+
+- **`POST /api/v1/projects`(프로젝트 생성, item2)**: owner 세그먼트가 아예 없다. 신규
+  `projectCreatePattern`을 추가하고, "계정 수준" 판정을 위해 신규 `authenticateAccountLevel()`을
+  만들었다 — project는 아직 존재하지 않아 특정 프로젝트로 스코프를 좁힌 토큰으로는 원천적으로
+  판정할 수 없으므로(repo scope 체크 대상이 없음), `allRepositories=true`(All repositories)인
+  토큰만 허용하도록 강제했다(GitHub Fine-grained PAT이 "All repositories" 토큰에만 새 저장소
+  생성 권한을 주는 것과 동일한 논리). 별도 스코프 그룹을 신설하지 않고 기존 ADMINISTRATION
+  (이미 `ResourceType.PROJECT` 포함)을 재사용했다 — "프로젝트를 새로 만들 수 있는가"가 다른
+  ADMINISTRATION 항목(SITE_SETTING/PROJECT_TRANSFER/ORGANIZATION 등)과 같은 "저장소 자체의
+  존재/설정을 다루는 관리 행위" 범주라고 판단했다. 4라운드가 남긴 "GitHub도 새 저장소 생성은
+  Fine-grained PAT으로 지원 안 하니 의도적으로 막아둔 것"이라는 주석은 실측 결과 틀린 전제였음을
+  확인하고 `ProjectRestApiController.kt`에서 정정했다.
+- **`GET /api/v1/user/issues/status`(item3-1)**: `/api/v1/user/**` 전용 신규 `userApiPattern`
+  추가. project는 null(여러 프로젝트에 걸친 "로그인 사용자 전체" 집계라 단일 프로젝트로 좁힐 수
+  없음)로 두고 ISSUES 그룹 권한만으로 판정 — project create/site export와 달리 `allRepositories`는
+  강제하지 않았다(쓰기가 아니라 읽기 전용 대시보드라 상대적으로 위험도가 낮다고 판단).
+- **`GET /site/export`(item3-2)**: 신규 `siteApiPattern`(`/sites?(?:/.*)?$`) 추가. SITE_SETTING
+  (ADMINISTRATION 그룹) + `allRepositories=true` 요구(프로젝트 생성과 동일한 논리 — 사이트 전체를
+  대상으로 하는 행위). 실제 사이트 관리자 권한 여부는 이 필터가 판정하지 않고 기존
+  `SecurityConfig`의 `hasAnyRole("ADMIN","SITE_ADMIN")`가 그대로 검사한다 — 이 필터는 PAT의
+  신원만 세팅한다.
+- **`POST /api/projects/{id}/members`(item3-3)**: owner/name이 아니라 숫자 PK로 식별되는 유일한
+  API라 신규 `legacyProjectIdPattern`(`/api/projects/(\d+)(?:/.*)?$`)을 추가하고 PROJECT_SETTING
+  (ADMINISTRATION 그룹)으로 스코프 인식시켰다. 별도로, `ProjectMemberController.getLoginUserId()`가
+  인증 정보가 없으면 `IllegalArgumentException("Unauthorized")`를 그대로 던져 500이 나던 버그를
+  `ResponseStatusException(HttpStatus.UNAUTHORIZED)`로 교체해 401로 고쳤다(스코프 인식 갭과는
+  별개의 버그, 지시사항대로 최소 수정만 함).
+- **`POST /projects/{owner}/{project}/webhooks`(item3-4)**: 세션/폼 기반 레거시 MVC라
+  `/api` 접두어가 아예 없다. 신규 `legacyWebProjectPattern`(`/projects/{owner}/{project}/{resource}`)을
+  추가해 기존 `resourceSegmentToResourceType` 매핑(이미 "webhooks" 포함)을 그대로 재사용했다.
+  CSRF는 전역 비활성 상태(`SecurityConfig`)라 원인이 아니었다 — 실제 원인은 이 URL이 어떤 스코프
+  패턴과도 안 맞아 PAT을 아예 인식 못 하고 익명으로 처리돼 컨트롤러 자체 권한 체크(매니저 전용)에
+  걸린 것이었다. 이 패턴은 `Authorization`/`Yona-Token` 헤더가 있을 때만 개입하므로 세션 기반
+  일반 웹 UI 트래픽에는 영향이 없다.
+- **RED/GREEN**: 신규 `config/ApiTokenAccountLevelAndLegacyAuthorizationIntegrationSpec.kt`
+  (12케이스 — 위 5개 URL 각각 스코프 없음→403 / 올바른 스코프→필터 통과, `ProjectMemberController`
+  500→401 포함). 수정 전 스택으로 되돌려 8~9개 실패(RED) 확인 후 복구해 12개 전부 GREEN.
+- **실서버+실CLI 골든패스**: `yona project create`, `yona issue status`, `yona admin backup export`,
+  `yona admin permission add`(멤버 중복 시 400, 신규 유저는 정상 추가), `yona admin webhook create`
+  전부 실제 서버에 대고 성공 확인.
+- **테스트 인프라 부수 수정**: 위 신규 스펙 중 "레거시 웹훅"/"프로젝트 생성" 테스트 2쌍이 실제
+  POST로 Webhook/Watch/ProjectUser/NotificationEvent 행을 만드는데(형제 스펙들은 GET만 써서 이런
+  부수효과가 없었다), 처음엔 정리(`afterSpec`)가 없어 같은 forked 테스트 JVM에서 H2 DB를 공유하는
+  무관한 다른 스펙들(`WatchServiceSpec`/`OrganizationServiceSpec`/`ProjectUserServiceSpec` 등)의
+  `deleteAll()` 정리 단계에서 FK 위반 연쇄 실패를 일으켰다(전체 스위트 실행 339개 실패로 실측
+  확인). `watchRepository`/`webhookRepository`/`notificationEventRepository`/`apiTokenRepository`/
+  `projectUserRepository`/`projectRepository`/`userRepository` 순서로 정리하는 `afterSpec`을
+  추가해 해소했다(`ProjectForkSelfIntegrationSpec.kt`에도 같은 이유로 소규모 정리 추가).
+
+#### 항목4 — `project fork`를 같은 owner로 하면 500 + DB 오염
+
+- **근본원인**: `ProjectServiceImpl.forkProject()`에 사전 검증이 없어, 목적지(owner+name)가 이미
+  존재해도(대표적으로 목적지 미지정 + forker 본인이 이미 owner인 "자기 자신에게 fork" 케이스)
+  검증 없이 파일시스템 하드링크부터 시도해 `FileAlreadyExistsException`으로 500이 났다. 더 심각한
+  문제: `@Transactional`은 있었지만 기본 롤백 규칙(RuntimeException/Error만 롤백, 체크 예외는
+  커밋)만 적용돼 있어서, `Files.createLink()`가 던지는 체크 예외(`FileAlreadyExistsException`은
+  `IOException`의 하위 타입)로 실패해도 그 전에 실행된 `projectRepository.save`/
+  `projectUserRepository.save`는 그대로 커밋됐다 — owner+name이 중복된 `Project` 행이 남고,
+  이후 그 프로젝트를 대상으로 한 모든 스코프 API가 `ApiTokenAuthenticationFilter.authenticateScoped`의
+  `findByOwnerAndName()`에서 `IncorrectResultSizeDataAccessException`으로 연쇄 500이 났다.
+- **수정**: (a) `@Transactional(rollbackFor = [Exception::class])`로 바꿔 체크 예외도 롤백 대상에
+  포함, (b) 파일시스템 작업을 시도하기 전에 `projectRepository.findByOwnerAndName(destOwner,
+  destName)`으로 목적지 존재 여부를 먼저 검증해 있으면 `IllegalArgumentException`으로 깔끔하게
+  거절(컨트롤러가 이미 400으로 매핑) — 예측 가능한 충돌은 트랜잭션 롤백에 기대는 대신 사전
+  검증으로 막는 게 더 명확하고 저렴하다고 판단했다.
+- **RED/GREEN**: `ProjectServiceImplSpec.kt`에 신규 mockk 테스트(사전 검증으로 파일시스템 작업
+  전에 거절 + save류 미호출 확인) + 기존 8개 fork 테스트에 신규 `findByOwnerAndName` 스텁 추가.
+  신규 `ProjectForkSelfIntegrationSpec.kt`(실제 DB + 실제 파일시스템 — 자기 자신에게 fork 시도 후
+  DB에 정확히 1건만 남는지, `findByOwnerAndName()`이 정상 동작하는지까지 실측 검증). 수정 전
+  두 스펙 모두 RED 확인 후 복구해 GREEN.
+- **실서버+실CLI 골든패스**: `yona project fork admin/golden-repo`(목적지 미지정, 이미 그 프로젝트의
+  owner) → 500이 아니라 `HTTP 400: '...' 프로젝트가 이미 존재합니다` 응답 확인, `yona search
+  projects golden-repo`로 중복 행 없이 정확히 1건만 조회됨을 확인.
+
+#### 항목5 — `pr diff`가 여전히 raw JGit 도메인 객체를 그대로 반환
+
+- **근본원인**: 9라운드가 Issue/PR/검색의 순환직렬화는 고쳤지만 diff 엔드포인트는 "JGit 값
+  객체라 User/Project 연관관계가 없어 순환직렬화 문제 자체가 없다"고만 확인하고 넘어갔다 —
+  맞는 말이지만 별개의 문제가 있었다: `FileDiff.a`/`b`(`org.eclipse.jgit.diff.RawText`),
+  `editList`(`EditList`), `oldMode`/`newMode`(`FileMode`)가 전부 일반 Jackson 빈 컨벤션에 맞는
+  getter가 없는 JGit 내부 타입이라, 그대로 직렬화하면 base64 rawContent 등 JGit 내부 표현이
+  노출되고 `pathA`/`pathB`조차 신뢰하기 어려운 응답이 됐다(실측: `yona pr diff`가
+  `- -> -`로 깨져 나옴).
+- **수정**: `web/RestApiResponseDto.kt`에 `FileDiffResponse`(pathA/pathB/changeType/commitA/
+  commitB/isBinaryA/isBinaryB/hasError/patch) + `FileDiff.toResponse()` 추가.
+  `FileDiff.getHunks()`(이미 JGit RawText/EditList를 순수 `DiffLine` 목록으로 계산해주는 기존
+  로직)를 그대로 이용해 GNU unified diff 형식의 `patch` 텍스트를 서버가 직접 조립해 내려주도록
+  했다(JGit `DiffFormatter`를 새로 쓰지 않고 기존 계산 결과를 재사용). `PullRequestController.
+  getDiff()`/`PullRequestApiController.diff()`가 이 DTO를 반환하도록 변경.
+  yona-cli(`cmd/pr.go`)도 `patch` 필드를 실제로 출력하도록 확장했다 — 이전엔 `pathA -> pathB`
+  요약 한 줄만 보여주고 실제 diff 내용은 `--json`으로만 볼 수 있었다(diff 커맨드인데 diff
+  내용을 안 보여주는 것 자체가 별도 UX 결함이었음).
+- **RED/GREEN**: `PullRequestControllerSpec.kt`에 신규 케이스(JGit 타입을 실제로 채운 `FileDiff`로
+  diff를 요청해 응답에 `rawContent`/`editList`가 없고 pathA/changeType/patch만 있는지 확인),
+  `PullRequestApiControllerSpec.kt` 기존 위임 테스트를 새 반환 타입에 맞춰 수정. yona-cli
+  `cmd/pr_test.go`에 신규 2케이스(`patch` 출력 확인, `patch` 없을 때 자리표시자 안 새는지 확인).
+  전부 수정 전 컴파일 에러/RED 확인 후 GREEN.
+- **실서버+실CLI 골든패스**: `feature-1` 브랜치에 README 한 줄 추가 후 `yona pr diff 1`로
+  `MODIFY  README.md -> README.md` + `@@ -1,1 +1,2 @@` unified diff 텍스트가 실제로 출력됨을 확인.
+
+#### 항목6 — `pr edit`에서 `--body`를 생략하면 기존 본문이 지워짐
+
+- **근본원인**: `PullRequestController.updatePullRequest()`가 `fromBranch`/`toBranch`는
+  `request.fromBranch ?: pullRequest.fromBranch` 폴백이 있는데 `body`만 `request.body`를 그대로
+  써서, yona-cli가 `--body`를 생략했을 때(`Body *string` 포인터 타입에 `json:"body,omitempty"`라
+  JSON에서 필드 자체가 생략됨, CLI 쪽은 정상) 서버가 그 null을 그대로 적용해 본문이 사라졌다.
+- **수정**: `body = request.body ?: pullRequest.body`로 동일한 폴백 추가(한 줄).
+- **RED/GREEN**: `PullRequestControllerSpec.kt`에 신규 케이스(body 키가 아예 없는 JSON으로
+  `pr edit` 재현 → 기존 body가 서비스에 그대로 전달되는지 검증). 수정 전 RED(폴백 없이 null이
+  그대로 전달됨) 확인 후 복구해 GREEN.
+- **실서버+실CLI 골든패스**: PR 생성 시 본문 채움 → `yona pr edit 1 --title "제목만 수정"`(body
+  생략) → `yona pr view 1`로 본문이 그대로 남아있음을 실측 확인.
+
+#### 항목7(사소함) — `label edit` 성공 메시지가 "라벨 #-을(를) 수정했습니다"로 나옴
+
+- **근본원인**: yona-cli `cmd/label.go`가 `num(label, "id")`로 서버 응답에서 id를 꺼내는데, 라벨
+  수정 엔드포인트(`LabelRestApiController.update` → `ProjectViewController.updateLabelForm` 위임)
+  응답 바디에 `id` 필드가 없어(수정된 라벨 객체 자체가 불완전하게 내려옴) 항상 `-`가 찍혔다. 서버
+  응답 형식을 고치는 대신(지시사항이 권장한 더 간단하고 안전한 방법을 채택), CLI가 이미 알고 있는
+  `args[0]`(사용자가 입력한 id)를 그대로 메시지에 쓰도록 고쳤다 — yuna 서버 쪽 변경 없음, yona-cli만
+  수정.
+- **RED/GREEN**: `cmd/label_test.go`에 신규 케이스(id 필드가 없는 실제 서버 응답 형태를 흉내낸
+  목서버로 재현 — 수정 전 `#-`로 깨짐을 RED로 직접 확인, 수정 후 `#2`로 정확히 나옴을 GREEN으로
+  확인).
+- **실서버+실CLI 골든패스**: `yona label create` → `yona label edit 1 --name bugfix --color blue
+  --category-id 1` → `라벨 #1을(를) 수정했습니다.` 정상 출력 확인.
+
+#### 전체 스위트 / 커밋
+
+- `./gradlew test`(H2) 최초 전체 실행 결과 339개 실패 — 위 "테스트 인프라 부수 수정"에서 다룬
+  신규 스펙의 정리 누락이 원인이었음을 확인하고 수정, 재실행 결과는 아래 "완료 기준" 절 갱신
+  참고.
+- yuna 커밋: TASK-0416(항목1 + 부수 발견 2건), TASK-0417(항목2+3), TASK-0418(항목4),
+  TASK-0419(항목5), TASK-0420(항목6). yona-cli 커밋: 항목1 부수발견(clone URL `/git/` 수정),
+  항목5(diff patch 출력), 항목7(label edit 메시지) — 자유 형식 커밋 메시지.
+- **막힌 항목 없음** — 7개 전부 실서버+실CLI로 재현/수정/재검증 완료. 위 항목1의 "막힘 아니지만
+  범위 밖" 발견(merge가 실제 브랜치 ref를 갱신하지 않음)만 다음 라운드로 이월.
 
 ## 리스크 / 미결정 사항
 
