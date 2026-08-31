@@ -175,6 +175,14 @@ class ProjectController(
         }
     }
 
+    // TASK-0421(P3-02 11라운드, 버그8) — 이 엔드포인트가 forkedProject(JPA Project 엔티티)를
+    // 가공 없이 그대로 반환하면 Project.projectUsers[].user(User.projectUsers와의 양방향 연관)를
+    // 따라가며 Jackson이 순환 직렬화를 시도하다 User.password/passwordSalt 해시값까지 응답
+    // 바이트에 그대로 노출한다(실측: curl로 90KB 응답에서 "password" 키 확인, RestApiResponseDto.kt
+    // 상단 주석에 적힌 이슈/PR 순환직렬화 버그와 동일한 근본원인의 별개 발생 지점).
+    // ProjectRestApiController.fork()가 이 메서드를 그대로 위임 호출하므로, RestApiResponseDto.kt의
+    // Project.toRefResponse()(id/owner/name/overview/vcs/scope만 노출)로 감싸 두 경로 모두 함께
+    // 고친다.
     @PostMapping("/api/{owner}/{projectName}/fork")
     fun forkProject(
         @PathVariable owner: String,
@@ -187,7 +195,7 @@ class ProjectController(
 
         return try {
             val forkedProject = projectService.forkProject(project.id!!, user.id!!)
-            ResponseEntity.ok(forkedProject)
+            ResponseEntity.ok(forkedProject.toRefResponse())
         } catch (e: IllegalArgumentException) {
             ResponseEntity.badRequest().body(mapOf("error" to e.message))
         }
