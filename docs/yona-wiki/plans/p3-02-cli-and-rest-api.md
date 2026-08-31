@@ -907,6 +907,31 @@ Step8.5 완료 후 "CLI 배선 문제가 아니라 서버 자체에 없어서 �
      모델을 확인해서, 정말 레거시에도 없던 개념을 새로 추가하는 것인지 확정하고 계획 문서에
      근거를 남겨라.
 
+## Step 8.7 — 7라운드에서 발견/이월된 2개 항목 (2026-09-01, 사용자 지시로 백로그화)
+
+7라운드(Step8.6 구현) 검증 과정에서 발견한 실제 버그 1건과, 7라운드가 명시적으로 범위 밖에
+둔 웹 UI 1건을 우선순위와 함께 백로그로 확정한다. 버그가 이미 배포된 기능을 깨뜨리고 있어
+1순위, 신규 기능의 UI 완성은 상대적으로 덜 급해 2순위로 뒀다.
+
+1. **(최우선, 실제 버그) `LabelRestApiController`의 list vs create/update/delete 엔티티 불일치**
+   — `list()`는 `ProjectController.getProjectLabels()`를 호출해 `domain/project/Label`(프로젝트
+   레벨 토픽 태그)을 반환하는데, `create()`/`update()`/`delete()`는 `ProjectViewController.
+   newLabel()`/`updateLabelForm()`/`deleteLabelForm()`을 호출해 `IssueLabel`(카테고리 기반 이슈
+   라벨링 시스템, 실제 이슈 라벨링에 쓰이는 진짜 라벨)을 조작한다. **`yona label create`로 만든
+   라벨이 `yona label list`엔 절대 뜨지 않는다** — TASK-0397(Step8.5 1라운드)부터 있던 버그,
+   이번 세션에서 직접 코드 대조로 재확인. 수정 방향: `list()`가 `IssueLabel` 기준으로 프로젝트의
+   라벨 목록을 조회하도록 변경(`create`/`update`/`delete`가 쓰는 것과 동일한 엔티티로 통일) —
+   `domain/project/Label`/`ProjectController.getProjectLabels()` 자체는 다른 용도(프로젝트 홈
+   화면의 토픽 태그 표시 등)로 쓰이고 있을 수 있으니 그대로 두고, `LabelRestApiController.
+   list()`의 위임 대상만 `IssueLabel` 조회로 교체하는 최소 수정을 우선 시도해라. `IssueLabel`을
+   프로젝트 기준으로 조회하는 기존 리포지토리 메서드가 있는지 먼저 확인하고, 없으면 신설해라.
+2. **PR 라벨/담당자 웹 UI** — 7라운드가 백엔드(엔티티/서비스/REST API/`pr list` 필터)는 전부
+   완료했지만 Thymeleaf 화면은 명시적으로 범위 밖에 뒀다. PR 상세(`pullrequest/view.html`류)와
+   목록 화면에 담당자·라벨을 Issue 화면과 동일한 방식으로 표시·편집할 수 있게 추가해라 — Issue의
+   대응 화면(담당자 배정 UI, 라벨 선택 UI)이 이미 있으니 그 마크업/컨트롤러 배선 패턴을 그대로
+   재사용해라(이 저장소의 "yuna식 독자 구현 금지" 원칙과 동일하게, Issue 화면 구조를 최대한
+   그대로 따라라).
+
 ## 관련
 
 - 백로그 원본: [`docs/PARITY_BACKLOG.md`](../../PARITY_BACKLOG.md#p3-02)
