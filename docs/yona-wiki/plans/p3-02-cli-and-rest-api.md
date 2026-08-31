@@ -756,6 +756,44 @@ yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤
 | `yona search prs` 대응 서버 기능 없음 | yona `SearchType` enum(PROJECT/ISSUE/USER/POST/MILESTONE/ISSUE_COMMENT/POST_COMMENT/REVIEW)에 PR 전용 값이 없어 PR 자체를 색인하는 통합검색이 서버에 없다 | **미해결(다음 라운드 이후로 이월)** — `SearchService`에 `SearchType.PULL_REQUEST` 추가 + PR 인덱싱 쿼리 신설이 필요한 별도 규모의 작업이라 이번 라운드 범위 밖으로 뒀다 |
 | `gh issue status` 최소 버전만 구현 | `UserIssueStatusRestApiController`는 담당/작성 이슈 개수·목록만 제공 | **미해결(다음 라운드 이후로 이월)** — `UserViewController.userIssues()`가 지원하는 mentioned/favorite/shared/commenter 필터, 페이지네이션/정렬 파라미터는 계획 문서 지시대로(범위가 커질 수 있어 최소 버전만) 이번 라운드에 포함하지 않았다 |
 
+## Step 8.6 — 실서버 기능 부재로 미룬 4개 항목 (2026-09-01, 사용자 지시로 백로그화)
+
+Step8.5 완료 후 "CLI 배선 문제가 아니라 서버 자체에 없어서 못 넣은 것도 있을 텐데?"라는 질문으로
+정리된, 위 리스크 표에 이미 개별 기록된 4개 항목을 우선순위와 함께 백로그로 확정한다. 착수 비용/
+리스크가 작은 순서로 정렬했다 — 뒤로 갈수록 범위가 커지고 설계 결정이 필요하다.
+
+1. **(최우선) `yona admin webhook list`/`permission list`용 JSON API 신설** — 웹훅
+   목록은 `web/WebhookController.kt`가 HTML 렌더링 전용이고, 권한 목록은 대응 엔드포인트가
+   아예 없다(`web/ProjectMemberController.kt`). 생성/변경/삭제는 이미 있으니 목록 조회만
+   추가하면 된다 — Step4~6과 동일한 "기존 서비스 로직에 위임하는 얇은 REST 어댑터" 패턴을
+   그대로 적용 가능, 스키마 변경 없음. 위험이 가장 작다.
+2. **`gh issue status` 필터/페이지네이션 전체 구현** — `UserViewController.userIssues()`에
+   mentioned/favorite/shared/commenter 필터와 페이지네이션/정렬이 **이미 구현돼 있다** —
+   `UserIssueStatusRestApiController`가 그중 assigned/created 두 개만 REST로 노출했으니,
+   나머지를 같은 방식으로 마저 노출하면 된다. 신규 백엔드 로직 불필요, 순수 REST 노출 확장.
+3. **`yona search prs` 서버 지원** — `domain/enumeration/SearchType`(또는 대응 enum)에
+   PR 전용 값이 없어 PR을 색인하는 통합검색 자체가 없다. `SearchService`에 `SearchType.
+   PULL_REQUEST` 추가 + PR 인덱싱/검색 쿼리 신설 필요 — 위 두 항목과 달리 **신규 검색 로직을
+   설계해야 하는 작업**이라 범위가 한 단계 크다(다만 PR 엔티티 스키마 변경은 없음).
+4. **(가장 큼, 설계 결정 필요) PR에 라벨/담당자 개념 추가** — `PullRequest.kt`(`domain/
+   pullrequest/PullRequest.kt`) 자체에 `labels`/`assignee` 필드가 없다(`Issue.kt`엔 `assignee:
+   Assignee?`, `labels: MutableSet<IssueLabel>`가 있는 것과 대비). 이건 REST API 배선이
+   아니라 **PR 엔티티에 없는 도메인 개념을 새로 추가하는 진짜 기능 확장**이다 — P3는 "레거시
+   동치성과 무관한 신규 인프라 개선"이 허용 범위이긴 하지만(`docs/yona-wiki/index.md` 서문
+   참고), 스키마 변경(마이그레이션 포함)이 들어가는 만큼 신중해야 한다. 착수 전 반드시 확인할
+   것:
+   - `Assignee(user, project)`(`domain/issue/Assignee.kt`)는 이미 Issue 전용이 아니라
+     범용(프로젝트 범위 사용자 배정) 엔티티라 PR에도 `assignee: Assignee?` 필드만 추가하면
+     재사용 가능해 보인다(실제로 재사용 가능한지, 아니면 PR 전용 개념이 필요한지 재검증 필요).
+   - 라벨은 `IssueLabel`(Issue 전용, `IssueLabelCategory`에 종속)과 별개로 `domain/project/
+     Label.kt`(Step8.5 1라운드가 프로젝트 레벨 라벨 CRUD에 쓴 범용 엔티티)가 이미 있다 — PR
+     라벨링에 `IssueLabel`을 재사용할지, `Label`을 재사용할지, 아니면 `PullRequestLabel`을
+     새로 만들지는 실제 두 엔티티의 용도 차이를 코드로 재확인해서 결정해라.
+   - **레거시 yona의 PR 모델에도 라벨/담당자 개념이 원래 없었을 가능성이 높다**(Issue 전용
+     설계로 보임) — 착수 전 legacy 소스(`/home/jiho/yona-convert/legacy-yona`)의 PR 관련
+     모델을 확인해서, 정말 레거시에도 없던 개념을 새로 추가하는 것인지 확정하고 계획 문서에
+     근거를 남겨라.
+
 ## 관련
 
 - 백로그 원본: [`docs/PARITY_BACKLOG.md`](../../PARITY_BACKLOG.md#p3-02)
