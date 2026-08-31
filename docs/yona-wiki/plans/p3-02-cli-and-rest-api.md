@@ -1412,6 +1412,112 @@ fork되고, 이미 존재하는 조합이면 TASK-0418의 400 가드에 걸린�
   0건인 완전히 깨끗한 라운드"를 여러 차례 반복 확인하는 수준까지는 도달하지 못했다 — 다음 세션이
   이어서 12라운드부터 계속할 수 있도록 이 로그를 남긴다.
 
+### 12라운드(2026-09-01) — 사용자의 긴급 지시로 라운드 중간에 즉시 종료
+
+**중요**: 이 라운드는 "클린 라운드 달성 또는 최대 4라운드"라는 원래 종료 조건에 도달하기 전에,
+사용자가 "지금 즉시 중단해라"라고 명시적으로 지시해 라운드 도중 종료했다. 아래는 종료 시점까지
+실제로 완료·검증된 것과, 손대다가 만 것(있다면)을 정확히 구분해 기록한다.
+
+#### 완료 + 검증됨 (RED→GREEN, 실서버+실CLI 재검증, 커밋/푸시까지 끝남)
+
+1. **`label` edit/delete의 교차 프로젝트 IDOR(TASK-0426, 심각도 높음)** — `LabelRestApiController.
+   update()`/`delete()` -> `ProjectViewController.updateLabelForm()`/`deleteLabelForm()`가 URL
+   경로의 project에 대한 라벨 쓰기 권한만 확인하고, 실제 대상인 라벨 id(및 update의
+   category.id)가 그 project 소속인지는 검증하지 않았다. 실서버+실 CLI로 재현: bob(자기 프로젝트
+   bob/repo-b에 대한 라벨 쓰기 권한만 있음)이 URL은 자기 프로젝트로 두고 id만 alice/repo-a의
+   라벨 번호로 바꿔 호출해 alice의 라벨을 실제로 덮어쓰고 삭제함을 확인. id/category.id가 해당
+   project 소속 목록에 있는지(`issueLabelService.getLabels()`/`getCategories()`) 먼저 확인하고
+   아니면 404/400으로 거절하도록 수정. `ProjectViewControllerSpec`에 교차 프로젝트 가드 케이스
+   3건 추가. 수정 후 bob의 재시도가 404로 깨끗하게 거절되고 alice의 라벨이 그대로임을 실측
+   재확인.
+2. **PR 리뷰어 등록 취소(removeReviewer) v1 REST API 어댑터 부재(TASK-0427)** — 레거시
+   `PullRequestController.removeReviewer()`(DELETE .../pullrequests/{n}/reviewers)는 원래부터
+   있었지만, yona-cli 등 외부 클라이언트의 유일한 경로인 v1 REST API(`PullRequestApiController`)엔
+   `addReviewer` 어댑터만 있고 `removeReviewer` 어댑터가 없어 "리뷰어 등록은 되는데 취소는
+   API/CLI로 불가능"했다. DELETE 어댑터 추가 + `PullRequestApiControllerSpec`에 위임 검증 추가.
+   yona-cli에도 `pr review --remove` 플래그 배선(`RemoveReviewer` 클라이언트 메서드 + CLI 테스트
+   추가). 실서버+실 CLI로 등록 -> `pr view --json reviewers`로 확인 -> `--remove` -> 다시 확인해
+   빈 배열로 돌아옴을 재검증.
+3. **git clone/push URL에 `.git` 접미어가 없으면 push가 항상 실패하는 버그(TASK-0428, 심각도
+   높음 — PR 관련 모든 실측 테스트를 막던 근본 원인)** — `GitServletConfig`의
+   `setRepositoryResolver { _, name -> File(gitBaseDir, name) ... }`가 JGit이 URL에서 파싱해
+   넘겨주는 저장소 name을 가공 없이 그대로 파일 경로로 썼다. 이 코드베이스 전역에서 물리 bare
+   저장소는 항상 `"owner/name.git"`로 생성되는데(`GitServiceImpl.createRepository()` 등),
+   클라이언트가 `.git` 접미어 없이 clone/push URL을 쓰면(GitHub 등에서 흔한 축약 표기, 예:
+   `git clone http://host/git/owner/repo`) 존재하지 않는 `"owner/repo"` 경로로 잘못 resolve된다.
+   clone(읽기)은 존재하지 않는 저장소를 빈 저장소처럼 조용히 취급해 성공한 것처럼 보이지만,
+   push(쓰기)는 `ObjectDirectoryPackParser.parse()`가 그 존재하지 않는 objects 디렉터리에 임시
+   팩 파일을 만들려다 `IOException`(ENOENT)을 던져 "unpacker error"로 거절된다 — 실서버(H2)+실
+   git 바이너리로 100% 재현 확인(PR merge 충돌 경로를 실측하려고 브랜치를 push하다가 발견).
+   **이전 라운드들이 이 버그를 못 잡은 이유**: 지금까지 모든 라운드가 clone/push URL에 항상
+   `.git`을 붙여서만 검증해왔다(`GitSmartHttpProtocolIntegrationSpec`의 기존 테스트도 마찬가지).
+   수정: 리졸버에서 name이 `.git`로 끝나지 않으면 붙여서 정규화 — 접미어 유무와 무관하게 항상
+   같은 실제 경로로 resolve. `GitSmartHttpProtocolIntegrationSpec`(실제 임베디드 톰캣+실제 git
+   바이너리)에 `.git` 없이 clone+push하고 별도 clone으로 실제 반영을 재검증하는 케이스 추가,
+   `GitServletConfigSpec`(mockk)에도 리졸버 람다 단위 테스트 추가. 두 스펙 함께 실행해 GREEN
+   확인. 실서버+실 CLI 골든패스: alice 계정으로 `.git` 없는 clone URL로 clone → 커밋 → 같은
+   URL로 push → "new branch main -> main" 성공 확인(수정 전엔 매번 "unpacker error").
+4. **yona-cli `search prs` 배선 부재** — 서버는 7라운드부터 `GET /api/v1/search/prs`를 지원하는데
+   CLI 쪽엔 "서버에 대응 기능이 없어 미구현"이라는 낡은 주석만 남긴 채 배선이 안 돼 있었다.
+   `search issues`/`search projects`와 동일한 패턴으로 `search prs` 배선(yona-cli, Go 테스트
+   추가). 실서버+실 CLI로 `yona search prs "test"` 결과가 정상 출력됨을 확인.
+
+각 항목 모두 관련 유닛/통합 테스트를 개별적으로(`--tests`로 좁혀서) 실행해 GREEN 확인했고,
+yuna 3건 모두 커밋 후 즉시 `git push origin main` 완료(TASK-0426/0427/0428), yona-cli 2건도
+커밋 후 `git push origin main` 완료.
+
+#### 미완료/미검증 — 사용자의 긴급 중단 지시로 이번 라운드에서 못 끝낸 것
+
+- **전체 `./gradlew test` 회귀 확인을 이번 라운드에서 한 번도 못 돌렸다.** 각 수정은 관련
+  스펙(`ProjectViewControllerSpec`, `PullRequestApiControllerSpec`, `GitServletConfigSpec`+
+  `GitSmartHttpProtocolIntegrationSpec`)을 개별적으로 GREEN 확인했고 서로 다른 파일/계층을
+  건드려 상호 간섭 가능성은 낮다고 판단하지만, 확립된 라운드 종료 관례("라운드가 끝날 때 전체
+  `./gradlew test` 1회")를 이번엔 지키지 못했다 — **다음 세션이 반드시 먼저 전체 스위트를
+  돌려 회귀 여부를 확인해야 한다.**
+- **PR merge 충돌 경로 실측**: TASK-0428로 git push가 정상화된 뒤, 실제로 공통 조상에서 같은
+  파일을 다르게 수정한 두 브랜치로 PR을 만들어 `pr merge`를 호출 — 서버가 크래시 없이
+  `{"conflicts":true}`로 깨끗하게 응답하고 CLI가 "충돌이 있어 머지되지 않았습니다"를 출력하며
+  PR 상태가 OPEN으로 그대로 남는 것까지 실측으로 확인했다(버그 아님, 정상 동작). **다만
+  자동화된 회귀 테스트로 고정하지는 못했다** — 시간이 있었다면 `PullRequestServiceSpec` 또는
+  통합테스트에 이 케이스를 추가했을 것이다.
+- **`admin backup export/import` 왕복 실측**: export한 백업을 같은 서버에 재-import(멱등성 확인,
+  이후 기존 프로젝트/PR 데이터가 그대로 조회됨을 재확인) + 완전히 새로운 빈 서버 인스턴스(포트
+  9011, 별도 `-Dyona.data`/`-Dyona.git.base-dir`)에 import까지 CLI로 수행했다. 두 경우 모두
+  `yona admin backup import`가 "백업을 복원했습니다"로 성공 응답했다. **다만 새 서버로 import한
+  뒤 실제 프로젝트 목록/이슈/PR이 CLI로 다시 조회되는지까지는 긴급 중단 지시로 검증을 마치지
+  못했다** — 이 마지막 확인 단계가 이번 라운드의 유일한 "시작했지만 결론을 못 낸" 조사다(코드
+  변경은 없음, 순수 조사였으므로 커밋 상태에는 영향 없음).
+- **환경 관찰(버그 아님, 다음 세션 참고용)**: `yona.git.base-dir`/`yona.svn.base-dir`
+  (`@Value("\${yona.git.base-dir:/tmp/yona/git}")` 등, `GitServletConfig`/`GitServiceImpl`/
+  `ProjectServiceImpl`/`RepositoryService`/`BoardViewController`/`PostingServiceImpl`에 중복
+  선언)는 `upload.base-dir`/H2 `url`과 달리 `-Dyona.data`에 연동되지 않고 항상 전역
+  `/tmp/yona/git`(또는 `/tmp/yona/svn`)로 떨어진다. TASK-0428 조사 중 이 경로에 과거 라운드들과
+  현재 동시 실행 중이던 다른 세션들이 남긴 실제 git 저장소 수백 개가 누적돼 있음을 확인했다 —
+  당장 오작동을 일으키진 않지만(이번 버그의 진짜 원인은 아니었음, `-Dyona.git.base-dir`로 완전
+  격리해도 100% 재현됨을 확인해 배제했다), 동시 세션 간 우연한 이름 충돌 가능성과 디스크 누적
+  문제가 있다 — 다음 세션이 서버를 띄울 때 `-Dyona.git.base-dir=<격리된 tmp 경로>`도 함께
+  지정하는 관례를 추가하는 걸 권장한다(이번 라운드부터는 그렇게 했다).
+- **PR/이슈 assignee·label CLI 배선 격차(버그 아님, 기능 확장 백로그)** — 서버는
+  `PullRequestApiController`에 `setAssignee`/`removeAssignee`/`addLabel`/`removeLabel`(7~8라운드
+  신설)을, `IssueRestApiController`도 assignee/label 필드를 지원하는데, yona-cli는 `pr` 쪽엔
+  아예 배선이 없고(`internal/api/pr.go`의 "PR엔 labels/assignee 개념이 없다"는 주석 자체가
+  7라운드 이전 기준으로 낡음) `issue create/edit`도 `CreateIssueRequest`/`UpdateIssueRequest`
+  Go 구조체엔 `AssigneeID`/`LabelIDs` 필드가 이미 있으면서 CLI 플래그로 노출된 적이 없다. "조직
+  목적지 fork 미지원"과 같은 성격(REST에 이미 있는 기능을 CLI가 못 따라간 것)으로 판단해 이번
+  라운드는 구현하지 않고 이월한다.
+- 그 밖에 `issue`/`org` 컨트롤러 코드를 읽어 순환직렬화·상태가드·필드스코프 문제를 점검했으나
+  (`IssueRestApiController`/`OrganizationRestApiController`/`SearchRestApiController` 모두
+  DTO/map 반환 확인, issue `changeState`는 OPEN/CLOSED 토글만 있어 PR의 MERGED 같은 종결
+  상태가 없어 가드 불필요로 판단), 실서버+실CLI 실측까지는 긴급 중단으로 못 갔다 — 코드 정독
+  수준의 확인만 마쳤다.
+
+#### 종료 사유
+
+사용자가 "12라운드까지만" 지시한 직후, 이어서 "지금 즉시 중단"으로 지시를 상향했다. 진행 중이던
+안전한 단위(TASK-0428 GREEN 확인 및 커밋/푸시)까지만 마무리하고, 새 조사(백업 import 후 데이터
+조회 검증)는 결론 없이 중단했다(코드 변경 없었으므로 안전). 클린 라운드 달성 여부와 무관하게
+사용자 지시로 즉시 종료 — 다음 세션은 위 "미완료" 목록부터 이어가면 된다.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
