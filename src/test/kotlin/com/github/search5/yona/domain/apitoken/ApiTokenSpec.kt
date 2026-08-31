@@ -42,14 +42,13 @@ class ApiTokenSpec @Autowired constructor(
                 )
                 val token = ApiToken(owner = owner, tokenHash = "hash-without-expiry", expiresAt = null)
 
-                // DB 제약(NOT NULL) 위반 자체는 5개 DB 전부 동일하게 저장을 거부하지만, Hibernate가 그
-                // 위반을 Spring 예외로 번역하는 결과는 DB마다 다르다 — MariaDB/Postgres/MySQL/SQL
-                // Server는 DataIntegrityViolationException으로 번역되는 반면 CUBRID는 더 뭉뚱그린
-                // JpaSystemException을 던진다(실측 확인, CUBRID JDBC 드라이버가 SQLState를 못 주는 것으로
-                // 추정 — 원인 규명은 별도 이슈로 이월, docs/PARITY_BACKLOG.md 참고). 여기서 검증하려는
-                // 것은 "null이 실제로 저장되지 않는다"는 것이지 예외 타입 자체가 아니므로, 구체 타입
-                // 대신 임의의 예외(무엇이든 저장이 실패하기만 하면 됨)로 완화한다.
-                shouldThrow<Exception> {
+                // DB 제약(NOT NULL) 위반 자체는 5개 DB 전부 동일하게 저장을 거부한다. CUBRID JDBC
+                // 드라이버(11.3.2.0053)는 이 위반에 SQLState를 안 주고 벤더 고유 errorCode(-631)만
+                // 주는 것으로 실측 확인됐는데, YunaCubridDialect.buildSQLExceptionConversionDelegate()가
+                // 이 errorCode를 ConstraintViolationException(NOT_NULL)으로 명시 변환하므로 나머지
+                // 4개 DB(MariaDB/Postgres/MySQL/SQL Server)와 동일하게 DataIntegrityViolationException으로
+                // 번역된다.
+                shouldThrow<org.springframework.dao.DataIntegrityViolationException> {
                     apiTokenRepository.saveAndFlush(token)
                 }
             }
