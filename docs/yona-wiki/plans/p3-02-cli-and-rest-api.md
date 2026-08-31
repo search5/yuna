@@ -8,7 +8,7 @@ depends_on: []
 blocks: [p3-03-ssh-gpg, p3-07-mcp-server, p3-05-ci-actions-runner]
 source: docs/PARITY_BACKLOG.md#P3-02
 created: 2026-08-28
-updated: 2026-08-31
+updated: 2026-09-01
 tags: [plan, p3, cli, api, auth]
 ---
 
@@ -334,7 +334,7 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] Fine-grained 토큰을 웹 UI에서 발급/조회/폐기할 수 있음 (3라운드 — Step 6.6)
 - [x] Go CLI 본체(`yona auth/issue/pr/project/admin/api`)가 1부 REST API를 감싸는 형태로 구현됨 (4라운드 — Step7~10, 별도 저장소 `yona-cli`)
 - [x] 서버(1부)가 Step8.5의 "기존 서버 API 연결"/"신규 API 필요" 두 그룹을 커버함 — project fork/create/edit/delete, label CRUD, issue reopen/transfer, PR edit/close/reopen/diff/comment, issue/pr list 필터, search issues/projects, org list/view, 사용자 이슈 대시보드 최소 버전 (5라운드 — 아래 완료 로그 참고. `yona search prs`는 서버에 대응 SearchType이 없어 이월)
-- [ ] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (Step 8.5, 다음 라운드 — 5라운드가 서버(1부) 쪽은 완료했으므로 다음 라운드는 CLI(2부) 클라이언트 코드만 남음 — 위 "CLI `gh` 명령 체계 대조 감사" 참고)
+- [x] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (6라운드 — 아래 완료 로그 참고. `pr create`의 `--from-project-id` 요구 제거와 `yona config`/`yona alias`는 낮은 우선순위 항목이라 다음 라운드 이후로 이월)
 - [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (다음 라운드로 이월 — 4라운드는 httptest 기반 단위/통합 테스트만 수행)
 - [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (다음 라운드)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
@@ -669,6 +669,77 @@ yuna와 완전히 별개인 새 git 저장소 `~/yona-convert/yona-cli`(`github.
   브라우저 CSS 렌더링, 이번 라운드가 전혀 손대지 않은 영역)이었고, 이 두 스펙은 이 라운드
   변경사항을 전부 `git stash`한 클린 `main`에서도 동일하게 실패함을 확인해 **사전 존재 이슈로
   회귀가 아님**을 검증했다.
+
+### 6라운드 (2026-09-01) — Step8.5 Go CLI(2부) 클라이언트 구현
+
+5라운드가 완료한 서버(1부) API를 그대로 감싸는 CLI(2부) 클라이언트 코드를 `yona-cli`
+저장소(`github.com/search5/yona-cli`, 독립 git 저장소)에 구현했다. 착수 전 이 계획 문서
+전체와 `yona-cli`의 기존 `cmd/*.go`/`internal/api/*.go`, 그리고 방금 5라운드가 추가한 실제
+yuna 서버 엔드포인트(`web/ProjectRestApiController.kt` 등 7개 컨트롤러)를 Serena LSP로
+직접 재확인해 계획 문서 요약과 실제 코드가 어긋나는 지점이 없는지 대조했다 — 어긋난 지점은
+없었고, 계획 문서에 이미 기록된 응답 형태 그대로였다.
+
+- **그룹 1(CLI 로컬 기능)**:
+  - `--json <fields>` 필드선택 전환: `cmd/output.go`의 `printJSON()`을 불리언 스위치에서
+    "필드를 JSON 왕복 변환 후 재귀적으로 골라내는" 방식으로 재작성. `cmd.Flags().Changed("json")`
+    으로 "플래그 자체를 안 씀"과 "빈 필드 목록을 명시적으로 줌"을 구분해 후자는 오류 처리.
+    기존 issue/pr/project 명령의 `--json` 사용처와 테스트를 전부 이 방식으로 갱신.
+  - `-L/--limit`: `issue list`는 서버가 지원하는 페이지네이션(`size` 쿼리 파라미터)을 그대로
+    활용, `pr list`/`project list`는 서버가 페이지네이션 없이 전체 목록을 반환해 클라이언트
+    사이드 슬라이싱으로 처리(계획 문서 지시대로).
+  - `--web`: `view`/`list` 계열 명령에 추가. 신규 `internal/weburl` 패키지가
+    `IssueViewController.kt`/`PullRequestViewController.kt`의 실제 `@GetMapping` 경로
+    (`/{owner}/{project}/issue/{n}`, `/{owner}/{project}/pull/{n}`, `/issues`, `/pulls`)를
+    그대로 반영해 URL을 계산하고, 신규 `internal/gitutil.OpenInBrowser()`가 OS별
+    (`xdg-open`/`open`/`rundll32`)로 연다.
+  - `--repo`/`-R` 자동감지: 신규 `internal/gitutil.DetectRepo()`가 `git remote get-url
+    origin`을 파싱한다. yuna clone URL(`TemplateHelper.getCloneUrl()`, `scheme://[loginId@]
+    host[:port]/owner/name.git`)과 `git@host:owner/repo.git` scp 스타일 SSH URL 둘 다
+    지원 — gh CLI와 동일하게 호스트 뒤 마지막 두 경로 세그먼트를 owner/project로 취급한다.
+    git이 없거나 저장소 밖이면 명시적 `--repo` 오류로 폴백. issue/pr/label의 모든 `--repo`
+    사용처가 이 자동감지를 거치도록 갱신(project는 원래부터 `owner/project` 위치 인자를 쓰므로
+    자동감지 대상이 아님).
+  - `yona server list/use`: 신규 `cmd/server.go`. `list`는 `auth status`와 동일한 토큰
+    마스킹으로 `config.Hosts`를 나열, `use`는 신규 `config.UseHost()`로 재로그인 없이
+    `CurrentHost`만 전환(등록 안 된 호스트면 오류).
+  - `yona browse [issue|pr <number>]`: 신규 `cmd/browse.go`. `internal/weburl`을 `--web`과
+    공유해 URL 계산 로직을 재사용.
+  - `completion`: 실제로 확인해보니 Cobra가 서브커맨드를 가진 루트 커맨드에 이미 자동으로
+    등록하고 있었다(`ExecuteC()` → `InitDefaultCompletionCmd()`, `CompletionOptions.
+    DisableDefaultCmd` 기본값 `false`) — 계획 문서 예상대로 별도 구현 없이 등록만 확인.
+  - `--version`: `cmd/root.go`에 `Version` 필드를 설정해 Cobra 기본 제공 `--version` 플래그를
+    활성화(하드코딩 상수, ldflags 주입은 Step 11 배포 작업 범위로 남김).
+- **그룹 2/3(서버 API 연결)**: 5라운드 완료 로그의 엔드포인트 목록을 그대로 클라이언트로
+  감쌌다 — `yona project fork/create/edit/delete`, `yona label list/create/edit/delete`,
+  `yona issue edit/reopen/transfer`(edit은 read-modify-write로 title/body 중 생략한 쪽을
+  현재 값으로 채움 — 서버 `UpdateIssueRequest`가 둘 다 non-null 필수), `yona issue list`의
+  `--assignee`/`--label`/`--author` 필터, `yona pr edit/close/reopen/diff/comment`(edit도
+  동일한 read-modify-write), `yona pr list`의 `--author` 필터, `yona search issues/projects`
+  (`prs`는 서버에 대응 SearchType이 없어 구현하지 않음, 계획 문서에 이미 기록된 이월 그대로
+  유지), `yona org list/view`, `yona issue status`(담당/작성 이슈 개수·목록).
+  - **`yona pr checkout <number>`**: 서버 API를 호출하지 않고, `pr view`와 같은 방식으로
+    조회한 PR 응답의 `fromProject`(owner/name) + `fromBranch`로 clone URL을 계산해
+    `git fetch <url> <branch>` + `git checkout -B pr-<번호> FETCH_HEAD`를 실행한다. URL/브랜치
+    이름 계산(`planCheckout()`)을 git 실행과 분리해 순수 함수로 단위테스트했다.
+- **서버 쪽에서 발견한 문제(이번 라운드 범위 밖, 보고만 함)**: `PullRequestController.getDiff()`
+  (`pr diff`가 호출)가 반환하는 `List<FileDiff>`의 `FileDiff.a`/`b`는
+  `org.eclipse.jgit.diff.RawText`, `editList`는 `EditList`(JGit 내부 타입)로 선언돼 있는데,
+  둘 다 일반 Jackson 빈 컨벤션에 맞는 getter가 없다 — 그대로 JSON 직렬화하면 필드가 거의
+  비거나 예외가 날 가능성이 있다. CLI 쪽에서 억지로 우회하지 않고 `pathA`/`pathB`/`changeType`
+  같은 단순 필드만 안전하게 쓰고 나머지는 `--json` 탈출구로만 노출하는 방어적 설계로 대응했다
+  (`internal/api/pr.go`의 `GetPullRequestDiff()` 주석 참고). 실제 서버로 호출해 직렬화
+  결과를 확인하지는 못했다(이번 라운드는 httptest 목킹만 수행) — 실서버 검증 시 재확인 필요.
+- **이월 항목**:
+  - `pr create`의 `--from-project-id` 요구 제거(TASK-0396이 계획 문서만 먼저 반영해뒀던
+    항목) — 이번 라운드 지시 범위에 명시적으로 포함되지 않아 손대지 않았다. 현재 그대로
+    `--from-project-id`(fork 프로젝트의 숫자 ID)가 필수다.
+  - `yona config`, `yona alias` — 계획 문서 지시대로 낮은 우선순위, 미착수.
+  - Go CLI 실서버 골든 패스(`auth login` → 이슈 생성 → PR 목록 조회) 수동 검증 — 여전히
+    미착수(httptest 기반 단위/통합 테스트만 수행).
+  - `goreleaser` 배포(Step 11) — 미착수.
+- **테스트**: `yona-cli` 신규/확장 테스트 다수 추가, `go test ./...` **167개 테스트 전체
+  GREEN**(`go build ./...`/`go vet ./...`/`gofmt -l .` 전부 클린). 상세 커밋 이력은 이 작업을
+  지시한 세션의 최종 보고 참고.
 
 ## 리스크 / 미결정 사항
 
