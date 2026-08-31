@@ -452,7 +452,17 @@ class ProjectServiceImpl(
         return orgUser.role.id == RoleType.ORG_ADMIN.roleType
     }
 
-    @Transactional
+    // TASK-0418 — 원래 @Transactional(기본 rollbackFor)만 있었는데, 이 메서드는 DB 저장(projectRepository.save,
+    // projectUserRepository.save) 다음에 java.nio.file.Files.createLink()가 던지는 체크 예외
+    // (FileAlreadyExistsException/IOException)로 실패할 수 있다. Spring 트랜잭션의 기본 롤백 규칙은
+    // RuntimeException/Error만 롤백 대상으로 삼고 체크 예외는 커밋 대상으로 취급하므로("체크 예외는
+    // 복구 가능한 정상적인 실패"라는 EJB 관례를 계승), 파일시스템 작업이 실패해도 이미 실행된 DB
+    // 저장은 그대로 커밋되어 owner+name이 중복된 Project 행이 남았다(실서버 재현: 자기 자신에게 fork
+    // 시도 → FileAlreadyExistsException → 500이지만 DB에는 중복 프로젝트가 남고, 이후 그 프로젝트를
+    // 대상으로 한 모든 스코프 API가 ApiTokenAuthenticationFilter의 findByOwnerAndName에서
+    // IncorrectResultSizeDataAccessException으로 연쇄 500). rollbackFor = [Exception::class]로
+    // 체크 예외도 롤백 대상에 포함시켜 부분 커밋 자체를 막는다.
+    @Transactional(rollbackFor = [Exception::class])
     override fun forkProject(
         projectId: Long,
         forkerId: Long,
@@ -466,6 +476,14 @@ class ProjectServiceImpl(
 
         val destOwner = if (destinationOwner.isNotBlank()) destinationOwner else forker.loginId
         val destName = if (destinationName.isNotBlank()) destinationName else original.name
+
+        // TASK-0418 — 목적지가 이미 존재하면(대표적으로 "목적지 미지정 + 이미 그 프로젝트의
+        // owner 본인" 시나리오) 파일시스템 하드링크를 시도하기도 전에 400 계열로 깔끔하게
+        // 거절한다. 위 rollbackFor 보강과는 별개로 필요하다 — 애초에 예측 가능한 충돌이므로
+        // 트랜잭션 롤백에 기대는 대신 사전 검증으로 막는 게 더 명확하고 저렴하다.
+        if (projectRepository.findByOwnerAndName(destOwner, destName).isPresent) {
+            throw IllegalArgumentException("'$destOwner/$destName' 프로젝트가 이미 존재합니다.")
+        }
 
         // 포크 대상 껍데기 프로젝트 엔티티 복제 생성
         val forked = Project(

@@ -1608,12 +1608,40 @@ class ProjectServiceImplSpec : DescribeSpec({
             }
         }
 
+        // TASK-0418 — 실서버 재현: 목적지 미지정으로 fork하면 destOwner가 forker의 loginId로
+        // 대체되는데, forker 본인이 이미 그 프로젝트의 owner라면(자기 자신에게 fork) destOwner/destName이
+        // 원본과 완전히 같아져 사전 검증에 걸려야 한다. 파일시스템 하드링크를 시도하기도 전에
+        // IllegalArgumentException으로 거절되고, projectRepository.save/projectUserRepository.save가
+        // 전혀 호출되지 않아야 한다(DB에 중복 행이 남지 않음을 보장).
+        it("목적지 프로젝트(owner+name)가 이미 존재하면 파일시스템 작업 전에 IllegalArgumentException으로 거절해야 한다") {
+            val original = Project(id = 9010L, name = "self-fork-repo", owner = "self-fork-owner", vcs = "GIT")
+            val forker = User(id = 12L, loginId = "self-fork-owner")
+            every { projectRepository.findById(9010L) } returns Optional.of(original)
+            every { userRepository.findById(12L) } returns Optional.of(forker)
+            every { projectRepository.findByOwnerAndName("self-fork-owner", "self-fork-repo") } returns Optional.of(original)
+            // 이 describe 블록의 다른 테스트들이 이미 projectRepository.save/projectUserRepository.save를
+            // 호출해뒀을 수 있어(mockk 인스턴스가 파일 전체에서 공유됨) 아래 verify(exactly=0)이
+            // "이번 테스트에서" 호출되지 않았는지를 보려면 먼저 기록을 비워야 한다(스텁 자체는
+            // 유지 — answers=false).
+            clearMocks(projectRepository, projectUserRepository, answers = false)
+
+            shouldThrow<IllegalArgumentException> {
+                // 목적지 미지정 -> destOwner=forker.loginId("self-fork-owner"), destName=원본 이름
+                // 그대로라 원본과 완전히 동일한 좌표로 fork를 시도하는 상황과 같다.
+                projectService.forkProject(9010L, 12L, "", "")
+            }
+
+            verify(exactly = 0) { projectRepository.save(any()) }
+            verify(exactly = 0) { projectUserRepository.save(any()) }
+        }
+
         it("destinationOwner/destinationName이 빈 값이면 forker의 loginId와 원본 프로젝트명으로 대체돼야 한다 (소스 저장소 없음)") {
             val original = Project(id = 9003L, name = "orig-noexist", owner = "owner-noexist-abcxyz", vcs = "GIT")
             val forker = User(id = 5L, loginId = "forker-login")
             val managerRole = Role(id = RoleType.MANAGER.roleType)
             every { projectRepository.findById(9003L) } returns Optional.of(original)
             every { userRepository.findById(5L) } returns Optional.of(forker)
+            every { projectRepository.findByOwnerAndName("forker-login", "orig-noexist") } returns Optional.empty()
             every { projectRepository.save(any()) } answers { firstArg() }
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
             every { projectUserRepository.save(any()) } returns mockk()
@@ -1632,6 +1660,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             val forker = User(id = 6L, loginId = "forker2")
             every { projectRepository.findById(9004L) } returns Optional.of(original)
             every { userRepository.findById(6L) } returns Optional.of(forker)
+            every { projectRepository.findByOwnerAndName("dest-owner2", "dest-name2") } returns Optional.empty()
             every { projectRepository.save(any()) } answers { firstArg() }
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.empty()
 
@@ -1660,6 +1689,7 @@ class ProjectServiceImplSpec : DescribeSpec({
                 val managerRole = Role(id = RoleType.MANAGER.roleType)
                 every { projectRepository.findById(9005L) } returns Optional.of(original)
                 every { userRepository.findById(7L) } returns Optional.of(forker)
+                every { projectRepository.findByOwnerAndName(destOwner, destName) } returns Optional.empty()
                 every { projectRepository.save(any()) } answers { firstArg() }
                 every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
                 every { projectUserRepository.save(any()) } returns mockk()
@@ -1695,6 +1725,7 @@ class ProjectServiceImplSpec : DescribeSpec({
                 val managerRole = Role(id = RoleType.MANAGER.roleType)
                 every { projectRepository.findById(9006L) } returns Optional.of(original)
                 every { userRepository.findById(8L) } returns Optional.of(forker)
+                every { projectRepository.findByOwnerAndName(destOwner, destName) } returns Optional.empty()
                 every { projectRepository.save(any()) } answers { firstArg() }
                 every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
                 every { projectUserRepository.save(any()) } returns mockk()
@@ -1726,6 +1757,7 @@ class ProjectServiceImplSpec : DescribeSpec({
                 val managerRole = Role(id = RoleType.MANAGER.roleType)
                 every { projectRepository.findById(9007L) } returns Optional.of(original)
                 every { userRepository.findById(9L) } returns Optional.of(forker)
+                every { projectRepository.findByOwnerAndName(destOwner, destName) } returns Optional.empty()
                 every { projectRepository.save(any()) } answers { firstArg() }
                 every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
                 every { projectUserRepository.save(any()) } returns mockk()
@@ -1747,6 +1779,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             val managerRole = Role(id = RoleType.MANAGER.roleType)
             every { projectRepository.findById(9008L) } returns Optional.of(original)
             every { userRepository.findById(10L) } returns Optional.of(forker)
+            every { projectRepository.findByOwnerAndName("vcs-null-fork-dest", "vcs-null-fork-dest-repo") } returns Optional.empty()
             every { projectRepository.save(any()) } answers { firstArg() }
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
             every { projectUserRepository.save(any()) } returns mockk()
@@ -1763,6 +1796,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             val managerRole = Role(id = RoleType.MANAGER.roleType)
             every { projectRepository.findById(9009L) } returns Optional.of(original)
             every { userRepository.findById(11L) } returns Optional.of(forker)
+            every { projectRepository.findByOwnerAndName("vcs-svn-abbrev-fork-dest", "vcs-svn-abbrev-fork-dest-repo") } returns Optional.empty()
             every { projectRepository.save(any()) } answers { firstArg() }
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
             every { projectUserRepository.save(any()) } returns mockk()
@@ -1804,6 +1838,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             val managerRole = Role(id = RoleType.MANAGER.roleType)
             every { projectRepository.findById(9100L) } returns Optional.of(original)
             every { userRepository.findById(100L) } returns Optional.of(forker)
+            every { projectRepository.findByOwnerAndName(destOwner, destName) } returns Optional.empty()
             every { projectRepository.save(any()) } answers { firstArg() }
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
             every { projectUserRepository.save(any()) } returns mockk()
