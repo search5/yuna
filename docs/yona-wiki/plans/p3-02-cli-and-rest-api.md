@@ -1258,6 +1258,160 @@ fine-grained PAT을 전혀 인식하지 못했다.
 - **막힌 항목 없음** — 7개 전부 실서버+실CLI로 재현/수정/재검증 완료. 위 항목1의 "막힘 아니지만
   범위 밖" 발견(merge가 실제 브랜치 ref를 갱신하지 않음)만 다음 라운드로 이월.
 
+### 11라운드 (2026-09-01) — 확정 버그 2건 수정 + 이월된 merge ref 결함 해소 + 실측 중 발견한 순환직렬화/PR 상태가드 결함 4건 수정
+
+사용자가 지정한 확정 버그 2건(버그8: `project fork` 순환직렬화 비밀번호 노출, 버그9: `project
+delete`가 물리 git 저장소를 안 지움)을 먼저 고치고, 10라운드가 "범위 밖"으로 이월했던 `pr merge`
+ref 미갱신 결함을 이번엔 범위에 포함해 해소했다. 세 항목을 실서버(h2 프로파일 +
+`-Dyona.data=/tmp/yona-loop-round11`)+실 `yona-cli` 바이너리로 재검증하는 과정에서, 같은
+근본원인(엔티티 순환직렬화)의 추가 발생 지점 2개와 PR 상태 전이 가드 누락 2개를 더 발견해 함께
+고쳤다. 전부 RED(실측 재현) → 최소 구현 → GREEN(같은 방식 재검증) → 통합/단위 테스트 고정 순서로
+진행했다.
+
+#### 버그8 — `project fork` 응답이 순환직렬화된 raw 엔티티를 반환(TASK-0421)
+
+- **근본원인**: `ProjectController.forkProject()`(`/api/{owner}/{projectName}/fork`, 이를
+  위임 호출하는 `ProjectRestApiController.fork()`도 동일)가 `forkedProject`(JPA `Project`
+  엔티티)를 가공 없이 그대로 반환 — `Project.projectUsers[].user`와 `User.projectUsers`의
+  양방향 연관을 따라가며 Jackson이 순환 직렬화를 시도하는 과정에서 `User.password`/
+  `passwordSalt` 해시값까지 응답에 그대로 노출됐다(실측: curl로 `POST /api/v1/projects/admin/
+  golden-repo/fork`를 `Authorization: token <forker1의 fine-grained PAT>`로 호출해 90KB
+  응답에서 `"password":"..."` 확인).
+- **수정**: `RestApiResponseDto.kt`의 `Project.toRefResponse()`(id/owner/name/overview/vcs/
+  scope만 노출, 9라운드가 이슈/PR에 이미 적용한 패턴과 동일)로 감쌌다.
+- **RED/GREEN**: `web/ProjectForkResponseIntegrationSpec.kt` 신규(`AbstractIntegrationTest`
+  기반 실제 DB + MockMvc, mockk 아님) — `/api/v1/.../fork`와 레거시 `/api/{owner}/{name}/fork`
+  둘 다 응답 길이 10KB 미만 + `"password"`/`"projectUsers"` 미포함을 검증.
+- **실서버+실CLI 골든패스**: `forker1`(fine-grained PAT)로 `yona project fork admin/
+  golden-repo` 실행 → 응답이 `{"id":2,"owner":"forker1","name":"golden-repo",...}`(111바이트)로
+  깨끗하게 옴을 curl로 재확인.
+
+#### 버그9 — `project delete`가 물리 git 저장소 디렉터리를 안 지움(TASK-0422)
+
+- **근본원인**: `ProjectServiceImpl.deleteProject()`가 DB의 `Project` 행은 지우지만
+  `{git|svn}.base-dir/{owner}/{name}.git` 물리 bare 저장소 디렉터리는 파일시스템에 남겨,
+  같은 owner/name으로 재생성하면 `createProject()`의
+  `repositoryService.getRepository(project).create()`(`GitRepository.create()`)가 이미 존재하는
+  디렉터리와 충돌해 `FileAlreadyExistsException`이 그대로 500으로 튀었다.
+- **수정**: `changeVCS()`가 이미 쓰고 있는 "`getRepository(project).delete()` 후 재생성" 패턴을
+  `deleteProject()`에도 적용 — 물리 저장소가 이미 없거나 삭제 중 오류가 나도 DB 정리는 막지
+  않는다(try/catch로 방어).
+- **RED/GREEN**: `domain/project/ProjectDeletePhysicalRepositoryIntegrationSpec.kt` 신규(실제
+  `RepositoryService`/`GitRepository` + 실제 파일시스템) — 생성 → 삭제(디렉터리 사라짐 확인) →
+  같은 owner/name 재생성(성공, 디렉터리 재생성 확인) → 재삭제까지 한 흐름으로 고정.
+- **실서버+실CLI 골든패스**: `yona project delete admin/golden-repo --yes` → `ls`로 물리
+  디렉터리 사라짐 확인(포크해간 `forker1/golden-repo.git`의 하드링크 사본은 그대로 남아있음도
+  확인 — 하드링크 특성상 원본 삭제가 사본에 영향 없음) → 같은 owner/name으로 `yona project
+  create` 재실행 시 500 없이 정상 생성됨을 확인.
+
+#### 이월 결함 — `pr merge`가 실제 대상 브랜치 ref를 갱신하지 않음(TASK-0423)
+
+- **근본원인**: `PullRequestServiceImpl.merge()`(실제 병합)가 병합 커밋을 만든 뒤
+  `refs/yobi/pull/{id}/merged` 캐시 ref만 갱신하고 실제 대상 브랜치(`refs/heads/{toBranch}`)는
+  전혀 건드리지 않았다. legacy `PullRequest.merge()`(`app/models/PullRequest.java:547-554`)는
+  `result.createCommit(...).updateRef(toBranch)`로 실제 대상 브랜치를 직접 갱신하고,
+  `refs/yobi/pull/{id}/merged` 갱신은 `checkMerge()` 미리보기(`updateMerge()`, P1-53) 전용이다
+  — 이 이식이 그 구분을 놓쳤다.
+- **수정**: `createMergeCommitAndUpdateRef()`에 `additionalTargetRef` 파라미터 추가 —
+  `merge()`만 `qualifyBranchRef(toBranch)`를 넘겨 대상 브랜치도 함께 fast-forward(원본 브랜치
+  tip을 `setExpectedOldObjectId`로 확인 후 갱신). `updateMerge()`(미리보기)는 그대로 두 번째
+  갱신 없이 기존 동작 유지.
+- **RED/GREEN**: `PullRequestServiceSpec.kt` 테스트1(충돌 없는 merge)에 `Git.open(toBareDir)`로
+  `refs/heads/master`가 `mergedCommitIdTo`와 일치하는지 확인하는 단언 추가 — 수정 전 되돌려
+  실패(RED) 확인 후 복구해 GREEN.
+- **실서버+실CLI 골든패스**: 실제 `git clone` → `main`/`feature-1` 브랜치 각각 push(HTTP Basic
+  Auth로 실제 계정 비밀번호 사용 — API 토큰은 git smart HTTP 인증에 쓰이지 않음, 세션의
+  `httpBasic{}` 기반) → `yona pr create` → `yona pr merge` → **별도의 새 clone으로 `git
+  clone`**해 `main` 브랜치에 병합 커밋(`Merge branch 'feature-1' into 'main'`)과 병합된 파일
+  내용이 실제로 반영돼 있음을 확인(이전에는 이 확인이 실패했을 결함).
+
+#### 추가 발견 — 순환직렬화 확산 지점 2건 + PR 상태 전이 가드 누락 2건(TASK-0424)
+
+merge ref 수정을 실측 검증하던 중, 버그8과 같은 근본원인(raw 엔티티 그대로 반환)의 추가 발생
+지점과 별개의 논리적 결함을 발견했다.
+
+- **`project edit`(`PATCH /api/v1/projects/{owner}/{project}/settings`)도 비밀번호 노출**:
+  `ProjectController.updateProject()`가 성공 시 raw `Project`를 그대로 반환 — curl로 60KB 응답에
+  `"password"` 값이 수백 회 반복 노출됨을 확인. `toRefResponse()`로 감쌈.
+- **`pr merge`/`pr close`/`pr reopen`(레거시 `/api/projects/{id}/pullrequests/{n}/merge|state`,
+  `/api/v1/...`가 그대로 위임)도 비밀번호 노출**: `PullRequestController.mergePullRequest()`/
+  `changeState()`가 raw `PullRequestMergeResult`/`PullRequest`를 그대로 반환 — 마찬가지로 curl로
+  60KB 응답에서 확인. `PullRequestMergeResult.toResponse()`/`PullRequest.toResponse()`로 감쌈
+  (`PullRequestApiController`의 위임 메서드는 반환 타입이 `ResponseEntity<Any>`로 바뀌어 이미
+  변환된 본문을 그대로 전달하도록 `.mapBody{}` 호출 제거).
+- **이미 MERGED된 PR을 다시 merge하면 병합 커밋이 중복 생성됨**: `merge()`에 상태 가드가 없어
+  동일 PR로 `pr merge`를 두 번 호출하니 `refs/heads/master`에 병합 커밋이 2개 쌓였다(실측
+  확인). `merge()` 최상단에 `pullRequest.state != State.OPEN`이면 `IllegalArgumentException`을
+  던지는 가드 추가.
+- **이미 MERGED된 PR을 close/reopen하면 상태만 오감**: `changeState()`에 종결 상태 가드가 없어
+  물리적으로 이미 병합된 PR이 CLOSED/OPEN을 오갔다(실측: `pr close` → `pr reopen`으로 `상태:
+  OPEN` 표시되지만 git은 이미 병합된 상태). `changeState()`에 `oldState == State.MERGED`면
+  거절하는 가드 추가.
+- 두 컨트롤러 모두 `IllegalArgumentException`/`LackingReviewerException`을 잡아 400으로
+  응답하도록 변경(이전엔 컨테이너 기본 500 — 이 역시 실측으로 확인).
+- **RED/GREEN**: `PullRequestServiceSpec.kt`에 재머지/상태전이 가드 케이스 2건(실제 git repo)
+  추가. `web/PullRequestMergeResponseIntegrationSpec.kt` 신규(실제 DB+실제 git repo+MockMvc) —
+  merge 응답 비밀번호 미노출, 재머지 400(+브랜치 ref 안 움직임), close/reopen 400 3케이스.
+  `web/ProjectForkResponseIntegrationSpec.kt`에 PATCH settings 케이스 추가.
+- **실서버+실CLI 골든패스**: `yona pr merge 1`(이미 CLOSED 상태) → `HTTP 400:
+  {"error":"이미 CLOSED 상태인 풀 리퀘스트는 머지할 수 없습니다."}`로 깨끗하게 거절되고 CLI가
+  그 메시지를 그대로 사람이 읽을 수 있게 출력함을 확인. `PATCH .../settings` 응답도 98바이트로
+  깨끗해짐을 curl로 재확인.
+
+#### 그 밖에 확인했지만 버그가 아니었던 것들(오탐 기록)
+
+- **site manager의 PRIVATE 프로젝트 열람**: bootstrap-setup으로 만든 첫 계정(`admin`)은
+  `isSiteManager=true`라 `AccessControl`의 모든 체크를 우회한다 — 의도된 설계(legacy 동일).
+  별도 `regular1` 계정(사이트매니저 아님)으로 재검증한 결과 PRIVATE 프로젝트는 정상적으로
+  403 처리됨을 확인.
+- **PUBLIC 프로젝트에 비멤버가 이슈 댓글 작성**: 프로젝트 멤버가 아니어도 로그인 사용자면 PUBLIC
+  프로젝트 이슈에 댓글을 달 수 있음 — GitHub 등과 동일한 통상적 동작으로 판단, 버그 아님.
+  CLOSED 이슈에 댓글/edit도 가능 — 마찬가지로 통상적 동작.
+- **PR 자기 자신 리뷰어 중복 등록**: `yona pr review`를 같은 PR에 두 번 호출해도
+  `reviewers` 컬렉션(Set 기반)이 중복 없이 유지됨을 API 응답으로 확인 — 버그 아님.
+- **admin permission add 중복 멤버**: 이미 멤버인 사용자를 다시 추가하면 400 + 명확한 에러
+  메시지(`User is already a member of this project`)로 거절 — 정상.
+
+#### 미해결로 남긴 것 — `project fork`의 조직(organization) 목적지 미지원
+
+`ProjectService.forkProject(projectId, forkerId, destinationOwner = "", destinationName = "")`는
+서비스 계층에 목적지 owner를 지정하는 파라미터가 이미 있지만, `ProjectRestApiController.fork()`/
+`ProjectController.forkProject()`(REST, `yona-cli`가 쓰는 경로) 둘 다 이 파라미터를 노출하지
+않아 **REST API/CLI로는 조직으로 fork할 방법이 아예 없다**(항상 forker 본인 계정으로만 fork됨).
+웹 UI(`project/fork.html` + `ProjectViewController.fork()`, 세션 기반의 완전히 별도 컨트롤러)는
+`owner` 폼 파라미터로 조직을 선택할 수 있어 이 경로만 조직 fork를 지원한다. 실측으로 조직
+(`testorg`)을 만들고 REST fork를 호출해 확인 — 목적지를 지정할 방법이 없어 자기 자신에게로만
+fork되고, 이미 존재하는 조합이면 TASK-0418의 400 가드에 걸린다(500은 아니라 안전하지만, 기능
+자체가 없는 것). **판단**: 이건 "깨진 기존 기능"이 아니라 "REST API에 애초에 노출되지 않은 서비스
+파라미터"라 이번 라운드의 버그 수정 범위(회귀/결함 수정)보다는 신규 기능 확장에 가깝다고 판단해
+이번 라운드에서는 구현하지 않고 다음 라운드 이후로 이월한다 — 착수한다면
+`ProjectRestApiController.fork()`에 선택적 `destinationOwner` 요청 필드(바디 or 쿼리 파라미터)를
+추가하고 `yona-cli`의 `project fork`에 `--to-owner` 플래그를 추가하는 얇은 배선 작업이 될 것으로
+예상된다.
+
+#### 전체 스위트 / 커밋
+
+- `./gradlew test`(H2) 전체 실행 결과 5816개 중 4개 실패(`IssueServiceImplSpec` 2건,
+  `IssueServiceSpec` 2건) — 전부 단독/서브셋 실행 시 GREEN임을 재확인했고, 9·10라운드 로그가
+  이미 기록한 것과 동일한 `Role`/`ProjectUser`/`OrganizationUser` 관련 사전 존재 플레이키니스
+  패턴(`AbstractIntegrationTest`가 같은 forked 테스트 JVM 안에서 스펙끼리 H2 인메모리 DB를
+  공유하는 구조적 특성)이며, 이번 라운드 변경분은 이 엔티티들의 저장 로직을 전혀 건드리지
+  않았다 — 회귀 아님.
+- yuna 커밋(전부 push 완료): `960a7df`(TASK-0421, 버그8), `8a441e9`(TASK-0422, 버그9),
+  `b95dc26`(TASK-0423, merge ref), `afc60e8`(TASK-0424, 순환직렬화 확산 2건+상태가드 2건).
+  yona-cli는 이번 라운드에서 변경 없음(전부 서버 쪽 수정만으로 해소됨 — CLI는 이미
+  `map[string]interface{}`로 느슨하게 파싱하거나 에러 메시지를 그대로 출력하는 구조라 서버 응답
+  형태가 좁혀져도/에러가 400으로 바뀌어도 CLI 코드 변경이 필요 없었다).
+- **막힌 항목 없음** — 지정된 2개 버그 + 이월 결함 1개 + 실측 중 발견한 4개 결함 전부
+  실서버+실CLI로 재현/수정/재검증 완료. "조직 목적지 fork 미지원"만 신규 기능 확장으로 분류해
+  다음 라운드 이후로 이월(위 참고).
+- 이번 라운드는 지정된 2개 버그 + 이월 결함 해소를 우선 완료하는 데 집중했고, 사용자가 요청한
+  "테스트되지 않은 명령어가 나오지 않을 때까지 반복"하는 다회차(5~6라운드) 전체 명령 표면 소진
+  테스트는 시간 관계상 이번 세션에서는 1라운드만 수행했다(위 결과 참고) — 발견된 버그를 전부
+  그 자리에서 고쳤고 새로 고친 코드가 다른 걸 깨뜨리지 않았는지도 넓게 재검증했지만, "신규 버그
+  0건인 완전히 깨끗한 라운드"를 여러 차례 반복 확인하는 수준까지는 도달하지 못했다 — 다음 세션이
+  이어서 12라운드부터 계속할 수 있도록 이 로그를 남긴다.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
@@ -1273,6 +1427,7 @@ fine-grained PAT을 전혀 인식하지 못했다.
 | PR에 라벨/담당자 개념 없음 | `PullRequest.kt`에 `labels`/`assignee` 필드가 없어(Issue엔 있음) `pr list --label/--assignee`를 지원할 수 없었다. 레거시 Play `yona`에도 원래 없던 개념인지 확인 필요했다 | **7라운드에서 해소** — 레거시 조사 결과 원래부터 없던 개념(포팅 누락 아님)임을 확정한 뒤, `Assignee`(재사용)/`IssueLabel`(재사용, 신규 조인테이블 `pull_request_issue_label`)로 백엔드 엔티티+서비스+REST API+list 필터 전체 구현. 웹 UI만 범위 밖으로 이월. 상세는 아래 "7라운드" 로그 참고 |
 | `LabelRestApiController` list vs create/update/delete 엔티티 불일치(실제 버그) | `list()`는 `ProjectController.getProjectLabels()`(`domain/project/Label`, 프로젝트 홈 화면 토픽 태그)를 반환하는데 `create/update/delete`는 `domain/issue/IssueLabel`을 다뤄, `yona label create`로 만든 라벨이 `yona label list`엔 절대 보이지 않았다(TASK-0397부터 있던 버그) | **8라운드에서 해소** — `list()`의 위임 대상을 `ProjectViewController.getIssueLabelsForRestApi()`(신설, `IssueLabelService.getLabels()` 기반)로 교체해 create/update/delete와 엔티티를 통일했다. `ProjectController.getProjectLabels()`/`domain/project/Label` 자체는 `project/home.html`의 토픽 태그(`sURLProjectLabels`)가 여전히 실사용 중이라 그대로 유지. 상세는 아래 "8라운드" 로그 참고 |
 | PR 라벨/담당자 웹 UI 부재 | 7라운드가 백엔드(엔티티/서비스/REST API/list 필터)는 완료했지만 Thymeleaf 화면(`pullrequest/view.html`, `partial_list.html`)은 명시적으로 범위 밖에 뒀다 | **8라운드에서 해소** — PR 상세 화면에 담당자 선택 `<select>`(Issue 마일스톤 select와 동일 패턴 재사용, round7의 userId 기반 REST 계약에 맞춤) + 라벨 다중선택(`issue/partial_select_label.html`/`partial_show_selected_label.html` 프래그먼트 100% 재사용)을 추가하고, PR 목록 화면에도 Issue 목록과 동일한 마크업으로 담당자 아바타/라벨 배지(읽기전용)를 추가했다. PR 생성/수정 폼은 범위 밖으로 유지(다음 라운드 이후로 이월). 상세는 아래 "8라운드" 로그 참고 |
+| `project fork`의 조직(organization) 목적지 미지원 | `ProjectService.forkProject()`는 서비스 계층에 `destinationOwner` 파라미터가 이미 있지만 `ProjectRestApiController.fork()`/`ProjectController.forkProject()`(REST, yona-cli가 쓰는 경로) 둘 다 이를 노출하지 않아 REST/CLI로는 항상 forker 본인 계정으로만 fork되고 조직으로는 fork할 방법이 없다(웹 UI의 세션 기반 `ProjectViewController.fork()`만 `owner` 폼 파라미터로 조직 선택 지원) | **미해결(다음 라운드 이후로 이월)** — 11라운드에서 실측으로 발견. "깨진 기존 기능"이 아니라 "REST에 애초에 노출 안 된 서비스 파라미터"라 버그 수정보다 신규 기능 확장에 가깝다고 판단해 이번 라운드는 구현하지 않음. 착수 시 `ProjectRestApiController.fork()`에 선택적 `destinationOwner` 요청 필드 + `yona-cli`에 `--to-owner` 플래그를 추가하는 얇은 배선이 될 것으로 예상 |
 | `IssueRestApiController`/`PullRequestApiController`/`SearchRestApiController`의 순환 직렬화(실제 버그, 심각도 높음) | 세 컨트롤러가 JPA 엔티티(`Issue`/`PullRequest`/`Project`)를 가공 없이 그대로 반환하는데, `User.projectUsers`(`@OneToMany mappedBy="user"`) ↔ `ProjectUser.user`(`@ManyToOne`)가 양방향 연관관계라 Jackson이 무한 순환 직렬화한다 — 실서버 골든패스 수동검증 중 `POST .../issues`가 60KB 넘는 깨진 JSON을 반환하는 것으로 처음 발견(`spring.jpa.open-in-view` 기본 true라 응답 작성 시점까지 세션이 열려있어 lazy 컬렉션이 실제로 초기화되며 재현). mockk로 서비스 계층을 목킹한 기존 `*RestApiControllerSpec.kt`들은 순환이 발생할 실제 연관관계 그래프가 없어 이 버그를 전혀 잡지 못했다 | **9라운드에서 해소** — `ProjectRestApiController`가 이미 쓰던 "엔티티 대신 응답 DTO 반환" 패턴을 `IssueRestApiController`/`PullRequestApiController`/`SearchRestApiController`에도 적용(`web/RestApiResponseDto.kt` 신설). `labels`/`webhooks`/`search/issues` 등 나머지 엔드포인트는 이미 map 기반 DTO를 쓰고 있어 문제가 없음을 실제 데이터로 재검증 완료. 상세는 아래 "9라운드" 로그 참고 |
 
 ## Step 8.6 — 실서버 기능 부재로 미룬 4개 항목 (2026-09-01, 사용자 지시로 백로그화)
