@@ -337,8 +337,8 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (6라운드 + 직후 보완 — 아래 완료 로그 참고. `yona config`/`yona alias`는 낮은 우선순위 항목이라 다음 라운드 이후로 이월)
 - [x] Step8.6 백로그 4개 항목(admin webhook/permission 목록 API, `gh issue status` 필터/페이지네이션 전체, `yona search prs`, PR 라벨/담당자) 전부 해소 (7라운드 — 아래 완료 로그 참고. PR 라벨/담당자의 웹 UI만 명시적으로 범위 밖, 다음 라운드 이후로 이월)
 - [x] Step8.7 백로그 2개 항목(`LabelRestApiController` list vs create/update/delete 엔티티 불일치 버그, PR 라벨/담당자 웹 UI) 전부 해소 (8라운드 — 아래 완료 로그 참고. PR 목록 생성/수정 폼까지는 범위 밖으로 유지, 상세 화면+목록 화면 표시까지만)
-- [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (다음 라운드로 이월 — 4라운드는 httptest 기반 단위/통합 테스트만 수행)
-- [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (다음 라운드)
+- [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (2026-09-01 사용자 지시로 보류 — httptest 기반 단위/통합 테스트로 대체된 상태를 잠정 인정하고, 재개 시점은 별도 지시로 결정)
+- [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (2026-09-01 사용자 지시로 보류 — 아직 외부 배포 대상 사용자가 없어 실제로 필요해지는 시점까지 미룸)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
 
 ## 완료 로그
