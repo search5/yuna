@@ -118,5 +118,70 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
         fromBranch: String,
         toProject: Project
     ): PullRequest?
+
+
+    // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 대응.
+    // IssueRepository.searchIssues()/searchIssuesInProject()와 동일한 패턴(Postgres Hibernate
+    // 7.2.x가 한 쿼리에 LIKE 술어가 2개 이상이면 실패하는 버그 회피를 위해 네이티브 쿼리 사용) —
+    // 전역 검색은 "toProject가 접근 허용 프로젝트 목록에 있거나, 내가 contributor인 PR"까지 포함한다
+    // (Issue의 author/assignee 대응 개념으로 contributor 하나만 있음).
+    @Query(
+        value = """
+            SELECT * FROM pull_request pr
+            WHERE (pr.title LIKE :keyword OR pr.body LIKE :keyword)
+              AND (pr.to_project_id IN :projectIds
+                   OR (:userId IS NOT NULL AND pr.contributor_id = :userId))
+        """,
+        countQuery = """
+            SELECT COUNT(*) FROM pull_request pr
+            WHERE (pr.title LIKE :keyword OR pr.body LIKE :keyword)
+              AND (pr.to_project_id IN :projectIds
+                   OR (:userId IS NOT NULL AND pr.contributor_id = :userId))
+        """,
+        nativeQuery = true
+    )
+    fun searchPullRequestsQuery(
+        @Param("projectIds") projectIds: List<Long>,
+        @Param("keyword") keyword: String,
+        @Param("userId") userId: Long?,
+        pageable: Pageable
+    ): Page<PullRequest>
+
+    fun searchPullRequests(projectIds: List<Long>, keyword: String, userId: Long?, pageable: Pageable): Page<PullRequest> =
+        searchPullRequestsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId, pageable.toSnakeCaseSort())
+
+    @Query(
+        value = """
+            SELECT COUNT(*) FROM pull_request pr
+            WHERE (pr.title LIKE :keyword OR pr.body LIKE :keyword)
+              AND (pr.to_project_id IN :projectIds
+                   OR (:userId IS NOT NULL AND pr.contributor_id = :userId))
+        """,
+        nativeQuery = true
+    )
+    fun countSearchPullRequestsQuery(
+        @Param("projectIds") projectIds: List<Long>,
+        @Param("keyword") keyword: String,
+        @Param("userId") userId: Long?
+    ): Int
+
+    fun countSearchPullRequests(projectIds: List<Long>, keyword: String, userId: Long?): Int =
+        countSearchPullRequestsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId)
+
+    @Query(
+        value = "SELECT * FROM pull_request WHERE to_project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
+        countQuery = "SELECT COUNT(*) FROM pull_request WHERE to_project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
+        nativeQuery = true
+    )
+    fun searchPullRequestsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<PullRequest>
+
+    fun searchPullRequestsInProject(project: Project, keyword: String, pageable: Pageable): Page<PullRequest> =
+        searchPullRequestsInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
+
+    @Query(
+        value = "SELECT COUNT(*) FROM pull_request WHERE to_project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
+        nativeQuery = true
+    )
+    fun countSearchPullRequestsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
 }
 

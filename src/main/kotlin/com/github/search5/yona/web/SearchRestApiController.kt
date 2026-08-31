@@ -3,6 +3,7 @@ package com.github.search5.yona.web
 import com.github.search5.yona.domain.enumeration.SearchType
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.project.Project
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.support.SearchService
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.Page
@@ -20,10 +21,12 @@ import org.springframework.web.bind.annotation.RestController
 // SearchService(searchInAll)를 직접 호출해 JSON으로 노출하는 신규 얇은 컨트롤러를 뒀다(신규
 // 서비스 로직 없음).
 //
-// **범위 조정**: yona SearchType enum엔 PROJECT/ISSUE/USER/POST/MILESTONE/ISSUE_COMMENT/
-// POST_COMMENT/REVIEW만 있고 "PULL_REQUEST"에 대응하는 값이 없다(PR 자체를 색인하는 통합검색
-// 기능이 서버에 아직 없음) - `yona search prs`는 서버에 대응 기능이 없어 이번 라운드 구현 대상에서
-// 제외하고 계획 문서에 다음 라운드 이월로 남긴다.
+// yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 해소. 4라운드
+// 당시 yona SearchType enum엔 PROJECT/ISSUE/USER/POST/MILESTONE/ISSUE_COMMENT/POST_COMMENT/REVIEW만
+// 있고 PULL_REQUEST가 없어(PR을 색인하는 통합검색 기능이 서버에 없었음) 이월했던 항목이다.
+// SearchType.PULL_REQUEST 신설 + SearchServiceImpl/PullRequestRepository에 기존 ISSUE 타입과
+// 동일한 패턴(전역 검색은 toProject가 허용 프로젝트에 있거나 내가 contributor인 PR까지 포함)의
+// 인덱싱/검색 쿼리를 추가해 아래 searchPullRequests()로 노출한다.
 //
 // **스코프 인가 갭(계획 문서 리스크 표에 기록)**: 이 엔드포인트는 여러 프로젝트를 가로지르는 전역
 // 검색이라 `/api/v1/projects/{owner}/{project}/{resource}` 3세그먼트 모델(저장소 단위 스코프)에
@@ -65,5 +68,22 @@ class SearchRestApiController(
         val user = getLoginUser(authentication)
         val result = searchService.searchInAll(q, SearchType.PROJECT, user, PageRequest.of(page, size))
         return ResponseEntity.ok(result.projects)
+    }
+
+
+    // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs`.
+    // SearchType.PULL_REQUEST 신설 + PullRequestRepository.searchPullRequests() 인덱싱 쿼리 신설
+    // 이후, issues/projects와 동일한 패턴으로 노출한다.
+    @GetMapping("/prs")
+    fun searchPullRequests(
+        @RequestParam q: String,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        authentication: Authentication?
+    ): ResponseEntity<Page<PullRequest>> {
+        if (q.isBlank()) return ResponseEntity.badRequest().build()
+        val user = getLoginUser(authentication)
+        val result = searchService.searchInAll(q, SearchType.PULL_REQUEST, user, PageRequest.of(page, size))
+        return ResponseEntity.ok(result.pullRequests)
     }
 }

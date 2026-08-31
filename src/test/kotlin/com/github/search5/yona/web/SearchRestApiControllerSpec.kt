@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.enumeration.SearchType
 import com.github.search5.yona.domain.issue.Issue
 import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectScope
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.support.SearchResult
 import com.github.search5.yona.domain.support.SearchService
 import com.github.search5.yona.domain.user.User
@@ -88,6 +89,29 @@ class SearchRestApiControllerSpec : DescribeSpec({
 
         it("검색어가 없으면 400을 반환한다") {
             mockMvc.perform(get("/api/v1/search/projects").param("q", "  "))
+                .andExpect(status().isBadRequest)
+        }
+    }
+
+    // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs`.
+    describe("GET /api/v1/search/prs") {
+        it("SearchService.searchInAll(PULL_REQUEST)에 위임한다") {
+            val project = Project(id = 1L, owner = "yona", name = "yuna")
+            val contributor = User(id = 2L, loginId = "contributor", name = "기여자")
+            val pr = PullRequest(id = 3L, number = 1L, title = "버그 수정 PR", fromProject = project, toProject = project, contributor = contributor)
+            val prPage: Page<PullRequest> = PageImpl(listOf(pr), PageRequest.of(0, 20), 1)
+            val result = SearchResult(keyword = "버그", searchType = SearchType.PULL_REQUEST, pullRequests = prPage)
+            every { searchService.searchInAll("버그", SearchType.PULL_REQUEST, null, any()) } returns result
+
+            mockMvc.perform(get("/api/v1/search/prs").param("q", "버그"))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.content[0].title").value("버그 수정 PR"))
+
+            verify(exactly = 1) { searchService.searchInAll("버그", SearchType.PULL_REQUEST, null, any()) }
+        }
+
+        it("검색어가 없으면 400을 반환한다") {
+            mockMvc.perform(get("/api/v1/search/prs").param("q", ""))
                 .andExpect(status().isBadRequest)
         }
     }

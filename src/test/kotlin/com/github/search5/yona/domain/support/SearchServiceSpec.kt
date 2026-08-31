@@ -12,6 +12,7 @@ import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.milestone.MilestoneRepository
 import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.board.PostingCommentRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
@@ -32,6 +33,7 @@ class SearchServiceSpec : DescribeSpec({
     val issueCommentRepository = mockk<IssueCommentRepository>()
     val postingCommentRepository = mockk<PostingCommentRepository>()
     val reviewCommentRepository = mockk<ReviewCommentRepository>()
+    val pullRequestRepository = mockk<PullRequestRepository>()
 
     val searchService = SearchServiceImpl(
         userRepository,
@@ -41,7 +43,8 @@ class SearchServiceSpec : DescribeSpec({
         milestoneRepository,
         issueCommentRepository,
         postingCommentRepository,
-        reviewCommentRepository
+        reviewCommentRepository,
+        pullRequestRepository
     )
 
     describe("SearchService 비즈니스 로직 테스트") {
@@ -60,6 +63,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             // search result mock
             val expectedIssues: Page<Issue> = PageImpl(emptyList())
@@ -82,6 +86,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%board%") } returns 0
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%board%") } returns 0
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%board%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%board%") } returns 0
 
             // search result mock
             val expectedPosts: Page<Posting> = PageImpl(emptyList())
@@ -103,6 +108,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             val expectedProjects: Page<Project> = PageImpl(emptyList())
             every { projectRepository.searchProjects(listOf(1L, 2L), "%test%", pageable) } returns expectedProjects
@@ -123,6 +129,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             val expectedUsers: Page<User> = PageImpl(emptyList())
             every { userRepository.searchUsers("%test%", pageable) } returns expectedUsers
@@ -143,6 +150,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%test%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%test%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%test%", 10L) } returns 0
 
             val expectedMilestones: Page<Milestone> = PageImpl(emptyList())
             every { milestoneRepository.searchMilestones(listOf(1L, 2L), "%test%", pageable) } returns expectedMilestones
@@ -151,6 +159,28 @@ class SearchServiceSpec : DescribeSpec({
 
             result.milestonesCount shouldBe 1
             result.searchType shouldBe SearchType.MILESTONE
+        }
+
+        // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 대응.
+        it("전역 검색 시 PR 검색 타입일 경우 PR 리포지토리를 호출해야 한다") {
+            every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(1L, 2L)
+            every { userRepository.countSearchUsers("%pr1%") } returns 0
+            every { projectRepository.countSearchProjects(listOf(1L, 2L), "%pr1%") } returns 0
+            every { issueRepository.countSearchIssues(listOf(1L, 2L), "%pr1%", 10L) } returns 0
+            every { postingRepository.countSearchPostings(listOf(1L, 2L), "%pr1%", 10L) } returns 0
+            every { milestoneRepository.countSearchMilestones(listOf(1L, 2L), "%pr1%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%pr1%", 10L) } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%pr1%", 10L) } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%pr1%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%pr1%", 10L) } returns 1
+
+            val expectedPullRequests: Page<com.github.search5.yona.domain.pullrequest.PullRequest> = PageImpl(emptyList())
+            every { pullRequestRepository.searchPullRequests(listOf(1L, 2L), "%pr1%", 10L, pageable) } returns expectedPullRequests
+
+            val result = searchService.searchInAll("pr1", SearchType.PULL_REQUEST, loginUser, pageable)
+
+            result.pullRequestsCount shouldBe 1
+            result.searchType shouldBe SearchType.PULL_REQUEST
         }
     }
 
@@ -166,6 +196,7 @@ class SearchServiceSpec : DescribeSpec({
             issueCommentRepository,
             postingCommentRepository,
             reviewCommentRepository,
+            pullRequestRepository,
             hideProjectListing = true
         )
         val pageable = PageRequest.of(0, 20)
@@ -188,6 +219,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(3L), "%test%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(3L), "%test%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(3L), "%test%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(3L), "%test%", 10L) } returns 0
             val expectedIssues: Page<Issue> = PageImpl(emptyList())
             every { issueRepository.searchIssues(listOf(3L), "%test%", 10L, pageable) } returns expectedIssues
 
@@ -222,6 +254,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(21L, 22L), "%anon1%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(21L, 22L), "%anon1%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(21L, 22L), "%anon1%", null) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(21L, 22L), "%anon1%", null) } returns 0
             every { issueRepository.searchIssues(listOf(21L, 22L), "%anon1%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("anon1", SearchType.AUTO, null, pageable)
@@ -241,6 +274,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(23L), "%ghost1%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(23L), "%ghost1%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(23L), "%ghost1%", null) } returns 1
+            every { pullRequestRepository.countSearchPullRequests(listOf(23L), "%ghost1%", null) } returns 0
             every { reviewCommentRepository.searchReviewComments(listOf(23L), "%ghost1%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("ghost1", SearchType.AUTO, transientUser, pageable)
@@ -259,6 +293,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%postkw%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%postkw%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%postkw%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%postkw%", 10L) } returns 0
             every { postingRepository.searchPostings(listOf(1L, 2L), "%postkw%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("postkw", SearchType.AUTO, loginUser, pageable)
@@ -277,6 +312,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%icmt%", 10L) } returns 2
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%icmt%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%icmt%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%icmt%", 10L) } returns 0
             every { issueCommentRepository.searchIssueComments(listOf(1L, 2L), "%icmt%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("icmt", SearchType.AUTO, loginUser, pageable)
@@ -295,6 +331,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%pcmt%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%pcmt%", 10L) } returns 3
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%pcmt%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%pcmt%", 10L) } returns 0
             every { postingCommentRepository.searchPostingComments(listOf(1L, 2L), "%pcmt%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("pcmt", SearchType.AUTO, loginUser, pageable)
@@ -313,6 +350,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%rvw%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%rvw%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%rvw%", 10L) } returns 5
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%rvw%", 10L) } returns 0
             every { reviewCommentRepository.searchReviewComments(listOf(1L, 2L), "%rvw%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("rvw", SearchType.AUTO, loginUser, pageable)
@@ -331,6 +369,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 2L), "%naval%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 2L), "%naval%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 2L), "%naval%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 2L), "%naval%", 10L) } returns 0
 
             val result = searchService.searchInAll("naval", SearchType.NA, loginUser, pageable)
 
@@ -352,6 +391,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(31L), "%apostkw%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(31L), "%apostkw%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(31L), "%apostkw%", null) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(31L), "%apostkw%", null) } returns 0
             every { postingRepository.searchPostings(listOf(31L), "%apostkw%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("apostkw", SearchType.AUTO, null, pageable)
@@ -370,6 +410,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(32L), "%aicmt%", null) } returns 1
             every { postingCommentRepository.countSearchPostingComments(listOf(32L), "%aicmt%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(32L), "%aicmt%", null) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(32L), "%aicmt%", null) } returns 0
             every { issueCommentRepository.searchIssueComments(listOf(32L), "%aicmt%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("aicmt", SearchType.AUTO, null, pageable)
@@ -388,6 +429,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(33L), "%apcmt%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(33L), "%apcmt%", null) } returns 1
             every { reviewCommentRepository.countSearchReviewComments(listOf(33L), "%apcmt%", null) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(33L), "%apcmt%", null) } returns 0
             every { postingCommentRepository.searchPostingComments(listOf(33L), "%apcmt%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("apcmt", SearchType.AUTO, null, pageable)
@@ -406,6 +448,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(34L), "%arvw%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(34L), "%arvw%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(34L), "%arvw%", null) } returns 1
+            every { pullRequestRepository.countSearchPullRequests(listOf(34L), "%arvw%", null) } returns 0
             every { reviewCommentRepository.searchReviewComments(listOf(34L), "%arvw%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAll("arvw", SearchType.AUTO, null, pageable)
@@ -429,6 +472,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%pissue%") } returns 0
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%pissue%") } returns 0
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%pissue%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%pissue%") } returns 0
             every { issueRepository.searchIssuesInProject(project, "%pissue%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAProject("pissue", SearchType.AUTO, loginUser, project, pageable)
@@ -446,6 +490,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%puser%") } returns 0
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%puser%") } returns 0
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%puser%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%puser%") } returns 0
             every { userRepository.searchUsers("%puser%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAProject("puser", SearchType.AUTO, loginUser, project, pageable)
@@ -463,6 +508,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%pmile%") } returns 0
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%pmile%") } returns 0
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%pmile%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%pmile%") } returns 0
             every { milestoneRepository.searchMilestonesInProject(project, "%pmile%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAProject("pmile", SearchType.AUTO, loginUser, project, pageable)
@@ -480,6 +526,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%picmt%") } returns 8
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%picmt%") } returns 0
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%picmt%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%picmt%") } returns 0
             every { issueCommentRepository.searchIssueCommentsInProject(project, "%picmt%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAProject("picmt", SearchType.AUTO, loginUser, project, pageable)
@@ -497,6 +544,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%ppcmt%") } returns 0
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%ppcmt%") } returns 9
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%ppcmt%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%ppcmt%") } returns 0
             every { postingCommentRepository.searchPostingCommentsInProject(project, "%ppcmt%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAProject("ppcmt", SearchType.AUTO, loginUser, project, pageable)
@@ -514,12 +562,32 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%prvw%") } returns 0
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%prvw%") } returns 0
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%prvw%") } returns 10
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%prvw%") } returns 0
             every { reviewCommentRepository.searchReviewCommentsInProject(project, "%prvw%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAProject("prvw", SearchType.AUTO, loginUser, project, pageable)
 
             result.reviewsCount shouldBe 10
             result.searchType shouldBe SearchType.REVIEW
+        }
+
+        // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 대응.
+        it("프로젝트 내부 검색 시 PR 검색 타입일 경우 PR 리포지토리를 호출해야 한다") {
+            val project = Project(id = 109L, name = "P109", owner = "owner")
+            every { userRepository.countSearchUsers("%pprreq%") } returns 0
+            every { issueRepository.countSearchIssuesInProject(project, "%pprreq%") } returns 0
+            every { postingRepository.countSearchPostingsInProject(project, "%pprreq%") } returns 0
+            every { milestoneRepository.countSearchMilestonesInProject(project, "%pprreq%") } returns 0
+            every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%pprreq%") } returns 0
+            every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%pprreq%") } returns 0
+            every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%pprreq%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%pprreq%") } returns 11
+            every { pullRequestRepository.searchPullRequestsInProject(project, "%pprreq%", pageable) } returns Page.empty()
+
+            val result = searchService.searchInAProject("pprreq", SearchType.AUTO, loginUser, project, pageable)
+
+            result.pullRequestsCount shouldBe 11
+            result.searchType shouldBe SearchType.PULL_REQUEST
         }
 
         it("PROJECT 타입을 명시하면 프로젝트 내부 검색은 지원하지 않으므로 when절의 else 분기를 타야 한다") {
@@ -531,6 +599,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%pproj%") } returns 0
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%pproj%") } returns 0
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%pproj%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%pproj%") } returns 0
 
             val result = searchService.searchInAProject("pproj", SearchType.PROJECT, loginUser, project, pageable)
 
@@ -548,6 +617,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueCommentsInProject(project, "%pall0%") } returns 0
             every { postingCommentRepository.countSearchPostingCommentsInProject(project, "%pall0%") } returns 0
             every { reviewCommentRepository.countSearchReviewCommentsInProject(project, "%pall0%") } returns 0
+            every { pullRequestRepository.countSearchPullRequestsInProject(project, "%pall0%") } returns 0
             every { issueRepository.searchIssuesInProject(project, "%pall0%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAProject("pall0", SearchType.AUTO, loginUser, project, pageable)
@@ -579,6 +649,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(1L, 3L), "%gissue%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(1L, 3L), "%gissue%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(1L, 3L), "%gissue%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(1L, 3L), "%gissue%", 10L) } returns 0
             every { issueRepository.searchIssues(listOf(1L, 3L), "%gissue%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("gissue", SearchType.AUTO, loginUser, org, pageable)
@@ -612,6 +683,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(5L), "%guser%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(5L), "%guser%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(5L), "%guser%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(5L), "%guser%", 10L) } returns 0
             every { userRepository.searchUsers("%guser%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("guser", SearchType.AUTO, loginUser, org, pageable)
@@ -633,6 +705,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(6L), "%gproj%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(6L), "%gproj%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(6L), "%gproj%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(6L), "%gproj%", 10L) } returns 0
             every { projectRepository.searchProjects(listOf(6L), "%gproj%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("gproj", SearchType.AUTO, loginUser, org, pageable)
@@ -654,6 +727,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(7L), "%gpost%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(7L), "%gpost%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(7L), "%gpost%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(7L), "%gpost%", 10L) } returns 0
             every { postingRepository.searchPostings(listOf(7L), "%gpost%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("gpost", SearchType.AUTO, loginUser, org, pageable)
@@ -675,6 +749,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(8L), "%gmile%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(8L), "%gmile%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(8L), "%gmile%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(8L), "%gmile%", 10L) } returns 0
             every { milestoneRepository.searchMilestones(listOf(8L), "%gmile%", pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("gmile", SearchType.AUTO, loginUser, org, pageable)
@@ -696,6 +771,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(9L), "%gicmt%", 10L) } returns 6
             every { postingCommentRepository.countSearchPostingComments(listOf(9L), "%gicmt%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(9L), "%gicmt%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(9L), "%gicmt%", 10L) } returns 0
             every { issueCommentRepository.searchIssueComments(listOf(9L), "%gicmt%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("gicmt", SearchType.AUTO, loginUser, org, pageable)
@@ -717,6 +793,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(10L), "%gpcmt%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(10L), "%gpcmt%", 10L) } returns 7
             every { reviewCommentRepository.countSearchReviewComments(listOf(10L), "%gpcmt%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(10L), "%gpcmt%", 10L) } returns 0
             every { postingCommentRepository.searchPostingComments(listOf(10L), "%gpcmt%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("gpcmt", SearchType.AUTO, loginUser, org, pageable)
@@ -738,12 +815,36 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(11L), "%grvw%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(11L), "%grvw%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(11L), "%grvw%", 10L) } returns 8
+            every { pullRequestRepository.countSearchPullRequests(listOf(11L), "%grvw%", 10L) } returns 0
             every { reviewCommentRepository.searchReviewComments(listOf(11L), "%grvw%", 10L, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("grvw", SearchType.AUTO, loginUser, org, pageable)
 
             result.reviewsCount shouldBe 8
             result.searchType shouldBe SearchType.REVIEW
+        }
+
+        // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 대응.
+        it("그룹 검색 시 PR 검색 타입일 경우 PR 리포지토리를 호출해야 한다") {
+            val p13 = Project(id = 13L, name = "P13", owner = "o13", organization = org)
+            every { projectRepository.findAllowedProjectIdsForUser(10L) } returns listOf(13L)
+            every { projectRepository.findAllById(listOf(13L)) } returns listOf(p13)
+
+            every { userRepository.countSearchUsers("%gpr%") } returns 0
+            every { projectRepository.countSearchProjects(listOf(13L), "%gpr%") } returns 0
+            every { issueRepository.countSearchIssues(listOf(13L), "%gpr%", 10L) } returns 0
+            every { postingRepository.countSearchPostings(listOf(13L), "%gpr%", 10L) } returns 0
+            every { milestoneRepository.countSearchMilestones(listOf(13L), "%gpr%") } returns 0
+            every { issueCommentRepository.countSearchIssueComments(listOf(13L), "%gpr%", 10L) } returns 0
+            every { postingCommentRepository.countSearchPostingComments(listOf(13L), "%gpr%", 10L) } returns 0
+            every { reviewCommentRepository.countSearchReviewComments(listOf(13L), "%gpr%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(13L), "%gpr%", 10L) } returns 9
+            every { pullRequestRepository.searchPullRequests(listOf(13L), "%gpr%", 10L, pageable) } returns Page.empty()
+
+            val result = searchService.searchInAGroup("gpr", SearchType.AUTO, loginUser, org, pageable)
+
+            result.pullRequestsCount shouldBe 9
+            result.searchType shouldBe SearchType.PULL_REQUEST
         }
 
         it("검색 타입을 NA로 명시하면 when절의 else 분기를 타서 결과 목록을 채우지 않아야 한다") {
@@ -759,6 +860,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(12L), "%gnaval%", 10L) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(12L), "%gnaval%", 10L) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(12L), "%gnaval%", 10L) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(12L), "%gnaval%", 10L) } returns 0
 
             val result = searchService.searchInAGroup("gnaval", SearchType.NA, loginUser, org, pageable)
 
@@ -795,6 +897,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(41L), "%agissue%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(41L), "%agissue%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(41L), "%agissue%", null) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(41L), "%agissue%", null) } returns 0
             every { issueRepository.searchIssues(listOf(41L), "%agissue%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("agissue", SearchType.AUTO, null, org, pageable)
@@ -816,6 +919,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(42L), "%agpost%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(42L), "%agpost%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(42L), "%agpost%", null) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(42L), "%agpost%", null) } returns 0
             every { postingRepository.searchPostings(listOf(42L), "%agpost%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("agpost", SearchType.AUTO, null, org, pageable)
@@ -837,6 +941,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(43L), "%agicmt%", null) } returns 1
             every { postingCommentRepository.countSearchPostingComments(listOf(43L), "%agicmt%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(43L), "%agicmt%", null) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(43L), "%agicmt%", null) } returns 0
             every { issueCommentRepository.searchIssueComments(listOf(43L), "%agicmt%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("agicmt", SearchType.AUTO, null, org, pageable)
@@ -858,6 +963,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(44L), "%agpcmt%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(44L), "%agpcmt%", null) } returns 1
             every { reviewCommentRepository.countSearchReviewComments(listOf(44L), "%agpcmt%", null) } returns 0
+            every { pullRequestRepository.countSearchPullRequests(listOf(44L), "%agpcmt%", null) } returns 0
             every { postingCommentRepository.searchPostingComments(listOf(44L), "%agpcmt%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("agpcmt", SearchType.AUTO, null, org, pageable)
@@ -879,6 +985,7 @@ class SearchServiceSpec : DescribeSpec({
             every { issueCommentRepository.countSearchIssueComments(listOf(45L), "%agrvw%", null) } returns 0
             every { postingCommentRepository.countSearchPostingComments(listOf(45L), "%agrvw%", null) } returns 0
             every { reviewCommentRepository.countSearchReviewComments(listOf(45L), "%agrvw%", null) } returns 1
+            every { pullRequestRepository.countSearchPullRequests(listOf(45L), "%agrvw%", null) } returns 0
             every { reviewCommentRepository.searchReviewComments(listOf(45L), "%agrvw%", null, pageable) } returns Page.empty()
 
             val result = searchService.searchInAGroup("agrvw", SearchType.AUTO, null, org, pageable)

@@ -11,6 +11,7 @@ import com.github.search5.yona.domain.issue.IssueCommentRepository
 import com.github.search5.yona.domain.board.PostingRepository
 import com.github.search5.yona.domain.board.PostingCommentRepository
 import com.github.search5.yona.domain.milestone.MilestoneRepository
+import com.github.search5.yona.domain.pullrequest.PullRequestRepository
 import com.github.search5.yona.domain.pullrequest.ReviewCommentRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.Pageable
@@ -28,6 +29,8 @@ class SearchServiceImpl(
     private val issueCommentRepository: IssueCommentRepository,
     private val postingCommentRepository: PostingCommentRepository,
     private val reviewCommentRepository: ReviewCommentRepository,
+    // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 대응.
+    private val pullRequestRepository: PullRequestRepository,
     // yona controllers/Application.java:35 HIDE_PROJECT_LISTING 대응 (P0-23).
     @Value("\${yona.application.hide-project-listing:false}")
     private val hideProjectListing: Boolean = false
@@ -68,6 +71,7 @@ class SearchServiceImpl(
             SearchType.ISSUE_COMMENT -> result.issueComments = issueCommentRepository.searchIssueComments(allowedProjectIds, processedKeyword, user?.id, pageable)
             SearchType.POST_COMMENT -> result.postComments = postingCommentRepository.searchPostingComments(allowedProjectIds, processedKeyword, user?.id, pageable)
             SearchType.REVIEW -> result.reviews = reviewCommentRepository.searchReviewComments(allowedProjectIds, processedKeyword, user?.id, pageable)
+            SearchType.PULL_REQUEST -> result.pullRequests = pullRequestRepository.searchPullRequests(allowedProjectIds, processedKeyword, user?.id, pageable)
             else -> {}
         }
 
@@ -86,7 +90,8 @@ class SearchServiceImpl(
         result.issueCommentsCount = issueCommentRepository.countSearchIssueCommentsInProject(project, processedKeyword)
         result.postCommentsCount = postingCommentRepository.countSearchPostingCommentsInProject(project, processedKeyword)
         result.reviewsCount = reviewCommentRepository.countSearchReviewCommentsInProject(project, processedKeyword)
-        
+        result.pullRequestsCount = pullRequestRepository.countSearchPullRequestsInProject(project, processedKeyword)
+
         result.updateSearchType()
 
         when (result.searchType) {
@@ -97,6 +102,7 @@ class SearchServiceImpl(
             SearchType.ISSUE_COMMENT -> result.issueComments = issueCommentRepository.searchIssueCommentsInProject(project, processedKeyword, pageable)
             SearchType.POST_COMMENT -> result.postComments = postingCommentRepository.searchPostingCommentsInProject(project, processedKeyword, pageable)
             SearchType.REVIEW -> result.reviews = reviewCommentRepository.searchReviewCommentsInProject(project, processedKeyword, pageable)
+            SearchType.PULL_REQUEST -> result.pullRequests = pullRequestRepository.searchPullRequestsInProject(project, processedKeyword, pageable)
             else -> {}
         }
 
@@ -127,6 +133,7 @@ class SearchServiceImpl(
             SearchType.ISSUE_COMMENT -> result.issueComments = issueCommentRepository.searchIssueComments(groupProjectIds, processedKeyword, user?.id, pageable)
             SearchType.POST_COMMENT -> result.postComments = postingCommentRepository.searchPostingComments(groupProjectIds, processedKeyword, user?.id, pageable)
             SearchType.REVIEW -> result.reviews = reviewCommentRepository.searchReviewComments(groupProjectIds, processedKeyword, user?.id, pageable)
+            SearchType.PULL_REQUEST -> result.pullRequests = pullRequestRepository.searchPullRequests(groupProjectIds, processedKeyword, user?.id, pageable)
             else -> {}
         }
 
@@ -144,7 +151,8 @@ class SearchServiceImpl(
             milestonesCount = milestoneRepository.countSearchMilestones(projectIds, processedKeyword),
             issueCommentsCount = issueCommentRepository.countSearchIssueComments(projectIds, processedKeyword, userId),
             postCommentsCount = postingCommentRepository.countSearchPostingComments(projectIds, processedKeyword, userId),
-            reviewsCount = reviewCommentRepository.countSearchReviewComments(projectIds, processedKeyword, userId)
+            reviewsCount = reviewCommentRepository.countSearchReviewComments(projectIds, processedKeyword, userId),
+            pullRequestsCount = pullRequestRepository.countSearchPullRequests(projectIds, processedKeyword, userId)
         )
     }
 }

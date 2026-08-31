@@ -120,6 +120,54 @@ class PullRequestRepositorySpec @Autowired constructor(
                 related.map { it.id } shouldBe listOf(openFromBranchPr.id)
                 related.map { it.id } shouldNotContain closedFromBranchPr.id
             }
+
+            // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 대응.
+            // IssueRepository.searchIssues() 주석이 지적한 Postgres Hibernate 7.2.x 네이티브 쿼리
+            // 버그(LIKE 2개 이상 시 실패)를 동일하게 회피하는 쿼리라 실제 DB로 검증한다.
+            it("searchPullRequests는 title/body가 매칭되는 프로젝트 소속 PR 또는 내가 contributor인 PR을 찾아야 한다") {
+                val contributor = userRepository.save(User(loginId = "search-contrib", name = "검색기여자", email = "search-contrib@yona.io"))
+                val otherContributor = userRepository.save(User(loginId = "other-contrib", name = "다른기여자", email = "other-contrib@yona.io"))
+                val allowedProject = projectRepository.save(Project(name = "allowed-repo", owner = "owner-allowed"))
+                val otherProject = projectRepository.save(Project(name = "other-repo", owner = "owner-other"))
+
+                val matchedByProject = pullRequestRepository.save(
+                    PullRequest(title = "버그 수정", toProject = allowedProject, fromProject = allowedProject, contributor = otherContributor)
+                )
+                val matchedByContributor = pullRequestRepository.save(
+                    PullRequest(title = "버그 개선", toProject = otherProject, fromProject = otherProject, contributor = contributor)
+                )
+                pullRequestRepository.save(
+                    PullRequest(title = "무관한 PR", toProject = otherProject, fromProject = otherProject, contributor = otherContributor)
+                )
+
+                val projectIds = listOf(allowedProject.id!!)
+                val keyword = "%버그%"
+                val page = pullRequestRepository.searchPullRequests(projectIds, keyword, contributor.id, org.springframework.data.domain.PageRequest.of(0, 20))
+                val count = pullRequestRepository.countSearchPullRequests(projectIds, keyword, contributor.id)
+
+                count shouldBe 2
+                page.content.map { it.id }.toSet() shouldBe setOf(matchedByProject.id, matchedByContributor.id)
+            }
+
+            it("searchPullRequestsInProject는 해당 프로젝트(toProject) 소속 PR만 title/body로 검색해야 한다") {
+                val contributor = userRepository.save(User(loginId = "inproj-contrib", name = "프로젝트내검색", email = "inproj-contrib@yona.io"))
+                val project = projectRepository.save(Project(name = "inproj-repo", owner = "owner-inproj"))
+                val otherProject = projectRepository.save(Project(name = "other-inproj-repo", owner = "owner-other-inproj"))
+
+                val matched = pullRequestRepository.save(
+                    PullRequest(title = "문서 개선", toProject = project, fromProject = project, contributor = contributor)
+                )
+                pullRequestRepository.save(
+                    PullRequest(title = "문서 개선 다른 프로젝트", toProject = otherProject, fromProject = otherProject, contributor = contributor)
+                )
+
+                val keyword = "%문서%"
+                val page = pullRequestRepository.searchPullRequestsInProject(project, keyword, org.springframework.data.domain.PageRequest.of(0, 20))
+                val count = pullRequestRepository.countSearchPullRequestsInProject(project, keyword)
+
+                count shouldBe 1
+                page.content.map { it.id } shouldBe listOf(matched.id)
+            }
         }
     }
 }

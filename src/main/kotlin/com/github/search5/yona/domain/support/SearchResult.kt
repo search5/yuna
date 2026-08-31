@@ -8,6 +8,7 @@ import com.github.search5.yona.domain.board.Posting
 import com.github.search5.yona.domain.milestone.Milestone
 import com.github.search5.yona.domain.issue.IssueComment
 import com.github.search5.yona.domain.board.PostingComment
+import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.pullrequest.ReviewComment
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
@@ -25,6 +26,8 @@ class SearchResult(
     var issueCommentsCount: Int = 0,
     var postCommentsCount: Int = 0,
     var reviewsCount: Int = 0,
+    // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 대응.
+    var pullRequestsCount: Int = 0,
 
     var users: Page<User> = Page.empty(),
     var projects: Page<Project> = Page.empty(),
@@ -33,7 +36,8 @@ class SearchResult(
     var milestones: Page<Milestone> = Page.empty(),
     var issueComments: Page<IssueComment> = Page.empty(),
     var postComments: Page<PostingComment> = Page.empty(),
-    var reviews: Page<ReviewComment> = Page.empty()
+    var reviews: Page<ReviewComment> = Page.empty(),
+    var pullRequests: Page<PullRequest> = Page.empty()
 ) {
 
     fun makeSnippets(contents: String, threshold: Int): List<String> {
@@ -126,6 +130,12 @@ class SearchResult(
         }
         if (reviewsCount > 0) {
             searchType = SearchType.REVIEW
+            return
+        }
+        // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — PULL_REQUEST 우선순위는
+        // 기존 8개 타입 뒤, 기본값(ISSUE) 폴백 앞에 추가한다(기존 우선순위 순서를 바꾸지 않음).
+        if (pullRequestsCount > 0) {
+            searchType = SearchType.PULL_REQUEST
             return
         }
 

@@ -156,6 +156,13 @@ class SearchResultSpec : DescribeSpec({
             result.searchType shouldBe SearchType.REVIEW
         }
 
+        // yona-wiki P3-02 Step8.6 항목3(2026-09-01, 우선순위 3위) — `yona search prs` 대응.
+        it("pullRequestsCount > 0이면 PULL_REQUEST로 설정해야 한다") {
+            val result = SearchResult(pullRequestsCount = 1)
+            result.updateSearchType()
+            result.searchType shouldBe SearchType.PULL_REQUEST
+        }
+
         it("모든 카운트가 0이면 기본값 ISSUE로 설정해야 한다") {
             val result = SearchResult()
             result.updateSearchType()
