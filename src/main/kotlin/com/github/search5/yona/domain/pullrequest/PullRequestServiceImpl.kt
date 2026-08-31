@@ -59,6 +59,24 @@ class PullRequestServiceImpl(
     private val meterRegistry: MeterRegistry
 ) : PullRequestService {
 
+    // TASK-0416 부수 발견(P3-02 10라운드) — 실제 서버 + 실제 yona-cli로 `pr create` -> `pr merge`
+    // 골든패스를 검증하다가 드러난 근본원인. `pr create --from-branch feature-1`(그리고 세션 웹 UI의
+    // PR 생성 폼도 동일 — PullRequestViewController.branchNamesOf()가 "refs/heads/" 접두어를 미리
+    // 벗겨서 select 옵션 값을 채운다)처럼 실제 운영 경로는 항상 짧은 브랜치 이름을
+    // PullRequest.fromBranch/toBranch에 그대로 저장한다. 그런데 JGit의 로컬(파일시스템) fetch
+    // 연결(BaseConnection.getRef())은 광고된 ref 맵에서 정확히 일치하는 전체 이름만 찾고 짧은
+    // 이름을 "refs/heads/"로 보정해주지 않는다 — 그래서 RefSpec 소스로 짧은 이름을 그대로 넘기면
+    // 항상 "Remote does not have <branch> available for fetch"로 실패했다(이 파일의 단위 테스트들은
+    // PullRequestService.createPullRequest()를 직접 "refs/heads/..." 형태로만 호출해왔기 때문에
+    // 이 갭이 지금까지 안 잡혔다). resolve() 계열(toBranch 조회 등)은 짧은 이름을 지원해 문제가
+    // 없다 — fetch RefSpec 소스에만 이 보정이 필요하다. 저장 형식(DB 마이그레이션 없음)이나 화면
+    // 표시(fromBranch/toBranch를 그대로 "feature-1 -> main"처럼 보여주는 CLI/웹 UI)에는 영향을
+    // 주지 않도록 fetch 직전에만 지역적으로 보정한다(GitRepository.kt setDefaultBranch()가 쓰는
+    // 것과 동일한 패턴). attemptMerge/previewMerge/merge/updateMerge 네 곳 모두 동일한 fetch
+    // 패턴을 반복하고 있어 공용 헬퍼로 뽑았다.
+    private fun qualifyBranchRef(branch: String): String =
+        if (branch.startsWith("refs/")) branch else "refs/heads/$branch"
+
     @Transactional
     override fun attemptMerge(pullRequestId: Long): PullRequestMergeResult {
         val pullRequest = pullRequestRepository.findById(pullRequestId)
@@ -76,7 +94,7 @@ class PullRequestServiceImpl(
                 .setRemote(fromGitDir)
                 .setRefSpecs(
                     RefSpec()
-                        .setSource(pullRequest.fromBranch)
+                        .setSource(qualifyBranchRef(pullRequest.fromBranch))
                         .setDestination(tempBranch)
                         .setForceUpdate(true)
                 )
@@ -130,7 +148,7 @@ class PullRequestServiceImpl(
                 .setRemote(fromGitDir)
                 .setRefSpecs(
                     RefSpec()
-                        .setSource(fromBranch)
+                        .setSource(qualifyBranchRef(fromBranch))
                         .setDestination(tempBranch)
                         .setForceUpdate(true)
                 )
@@ -346,12 +364,12 @@ class PullRequestServiceImpl(
             val fromGitDir = repositoryService.getRepository(pullRequest.fromProject).getDirectory().absolutePath
             val fetchSourceRef = "refs/yobi/pull/${pullRequest.id}/head"
 
-            // 공식 fetch source branch로 fetch
+            // 공식 fetch source branch로 fetch (qualifyBranchRef 관련 근본원인은 클래스 상단 주석 참고)
             Git(repo).fetch()
                 .setRemote(fromGitDir)
                 .setRefSpecs(
                     RefSpec()
-                        .setSource(pullRequest.fromBranch)
+                        .setSource(qualifyBranchRef(pullRequest.fromBranch))
                         .setDestination(fetchSourceRef)
                         .setForceUpdate(true)
                 )
@@ -466,7 +484,7 @@ class PullRequestServiceImpl(
                 .setRemote(fromGitDir)
                 .setRefSpecs(
                     RefSpec()
-                        .setSource(pullRequest.fromBranch)
+                        .setSource(qualifyBranchRef(pullRequest.fromBranch))
                         .setDestination(fetchedSourceRef)
                         .setForceUpdate(true)
                 )

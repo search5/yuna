@@ -1040,7 +1040,7 @@ class TemplateHelperBranchSpec : DescribeSpec({
     describe("getCloneUrl") {
         it("요청 컨텍스트가 없으면 http://localhost 기본값을 쓰고, user가 없으면 계정 없이 반환") {
             val p = project(owner = "own", name = "proj")
-            templateHelper.getCloneUrl(p, null) shouldBe "http://localhost/own/proj.git"
+            templateHelper.getCloneUrl(p, null) shouldBe "http://localhost/git/own/proj.git"
         }
         it("scheme=http, port=80(기본포트)이면 포트를 생략한다") {
             val request = MockHttpServletRequest()
@@ -1049,7 +1049,7 @@ class TemplateHelperBranchSpec : DescribeSpec({
             request.serverPort = 80
             RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
             val p = project(owner = "own", name = "proj")
-            templateHelper.getCloneUrl(p, null) shouldBe "http://example.com/own/proj.git"
+            templateHelper.getCloneUrl(p, null) shouldBe "http://example.com/git/own/proj.git"
         }
         it("scheme=http, port=8080(비기본포트)이면 포트를 붙인다") {
             val request = MockHttpServletRequest()
@@ -1058,7 +1058,7 @@ class TemplateHelperBranchSpec : DescribeSpec({
             request.serverPort = 8080
             RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
             val p = project(owner = "own", name = "proj")
-            templateHelper.getCloneUrl(p, null) shouldBe "http://example.com:8080/own/proj.git"
+            templateHelper.getCloneUrl(p, null) shouldBe "http://example.com:8080/git/own/proj.git"
         }
         it("scheme=https, port=443(기본포트)이면 포트를 생략한다") {
             val request = MockHttpServletRequest()
@@ -1067,7 +1067,7 @@ class TemplateHelperBranchSpec : DescribeSpec({
             request.serverPort = 443
             RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
             val p = project(owner = "own", name = "proj")
-            templateHelper.getCloneUrl(p, null) shouldBe "https://example.com/own/proj.git"
+            templateHelper.getCloneUrl(p, null) shouldBe "https://example.com/git/own/proj.git"
         }
         it("scheme=https, port=8443(비기본포트)이면 포트를 붙인다") {
             val request = MockHttpServletRequest()
@@ -1076,21 +1076,21 @@ class TemplateHelperBranchSpec : DescribeSpec({
             request.serverPort = 8443
             RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
             val p = project(owner = "own", name = "proj")
-            templateHelper.getCloneUrl(p, null) shouldBe "https://example.com:8443/own/proj.git"
+            templateHelper.getCloneUrl(p, null) shouldBe "https://example.com:8443/git/own/proj.git"
         }
         it("user가 있어도 project.id가 null이면 멤버로 취급하지 않는다") {
             val request = MockHttpServletRequest()
             RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
             val p = project(id = null, owner = "own", name = "proj")
             val u = user(1L, "member1")
-            templateHelper.getCloneUrl(p, u) shouldBe "http://localhost/own/proj.git"
+            templateHelper.getCloneUrl(p, u) shouldBe "http://localhost/git/own/proj.git"
         }
         it("user.id가 null이면 멤버로 취급하지 않는다") {
             val request = MockHttpServletRequest()
             RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
             val p = project(id = 1L, owner = "own", name = "proj")
             val u = user(id = null, loginId = "member1")
-            templateHelper.getCloneUrl(p, u) shouldBe "http://localhost/own/proj.git"
+            templateHelper.getCloneUrl(p, u) shouldBe "http://localhost/git/own/proj.git"
         }
         it("프로젝트 멤버면 loginId@host 형태로 계정을 끼워넣는다") {
             val request = MockHttpServletRequest()
@@ -1098,7 +1098,7 @@ class TemplateHelperBranchSpec : DescribeSpec({
             val p = project(id = 1L, owner = "own", name = "proj")
             val u = user(id = 1L, loginId = "member1")
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 1L) } returns true
-            templateHelper.getCloneUrl(p, u) shouldBe "http://member1@localhost/own/proj.git"
+            templateHelper.getCloneUrl(p, u) shouldBe "http://member1@localhost/git/own/proj.git"
         }
         it("프로젝트 멤버가 아니면 계정 없이 반환한다") {
             val request = MockHttpServletRequest()
@@ -1106,7 +1106,7 @@ class TemplateHelperBranchSpec : DescribeSpec({
             val p = project(id = 1L, owner = "own", name = "proj")
             val u = user(id = 2L, loginId = "nonmember1")
             every { projectUserRepository.existsByProjectIdAndUserId(1L, 2L) } returns false
-            templateHelper.getCloneUrl(p, u) shouldBe "http://localhost/own/proj.git"
+            templateHelper.getCloneUrl(p, u) shouldBe "http://localhost/git/own/proj.git"
         }
     }
 })

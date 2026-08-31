@@ -1530,6 +1530,34 @@ class PullRequestServiceSpec @Autowired constructor(
                 repo.close()
             }
 
+            // TASK-0416 부수 발견(P3-02 10라운드) — 실제 서버 + 실제 yona-cli로 `pr create` ->
+            // `pr merge` 골든패스를 재현하다가 발견한 회귀. 이 파일의 다른 merge 테스트들은 전부
+            // fromBranch/toBranch를 "refs/heads/..." 형태로 직접 만들어 호출하는데, 실제 운영
+            // 경로(REST API의 CreatePullRequestRequest, 세션 웹 UI의 PR 생성 폼)는 항상 짧은
+            // 브랜치 이름("feature-1")을 그대로 저장한다 — 이 스펙은 createPullRequest()를 통해
+            // 짧은 이름으로 PR을 만들어(실제 운영 경로와 동일하게) merge()가 여전히 성공하는지
+            // 검증한다.
+            it("merge - fromBranch/toBranch가 짧은 이름(refs/heads/ 접두어 없음)이어도 병합에 성공해야 한다") {
+                createCommit(repositoryService.getRepository(toProject).getDirectory(), "master", "test.txt", "hello", "Initial commit")
+                createCommit(
+                    repositoryService.getRepository(toProject).getDirectory(), "short-branch-feature", "test2.txt", "change", "짧은 이름 브랜치 변경",
+                    baseBranch = "master"
+                )
+
+                val created = pullRequestService.createPullRequest(
+                    title = "짧은 브랜치 이름 PR", body = "본문",
+                    fromProjectId = toProject.id!!, toProjectId = toProject.id!!,
+                    fromBranch = "short-branch-feature", toBranch = "master",
+                    contributor = contributor
+                )
+
+                val mergeResult = pullRequestService.merge(created.id!!, receiver)
+
+                mergeResult.conflicts() shouldBe false
+                val mergedPr = pullRequestRepository.findById(created.id!!).get()
+                mergedPr.mergedCommitIdTo shouldNotBe null
+            }
+
             it("createPullRequest - 동일 대상 프로젝트에 두 번째 PR을 생성하면 번호가 순차 증가해야 한다") {
                 val first = pullRequestService.createPullRequest(
                     title = "첫 번째 PR", body = "본문",

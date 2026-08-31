@@ -572,7 +572,13 @@ class TemplateHelper(
         val isMember = user != null && project.id != null && user.id != null &&
             projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!)
         val authority = if (isMember && user != null) "${user.loginId}@$hostPart" else hostPart
-        return "$scheme://$authority/${project.owner}/${project.name}.git"
+        // TASK-0416 부수 발견(P3-02 10라운드) — 실제 git 스마트 HTTP 서블릿은 GitServletConfig가
+        // "/git/*" 경로에 등록돼 있는데(GitServletConfig.kt), 이 헬퍼는 "/git/" 세그먼트 없이
+        // "scheme://host/owner/name.git" 형태로 URL을 만들어왔다. 이 URL은 실제로 존재하지 않는
+        // 경로라 partial_state.html("git remote add upstream ...")이 화면에 보여주는 안내
+        // 커맨드를 그대로 실행하면 항상 404가 난다 — yona-cli의 planCheckout()도 동일한 착오로
+        // 같은 형태의 URL을 만들고 있었다(둘 다 이번에 함께 수정).
+        return "$scheme://$authority/git/${project.owner}/${project.name}.git"
     }
 }
 

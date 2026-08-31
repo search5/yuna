@@ -122,6 +122,20 @@ class GitServletConfig(
 
         // 단일 진입점 디스패처 서블릿 정의
         val dispatcherServlet = object : HttpServlet() {
+            // 근본원인(TASK-0416): gitServlet/lfsServlet은 컨테이너에 직접 등록되지 않고
+            // 이 디스패처의 service()에서 수동으로 .service()만 호출돼 왔다. 그런데
+            // GitServlet(JGit)은 MetaServlet을 상속하며, 내부 GitFilter가 URL 파이프라인
+            // (upload-pack/receive-pack/info-refs 등)을 구성하는 시점이 바로 init(ServletConfig)다.
+            // init()이 한 번도 호출되지 않으면 GitFilter의 bindings가 비어 있는 채로 남아,
+            // 모든 요청이 매치 실패로 기본 체인(chain.doFilter)에 떨어져 조용히 404를 반환한다
+            // (RepositoryResolver까지 도달하지도 못함 — 그래서 예외 스택트레이스가 안 남았다).
+            // 컨테이너가 이 디스패처 서블릿 자체에 대해 보장하는 init(ServletConfig) 호출을
+            // 그대로 위임해 gitServlet/lfsServlet도 정상적인 서블릿 생명주기를 타도록 한다.
+            override fun init() {
+                gitServlet.init(servletConfig)
+                lfsServlet.init(servletConfig)
+            }
+
             override fun service(req: HttpServletRequest, res: HttpServletResponse) {
                 println(">>> Dispatcher received URI: '${req.requestURI}'")
                 if (req.requestURI.contains("/info/lfs/")) {
