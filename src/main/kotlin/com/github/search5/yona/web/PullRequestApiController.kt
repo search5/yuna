@@ -2,7 +2,6 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.ProjectRepository
-import com.github.search5.yona.domain.vcs.FileDiff
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -210,18 +209,20 @@ class PullRequestApiController(
         return pullRequestController.changeState(found.id!!, number, State.OPEN, authentication).mapBody { it.toResponse() }
     }
 
-    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr diff`/`gh pr comment`. FileDiff는 JPA
-    // 엔티티가 아니라 JGit 내부 타입(RawText/EditList)을 그대로 들고 있는 값 객체라(yona-cli
-    // internal/api/pr.go의 GetPullRequestDiff() 주석에도 명시) User/Project 양방향 연관관계로
-    // 인한 순환 직렬화 문제 자체가 없다 — pathA/pathB/changeType 등 단순 필드 위주로 CLI가 이미
-    // 방어적으로 파싱하므로 그대로 반환한다(Step8.7 2번 실측 재검증 결과 확인).
+    // yona-wiki P3-02 10라운드(TASK-0419) — 위 4라운드 주석("FileDiff는 순환 직렬화 문제가 없어
+    // pathA/pathB/changeType 위주로 그대로 반환해도 된다")은 실제 서버로 재현한 결과 절반만 맞았다
+    // — 순환 참조는 없지만(맞음), FileDiff.a/b(RawText)/editList(EditList)/oldMode/newMode(FileMode)가
+    // Jackson 빈 컨벤션에 안 맞는 JGit 내부 타입이라 그대로 직렬화하면 base64 rawContent 등 JGit
+    // 내부 표현이 그대로 노출돼 CLI가 pathA/pathB조차 신뢰하기 어려운 응답이 됐다(`pr diff`가
+    // "- -> -"로 깨져 나오는 걸 실측 확인). PullRequestController.getDiff()가 이제
+    // FileDiffResponse(RestApiResponseDto.kt)로 변환해 내려주므로 그대로 위임한다.
     @GetMapping("/{number}/diff")
     fun diff(
         @PathVariable owner: String,
         @PathVariable project: String,
         @PathVariable number: Long,
         authentication: Authentication?
-    ): ResponseEntity<List<FileDiff>> {
+    ): ResponseEntity<List<FileDiffResponse>> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
         return pullRequestController.getDiff(found.id!!, number, authentication)

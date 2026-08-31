@@ -193,7 +193,7 @@ class PullRequestApiControllerSpec : DescribeSpec({
     describe("GET /api/v1/projects/{owner}/{project}/pull-requests/{number}/diff") {
         it("PullRequestController.getDiff에 위임한다") {
             every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
-            every { pullRequestController.getDiff(1L, 1L, any()) } returns ResponseEntity.ok(listOf(FileDiff()))
+            every { pullRequestController.getDiff(1L, 1L, any()) } returns ResponseEntity.ok(listOf(FileDiff().toResponse()))
 
             mockMvc.perform(get("/api/v1/projects/yona/yuna/pull-requests/1/diff"))
                 .andExpect(status().isOk)

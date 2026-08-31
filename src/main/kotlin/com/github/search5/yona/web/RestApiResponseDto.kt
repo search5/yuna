@@ -11,6 +11,8 @@ import com.github.search5.yona.domain.pullrequest.PullRequestCommit
 import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
 import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.user.User
+import com.github.search5.yona.domain.vcs.DiffLineType
+import com.github.search5.yona.domain.vcs.FileDiff
 import com.github.search5.yona.domain.vcs.GitCommit
 import java.time.Instant
 
@@ -276,3 +278,67 @@ fun PullRequestMergeResult.toResponse() = PullRequestMergeResultResponse(
     gitCommits = gitCommits.map { it.toResponse() },
     newCommits = newCommits.map { it.toResponse() }
 )
+
+// TASK-0419(P3-02 10라운드) — `GET .../pull-requests/{number}/diff`(PullRequestController.getDiff())가
+// FileDiff 엔티티를 가공 없이 그대로 반환하던 문제. FileDiff.a/b는 org.eclipse.jgit.diff.RawText,
+// editList는 EditList(Edit 리스트), oldMode/newMode는 FileMode인데 전부 일반 Jackson 빈 컨벤션에
+// 맞는 getter가 없는 JGit 내부 타입이다 — 그대로 직렬화하면 a/b가 rawContent(byte[] 필드 하나만
+// base64로 노출)만 덜렁 나오고 editList/hunks는 사실상 못 쓰는 내부 표현이 그대로 노출된다(실측
+// 확인). yona-cli(internal/api/pr.go GetPullRequestDiff())는 이미 pathA/pathB/changeType만
+// 신뢰하도록 방어적으로 작성돼 있었지만, 그마저도 Jackson이 a/b/editList 직렬화 도중 문제를
+// 일으키면 응답 전체가 깨질 위험이 있었다.
+//
+// 대신 pathA/pathB/changeType 등 단순 필드만 노출하고, JGit RawText/EditList를 그대로 넘기는 대신
+// FileDiff.getHunks()(이미 이 클래스가 순수 데이터 구조인 DiffLine 목록으로 계산해주는 값)를
+// 이용해 서버가 직접 GNU unified diff 형식의 텍스트(patch)를 만들어 내려준다 — 클라이언트가 JGit
+// 타입을 전혀 몰라도 사람이 읽을 수 있는 diff를 그대로 보여줄 수 있다(yona-cli 쪽 변경 없이도
+// 이미 pathA/pathB/changeType으로 첫 줄을 렌더링하던 동작은 그대로 유지된다).
+data class FileDiffResponse(
+    val pathA: String?,
+    val pathB: String?,
+    val changeType: String?,
+    val commitA: String?,
+    val commitB: String?,
+    val isBinaryA: Boolean,
+    val isBinaryB: Boolean,
+    val hasError: Boolean,
+    val patch: String?
+)
+
+fun FileDiff.toResponse(): FileDiffResponse {
+    return FileDiffResponse(
+        pathA = pathA,
+        pathB = pathB,
+        changeType = changeType?.name,
+        commitA = commitA,
+        commitB = commitB,
+        isBinaryA = isBinaryA,
+        isBinaryB = isBinaryB,
+        hasError = hasError(),
+        patch = if (isBinaryA || isBinaryB) null else buildUnifiedDiffPatch(this)
+    )
+}
+
+// yona-cli/cmd/pr.go의 `git diff` 관례(공백=컨텍스트, -=삭제, +=추가)를 그대로 따르는 최소
+// unified diff 텍스트. FileDiff.getHunks()가 이미 begin/end 라인 번호와 DiffLineType까지
+// 계산해두므로 여기서는 형식만 맞춰 문자열로 조립한다.
+private fun buildUnifiedDiffPatch(diff: FileDiff): String? {
+    val hunks = diff.getHunks() ?: return null
+    if (hunks.isEmpty()) return ""
+
+    val sb = StringBuilder()
+    for (hunk in hunks) {
+        val countA = hunk.endA - hunk.beginA
+        val countB = hunk.endB - hunk.beginB
+        sb.append("@@ -${hunk.beginA + 1},$countA +${hunk.beginB + 1},$countB @@\n")
+        for (line in hunk.lines) {
+            val prefix = when (line.kind) {
+                DiffLineType.ADD -> "+"
+                DiffLineType.REMOVE -> "-"
+                DiffLineType.CONTEXT -> " "
+            }
+            sb.append(prefix).append(line.content).append("\n")
+        }
+    }
+    return sb.toString()
+}

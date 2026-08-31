@@ -179,10 +179,16 @@ class PullRequestController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
+        // TASK-0420 — fromBranch/toBranch는 null이면 기존 값으로 폴백하는데 body만 그 폴백이
+        // 빠져 있었다. yona-cli의 `pr edit --title`(body 생략)은 Body가 `*string` 포인터 타입에
+        // `json:"body,omitempty"`라 요청 JSON에서 body 필드 자체를 아예 생략한다(internal/api/pr.go
+        // 참고, CLI 쪽은 정상) — 서버가 그 null을 그대로 적용해버려 title만 바꾸려 했는데 기존
+        // 본문이 통째로 지워지던 버그(실서버 재현: PR 생성 시 본문을 채우고 title만 바꾸는
+        // `pr edit` 실행 후 `pr view`로 본문이 사라짐을 확인).
         val updated = pullRequestService.updatePullRequest(
             pullRequestId = pullRequest.id!!,
             title = request.title,
-            body = request.body,
+            body = request.body ?: pullRequest.body,
             fromBranch = request.fromBranch ?: pullRequest.fromBranch,
             toBranch = request.toBranch ?: pullRequest.toBranch
         )
@@ -237,11 +243,14 @@ class PullRequestController(
     // viewChangesInternal()이 화면 렌더링에 쓰는 것과 동일한 pullRequestService.getDiff()를
     // JSON으로 그대로 노출한다(신규 서비스 로직 없음).
     @GetMapping("/{number}/diff")
+    // TASK-0419 — FileDiff(JGit RawText/EditList/FileMode를 그대로 들고 있는 값 객체) 목록을 그대로
+    // 반환하지 않고 FileDiffResponse(단순 필드 + 서버가 조립한 unified diff 텍스트)로 변환해
+    // 내려준다(RestApiResponseDto.kt의 FileDiff.toResponse() 참고).
     fun getDiff(
         @PathVariable projectId: Long,
         @PathVariable number: Long,
         authentication: Authentication?
-    ): ResponseEntity<List<FileDiff>> {
+    ): ResponseEntity<List<FileDiffResponse>> {
         val project = projectRepository.findById(projectId).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
@@ -258,7 +267,7 @@ class PullRequestController(
         } catch (e: Exception) {
             emptyList()
         }
-        return ResponseEntity.ok(diffs)
+        return ResponseEntity.ok(diffs.map { it.toResponse() })
     }
 
     // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr comment` 대응. yona PR은 "PR 전체에 붙는

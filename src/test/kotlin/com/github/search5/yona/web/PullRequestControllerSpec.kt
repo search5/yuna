@@ -16,6 +16,8 @@ import com.github.search5.yona.domain.role.RoleType
 import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -434,6 +436,33 @@ class PullRequestControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
 
                 verify(exactly = 1) { pullRequestService.updatePullRequest(50L, "수정된 PR 제목", "수정된 PR 본문", "feature", "master") }
+            }
+
+            // TASK-0420 — 실서버 재현: PR 생성 시 본문을 채우고 title만 바꾸는 `pr edit`을 실행하면
+            // yona-cli는 Body *string 필드가 nil이라 JSON에 "body" 키 자체를 아예 생략한다
+            // (`json:"body,omitempty"`). fromBranch/toBranch처럼 body도 null이면 기존 값으로
+            // 폴백해야 하는데 그 폴백이 없어 본문이 통째로 지워지던 버그.
+            it("요청 본문에 body가 아예 없으면(null) 기존 PR의 body를 그대로 유지해야 한다") {
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { projectUserRepository.findByProjectIdAndUserId(1L, 10L) } returns Optional.of(projectUser)
+                every { pullRequestService.updatePullRequest(50L, "제목만 수정", "PR 본문", "feature", "master") } returns pullRequest
+
+                // body 키 자체가 없는 JSON — yona-cli가 --body를 생략했을 때와 동일한 페이로드.
+                val jsonContent = """{"title": "제목만 수정"}"""
+
+                mockMvc.perform(
+                    put("/api/projects/1/pullrequests/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(userAuth)
+                )
+                    .andExpect(status().isOk)
+
+                // "PR 본문"은 pullRequest 픽스처의 기존 body 값 — null이 그대로 서비스에 전달돼
+                // 본문이 지워지지 않고 기존 값으로 폴백됐는지 확인한다.
+                verify(exactly = 1) { pullRequestService.updatePullRequest(50L, "제목만 수정", "PR 본문", "feature", "master") }
             }
 
             it("컨트리뷰터가 아닌 일반 프로젝트 멤버가 수정해도 200 OK를 반환해야 한다 (P1-92, legacy는 프로젝트 멤버 전원 허용)") {
@@ -1182,6 +1211,38 @@ class PullRequestControllerSpec : DescribeSpec({
                     .andExpect(status().isOk)
 
                 verify(exactly = 1) { pullRequestService.getDiff(pullRequest) }
+            }
+
+            // TASK-0419 — FileDiff 엔티티를 그대로 반환하면 JGit 내부 타입(RawText/EditList/FileMode)이
+            // 노출된다(그중 RawText는 rawContent라는 이름의 byte[] 필드를 base64로 노출). 응답이
+            // pathA/pathB/changeType/patch 같은 단순 필드로만 구성된 FileDiffResponse여야 하고,
+            // JGit 내부 표현(rawContent/editList)은 응답에 아예 없어야 한다.
+            it("diff 응답은 JGit 내부 타입을 노출하지 않고 pathA/pathB/changeType/patch만 담은 단순 필드여야 한다") {
+                val diff = com.github.search5.yona.domain.vcs.FileDiff().apply {
+                    pathA = "a.txt"
+                    pathB = "a.txt"
+                    changeType = org.eclipse.jgit.diff.DiffEntry.ChangeType.MODIFY
+                    a = org.eclipse.jgit.diff.RawText(byteArrayOf('o'.code.toByte(), '\n'.code.toByte()))
+                    b = org.eclipse.jgit.diff.RawText(byteArrayOf('n'.code.toByte(), '\n'.code.toByte()))
+                    editList = org.eclipse.jgit.diff.EditList().apply {
+                        add(org.eclipse.jgit.diff.Edit(0, 1, 0, 1))
+                    }
+                }
+                every { projectRepository.findById(1L) } returns Optional.of(project)
+                every { userRepository.findByLoginId("testuser") } returns Optional.of(user)
+                every { projectUserRepository.existsByProjectIdAndUserId(1L, 10L) } returns true
+                every { pullRequestService.getPullRequest(1L, 1L) } returns pullRequest
+                every { pullRequestService.getDiff(pullRequest) } returns listOf(diff)
+
+                val body = mockMvc.perform(get("/api/projects/1/pullrequests/1/diff").principal(userAuth))
+                    .andExpect(status().isOk)
+                    .andReturn().response.contentAsString
+
+                body shouldContain "\"pathA\":\"a.txt\""
+                body shouldContain "\"changeType\":\"MODIFY\""
+                body shouldContain "\"patch\""
+                body shouldNotContain "rawContent"
+                body shouldNotContain "editList"
             }
 
             it("존재하지 않는 프로젝트의 diff를 조회하면 404 Not Found를 반환해야 한다") {
