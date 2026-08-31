@@ -168,6 +168,19 @@ class GitRepositorySpec : DescribeSpec({
             repo.isEmpty() shouldBe true
         }
 
+        // 사용자 요청 — 새 프로젝트 기본 브랜치를 "master" 대신 "main"으로. 위 defaultBranchRef 프로브가
+        // 보여주듯 호스트 git의 init.defaultBranch에 맡기면 환경마다 달라지므로, defaultBranch
+        // 생성자 인자로 애플리케이션이 결정론적으로 강제할 수 있어야 한다(RepositoryService가
+        // yona.git.default-branch 설정값을 여기로 넘겨줌).
+        it("defaultBranch 생성자 인자를 지정하면 그 이름으로 초기 브랜치가 만들어져야 한다") {
+            val repo = GitRepository("o1c", "p1c", newTempBaseDir(), userResolver, defaultBranch = "main")
+
+            repo.create()
+
+            val fullBranch = openRepo(repo).use { it.fullBranch }
+            fullBranch shouldBe "refs/heads/main"
+        }
+
         it("커밋이 하나라도 있으면 isEmpty()가 false다") {
             val baseDir = newTempBaseDir()
             val repo = GitRepository("o2", "p2", baseDir, userResolver)

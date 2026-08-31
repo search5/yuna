@@ -312,5 +312,25 @@
     <footer th:replace="~{site/layout :: footer}"></footer>
     <div th:replace="~{site/layout :: scripts}"></div>
 </div>
+<!-- legacy project/home.scala.html:165-177 대응 — 이 호출이 없으면 "주소복사"(ClipboardJS)/설명
+     수정 저장/라벨 편집이 전부 죽은 버튼이 된다. ClipboardJS 자체는 site/layout::scripts가 이미
+     불러오는 공용 yona-common.js에 번들돼 있어(legacy도 이 페이지에 clipboard.js를 별도로 로드하지
+     않음, 직접 대조 확인) 별도 <script src> 추가는 불필요하다. #label-board/#label-editor-toggle은
+     이 화면에 아직 없는 요소라 빈 jQuery 선택이 되지만, 모듈 쪽에서 그 요소가 실제로 있을 때만
+     사용하므로 안전하다(라벨 편집기는 이 화면에 아직 이식되지 않은 별도 범위). -->
+<script type="text/javascript" th:inline="javascript">
+$(document).ready(function(){
+    $yobi.loadModule("project.Home", {
+        "sURLProjectLabels": /*[[@{/api/{owner}/{name}/labels(owner=${project.owner}, name=${project.name})}]]*/ "",
+        "sURLLabels": /*[[@{/labels}]]*/ "",
+        "sURLLabelCategories": /*[[@{/categories}]]*/ "",
+        "welLabelBoard": $('#label-board'),
+        "welLabelEditorToggle": $('#label-editor-toggle'),
+        "nProjectId": /*[[${project.id}]]*/ "",
+        "sURLProject": /*[[@{/api/projects/{id}(id=${project.id})}]]*/ "",
+        "sURLZeroClipboard": /*[[@{/javascripts/lib/jquery/ZeroClipboard.swf}]]*/ ""
+    });
+});
+</script>
 </body>
 </html>

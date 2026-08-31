@@ -239,7 +239,7 @@ class BareCommitSpec : DescribeSpec({
 
             val repository = FileRepositoryBuilder().setGitDir(bareDir).build()
             try {
-                repository.resolve("refs/heads/master") shouldBe commit4
+                repository.resolve("refs/heads/main") shouldBe commit4
 
                 val revWalk = RevWalk(repository)
                 val firstCommit = revWalk.parseCommit(commit1)
@@ -259,6 +259,35 @@ class BareCommitSpec : DescribeSpec({
             }
         }
 
+        // 사용자 요청 — 새 프로젝트 기본 브랜치를 "master" 대신 "main"으로 만들고 싶어함. 호스트 git의
+        // init.defaultBranch 설정에 기대는 대신(GitRepositorySpec.kt의 defaultBranchRef 프로브 주석
+        // 참고 — 환경마다 달라져 깨질 수 있음), 애플리케이션 설정(yona.git.default-branch, 기본값 "main")
+        // 으로 결정론적으로 고정한다. BareCommit도 같은 값을 따라야 한다 — 그러지 않으면 새로 만든
+        // 저장소(HEAD가 refs/heads/main을 가리킴, 아직 커밋 없음)에 README 체크박스 등으로 첫 커밋을
+        // 올릴 때 setRefName() 없이 이 3-인자 오버로드를 쓰는 경로(BoardViewController)가 여전히
+        // refs/heads/master에 커밋해버려 main은 계속 비어있고 master만 생기는 불일치가 생긴다.
+        it("defaultBranch 생성자 인자를 지정하면 setRefName() 없이도 그 브랜치에 커밋해야 한다") {
+            val gitBaseDir = Files.createTempDirectory("yona-barecommit-defaultbranch-test").toFile()
+            val bareDir = File(gitBaseDir, "tester/repo.git")
+            Git.init().setDirectory(bareDir).setBare(true).setInitialBranch("main").call().close()
+
+            val project = Project(id = 1L, owner = "tester", name = "repo")
+            val user = User(id = 1L, loginId = "tester", name = "테스터", email = "tester@yona.io")
+
+            val commitId = BareCommit(project, user, gitBaseDir.absolutePath, defaultBranch = "main")
+                .commitTextFile("README.md", "# repo", "initial commit")
+
+            commitId shouldNotBe null
+
+            val repository = FileRepositoryBuilder().setGitDir(bareDir).build()
+            try {
+                repository.resolve("refs/heads/main") shouldBe commitId
+                repository.findRef("refs/heads/master") shouldBe null
+            } finally {
+                repository.close()
+            }
+        }
+
         // createTreeWith() 루프의 treeParser.entryFileMode == FileMode.TREE 분기 검증. 이 레거시
         // 오버로드 자체는 항상 루트 파일만 커밋하므로 스스로 디렉터리 엔트리를 만들 수 없다 -- 대신
         // seedInitialCommit()으로 저장소를 미리 하위 디렉터리가 있는 상태로 만들어 재현한다.
@@ -267,7 +296,7 @@ class BareCommitSpec : DescribeSpec({
             val bareDir = File(gitBaseDir, "tester/repo.git")
             Git.init().setDirectory(bareDir).setBare(true).call().close()
 
-            seedInitialCommit(bareDir, "master", "src/foo.txt", "nested content")
+            seedInitialCommit(bareDir, "main", "src/foo.txt", "nested content")
 
             val project = Project(id = 1L, owner = "tester", name = "repo")
             val user = User(id = 1L, loginId = "tester", name = "테스터", email = "tester@yona.io")

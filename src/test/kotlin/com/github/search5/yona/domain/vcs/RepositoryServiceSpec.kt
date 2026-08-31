@@ -30,7 +30,7 @@ class RepositoryServiceSpec : DescribeSpec({
     val gitBaseDir = "/tmp/git"
     val svnBaseDir = "/tmp/svn"
 
-    val service = RepositoryService(userRepository, projectRepository, gitBaseDir, svnBaseDir)
+    val service = RepositoryService(userRepository, projectRepository, gitBaseDir, svnBaseDir, "main")
 
     val objectMapper = ObjectMapper()
 
@@ -117,13 +117,13 @@ class RepositoryServiceSpec : DescribeSpec({
 
         it("should proceed past the not-found check when project exists (real empty bare repo)") {
             val tempBase = tempdir()
-            val realService = RepositoryService(userRepository, projectRepository, tempBase.absolutePath, svnBaseDir)
+            val realService = RepositoryService(userRepository, projectRepository, tempBase.absolutePath, svnBaseDir, "main")
             val proj = Project(id = 2L, owner = "realowner", name = "realproj", vcs = "GIT")
             every { projectRepository.findByOwnerAndName("realowner", "realproj") } returns Optional.of(proj)
 
             // 실제 빈 bare 저장소를 만들어 getRepository()는 성공하고, getRawFile()의 HEAD 해석
             // 단계에서만 실패하게 한다 — getFileAsRaw의 "프로젝트 존재" 분기 자체가 목적.
-            GitRepository("realowner", "realproj", tempBase.absolutePath) { _, _ -> null }.create()
+            GitRepository("realowner", "realproj", tempBase.absolutePath, userResolver = { _, _ -> null }).create()
 
             shouldThrow<FileNotFoundException> {
                 realService.getFileAsRaw("realowner", "realproj", "HEAD", "file.txt")

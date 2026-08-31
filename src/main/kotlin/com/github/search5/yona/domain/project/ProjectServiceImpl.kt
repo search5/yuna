@@ -106,6 +106,10 @@ class ProjectServiceImpl(
             projectUserRepository.save(projectUser)
             savedProject.projectUsers.add(projectUser)
         }
+        // yona ProjectApp.java:191 "RepositoryService.createRepository(project)" 대응 (P0-26).
+        // 이 호출이 없으면 DB 행만 생기고 물리 bare 저장소가 안 만들어져, 이후 README 커밋 등
+        // 저장소 쓰기 작업이 BareCommit의 조용한 catch(Exception)에 가려진 채 전부 실패한다.
+        repositoryService.getRepository(savedProject).create()
         return savedProject
     }
 

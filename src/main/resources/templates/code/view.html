@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="ko">
-<head th:replace="~{site/layout :: head(${project.name} + ' - 코드 브라우저')}">
+<!-- th:replace는 호스트 <head> 태그와 그 자식을 전부 프래그먼트 결과로 치환하므로, 페이지 전용
+     <style>를 <head> 안에 두면 절대 렌더링되지 않는다(이 저장소의 다른 모든 템플릿은
+     `<head th:replace="..."></head>`처럼 안을 비워둔다) — <body> 최상단으로 옮겨서 실제로
+     렌더링되게 한다(P0-27). -->
+<head th:replace="~{site/layout :: head(${project.name} + ' - 코드 브라우저')}"></head>
+<body class="prj" id="html-body">
 <style>
   .code-browse-wrap {
       background: #fff;
@@ -9,17 +14,21 @@
       padding: 20px;
       margin-bottom: 25px;
   }
-  .code-browse-header {
+  /* 공용 stylesheets/yobi.css에 더 구체적인(specificity 2클래스) legacy 선택자
+     `.code-browse-wrap .code-browse-header`/`.code-breadcrumb-wrap`이 이미 있어(select2 위젯
+     기준 display:block+고정 height:34px 등), 스코프 없는 1클래스 선택자로는 소스 순서와 무관하게
+     항상 밀린다 — 명시도를 맞춰 이 파일이 실제 의도한 flex 레이아웃/여백이 적용되게 한다. */
+  .code-browse-wrap .code-browse-header {
       margin-bottom: 15px;
       display: flex;
       align-items: center;
       justify-content: space-between;
   }
-  .code-breadcrumb-wrap {
+  .code-browse-wrap .code-breadcrumb-wrap {
       font-size: 16px;
       font-weight: bold;
   }
-  .code-breadcrumb-wrap a {
+  .code-browse-wrap .code-breadcrumb-wrap a {
       margin: 0 5px;
       text-decoration: none;
   }
@@ -28,45 +37,51 @@
       border-radius: 3px;
       margin-bottom: 15px;
   }
-  .listhead {
+  /* 아래 전부(.listhead/.listitem/.filename/.commitMsg/.commitDate/.file-wrap/.file-header/
+     .file-info/.code-wrap) 역시 위 `.code-browse-header`와 동일한 이유로 `.code-browse-wrap`
+     프리픽스가 필요하다 — 전수 감사(사용자 요청)에서 발견: 공용 yobi.css에
+     `.code-browse-wrap .listhead`/`.code-browse-wrap .listitem .commitDate`/
+     `.code-browse-wrap .file-header` 등 더 구체적인 legacy 선택자가 이미 있어, 스코프 없이 두면
+     파일 목록 정렬/줄바꿈과 단일 파일 뷰 헤더 레이아웃이 소스 순서와 무관하게 그쪽으로 밀린다. */
+  .code-browse-wrap .listhead {
       background-color: #f6f8fa;
       padding: 10px;
       border-bottom: 1px solid #eaecef;
       font-weight: bold;
       display: flex;
   }
-  .listitem {
+  .code-browse-wrap .listitem {
       padding: 10px;
       border-bottom: 1px solid #eaecef;
       display: flex;
       align-items: center;
   }
-  .listitem:last-child {
+  .code-browse-wrap .listitem:last-child {
       border-bottom: none;
   }
-  .filename {
+  .code-browse-wrap .filename {
       flex: 3;
       display: flex;
       align-items: center;
   }
-  .commitMsg {
+  .code-browse-wrap .commitMsg {
       flex: 5;
       color: #586069;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
   }
-  .commitDate {
+  .code-browse-wrap .commitDate {
       flex: 2;
       text-align: right;
       color: #6a737d;
   }
-  .file-wrap {
+  .code-browse-wrap .file-wrap {
       border: 1px solid #d1d5da;
       border-radius: 3px;
       background: #fff;
   }
-  .file-header {
+  .code-browse-wrap .file-header {
       background-color: #f6f8fa;
       border-bottom: 1px solid #d1d5da;
       padding: 10px;
@@ -74,13 +89,13 @@
       align-items: center;
       justify-content: space-between;
   }
-  .file-info {
+  .code-browse-wrap .file-info {
       font-size: 13px;
       display: flex;
       align-items: center;
       gap: 15px;
   }
-  .code-wrap {
+  .code-browse-wrap .code-wrap {
       margin: 0;
       border: none;
       background-color: #fafbfc;
@@ -90,9 +105,15 @@
   .markdown-wrap {
       padding: 30px;
   }
+  /* legacy yobi.css의 `.code-browse-wrap .list-wrap { display: none; }`는 legacy JS
+     `$yobi.loadModule("code.Browser", ...)`의 `$(".list-wrap").show()`로 열리는 걸 전제로 한
+     규칙인데, yuna는 이 SPA 트리 전개 JS 모듈을 포팅하지 않고 일반 페이지 이동 링크로 단순화했다
+     (code/view.html은 폴더 클릭 시 AJAX 없이 새 페이지를 로드) — 그래서 이 규칙을 여기서 명시적으로
+     되돌리지 않으면 위 스타일이 실제로 렌더링되어도 폴더 목록 자체가 항상 숨겨진 채로 남는다. */
+  .code-browse-wrap .list-wrap {
+      display: block;
+  }
 </style>
-</head>
-<body class="prj" id="html-body">
 <div id="main" class="main">
   <div th:replace="~{site/layout :: gnb}"></div>
   <div th:replace="~{project/header :: header(${project})}"></div>

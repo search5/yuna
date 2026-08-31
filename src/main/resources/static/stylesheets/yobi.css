@@ -1168,6 +1168,13 @@ input.white:-ms-input-placeholder {
 .gnb-outer.project-header .gnb-inner .gnb-usermenu-dropdown a {
   color: #FFF !important;
 }
+/* 위 규칙의 `li a`/`.gnb-usermenu-dropdown a`는 깊이 제한이 없어, "+" 버튼이 여는
+   `.dropdown-menu`(흰 배경 팝업)의 링크까지 걸려 흰 배경에 흰 글자로 안 보이는 문제가 있었다
+   (legacy yobi.css에는 없는, yuna 전용 회귀 — 위 흰색 강제 규칙 자체가 legacy에 없이 새로 추가된
+   것). 팝업 안 링크만 원래 색으로 되돌린다. */
+.gnb-outer.project-header .gnb-inner .gnb-usermenu-dropdown .dropdown-menu li a {
+  color: #333 !important;
+}
 .gnb-outer.project-header .gnb-inner .gnb-nav li.divider {
   border-color: rgba(255, 255, 255, 0.2) !important;
 }

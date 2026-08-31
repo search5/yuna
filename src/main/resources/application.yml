@@ -35,6 +35,11 @@ yona:
   site-name: "${YONA_SITE_NAME:Yona}"
   upload:
     base-dir: "${yona.data:data}/uploads"
+  git:
+    # 새로 만드는 프로젝트의 초기 브랜치명. 지정하지 않으면(환경변수 미설정) "main"이 기본값이다 —
+    # 이 값을 지정하지 않으면 JGit이 서버가 돌아가는 머신의 전역 git 설정(init.defaultBranch)을
+    # 그대로 따르게 되어 배포 환경마다 다른 이름으로 생성될 수 있다(사용자 요청으로 결정론적으로 고정).
+    default-branch: "${YONA_GIT_DEFAULT_BRANCH:main}"
   signup:
     allowed-email-domains: "${YONA_SIGNUP_ALLOWED_EMAIL_DOMAINS:}"
   notification:

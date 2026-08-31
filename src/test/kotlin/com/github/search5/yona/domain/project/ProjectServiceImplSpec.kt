@@ -1424,6 +1424,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { projectRepository.save(newProject) } returns newProject
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
             every { projectUserRepository.save(any()) } returns mockk()
+            every { repositoryService.getRepository(newProject) } returns mockk<PlayRepository>(relaxed = true)
 
             val result = projectService.createProject(newProject, creator)
 
@@ -1444,6 +1445,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { projectRepository.findByOwnerAndName("creator3", "no-manager-role-project") } returns Optional.empty()
             every { projectRepository.save(newProject) } returns newProject
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.empty()
+            every { repositoryService.getRepository(newProject) } returns mockk<PlayRepository>(relaxed = true)
             // projectUserRepository는 스펙 전역 공유 mock이라 이전 it들의 호출 이력이 누적돼 있다.
             // exactly=0 단언이 오염되지 않도록 스텁(answers)은 남기고 호출 이력만 초기화한다.
             clearMocks(projectUserRepository, answers = false)
@@ -1483,10 +1485,31 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { projectRepository.save(newProject) } returns newProject
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
             every { projectUserRepository.save(any()) } returns mockk()
+            every { repositoryService.getRepository(newProject) } returns mockk<PlayRepository>(relaxed = true)
 
             val result = projectService.createProject(newProject, creator)
 
             result shouldBe newProject
+        }
+
+        // yona ProjectApp.java:191 "RepositoryService.createRepository(project)" 대응 (P0-26).
+        // yuna의 웹 폼 생성 경로(ProjectViewController.newProject → 이 메서드)는 DB 행만 만들고
+        // 물리 bare git/svn 저장소를 생성하지 않아, 이후 README 커밋 등 저장소 쓰기 작업이 전부
+        // 조용히 실패하는 회귀가 있었다(BareCommit의 catch(Exception)가 예외를 삼킴).
+        it("새 프로젝트를 생성하면 물리 저장소도 함께 생성돼야 한다") {
+            val creator = User(id = 906L, loginId = "creator7", name = "생성자7")
+            val newProject = Project(name = "repo-created-project", owner = "creator7", vcs = "GIT")
+            val managerRole = Role(id = RoleType.MANAGER.roleType)
+            val playRepository = mockk<PlayRepository>(relaxed = true)
+            every { projectRepository.findByOwnerAndName("creator7", "repo-created-project") } returns Optional.empty()
+            every { projectRepository.save(newProject) } returns newProject
+            every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
+            every { projectUserRepository.save(any()) } returns mockk()
+            every { repositoryService.getRepository(newProject) } returns playRepository
+
+            projectService.createProject(newProject, creator)
+
+            verify(exactly = 1) { playRepository.create() }
         }
 
         // exists(project.owner ?: "", project.name) — owner가 null인 프로젝트 생성 시도(엘비스 분기).
@@ -1498,6 +1521,7 @@ class ProjectServiceImplSpec : DescribeSpec({
             every { projectRepository.save(newProject) } returns newProject
             every { roleRepository.findById(RoleType.MANAGER.roleType) } returns Optional.of(managerRole)
             every { projectUserRepository.save(any()) } returns mockk()
+            every { repositoryService.getRepository(newProject) } returns mockk<PlayRepository>(relaxed = true)
 
             val result = projectService.createProject(newProject, creator)
 

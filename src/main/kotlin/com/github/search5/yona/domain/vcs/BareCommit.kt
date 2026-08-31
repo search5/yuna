@@ -20,12 +20,15 @@ import java.io.IOException
 import java.text.MessageFormat
 import java.time.Instant
 
-class BareCommit(project: Project, user: User, gitBaseDir: String) {
+class BareCommit(project: Project, user: User, gitBaseDir: String, defaultBranch: String = "main") {
     private val repository: Repository
     private val personIdent: PersonIdent
     private var commitMessage: String? = null
     private var file: File? = null
-    private var refName: String = Constants.R_HEADS + "master" // refs/heads/master
+    // 새 프로젝트의 실제 초기 브랜치(GitRepository.create()가 만드는 것)와 일치해야 한다 — 안
+    // 그러면 setRefName() 없이 이 기본값으로 커밋하는 경로(README/ISSUE_TEMPLATE 등)가 실제 HEAD가
+    // 가리키는 빈 브랜치가 아니라 별도의 고아 브랜치를 만들어버린다.
+    private var refName: String = Constants.R_HEADS + defaultBranch
     private var headObjectId: ObjectId? = null
 
     init {

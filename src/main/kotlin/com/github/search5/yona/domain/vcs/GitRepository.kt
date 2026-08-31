@@ -55,7 +55,13 @@ class GitRepository(
     private val ownerName: String,
     private val projectName: String,
     private val baseDir: String,
-    private val userResolver: (String?, String?) -> User?
+    private val userResolver: (String?, String?) -> User?,
+    // 새 저장소의 초기 브랜치명. JGit의 Git.init() 기본값은 이 서버가 돌아가는 머신의 전역 git 설정
+    // (init.defaultBranch)을 따라 환경마다 달라질 수 있어(GitRepositorySpec.kt의 defaultBranchRef
+    // 프로브 참고), 애플리케이션 차원에서 결정론적으로 강제한다(RepositoryService가
+    // yona.git.default-branch 설정값을 넘겨줌). userResolver 뒤에 둬서(파라미터 순서 유지) 기존
+    // `GitRepository(a, b, c, userResolver)` 형태의 수십 개 테스트 호출부가 그대로 동작하게 한다.
+    private val defaultBranch: String = "main"
 ) : PlayRepository {
 
     private val objectMapper = ObjectMapper()
@@ -71,7 +77,7 @@ class GitRepository(
         if (!gitDir.exists()) {
             gitDir.mkdirs()
         }
-        Git.init().setDirectory(gitDir).setBare(true).call().close()
+        Git.init().setDirectory(gitDir).setBare(true).setInitialBranch(defaultBranch).call().close()
     }
 
     override fun isIntermediateFolder(path: String): Boolean {

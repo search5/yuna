@@ -16,7 +16,11 @@ class RepositoryService(
     @Value("\${yona.git.base-dir:/tmp/yona/git}")
     private val gitBaseDir: String,
     @Value("\${yona.svn.base-dir:/tmp/yona/svn}")
-    private val svnBaseDir: String
+    private val svnBaseDir: String,
+    // 사용자 요청 — 새 프로젝트 기본 브랜치를 "master" 대신 "main"으로. 호스트 git의
+    // init.defaultBranch 설정에 기대지 않고 애플리케이션 설정으로 결정론적으로 고정한다.
+    @Value("\${yona.git.default-branch:main}")
+    private val gitDefaultBranch: String
 ) {
     private val objectMapper = ObjectMapper()
 
@@ -34,14 +38,16 @@ class RepositoryService(
             GitRepository(
                 ownerName = project.owner ?: "",
                 projectName = project.name,
-                baseDir = gitBaseDir
-            ) { _, email ->
-                if (email != null) {
-                    userRepository.findByEmail(email).orElse(null)
-                } else {
-                    null
-                }
-            }
+                baseDir = gitBaseDir,
+                userResolver = { _, email ->
+                    if (email != null) {
+                        userRepository.findByEmail(email).orElse(null)
+                    } else {
+                        null
+                    }
+                },
+                defaultBranch = gitDefaultBranch
+            )
         }
     }
 
