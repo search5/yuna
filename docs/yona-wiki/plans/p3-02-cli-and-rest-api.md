@@ -277,18 +277,49 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 7. **Step 7 — CLI 스캐폴딩**: `yona auth login/logout/status`(Personal Access Token 입력·저장, 위 기본 스코프 원칙 적용)
 8. **Step 8 — `yona issue`/`yona pr`/`yona project` 하위 명령**: 1부 API를 감싸는 얇은 HTTP 클라이언트
 8.5. **Step 8.5 — `gh` 명령 체계 정합화**: 위 "CLI `gh` 명령 체계 대조 감사"의 (A) 항목 구현.
-   - **CLI 로컬 기능만으로 되는 것**(서버 변경 불필요): `--json <fields>` 필드선택 전환, `-L/--limit`,
-     `--web`, `--repo` 로컬 git 컨텍스트 자동감지, `yona server list/use`, `yona browse`,
-     `yona completion`(Cobra 기본 제공 등록만), `--version`
-   - **기존 서버 API 연결만 하면 되는 것**: `yona project fork/create/edit/delete`, `yona label
-     list/create/edit/delete`, `yona issue edit/reopen/transfer`, `yona pr checkout/diff/comment`,
-     `yona search issues/prs/projects`, `yona org list/view`, `issue/pr list`의 `--assignee`/
-     `--label`/`--author` 필터, `pr create`의 `--from-project-id`(숫자 ID 수동 조회) 요구 제거 —
-     `--repo`(from) + `--from-branch`만 받고 CLI 내부에서 기존 프로젝트 조회 API(`GET
-     /api/v1/projects/{owner}/{project}`, Step6)로 ID를 알아서 resolve(신규 서버 API 불필요)
-   - **서버(1부)에 신규 API가 필요한 것**: `gh pr edit` 대응(PR 제목/본문 PATCH — Step5에 없음),
-     `gh issue status` 대응(사용자 대시보드 REST API — 범위 클 수 있어 별도 하위 스텝으로 쪼갤 수 있음),
-     `gh pr close/reopen`(서버에 대응 상태변경 API 존재 여부 착수 전 확인 필요)
+   - **CLI 로컬 기능만으로 되는 것**(서버 변경 불필요, 다음 라운드 CLI 작업): `--json <fields>`
+     필드선택 전환, `-L/--limit`, `--web`, `--repo` 로컬 git 컨텍스트 자동감지, `yona server
+     list/use`, `yona browse`, `yona completion`(Cobra 기본 제공 등록만), `--version`, **`yona pr
+     checkout`**(5라운드 재검증 결과 CLI 전용으로 재분류 — 아래 참고)
+   - **서버(1부) 작업 완료(5라운드)** — 이하 전부 REST API로 노출 완료, CLI(2부)만 다음 라운드로 남음:
+     `yona project fork/create/edit/delete`, `yona label list/create/edit/delete`, `yona issue
+     reopen/transfer`(edit은 재검증 결과 Step4에서 이미 구현돼 있었음 — 아래 재분류 참고), `yona pr
+     diff/comment`, `yona pr edit`(PATCH 어댑터만 추가 — 재검증 결과 서비스/컨트롤러 로직 자체는
+     Step5의 PUT으로 이미 존재), `yona pr close/reopen`(재검증 결과 서버에 이미 범용
+     `changeState` API 존재), `yona search issues/projects`(`prs`는 서버에 대응 SearchType이 없어
+     이월), `yona org list/view`, `issue/pr list`의 `--assignee`/`--label`/`--author` 필터(PR은
+     모델에 label/assignee 개념이 없어 `--author`만), `pr create`의 `--from-project-id` 요구
+     제거(TASK-0396에서 계획 문서만 먼저 반영 — CLI 구현은 다음 라운드), `gh issue status`
+     대응(최소 버전만 — 담당/작성 이슈 개수·목록, 나머지 필터는 이월)
+   - **재검증으로 바로잡은 오분류(5라운드, 사용자 지시대로 코드 직접 확인)**:
+     - `gh issue edit` — Step4의 `IssueRestApiController.update()`(PATCH `/{number}`)가 이미
+       처음부터 구현돼 있었다. 감사표/Step8.5 원문이 "서버 API 필요"로 잘못 분류한 적은 없었지만
+       혼동 방지를 위해 명시.
+     - `gh pr checkout` — `PullRequestApiController.get()`/`list()`가 반환하는 `PullRequest` 엔티티에
+       `fromProject`(owner/name 포함하는 완전한 Project 객체, `@JsonIgnore` 없음)와 `fromBranch`가
+       그대로 직렬화된다 - CLI가 그 값으로 clone URL을 계산해 `git fetch`만 하면 되므로 신규 서버
+       API가 불필요하다. **"기존 서버 API 연결" 그룹에서 "CLI 로컬 기능" 그룹으로 재분류.**
+     - `gh pr edit` — 계획 문서가 "Step5에 PATCH 없음 → 서버 API도 신규 필요"로 적었으나, 실제로는
+       `PullRequestController.updatePullRequest()`(PUT, 제목/본문/브랜치 수정)가 Step5부터 이미
+       존재했다. 필요했던 건 신규 서비스 로직이 아니라 `PullRequestApiController`에 PATCH
+       위임 어댑터 한 줄뿐이었다. **"신규 API 필요" → "기존 서버 API 연결"로 재분류.**
+     - `gh pr close/reopen` — 계획 문서가 "서버 대응 상태변경 API 존재 여부 확인 필요"로 남겨뒀으나,
+       `PullRequestController.changeState()`(POST `/{number}/state`)가 Step5부터 이미 양방향
+       상태변경을 지원했다(이슈의 `changeState`와 동일 패턴). **"신규 API 필요" → "기존 서버 API
+       연결"로 재분류.**
+     - `yona label` — 감사표는 근거로 `web/LabelController.kt`를 지목했으나, 그 파일은 프로젝트와
+       무관한 전역 라벨/카테고리 자동완성(`/labels`, `/categories`)만 제공한다. 실제 "프로젝트 하나에
+       속한 라벨" CRUD는 `web/ProjectController.kt`(목록)와 `web/ProjectViewController.kt`(생성/
+       수정/삭제, `/{owner}/{projectName}/issue/label(s)/...`, `ISSUE_LABEL` 기준 AccessControl)에
+       있었다 - 감사표의 근거 파일 자체가 틀렸다(기능 존재 여부 분류는 맞았음).
+   - **서버(1부)에 신규 API가 필요했던 것 중 실제로 구현한 것**: `gh issue status` 대응(사용자
+     대시보드 REST API, `UserIssueStatusRestApiController` — 계획 지시대로 최소 버전만: 담당/작성
+     이슈 개수·목록. mentioned/favorite/shared 필터와 페이지네이션 확장은 다음 라운드로 이월),
+     `gh pr diff`(`PullRequestController.getDiff()`, `pullRequestService.getDiff()` 그대로 노출),
+     `gh pr comment`(`PullRequestController.addComment()`, `CodeReviewService.createReviewComment()`
+     재사용), `yona search issues/projects`(신규 `SearchRestApiController`, `SearchService.
+     searchInAll()` 재사용), `yona org list/view`(신규 `OrganizationRestApiController`,
+     `AccessControl.getVisibleProjects()` 재사용).
    - **낮은 우선순위**(nice-to-have, 다음 라운드 이후로 미뤄도 무방): `yona config`, `yona alias`
 9. **Step 9 — `yona admin backup/webhook/permission`**: 기존 관리자 API 확인 후 연결(신규 서버 API 필요 시 1부 패턴으로 추가)
 10. **Step 10 — `yona api <method> <path>`**: 저수준 원시 호출 명령(디버깅/스크립팅용)
@@ -302,7 +333,8 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 - [x] 프로젝트 조회/목록 API가 Fine-grained 스코프 토큰으로 완전히 동작함 (3라운드 — Step 6.5)
 - [x] Fine-grained 토큰을 웹 UI에서 발급/조회/폐기할 수 있음 (3라운드 — Step 6.6)
 - [x] Go CLI 본체(`yona auth/issue/pr/project/admin/api`)가 1부 REST API를 감싸는 형태로 구현됨 (4라운드 — Step7~10, 별도 저장소 `yona-cli`)
-- [ ] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (Step 8.5, 다음 라운드 — 위 "CLI `gh` 명령 체계 대조 감사" 참고)
+- [x] 서버(1부)가 Step8.5의 "기존 서버 API 연결"/"신규 API 필요" 두 그룹을 커버함 — project fork/create/edit/delete, label CRUD, issue reopen/transfer, PR edit/close/reopen/diff/comment, issue/pr list 필터, search issues/projects, org list/view, 사용자 이슈 대시보드 최소 버전 (5라운드 — 아래 완료 로그 참고. `yona search prs`는 서버에 대응 SearchType이 없어 이월)
+- [ ] yona-cli가 `gh` 명령 체계 대조 감사((A) 항목)를 반영해 사용법이 실제로 `gh`에 준함 (Step 8.5, 다음 라운드 — 5라운드가 서버(1부) 쪽은 완료했으므로 다음 라운드는 CLI(2부) 클라이언트 코드만 남음 — 위 "CLI `gh` 명령 체계 대조 감사" 참고)
 - [ ] Go CLI로 로그인 → 이슈 생성 → PR 목록 조회 골든 패스가 수동 검증 완료 (다음 라운드로 이월 — 4라운드는 httptest 기반 단위/통합 테스트만 수행)
 - [ ] `goreleaser` 배포(Step 11: GitHub Releases/Homebrew/Scoop/`.deb`/`.rpm`) (다음 라운드)
 - [ ] `./gradlew test` 전체 GREEN, JaCoCo 95%/95%/95% 유지(`docs/COVERAGE_BACKLOG.md` 기준) (전체 계획 완료 후 검증)
@@ -536,6 +568,108 @@ yuna와 완전히 별개인 새 git 저장소 `~/yona-convert/yona-cli`(`github.
   커밋 3개(설정+HTTP 클라이언트 코어 / REST API 클라이언트 / Cobra 명령 트리)로 나눠
   진행했다. 상세 커밋 이력과 파일 경로는 이 작업을 지시한 세션의 최종 보고 참고.
 
+### 5라운드 (2026-08-31) — Step8.5 서버(1부) 보강
+
+착수 전 "CLI `gh` 명령 체계 대조 감사"의 (A) 감사표/Step8.5 분류를 코드로 전수 재검증하라는
+지시에 따라, 각 항목이 실제로 `/api/v1/projects/...` 네임스페이스에 이미 노출돼 있는지부터
+직접 확인했다 — 재검증 결과와 오분류 정정은 위 "단계별 작업 계획" Step8.5 절에 기록. 그 결과
+실제로 서버 쪽에 손을 대야 했던 항목만 구현했다(대부분 "기존 서비스/컨트롤러 메서드에 위임하는
+얇은 어댑터 추가"였고, 순수 신규 서비스 로직이 필요했던 곳은 없었다 — Step4~6의 설계 원칙을
+그대로 유지).
+
+- **필터 확장**: `config/ApiTokenAuthenticationFilter.kt`의 `resourceSegmentToResourceType`에
+  `"labels" -> ResourceType.ISSUE_LABEL`(ISSUES 그룹 — 위임 대상 메서드들이 실제로 ISSUE_LABEL
+  기준 AccessControl을 쓰므로 일치시킴), `"fork" -> ResourceType.FORK`(CODE 그룹)를 추가. 둘 다
+  기존 3세그먼트 `scopedApiPattern`에 그대로 매칭돼 정규식 자체는 변경하지 않았다.
+- **프로젝트 REST API 확장**(`web/ProjectRestApiController.kt`):
+  - `POST /api/v1/projects/{owner}/{project}/fork` — `ProjectController.forkProject()`(기존
+    owner/name 기반, 숫자 ID 변환 불필요)에 그대로 위임.
+  - `PATCH`/`DELETE /api/v1/projects/{owner}/{project}/settings` — owner/project 이름을 ID로
+    바꿔 `ProjectController.updateProject()`/`deleteProject()`에 위임. **"settings" 세그먼트를
+    쓴 이유(설계 결정)**: 세그먼트 없는 `/api/v1/projects/{owner}/{project}`는 이미 Step6.5의
+    "metadata" 스코프(그룹/권한 매트릭스 없이 repo scope만 확인)로 매핑돼 있어, 그 경로를 PATCH/
+    DELETE에도 그대로 쓰면 ADMINISTRATION 쓰기 권한이 전혀 없는 토큰도 프로젝트를 수정/삭제할 수
+    있는 구멍이 생긴다. 기존에 이미 `ResourceType.PROJECT_SETTING`(ADMINISTRATION 그룹)으로
+    매핑돼 있던 "settings" 세그먼트(Step1~3이 선점만 하고 실제 컨트롤러는 없었음)를 재사용해
+    필터 변경 없이 올바른 권한 등급을 강제했다.
+  - `POST /api/v1/projects`(bare, owner 세그먼트 없음) — `yona project create`. 세션 로그인
+    사용자의 조직 소속 프로젝트 생성 권한 로직(`ProjectViewController.newProject()`와 동일 —
+    owner가 기존 조직명이면 그 조직 admin만 생성 가능)을 그대로 재사용해 JSON으로 새로 구현.
+    **의도적 설계**: 이 URL은 필터의 어떤 스코프 패턴과도 매칭되지 않아(3/2/1세그먼트 전부 모양이
+    다름) 세션 로그인/레거시 전권 토큰으로만 호출 가능하고 Fine-grained 스코프 토큰으로는 저장소
+    "생성"을 할 수 없다 — GitHub Fine-grained PAT도 저장소 생성 자체는 지원하지 않는 것(기존
+    저장소에만 스코프될 수 있음)과 동일한 제약이라 우연이 아니라 의도적으로 이렇게 뒀다.
+- **라벨 REST API 신설**(`web/LabelRestApiController.kt`,
+  `/api/v1/projects/{owner}/{project}/labels`): 목록은 `ProjectController.getProjectLabels()`,
+  생성/수정/삭제는 `ProjectViewController.newLabel()`/`updateLabelForm()`/`deleteLabelForm()`에
+  위임(전부 기존 메서드 재사용, 신규 서비스 로직 없음).
+- **이슈 REST API 확장**(`web/IssueRestApiController.kt` + `web/IssueController.kt`):
+  - `POST /{number}/reopen` — 기존 범용 `IssueController.changeState()`를 OPEN으로 고정 호출.
+  - `POST /{number}/transfer` — 기존 `IssueController.moveIssue()`(`MoveIssueRequest
+    (targetProjectId: Long)`)에 위임하되, CLI 편의를 위해 `targetOwner`/`targetProject`(이름)를
+    받아 이 어댑터가 내부에서 숫자 ID로 resolve한다(신규 서버 API 없이 기존 조회 반복 사용).
+  - `GET /issues` `--assignee`/`--label`/`--author` 필터 — `IssueController.getIssues()`에
+    세 선택 파라미터 추가. 셋 다 없으면 기존 `findByProject(AndState)` 경로를 100% 그대로 타
+    회귀가 없고, 하나라도 있으면 `IssueRepository`가 이미 구현 중이던
+    `JpaSpecificationExecutor<Issue>`를 활용한 동적 `Specification`으로 좁힌다(신규 리포지토리
+    메서드 불필요). `author`는 `Issue.authorLoginId` 등가비교, `assignee`는 `Assignee.user.
+    loginId` 등가비교, `label`은 `IssueLabel.name` 등가비교(ManyToMany라 `distinct(true)` 적용).
+- **PR REST API 확장**(`web/PullRequestApiController.kt` + `web/PullRequestController.kt`):
+  - `PATCH /{number}` — 기존 `PullRequestController.updatePullRequest()`(PUT, Step5부터 존재)에
+    PATCH로 위임하는 어댑터만 추가.
+  - `POST /{number}/close`, `/reopen` — 기존 `PullRequestController.changeState()`(Step5부터
+    존재)를 CLOSED/OPEN으로 고정 호출.
+  - `GET /{number}/diff` — 신규 `PullRequestController.getDiff()`(숫자 ID 기반, 웹 뷰
+    `PullRequestViewController.viewChangesInternal()`이 화면 렌더링에 쓰는 것과 동일한
+    `pullRequestService.getDiff()`를 JSON으로 노출) + REST API 어댑터.
+  - `POST /{number}/comments` — 신규 `PullRequestController.addComment()`(숫자 ID 기반,
+    `CodeReviewService.createReviewComment()`를 commitId/codeRange 없이 호출해 PR 전체에 붙는
+    일반 댓글로 귀결시킴 — `ReviewViewController.newPullRequestComment()`와 같은 서비스를
+    재사용하되 그 메서드 자체는 브라우저 폼 제출 전용(redirect 응답)이라 위임 대상으로 못 씀) +
+    REST API 어댑터.
+  - `GET /pull-requests` `--author` 필터 — `PullRequestController.getPullRequests()`에 선택
+    파라미터 추가, `contributor.loginId` 등가비교로 인메모리 필터링(PR 목록은 프로젝트당 크지
+    않아 신규 리포지토리 쿼리 없이 처리). **`--assignee`/`--label`은 PR에 적용하지 않는다** —
+    yona `PullRequest` 엔티티엔 이슈와 달리 labels/assignee 필드 자체가 없어(reviewers/
+    contributor만 존재) 실제 모델에 없는 개념을 인위적으로 만들지 않았다.
+- **검색/조직/사용자 대시보드 신규 컨트롤러**(전부 기존 서비스 재사용, 신규 서비스 로직 없음):
+  - `web/SearchRestApiController.kt`(`/api/v1/search/issues`, `/api/v1/search/projects`) —
+    `SearchService.searchInAll()`을 JSON으로 노출. **범위 조정**: yona `SearchType` enum엔
+    PROJECT/ISSUE/USER/POST/MILESTONE/ISSUE_COMMENT/POST_COMMENT/REVIEW만 있고 "PULL_REQUEST"에
+    대응하는 값이 없다(PR 자체를 색인하는 통합검색 기능이 서버에 아직 없음) — `yona search prs`는
+    이번 라운드 구현 대상에서 제외하고 다음 라운드로 이월.
+  - `web/OrganizationRestApiController.kt`(`/api/v1/organizations`,
+    `/api/v1/organizations/{name}`) — `OrganizationViewController`와 동일한 권한 로직(게스트
+    차단, `HIDE_PROJECT_LISTING`, `AccessControl.getVisibleProjects()`)만 재사용.
+  - `web/UserIssueStatusRestApiController.kt`(`GET /api/v1/user/issues/status`) — `gh issue
+    status` 최소 버전(계획 지시대로). `UserViewController.userIssues()`가 이미 쓰는
+    `findByAssigneeAndState`/`findByAuthorIdAndState` + count 쌍만 재사용해 담당/작성 이슈
+    개수·목록을 반환한다. mentioned/favorite/shared 필터, 페이지네이션/정렬 확장은 범위가 커질 수
+    있어 다음 라운드로 이월.
+- **신규 스코프 인가 갭(문서화, 아래 리스크 표에도 기록)**: `search`/`organizations`/`user`는
+  프로젝트(저장소) 하나에 속한 리소스가 아니라 여러 저장소를 가로지르거나 저장소와 무관한
+  전역/사용자 단위 개념이라 `/api/v1/projects/{owner}/{project}/{resource}` 3세그먼트 스코프
+  모델에 애초에 맞지 않는다. 이 세 네임스페이스는 어떤 스코프 패턴과도 매칭되지 않아 세션
+  로그인/레거시 전권 토큰으로만 인증되고 Fine-grained 스코프 토큰은 인증되지 않는다(구멍이
+  아니라 기능 제한 — Step6 이전 프로젝트 조회 API가 겪었던 것과 동일한 성격의 제한이며, 이번
+  라운드 지시사항이 "애매하면 리스크 표에 남기고 합리적 기본값으로 진행"이라 명시해 이렇게
+  처리했다).
+- **테스트**: 신규/확장 스펙 파일 — `web/ProjectRestApiControllerSpec.kt`(+8),
+  `web/LabelRestApiControllerSpec.kt`(신규 4), `web/IssueRestApiControllerSpec.kt`(+7),
+  `web/PullRequestApiControllerSpec.kt`(+6), `web/PullRequestControllerSpec.kt`(+4),
+  `web/SearchRestApiControllerSpec.kt`(신규 5), `web/OrganizationRestApiControllerSpec.kt`(신규
+  4), `web/UserIssueStatusRestApiControllerSpec.kt`(신규 2),
+  `config/ApiTokenScopedProjectForkAndLabelSubpathAuthorizationIntegrationSpec.kt`(신규 8 —
+  fork/labels/settings 세그먼트 스코프 403/통과 검증),
+  `config/ApiTokenScopedIssueAndPullRequestSubpathAuthorizationIntegrationSpec.kt`(+9 —
+  이슈 reopen/transfer, PR edit/close/reopen/diff/comments 서브패스 스코프 검증). 총 57개
+  테스트 추가/확장, 전부 GREEN.
+- **회귀 확인**: `web`/`config`/`domain/apitoken` 패키지 전체(3280여 개 테스트) 실행 결과 4건
+  실패는 전부 `CodeSwallowedStyleRenderingSpec`/`CodeBrowserListWrapRenderingSpec`(코드
+  브라우저 CSS 렌더링, 이번 라운드가 전혀 손대지 않은 영역)이었고, 이 두 스펙은 이 라운드
+  변경사항을 전부 `git stash`한 클린 `main`에서도 동일하게 실패함을 확인해 **사전 존재 이슈로
+  회귀가 아님**을 검증했다.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
@@ -545,9 +679,12 @@ yuna와 완전히 별개인 새 git 저장소 `~/yona-convert/yona-cli`(`github.
 | 관리자 API 존재 여부 | 백업/웹훅/권한 관리용 서버 API가 이미 있는지 미확인 | **4라운드에서 해소** — 백업(`GET /site/export`, `POST /site/import`)은 실사용 가능한 형태로 존재해 CLI에 완전히 연결. 웹훅(`web/WebhookController.kt`)·권한(`web/ProjectMemberController.kt`)은 생성/변경/삭제 API는 있지만 세션·폼 기반 레거시라 목록 조회용 JSON API가 없다(웹훅 목록은 HTML 렌더링 전용, 권한 목록은 엔드포인트 자체가 없음) — `yona admin webhook list`/`yona admin permission list`는 명확한 안내 메시지의 미구현 스텁으로 유지. 새 JSON API를 yuna에 추가하는 것은 CLI 프로젝트 범위 밖이라 이번 라운드는 시도하지 않음. 상세는 위 "4라운드" 로그 참고 |
 | 프로젝트 조회 API의 스코프 패턴 불일치 | Step6의 `/api/v1/projects/{owner}`(목록)와 `/api/v1/projects/{owner}/{project}`(조회)는 리소스 세그먼트가 없어 `ApiTokenAuthenticationFilter.scopedApiPattern`(owner/project/resource 3단 필수)과 매칭되지 않는다 — Fine-grained 스코프 토큰으로 호출 불가(세션/전권 토큰만 가능), 이슈/PR API는 "issues"/"pull-requests" 세그먼트가 있어 이 문제가 없다 | **3라운드에서 해소** — 개별 조회는 `metadata` 스코프(그룹/권한 매트릭스 없이 repo scope만 확인), 목록은 request attribute(`SCOPED_API_TOKEN_ATTRIBUTE`) 기반 필터링으로 구현 완료. 상세는 아래 "3라운드" 로그 참고 |
 | 토큰 발급/관리 UI 부재 | `ApiTokenRepository`엔 조회 메서드 하나뿐, 사용자가 `ApiToken`을 발급/조회/폐기할 UI·컨트롤러·서비스가 전혀 없어 실사용자는 Fine-grained 토큰을 발급받을 방법이 없다 | **3라운드에서 해소** — `ApiTokenService`/`ApiTokenServiceImpl` + `UserViewController` 확장 + `user/edit_tokens.html` 신설로 발급/조회/폐기 가능. 상세는 아래 "3라운드" 로그 참고 |
+| 전역/사용자 단위 엔드포인트의 스코프 인가 갭 | `search`/`organizations`/`user` 네임스페이스(5라운드 신설)는 특정 저장소 하나에 속한 리소스가 아니라 `/api/v1/projects/{owner}/{project}/{resource}` 3세그먼트 스코프 모델에 맞지 않는다 | **미해결(다음 라운드 이후로 이월)** — 현재는 세션 로그인/레거시 전권 토큰으로만 인증되고 Fine-grained 스코프 토큰은 인증되지 않는다(구멍은 아니고 기능 제한). 해소하려면 이 계획의 8개 스코프 그룹과 별개로 "저장소 비종속" 스코프 개념을 새로 설계해야 한다 — 이번 라운드 지시사항대로 무리하게 밀어붙이지 않고 문서화만 함 |
+| `yona search prs` 대응 서버 기능 없음 | yona `SearchType` enum(PROJECT/ISSUE/USER/POST/MILESTONE/ISSUE_COMMENT/POST_COMMENT/REVIEW)에 PR 전용 값이 없어 PR 자체를 색인하는 통합검색이 서버에 없다 | **미해결(다음 라운드 이후로 이월)** — `SearchService`에 `SearchType.PULL_REQUEST` 추가 + PR 인덱싱 쿼리 신설이 필요한 별도 규모의 작업이라 이번 라운드 범위 밖으로 뒀다 |
+| `gh issue status` 최소 버전만 구현 | `UserIssueStatusRestApiController`는 담당/작성 이슈 개수·목록만 제공 | **미해결(다음 라운드 이후로 이월)** — `UserViewController.userIssues()`가 지원하는 mentioned/favorite/shared/commenter 필터, 페이지네이션/정렬 파라미터는 계획 문서 지시대로(범위가 커질 수 있어 최소 버전만) 이번 라운드에 포함하지 않았다 |
 
 ## 관련
 
 - 백로그 원본: [`docs/PARITY_BACKLOG.md`](../../PARITY_BACKLOG.md#p3-02)
 - 관련 계획: [[p3-03-ssh-gpg]], [[p3-07-mcp-server]], [[p3-05-ci-actions-runner]]
-- 관련 소스: `config/ApiTokenAuthenticationFilter.kt`, `config/SecurityConfig.kt`, `domain/enumeration/ResourceType.kt`, `web/ProjectApiController.kt`, `web/IssueRestApiController.kt`, `web/PullRequestApiController.kt`, `web/ProjectRestApiController.kt`, `domain/pullrequest/PullRequestServiceImpl.kt`
+- 관련 소스: `config/ApiTokenAuthenticationFilter.kt`, `config/SecurityConfig.kt`, `domain/enumeration/ResourceType.kt`, `web/ProjectApiController.kt`, `web/IssueRestApiController.kt`, `web/PullRequestApiController.kt`, `web/ProjectRestApiController.kt`, `web/LabelRestApiController.kt`, `web/SearchRestApiController.kt`, `web/OrganizationRestApiController.kt`, `web/UserIssueStatusRestApiController.kt`, `domain/pullrequest/PullRequestServiceImpl.kt`
