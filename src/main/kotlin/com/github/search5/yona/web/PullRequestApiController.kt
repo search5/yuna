@@ -113,6 +113,22 @@ class PullRequestApiController(
         return pullRequestController.addReviewer(found.id!!, number, authentication)
     }
 
+    // yona-wiki P3-02 12라운드(2026-09-01) — 레거시 `/api/projects/{projectId}/pullrequests/{number}/reviewers`
+    // DELETE(PullRequestController.removeReviewer())는 처음부터 있었지만, 이 v1 REST API(Go CLI 등
+    // 외부 클라이언트의 유일한 경로)엔 addReviewer만 어댑터가 있고 removeReviewer 어댑터가 없어
+    // "리뷰어 등록은 되는데 등록 취소는 API/CLI로 불가능"한 실제 기능 갭이었다(실측으로 발견).
+    @DeleteMapping("/{number}/reviewers")
+    fun removeReviewer(
+        @PathVariable owner: String,
+        @PathVariable project: String,
+        @PathVariable number: Long,
+        authentication: Authentication?
+    ): ResponseEntity<Unit> {
+        val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        return pullRequestController.removeReviewer(found.id!!, number, authentication)
+    }
+
 
     // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — PR 담당자/라벨 CRUD 어댑터.
     @PutMapping("/{number}/assignee")

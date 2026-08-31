@@ -131,6 +131,20 @@ class PullRequestApiControllerSpec : DescribeSpec({
         }
     }
 
+    // yona-wiki P3-02 12라운드(2026-09-01, 실측으로 발견한 실제 기능 갭) — addReviewer만 있고
+    // removeReviewer 어댑터가 없어 리뷰어 등록 취소를 v1 API/CLI로 할 방법이 없었다.
+    describe("DELETE /api/v1/projects/{owner}/{project}/pull-requests/{number}/reviewers") {
+        it("PullRequestController.removeReviewer에 위임한다") {
+            every { projectRepository.findByOwnerAndName("yona", "yuna") } returns Optional.of(project)
+            every { pullRequestController.removeReviewer(1L, 1L, any()) } returns ResponseEntity.ok().build()
+
+            mockMvc.perform(delete("/api/v1/projects/yona/yuna/pull-requests/1/reviewers"))
+                .andExpect(status().isOk)
+
+            verify(exactly = 1) { pullRequestController.removeReviewer(1L, 1L, any()) }
+        }
+    }
+
     // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr edit`. 재검증 결과 서비스/컨트롤러 로직
     // 자체는 이미 있었고(PullRequestController.updatePullRequest, PUT) 이 신규 REST API에 PATCH
     // 위임 어댑터만 없었다.
