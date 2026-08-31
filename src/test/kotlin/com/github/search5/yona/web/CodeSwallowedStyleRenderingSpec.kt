@@ -60,7 +60,7 @@ class CodeSwallowedStyleRenderingSpec @Autowired constructor(
             }
 
             it("code/history.html: 페이지 전용 .code-browse-wrap 스타일이 실제 응답 본문에 렌더링돼야 한다") {
-                val body = mockMvc.perform(get("/${project.owner}/${project.name}/commits/master"))
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/commits/main"))
                     .andExpect(status().isOk)
                     .andReturn().response.contentAsString
 
@@ -68,7 +68,7 @@ class CodeSwallowedStyleRenderingSpec @Autowired constructor(
             }
 
             it("code/compare.html: 페이지 전용 .code-browse-wrap 스타일과 .commitId 스코프가 실제 응답 본문에 렌더링돼야 한다") {
-                val body = mockMvc.perform(get("/${project.owner}/${project.name}/compare/master..master"))
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/compare/main..main"))
                     .andExpect(status().isOk)
                     .andReturn().response.contentAsString
 

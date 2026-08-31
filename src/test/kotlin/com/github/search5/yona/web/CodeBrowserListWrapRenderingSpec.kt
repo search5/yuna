@@ -62,7 +62,7 @@ class CodeBrowserListWrapRenderingSpec @Autowired constructor(
                     BareCommit(project, owner, gitBaseDir).commitTextFile("README.md", "# cbw-proj", "테스트")
                 }
 
-                val body = mockMvc.perform(get("/${project.owner}/${project.name}/code/master"))
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/code/main"))
                     .andExpect(status().isOk)
                     .andReturn().response.contentAsString
 
@@ -96,7 +96,7 @@ class CodeBrowserListWrapRenderingSpec @Autowired constructor(
                     BareCommit(project, owner, gitBaseDir).commitTextFile("README.md", "# cbw-proj", "테스트")
                 }
 
-                val body = mockMvc.perform(get("/${project.owner}/${project.name}/code/master"))
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/code/main"))
                     .andExpect(status().isOk)
                     .andReturn().response.contentAsString
 
@@ -123,7 +123,7 @@ class CodeBrowserListWrapRenderingSpec @Autowired constructor(
                     BareCommit(project, owner, gitBaseDir).commitTextFile("README.md", "# cbw-proj", "테스트")
                 }
 
-                val body = mockMvc.perform(get("/${project.owner}/${project.name}/code/master"))
+                val body = mockMvc.perform(get("/${project.owner}/${project.name}/code/main"))
                     .andExpect(status().isOk)
                     .andReturn().response.contentAsString
 
