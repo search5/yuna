@@ -2,9 +2,6 @@ package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.enumeration.State
 import com.github.search5.yona.domain.project.ProjectRepository
-import com.github.search5.yona.domain.pullrequest.PullRequest
-import com.github.search5.yona.domain.pullrequest.PullRequestMergeResult
-import com.github.search5.yona.domain.pullrequest.ReviewComment
 import com.github.search5.yona.domain.vcs.FileDiff
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -37,6 +34,14 @@ class PullRequestApiController(
     private val pullRequestController: PullRequestController
 ) {
 
+    // yona-wiki P3-02 Step8.7 2번(2026-09-01) — pullRequestController.*()가 반환하는
+    // ResponseEntity<PullRequest>는 엔티티를 그대로 담고 있어(toProject/fromProject/contributor/
+    // receiver 등이 다시 Project<->User 양방향 연관관계를 끌고 들어와 순환 직렬화 유발,
+    // RestApiResponseDto.kt 참고) 이 얇은 어댑터 경계에서 항상 응답 DTO로 변환한 뒤 상태코드만
+    // 유지해 반환한다.
+    private fun <T : Any> ResponseEntity<T>.mapBody(transform: (T) -> Any): ResponseEntity<Any> =
+        ResponseEntity.status(statusCode).body(body?.let(transform))
+
     // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr list --author` 대응.
     // yona-wiki P3-02 Step8.6 항목4(2026-09-01, 우선순위 4위) — `--assignee`/`--label` 추가.
     @GetMapping
@@ -48,10 +53,11 @@ class PullRequestApiController(
         @RequestParam(required = false) assignee: String?,
         @RequestParam(required = false) label: String?,
         authentication: Authentication?
-    ): ResponseEntity<List<PullRequest>> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
         return pullRequestController.getPullRequests(found.id!!, state, author, assignee, label, authentication)
+            .mapBody { list -> list.map { it.toResponse() } }
     }
 
     @PostMapping
@@ -60,10 +66,10 @@ class PullRequestApiController(
         @PathVariable project: String,
         @RequestBody request: PullRequestController.CreatePullRequestRequest,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.createPullRequest(found.id!!, request, authentication)
+        return pullRequestController.createPullRequest(found.id!!, request, authentication).mapBody { it.toResponse() }
     }
 
     @GetMapping("/{number}")
@@ -72,10 +78,10 @@ class PullRequestApiController(
         @PathVariable project: String,
         @PathVariable number: Long,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.getPullRequest(found.id!!, number, authentication)
+        return pullRequestController.getPullRequest(found.id!!, number, authentication).mapBody { it.toResponse() }
     }
 
     @PostMapping("/{number}/merge")
@@ -84,10 +90,10 @@ class PullRequestApiController(
         @PathVariable project: String,
         @PathVariable number: Long,
         authentication: Authentication?
-    ): ResponseEntity<PullRequestMergeResult> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.mergePullRequest(found.id!!, number, authentication)
+        return pullRequestController.mergePullRequest(found.id!!, number, authentication).mapBody { it.toResponse() }
     }
 
     // yona-wiki 계획 원문 "리뷰" 대응 — PullRequestService가 제공하는 리뷰 단위는 리뷰어
@@ -114,10 +120,10 @@ class PullRequestApiController(
         @PathVariable number: Long,
         @RequestBody request: PullRequestController.SetAssigneeRequest,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.setAssignee(found.id!!, number, request, authentication)
+        return pullRequestController.setAssignee(found.id!!, number, request, authentication).mapBody { it.toResponse() }
     }
 
     @DeleteMapping("/{number}/assignee")
@@ -126,10 +132,10 @@ class PullRequestApiController(
         @PathVariable project: String,
         @PathVariable number: Long,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.removeAssignee(found.id!!, number, authentication)
+        return pullRequestController.removeAssignee(found.id!!, number, authentication).mapBody { it.toResponse() }
     }
 
     @PostMapping("/{number}/labels")
@@ -139,10 +145,10 @@ class PullRequestApiController(
         @PathVariable number: Long,
         @RequestBody request: PullRequestController.AddPullRequestLabelRequest,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.addLabel(found.id!!, number, request, authentication)
+        return pullRequestController.addLabel(found.id!!, number, request, authentication).mapBody { it.toResponse() }
     }
 
     @DeleteMapping("/{number}/labels/{labelId}")
@@ -152,10 +158,10 @@ class PullRequestApiController(
         @PathVariable number: Long,
         @PathVariable labelId: Long,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.removeLabel(found.id!!, number, labelId, authentication)
+        return pullRequestController.removeLabel(found.id!!, number, labelId, authentication).mapBody { it.toResponse() }
     }
 
     // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr edit`. PullRequestController.
@@ -169,10 +175,11 @@ class PullRequestApiController(
         @PathVariable number: Long,
         @RequestBody request: PullRequestController.UpdatePullRequestRequest,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
         return pullRequestController.updatePullRequest(found.id!!, number, request, authentication)
+            .mapBody { it.toResponse() }
     }
 
     // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr close`/`gh pr reopen`. 서버는 이미
@@ -185,10 +192,10 @@ class PullRequestApiController(
         @PathVariable project: String,
         @PathVariable number: Long,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.changeState(found.id!!, number, State.CLOSED, authentication)
+        return pullRequestController.changeState(found.id!!, number, State.CLOSED, authentication).mapBody { it.toResponse() }
     }
 
     @PostMapping("/{number}/reopen")
@@ -197,13 +204,17 @@ class PullRequestApiController(
         @PathVariable project: String,
         @PathVariable number: Long,
         authentication: Authentication?
-    ): ResponseEntity<PullRequest> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.changeState(found.id!!, number, State.OPEN, authentication)
+        return pullRequestController.changeState(found.id!!, number, State.OPEN, authentication).mapBody { it.toResponse() }
     }
 
-    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr diff`/`gh pr comment`.
+    // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `gh pr diff`/`gh pr comment`. FileDiff는 JPA
+    // 엔티티가 아니라 JGit 내부 타입(RawText/EditList)을 그대로 들고 있는 값 객체라(yona-cli
+    // internal/api/pr.go의 GetPullRequestDiff() 주석에도 명시) User/Project 양방향 연관관계로
+    // 인한 순환 직렬화 문제 자체가 없다 — pathA/pathB/changeType 등 단순 필드 위주로 CLI가 이미
+    // 방어적으로 파싱하므로 그대로 반환한다(Step8.7 2번 실측 재검증 결과 확인).
     @GetMapping("/{number}/diff")
     fun diff(
         @PathVariable owner: String,
@@ -223,9 +234,9 @@ class PullRequestApiController(
         @PathVariable number: Long,
         @RequestBody request: PullRequestController.PullRequestCommentRequest,
         authentication: Authentication?
-    ): ResponseEntity<ReviewComment> {
+    ): ResponseEntity<Any> {
         val found = projectRepository.findByOwnerAndName(owner, project).orElse(null)
             ?: return ResponseEntity.notFound().build()
-        return pullRequestController.addComment(found.id!!, number, request, authentication)
+        return pullRequestController.addComment(found.id!!, number, request, authentication).mapBody { it.toResponse() }
     }
 }

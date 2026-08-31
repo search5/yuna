@@ -1,9 +1,6 @@
 package com.github.search5.yona.web
 
 import com.github.search5.yona.domain.enumeration.SearchType
-import com.github.search5.yona.domain.issue.Issue
-import com.github.search5.yona.domain.project.Project
-import com.github.search5.yona.domain.pullrequest.PullRequest
 import com.github.search5.yona.domain.support.SearchService
 import com.github.search5.yona.domain.user.UserRepository
 import org.springframework.data.domain.Page
@@ -44,30 +41,37 @@ class SearchRestApiController(
     private fun getLoginUser(authentication: Authentication?) =
         authentication?.let { userRepository.findByLoginId(it.name).orElse(null) }
 
+    // yona-wiki P3-02 Step8.7 2번(2026-09-01) — searchInAll()이 반환하는 Page<Issue>/Page<Project>/
+    // Page<PullRequest>는 JPA 엔티티를 그대로 담고 있어(Project<->User 양방향 연관관계로 순환
+    // 직렬화 유발, RestApiResponseDto.kt 참고) IssueRestApiController/PullRequestApiController와
+    // 동일한 응답 DTO로 변환해 반환한다.
     @GetMapping("/issues")
     fun searchIssues(
         @RequestParam q: String,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
         authentication: Authentication?
-    ): ResponseEntity<Page<Issue>> {
+    ): ResponseEntity<Page<IssueResponse>> {
         if (q.isBlank()) return ResponseEntity.badRequest().build()
         val user = getLoginUser(authentication)
         val result = searchService.searchInAll(q, SearchType.ISSUE, user, PageRequest.of(page, size))
-        return ResponseEntity.ok(result.issues)
+        return ResponseEntity.ok(result.issues.map { it.toResponse() })
     }
 
+    // yona ProjectApi.java:220-228 createdProjectNode() 대응 — ProjectRestApiController.
+    // toProjectNode()와 동일한 필드 구성이라 그 패턴을 그대로 재사용하는
+    // RestApiResponseDto.kt의 ProjectRefResponse로 통일한다.
     @GetMapping("/projects")
     fun searchProjects(
         @RequestParam q: String,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
         authentication: Authentication?
-    ): ResponseEntity<Page<Project>> {
+    ): ResponseEntity<Page<ProjectRefResponse>> {
         if (q.isBlank()) return ResponseEntity.badRequest().build()
         val user = getLoginUser(authentication)
         val result = searchService.searchInAll(q, SearchType.PROJECT, user, PageRequest.of(page, size))
-        return ResponseEntity.ok(result.projects)
+        return ResponseEntity.ok(result.projects.map { it.toRefResponse() })
     }
 
 
@@ -80,10 +84,10 @@ class SearchRestApiController(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
         authentication: Authentication?
-    ): ResponseEntity<Page<PullRequest>> {
+    ): ResponseEntity<Page<PullRequestResponse>> {
         if (q.isBlank()) return ResponseEntity.badRequest().build()
         val user = getLoginUser(authentication)
         val result = searchService.searchInAll(q, SearchType.PULL_REQUEST, user, PageRequest.of(page, size))
-        return ResponseEntity.ok(result.pullRequests)
+        return ResponseEntity.ok(result.pullRequests.map { it.toResponse() })
     }
 }
