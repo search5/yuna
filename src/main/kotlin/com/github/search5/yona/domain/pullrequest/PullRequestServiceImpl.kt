@@ -394,7 +394,12 @@ class PullRequestServiceImpl(
             // 머지 성공: 머지 커밋 생성
             val whoMerges = PersonIdent(updater.name, updater.email ?: "yona@yona.io")
             val diff = diffCommits(repo, leftParent, rightParent)
-            val mergeCommitId = createMergeCommitAndUpdateRef(repo, pullRequest, leftParent, rightParent, merger, whoMerges, diff)
+            // TASK-0423(P3-02 11라운드) — additionalTargetRef로 실제 대상 브랜치도 함께 갱신한다
+            // (아래 createMergeCommitAndUpdateRef() 주석 참고).
+            val mergeCommitId = createMergeCommitAndUpdateRef(
+                repo, pullRequest, leftParent, rightParent, merger, whoMerges, diff,
+                additionalTargetRef = qualifyBranchRef(pullRequest.toBranch)
+            )
 
             // DB 업데이트
             result.gitCommits = diff
@@ -431,7 +436,19 @@ class PullRequestServiceImpl(
         rightParent: ObjectId,
         merger: ThreeWayMerger,
         whoMerges: PersonIdent,
-        diff: List<GitCommit>
+        diff: List<GitCommit>,
+        // TASK-0423(P3-02 11라운드, "pr merge가 실제 브랜치 ref를 갱신하지 않는" 이월 결함) —
+        // 이 헬퍼는 원래 merge()(실제 병합)/updateMerge()(재검사 미리보기, P1-53) 둘 다 항상
+        // refs/yobi/pull/{id}/merged만 갱신했다. legacy PullRequest.merge()
+        // (app/models/PullRequest.java:547-554)는 실제 병합 시 `result.createCommit(...)
+        // .updateRef(toBranch)`로 실제 대상 브랜치를 직접 갱신하고, `refs/yobi/pull/{id}/merged`
+        // 갱신은 checkMerge() 미리보기(app/models/PullRequest.java:911-922) 전용이다 — 이 이식이
+        // 그 구분을 놓쳐, 실제 merge() 후 toProject에서 `git pull`을 해도 toBranch가 전혀
+        // 움직이지 않았다(실서버+실 yona-cli로 clone -> push -> pr create -> pr merge ->
+        // git pull 골든패스 재현 확인). merge()만 이 파라미터로 qualifyBranchRef(toBranch)를
+        // 넘겨 대상 브랜치도 함께 fast-forward한다 — updateMerge()는 그대로 null을 넘겨
+        // mergedRef만 갱신하는 기존 부수효과 경계를 유지한다.
+        additionalTargetRef: String? = null
     ): ObjectId {
         val reusableTreeId = getMergedTreeIfReusable(repo, leftParent, rightParent, pullRequest)
         val mergeCommit = CommitBuilder().apply {
@@ -456,6 +473,25 @@ class PullRequestServiceImpl(
         val rc = refUpdate.update()
         if (rc != RefUpdate.Result.NEW && rc != RefUpdate.Result.FAST_FORWARD && rc != RefUpdate.Result.FORCED) {
             throw PullRequestException("Ref update failed for $mergedRef: $rc")
+        }
+
+        if (additionalTargetRef != null) {
+            // mergeCommit의 첫 부모가 정확히 leftParent(toBranch의 현재 tip)이므로 이 갱신은
+            // 항상 fast-forward다 — setExpectedOldObjectId로 그 사이 다른 push가 toBranch를
+            // 움직이지 않았음을 한 번 더 보장한다(동시성 안전장치, RefUpdate.Result.
+            // LOCK_FAILURE로 감지 가능).
+            val branchRefUpdate = repo.updateRef(additionalTargetRef)
+            branchRefUpdate.setExpectedOldObjectId(leftParent)
+            branchRefUpdate.setNewObjectId(mergeCommitId)
+            branchRefUpdate.refLogIdent = whoMerges
+            branchRefUpdate.setRefLogMessage("merge pull request #${pullRequest.number}", false)
+            val branchRc = branchRefUpdate.update()
+            if (branchRc != RefUpdate.Result.NEW &&
+                branchRc != RefUpdate.Result.FAST_FORWARD &&
+                branchRc != RefUpdate.Result.FORCED
+            ) {
+                throw PullRequestException("Ref update failed for $additionalTargetRef: $branchRc")
+            }
         }
 
         return mergeCommitId

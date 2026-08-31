@@ -258,6 +258,15 @@ class PullRequestServiceSpec @Autowired constructor(
                 commits.size shouldBe 1
                 commits.first().commitMessage.trim() shouldBe "Update source"
                 commits.first().state shouldBe PullRequestCommit.State.CURRENT
+
+                // TASK-0423(P3-02 11라운드, "pr merge가 실제 브랜치 ref를 갱신하지 않는" 이월 결함) —
+                // merge()는 refs/yobi/pull/{id}/merged 캐시 ref뿐 아니라 실제 대상 브랜치
+                // (toProject의 refs/heads/master)도 병합 커밋으로 갱신해야 한다. 이래야
+                // 병합 후 toProject를 clone/pull한 클라이언트가 실제로 병합 결과를 받는다 —
+                // 예전에는 이 ref가 전혀 움직이지 않아 pull해도 병합 내용이 보이지 않았다.
+                Git.open(toBareDir).use { git ->
+                    git.repository.resolve("master")!!.name shouldBe mergedPr.mergedCommitIdTo
+                }
             }
 
             // yona PullRequestMerger의 refs/yobi/pull/{id}/merged 캐시 재사용 대응 — getMergedTreeIfReusable()가
