@@ -6,6 +6,7 @@ import com.github.search5.yona.domain.apitoken.ApiTokenPermission
 import com.github.search5.yona.domain.apitoken.ApiTokenRepository
 import com.github.search5.yona.domain.apitoken.hashApiToken
 import com.github.search5.yona.domain.enumeration.ResourceType
+import com.github.search5.yona.domain.project.Project
 import com.github.search5.yona.domain.project.ProjectRepository
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.user.UserState
@@ -45,6 +46,32 @@ import java.util.regex.Pattern
  *   내지 않고 SecurityContext에 신원만 세팅한 뒤, 인증에 쓰인 ApiToken 객체를 request attribute
  *   (SCOPED_API_TOKEN_ATTRIBUTE)로 다운스트림 컨트롤러에 넘긴다(Spring Security가 CSRF 토큰 등을
  *   넘기는 방식과 동일).
+ *
+ * yona-wiki P3-02 10라운드(TASK-0417~0418) — "Fine-grained PAT으로 CLI의 모든 명령이 동작해야
+ * 한다"는 목표에 맞춰, 위 세 패턴이 전부 `/api/v1/projects/{owner}/...`(최소 owner 세그먼트 필요)
+ * 형태만 인식하던 갭을 메웠다. 실제 서버+실제 yona-cli로 재현한 5개 URL이 전부 이 갭 때문에
+ * 스코프 인식이 안 되고 있었다:
+ * - `POST /api/v1/projects`(프로젝트 생성, owner 세그먼트가 아예 없음) — 신규 프로젝트를 만들
+ *   권한은 특정 프로젝트에 종속될 수 없는 "계정 수준" 판정이라, 기존 그룹/권한 매트릭스는
+ *   그대로 재사용하되(ResourceType.PROJECT → ADMINISTRATION 그룹, 이미 존재) project는 null로
+ *   판정하는 대신 반드시 `allRepositories=true`인 토큰만 허용한다(GitHub Fine-grained PAT도
+ *   "All repositories" 토큰만 새 저장소 생성이 가능한 것과 동일한 논리 — 근거는
+ *   docs/yona-wiki/plans/p3-02-cli-and-rest-api.md 참고).
+ * - `GET /api/v1/user/issues/status`("내 이슈 현황", 특정 프로젝트가 아니라 로그인 사용자 전체를
+ *   대상으로 함) — ISSUES 그룹으로 취급하되 project는 null(repo scope 체크 자체를 건너뜀 — 여러
+ *   프로젝트에 걸친 집계라 단일 project로 좁힐 수 없음).
+ * - `GET /site/export`(사이트 전체 백업, 여러 서버 산하 프로젝트를 대상으로 함) — SITE_SETTING
+ *   → ADMINISTRATION 그룹으로 취급하고, 프로젝트 생성과 동일한 이유로 `allRepositories=true`를
+ *   요구한다. 실제 사이트 관리자 권한 여부는 이 필터가 아니라 기존 SecurityConfig의
+ *   `hasAnyRole("ADMIN","SITE_ADMIN")` 요구사항이 그대로 검사한다 — 이 필터는 신원만 세팅한다.
+ * - `POST /api/projects/{id}/members`(레거시 숫자 ID 기반 프로젝트 멤버 관리) — owner/name이
+ *   아니라 프로젝트 PK로 식별되는 유일한 API라 별도 패턴이 필요했다. PROJECT_SETTING
+ *   (ADMINISTRATION 그룹)으로 취급하고 project는 ID로 조회해 repo scope를 그대로 검사한다.
+ * - `POST /projects/{owner}/{project}/webhooks`(세션/폼 기반 레거시 MVC, `/api` 밖) — URL
+ *   접두어만 다를 뿐 리소스 세그먼트 구조(`/{owner}/{project}/{resource}`)는 신규 API와 동일해
+ *   기존 resourceSegmentToResourceType 매핑을 그대로 재사용한다. 이 경로는 세션 인증이 기본이라
+ *   대부분의 요청엔 Authorization/Yona-Token 헤더가 없으므로(extractToken이 null 반환) 기존 세션
+ *   기반 웹 UI 동작에는 영향이 없다 — PAT 헤더를 실제로 들고 오는 CLI 요청에만 적용된다.
  */
 @Component
 class ApiTokenAuthenticationFilter(
@@ -65,14 +92,38 @@ class ApiTokenAuthenticationFilter(
         if (!alreadyAuthenticated) {
             val token = extractToken(request)
             if (token != null) {
-                val target = parseScopedApiTarget(request.requestURI)
+                val requestUri = request.requestURI
+                val target = parseScopedApiTarget(requestUri)
+                val accountTarget = if (target == null) parseAccountLevelTarget(requestUri) else null
+                val legacyMemberProjectId = if (target == null && accountTarget == null) parseLegacyProjectIdTarget(requestUri) else null
+                val legacyWebTarget = if (target == null && accountTarget == null && legacyMemberProjectId == null)
+                    parseLegacyWebProjectTarget(requestUri) else null
+
                 when {
                     target != null -> {
-                        if (!authenticateScoped(token, target, request, response)) {
+                        val project = projectRepository.findByOwnerAndName(target.owner, target.projectName).orElse(null)
+                        if (!authenticateScoped(token, target.representativeResourceType, project, request, response)) {
                             return
                         }
                     }
-                    isOwnerOnlyListRequest(request.requestURI) -> authenticateScopedList(token, request)
+                    isOwnerOnlyListRequest(requestUri) -> authenticateScopedList(token, request)
+                    accountTarget != null -> {
+                        if (!authenticateAccountLevel(token, accountTarget, request, response)) {
+                            return
+                        }
+                    }
+                    legacyMemberProjectId != null -> {
+                        val project = projectRepository.findById(legacyMemberProjectId).orElse(null)
+                        if (!authenticateScoped(token, ResourceType.PROJECT_SETTING, project, request, response)) {
+                            return
+                        }
+                    }
+                    legacyWebTarget != null -> {
+                        val project = projectRepository.findByOwnerAndName(legacyWebTarget.owner, legacyWebTarget.projectName).orElse(null)
+                        if (!authenticateScoped(token, legacyWebTarget.representativeResourceType, project, request, response)) {
+                            return
+                        }
+                    }
                     else -> authenticateLegacy(token)
                 }
             }
@@ -85,19 +136,19 @@ class ApiTokenAuthenticationFilter(
     // false를 반환한다(GitAuthorizationFilter의 sendError + return 패턴과 동일).
     private fun authenticateScoped(
         token: String,
-        target: ScopedApiTarget,
+        resourceType: ResourceType?,
+        project: Project?,
         request: HttpServletRequest,
         response: HttpServletResponse
     ): Boolean {
         val apiToken = apiTokenRepository.findByTokenHash(hashApiToken(token)).orElse(null)
             ?: return true // 스코프 토큰이 아니면(모르는 토큰) 인증 없이 통과 — 컨트롤러/후속 인가에서 401 처리
 
-        val project = projectRepository.findByOwnerAndName(target.owner, target.projectName).orElse(null)
         val requiredPermission = requiredPermissionFor(request.method)
 
         val allowed = ApiTokenAuthorizer.isAuthorized(
             token = apiToken,
-            resourceType = target.representativeResourceType,
+            resourceType = resourceType,
             project = project,
             requiredPermission = requiredPermission
         )
@@ -106,12 +157,48 @@ class ApiTokenAuthenticationFilter(
             return false
         }
 
+        markAuthenticated(apiToken, request)
+        return true
+    }
+
+    // yona-wiki P3-02 10라운드 — 특정 프로젝트에 종속되지 않는 "계정 수준" 판정(신규 프로젝트 생성,
+    // 로그인 사용자 전체 이슈 현황, 사이트 전체 백업 등). project를 아예 두지 않고 판정하므로
+    // ApiTokenAuthorizer.isAuthorized()의 repo-scope 체크(project==null이면 항상 통과)만으로는
+    // "특정 프로젝트로 좁혀진 토큰"까지 계정 전체 동작을 허용해버리는 구멍이 생긴다 — 이런
+    // 액션들은 requireAllRepositories=true로 표시해 "전체 저장소" 토큰만 허용하도록 별도로 막는다
+    // (GitHub Fine-grained PAT의 "All repositories" 전용 동작과 동일한 논리).
+    private fun authenticateAccountLevel(
+        token: String,
+        target: AccountLevelTarget,
+        request: HttpServletRequest,
+        response: HttpServletResponse
+    ): Boolean {
+        val apiToken = apiTokenRepository.findByTokenHash(hashApiToken(token)).orElse(null)
+            ?: return true
+
+        val requiredPermission = requiredPermissionFor(request.method)
+        val scopeAllowed = ApiTokenAuthorizer.isAuthorized(
+            token = apiToken,
+            resourceType = target.resourceType,
+            project = null,
+            requiredPermission = requiredPermission
+        )
+        val allowed = scopeAllowed && (!target.requireAllRepositories || apiToken.allRepositories)
+        if (!allowed) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden")
+            return false
+        }
+
+        markAuthenticated(apiToken, request)
+        return true
+    }
+
+    private fun markAuthenticated(apiToken: ApiToken, request: HttpServletRequest) {
         setAuthenticatedIdentity(apiToken)
         request.setAttribute(SCOPED_API_TOKEN_ATTRIBUTE, apiToken)
 
         apiToken.lastUsedAt = Instant.now()
         apiTokenRepository.save(apiToken)
-        return true
     }
 
     // yona-wiki P3-02 Step6.5 — owner 전용 목록 경로(`/api/v1/projects/{owner}`)는 특정 프로젝트
@@ -167,6 +254,31 @@ class ApiTokenAuthenticationFilter(
         // 1세그먼트). 위 두 패턴과 세그먼트 수가 달라 겹치지 않는다.
         private val ownerOnlyPattern = Pattern.compile("^/api/v1/projects/([^/]+)/?$")
 
+        // yona-wiki P3-02 10라운드 — owner 세그먼트조차 없는 프로젝트 "생성" 자체
+        // (`POST /api/v1/projects`). 위 세 패턴 모두 최소 1개의 세그먼트(owner)를 요구하므로 겹치지
+        // 않는다.
+        private val projectCreatePattern = Pattern.compile("^/api/v1/projects/?$")
+
+        // yona-wiki P3-02 10라운드 — 로그인 사용자 전체를 대상으로 하는 신규 API
+        // (`/api/v1/user/issues/status` 등). `/api/v1/projects/**`와 구분되는 별도 네임스페이스다.
+        private val userApiPattern = Pattern.compile("^/api/v1/user/issues(?:/.*)?$")
+
+        // yona-wiki P3-02 10라운드 — 사이트 전체 관리 API(`/site/**`, `/sites/**`). 실제 사이트
+        // 관리자 권한 여부는 SecurityConfig의 hasAnyRole("ADMIN","SITE_ADMIN")이 별도로 검사하므로,
+        // 이 필터는 PAT 토큰의 신원 확인 + ADMINISTRATION 스코프 보유 여부만 판정한다.
+        private val siteApiPattern = Pattern.compile("^/sites?(?:/.*)?$")
+
+        // yona-wiki P3-02 10라운드 — 레거시 숫자 프로젝트 ID 기반 API(`/api/projects/{id}/...`,
+        // `ProjectMemberController`). owner/name이 아니라 PK로 프로젝트를 식별하는 유일한 경로라
+        // 별도 패턴으로 분리했다.
+        private val legacyProjectIdPattern = Pattern.compile("^/api/projects/(\\d+)(?:/.*)?$")
+
+        // yona-wiki P3-02 10라운드 — 세션/폼 기반 레거시 MVC 프로젝트 리소스
+        // (`/projects/{owner}/{project}/{resource}`, 예: 웹훅 생성). `/api` 접두어만 다를 뿐
+        // 세그먼트 구조가 scopedApiPattern과 동일해 같은 resourceSegmentToResourceType 매핑을
+        // 재사용한다.
+        private val legacyWebProjectPattern = Pattern.compile("^/projects/([^/]+)/([^/]+)/([^/]+)(?:/.*)?$")
+
         // URL의 리소스 세그먼트(예: "issues")를 스코프 판정용 대표 ResourceType 하나로 매핑한다.
         // ApiTokenAuthorizer는 ResourceType을 ApiTokenScopeGroup으로 다시 뭉뚱그리므로, 그룹 안에서
         // 어떤 대표값을 고르는지는 판정 결과에 영향을 주지 않는다(같은 그룹이면 결과 동일).
@@ -219,6 +331,43 @@ class ApiTokenAuthenticationFilter(
             return null
         }
 
+        // yona-wiki P3-02 10라운드 — 프로젝트에 종속되지 않는 계정 수준 URL 판정.
+        private fun parseAccountLevelTarget(requestUri: String?): AccountLevelTarget? {
+            if (requestUri == null) return null
+
+            if (projectCreatePattern.matcher(requestUri).matches()) {
+                return AccountLevelTarget(ResourceType.PROJECT, requireAllRepositories = true)
+            }
+            if (userApiPattern.matcher(requestUri).matches()) {
+                return AccountLevelTarget(ResourceType.ISSUE_POST, requireAllRepositories = false)
+            }
+            if (siteApiPattern.matcher(requestUri).matches()) {
+                return AccountLevelTarget(ResourceType.SITE_SETTING, requireAllRepositories = true)
+            }
+            return null
+        }
+
+        // yona-wiki P3-02 10라운드 — `/api/projects/{id}/...` 레거시 숫자 ID 패턴에서 프로젝트 ID를
+        // 추출한다.
+        private fun parseLegacyProjectIdTarget(requestUri: String?): Long? {
+            if (requestUri == null) return null
+            val matcher = legacyProjectIdPattern.matcher(requestUri)
+            if (!matcher.matches()) return null
+            return matcher.group(1).toLongOrNull()
+        }
+
+        // yona-wiki P3-02 10라운드 — 세션/폼 기반 레거시 MVC 프로젝트 리소스 URL 판정.
+        private fun parseLegacyWebProjectTarget(requestUri: String?): ScopedApiTarget? {
+            if (requestUri == null) return null
+            val matcher = legacyWebProjectPattern.matcher(requestUri)
+            if (!matcher.matches()) return null
+            val owner = matcher.group(1)
+            val projectName = matcher.group(2)
+            val resourceSegment = matcher.group(3)
+            if (!resourceSegmentToResourceType.containsKey(resourceSegment)) return null
+            return ScopedApiTarget(owner, projectName, resourceSegmentToResourceType[resourceSegment])
+        }
+
         private fun isOwnerOnlyListRequest(requestUri: String?): Boolean {
             if (requestUri == null) return false
             return ownerOnlyPattern.matcher(requestUri).matches()
@@ -241,5 +390,10 @@ class ApiTokenAuthenticationFilter(
         val owner: String,
         val projectName: String,
         val representativeResourceType: ResourceType?
+    )
+
+    private data class AccountLevelTarget(
+        val resourceType: ResourceType?,
+        val requireAllRepositories: Boolean
     )
 }

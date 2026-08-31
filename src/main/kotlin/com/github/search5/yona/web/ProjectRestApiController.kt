@@ -99,12 +99,25 @@ class ProjectRestApiController(
 
     // yona-wiki P3-02 4라운드(Step8.5 서버 보강) — `yona project create`. ProjectViewController.
     // newProject()(세션/폼 기반)와 동일한 권한 로직(owner가 기존 조직명이면 그 조직 admin만 생성
-    // 가능)을 그대로 재사용하되, JSON 요청/응답으로 노출한다. 의도적으로 `/api/v1/projects`
-    // 세그먼트 없는 bare POST로 두었다 - ApiTokenAuthenticationFilter의 어떤 스코프 패턴과도
-    // 매칭되지 않아(3세그먼트/2세그먼트/owner전용 1세그먼트 전부 요구 형태가 다름) 세션 로그인이나
-    // 레거시 전권 토큰으로만 호출 가능하다. GitHub Fine-grained PAT도 새 저장소 "생성" 자체는
-    // 지원하지 않는 것(기존 저장소에만 스코프될 수 있음)과 동일한 제약이라 의도적 설계로 문서화한다
-    // (계획 문서 "리스크/미결정 사항" 참고).
+    // 가능)을 그대로 재사용하되, JSON 요청/응답으로 노출한다.
+    //
+    // yona-wiki P3-02 10라운드(TASK-0417) — 위 4라운드 주석은 "GitHub Fine-grained PAT도 새 저장소
+    // 생성을 지원하지 않는다"는 전제로 이 bare POST가 Fine-grained PAT의 어떤 스코프 패턴과도
+    // 매칭되지 않는 것을 의도적 설계로 문서화했었다. 실제 서버 + 실제 yona-cli(`yona project
+    // create`)로 재현한 결과 이건 의도가 아니라 버그였다 — `yona project create`가 발급받은
+    // fine-grained PAT으로 이 엔드포인트를 호출하면 항상 401이 났다(ApiTokenAuthenticationFilter의
+    // scopedApiPattern/individualProjectPattern/ownerOnlyPattern이 전부 owner 세그먼트를 최소
+    // 1개 요구해 세그먼트가 아예 없는 이 URL과 매칭되지 않았기 때문). 이제
+    // ApiTokenAuthenticationFilter.projectCreatePattern이 이 URL을 인식해, "allRepositories=true
+    // (All repositories) + ADMINISTRATION(ResourceType.PROJECT) 그룹 WRITE 권한"을 가진 토큰만
+    // 여기 도달하도록 허용한다 — 신규 프로젝트는 아직 존재하지 않는 저장소라 특정 프로젝트로
+    // 스코프를 좁힌 토큰으로는 원천적으로 판정할 수 없으므로(repo scope 체크 대상이 없음),
+    // GitHub Fine-grained PAT이 "All repositories" 토큰에만 새 저장소 생성 권한을 주는 것과 동일한
+    // 논리로 allRepositories를 강제한다. 별도 스코프 그룹을 신설하지 않고 기존 ADMINISTRATION(이미
+    // ResourceType.PROJECT를 포함)을 재사용한 이유는, 계정 전체의 "프로젝트를 새로 만들 수 있는가"
+    // 판정이 다른 ADMINISTRATION 항목(SITE_SETTING/PROJECT_TRANSFER/ORGANIZATION 등)과 같은
+    // "저장소 자체의 존재/설정을 다루는 관리 행위" 범주에 속한다고 판단했기 때문이다(근거는
+    // docs/yona-wiki/plans/p3-02-cli-and-rest-api.md 10라운드 로그 참고).
     @PostMapping
     fun create(
         @RequestBody request: CreateProjectRequest,

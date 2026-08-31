@@ -14,6 +14,7 @@ import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import org.springframework.context.MessageSource
 import org.springframework.context.i18n.LocaleContextHolder
+import org.springframework.web.server.ResponseStatusException
 
 @RestController
 @RequestMapping("/api/projects/{projectId}")
@@ -33,10 +34,16 @@ class ProjectMemberController(
             .orElse(false)
     }
 
+    // TASK-0417 — 인증 정보가 없거나(PAT 인식 실패 등으로 authentication이 null) 토큰 소유자를
+    // DB에서 못 찾는 경우 IllegalArgumentException을 그대로 던지면 @RestController 기본
+    // 예외 처리기가 500으로 응답한다("Unauthorized"라는 메시지와 전혀 안 맞는 상태 코드였다 —
+    // yona-cli `admin permission add`를 실제 서버에 대고 재현해 발견). ResponseStatusException은
+    // Spring MVC가 자동으로 지정된 상태 코드(401)로 변환해주므로 각 호출부에 try/catch를 추가할
+    // 필요가 없다.
     private fun getLoginUserId(authentication: Authentication?): Long {
-        if (authentication == null) throw IllegalArgumentException("Unauthorized")
+        if (authentication == null) throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized")
         val user = userRepository.findByLoginId(authentication.name)
-            .orElseThrow { IllegalArgumentException("User not found") }
+            .orElseThrow { ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found") }
         return user.id!!
     }
 
@@ -176,11 +183,7 @@ class ProjectMemberController(
         @PathVariable projectId: Long,
         authentication: Authentication?
     ): ResponseEntity<Any> {
-        val currentUserId = try {
-            getLoginUserId(authentication)
-        } catch (e: IllegalArgumentException) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
-        }
+        val currentUserId = getLoginUserId(authentication)
         if (!isProjectManager(projectId, currentUserId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }

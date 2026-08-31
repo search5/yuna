@@ -24,10 +24,14 @@ import org.springframework.web.bind.annotation.RestController
 // yona-wiki P3-02 Step8.6 항목2(2026-09-01, 우선순위 2위) — 5라운드가 "최소 버전"으로 남겨둔
 // mentioned/favorite/shared/commenter 필터와 페이지네이션/정렬 파라미터를 전부 노출하도록 확장.
 //
-// **스코프 인가 갭**: `/api/v1/user/**`는 특정 저장소에 속한 리소스가 아니라(사용자 전역 대시보드)
-// `/api/v1/projects/{owner}/{project}/{resource}` 저장소 단위 스코프 모델과 맞지 않는다 - 다른
-// 신규 전역 엔드포인트(search/organizations)와 동일하게 세션 로그인/레거시 전권 토큰으로만
-// 인증되고 Fine-grained 스코프 토큰은 인증되지 않는다(계획 문서 리스크 표에 기록).
+// yona-wiki P3-02 10라운드(TASK-0417) — 위 문단은 "`/api/v1/user/**`는 저장소 단위 스코프 모델과
+// 맞지 않아 Fine-grained 스코프 토큰은 인증되지 않는다"는 갭을 리스크로만 기록해뒀었다. 실제 서버 +
+// 실제 yona-cli(`yona issue status`)로 재현한 결과 이건 CLI의 핵심 명령이 PAT으로 아예 동작하지
+// 않는 버그였다. ApiTokenAuthenticationFilter.userApiPattern(`/api/v1/user/issues/**`)을 추가해,
+// project는 null로 두고(특정 저장소 하나로 좁힐 수 없는 "로그인 사용자 전체" 집계라) ISSUES 그룹
+// 권한만으로 판정하도록 계정 수준 인가를 지원한다(project create/site export와 달리
+// allRepositories까지 강제하지는 않는다 — 이 조회는 여러 프로젝트의 이슈를 "만든다/수정한다"가
+// 아니라 읽기만 하는 대시보드 성격이라 상대적으로 위험도가 낮다고 판단했다).
 @RestController
 @RequestMapping("/api/v1/user/issues")
 class UserIssueStatusRestApiController(

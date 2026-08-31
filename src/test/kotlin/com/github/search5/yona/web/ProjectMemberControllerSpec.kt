@@ -29,6 +29,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.web.server.ResponseStatusException
 import java.util.Optional
 import com.github.search5.yona.domain.organization.OrganizationRepository
 import com.github.search5.yona.domain.issue.IssueRepository
@@ -169,22 +170,28 @@ class ProjectMemberControllerSpec : DescribeSpec({
     }
 
     // getLoginUserId()의 두 예외 분기(인증 없음 / 로그인 사용자 미존재) 커버.
+    // TASK-0417 — 예전엔 IllegalArgumentException을 그대로 던져 @RestController 기본 예외 처리기가
+    // 500으로 응답했다("Unauthorized"라는 메시지와 전혀 안 맞는 상태 코드 — yona-cli
+    // `admin permission add`를 실제 서버에 대고 재현해 발견). ResponseStatusException(401)으로
+    // 바꿔 Spring MVC가 자동으로 401을 응답하도록 고쳤다.
     describe("getLoginUserId 예외 분기") {
-        it("인증 정보가 없으면 IllegalArgumentException(Unauthorized)을 던져야 한다") {
-            val exception = shouldThrow<IllegalArgumentException> {
+        it("인증 정보가 없으면 ResponseStatusException(401 Unauthorized)을 던져야 한다") {
+            val exception = shouldThrow<ResponseStatusException> {
                 projectMemberController.enroll(1L, null)
             }
-            exception.message shouldBe "Unauthorized"
+            exception.statusCode shouldBe HttpStatus.UNAUTHORIZED
+            exception.reason shouldBe "Unauthorized"
         }
 
-        it("로그인 아이디에 해당하는 사용자를 찾을 수 없으면 IllegalArgumentException(User not found)을 던져야 한다") {
+        it("로그인 아이디에 해당하는 사용자를 찾을 수 없으면 ResponseStatusException(401 Unauthorized)을 던져야 한다") {
             val auth = UsernamePasswordAuthenticationToken("ghost", "password")
             every { userRepository.findByLoginId("ghost") } returns Optional.empty()
 
-            val exception = shouldThrow<IllegalArgumentException> {
+            val exception = shouldThrow<ResponseStatusException> {
                 projectMemberController.enroll(1L, auth)
             }
-            exception.message shouldBe "User not found"
+            exception.statusCode shouldBe HttpStatus.UNAUTHORIZED
+            exception.reason shouldBe "User not found"
         }
     }
 
