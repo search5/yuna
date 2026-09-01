@@ -418,6 +418,13 @@ class PullRequestServiceSpec @Autowired constructor(
                 val updatedPrAfterAttempt = pullRequestRepository.findById(pr.id!!).orElse(null)
                 updatedPrAfterAttempt.isConflict shouldBe true
 
+                // yona-wiki P3-02 13라운드(TASK-0430) — 12라운드가 실서버+실 git으로 수동
+                // 확인만 하고 자동화하지 못한 채 이월한 항목. merge() 시도 전 대상 브랜치
+                // (refs/heads/master) tip을 기록해두고, 충돌 머지 이후에도 이 ref가 전혀
+                // 움직이지 않았는지 검증한다(TASK-0423이 고친 "실제 merge()만 대상 브랜치를
+                // fast-forward한다" 경로가 충돌 시에는 아예 호출되지 않아야 함을 고정).
+                val masterRefBeforeMerge = Git.open(toBareDir).use { it.repository.resolve("master")!!.name }
+
                 // 4) merge 수행 - 머지 실패(충돌 상태 보존 및 MERGED 미변경)
                 val mergeResult = pullRequestService.merge(pr.id!!, receiver)
                 mergeResult.conflicts() shouldBe true
@@ -425,6 +432,9 @@ class PullRequestServiceSpec @Autowired constructor(
                 val mergedPr = pullRequestRepository.findById(pr.id!!).orElse(null)
                 mergedPr.state shouldBe State.OPEN
                 mergedPr.isConflict shouldBe true
+
+                val masterRefAfterMerge = Git.open(toBareDir).use { it.repository.resolve("master")!!.name }
+                masterRefAfterMerge shouldBe masterRefBeforeMerge
             }
 
             it("3. 이슈 자동 닫기(Issue Auto-Close) 연동 검증") {
