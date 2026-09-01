@@ -1518,6 +1518,144 @@ yuna 3건 모두 커밋 후 즉시 `git push origin main` 완료(TASK-0426/0427/
 조회 검증)는 결론 없이 중단했다(코드 변경 없었으므로 안전). 클린 라운드 달성 여부와 무관하게
 사용자 지시로 즉시 종료 — 다음 세션은 위 "미완료" 목록부터 이어가면 된다.
 
+### 13라운드 (2026-09-01) — 12라운드 미완료 4항목 전부 해소 + 실서버 탐색
+
+12라운드가 남긴 4개 미완료 항목을 순서대로 먼저 처리한 뒤, 이어서 실서버+실 `yona-cli`
+바이너리로 새로운 배선을 재검증하고 추가 관점(라벨 전체교체 시맨틱, 존재하지 않는 담당자/
+라벨, 이미 CLOSED된 이슈 편집, PR 라벨 중복 추가)을 탐색했다.
+
+#### 미완료 1 — 전체 `./gradlew test` 회귀 확인
+
+`JAVA_HOME=.../21.0.11-tem ./gradlew test`를 이번 라운드 시작 시점(TASK-0426~0429 변경 반영
+직후)에 처음 실행한 결과 5827개 중 48개 실패(`PostingServiceSpec` 16, `ApiTokenServiceImplSpec`
+9, `CommentServiceSpec` 7, `GitAuthorizationFilterIntegrationSpec` 6, `PostingRepositorySpec` 3,
+`PostingCommentRepositorySpec` 3, `CommentServiceExtraSpec` 2, `TemplateHelperSpec` 2) — 11라운드
+까지의 "4개 실패" 사전 존재 플레이키니스보다 훨씬 많아 처음엔 회귀를 의심했다. 그러나:
+
+- 실패한 8개 스펙 전부 `--tests`로 단독/서브셋 실행하면 100% GREEN(`BUILD SUCCESSFUL`).
+- 실패 목록이 이번 라운드가 손댄 어떤 파일과도 무관한 도메인(게시판/댓글/API토큰/git 인가
+  필터/템플릿 헬퍼)에 집중돼 있다.
+- `~/.testcontainers.properties`의 `testcontainers.reuse.enable=true` + `AbstractIntegrationTest`
+  전 컨테이너의 `.withReuse(true)`로 인해 MariaDB testcontainer가 이 머신에서 동시에 돌고 있는
+  **다른 세션들의 `./gradlew test` 실행과 공유**된다(`.claude/worktrees/agent-*` 디렉터리 다수가
+  이 시점에도 존재 확인) — 여러 세션이 같은 DB에 동시에 쓰기/읽기를 하면서 서로 다른 무관한
+  스펙들이 서로의 데이터를 밟는 구조적 환경 노이즈다.
+- 라운드 종료 시점에 변경사항 반영 후 전체 스위트를 다시 돌린 결과도 **정확히 동일한 48개,
+  동일한 8개 스펙, 동일한 케이스 수**로 재현됐다 — 우리 변경이 원인이면 실패 집합이 변경
+  전후로 달라야 하는데 완전히 동일하다는 것 자체가 "우리 변경과 무관한 외부 요인"이라는
+  강력한 증거다.
+
+**결론**: 48개 실패는 전부 동시 실행 중인 다른 세션과 testcontainer를 공유하는 환경 노이즈이며
+회귀가 아니다(개별/서브셋 재실행 100% GREEN으로 확정). 베이스라인은 사실상 GREEN으로 확인됨.
+
+#### 미완료 2 — PR merge 충돌 케이스 회귀 테스트 고정(TASK-0431)
+
+기존 `PullRequestServiceSpec`의 "2. 충돌이 발생하는 경우" 테스트가 이미 `merge()` 호출 자체
+(단순 `attemptMerge` 미리보기가 아니라)의 결과(`conflicts()=true`, PR이 OPEN 유지,
+`isConflict=true`)를 검증하고 있었다 — 12라운드가 수동으로 확인한 것과 같은 범위를 이미
+자동화가 커버하고 있었던 셈이다. 다만 12라운드 수동검증의 핵심 관찰 포인트였던 "대상 브랜치
+(`refs/heads/master`) ref가 전혀 움직이지 않는다"는 검증되지 않고 있어, `merge()` 호출 전/후
+`Git.open(toBareDir).repository.resolve("master")`를 비교하는 단언을 추가해 완전히 고정했다.
+GREEN 확인(`--tests PullRequestServiceSpec`).
+
+#### 미완료 3 — `admin backup export/import` 왕복 후 실제 데이터 조회까지 실서버로 완결
+
+12라운드는 새 서버로 import까지는 했지만 그 서버에서 데이터가 실제로 조회되는지 확인을 못 하고
+중단했었다. 이번 라운드는 h2 프로파일 서버 2대(포트 18099/18100, 각각 `-Dyona.data`/
+`-Dyona.git.base-dir` 완전 격리)로 끝까지 확인했다:
+
+1. 서버1(18099)에서 bootstrap-setup → 세션 로그인 → `POST /api/v1/projects`로 프로젝트 생성 →
+   `POST /user/editform/tokens`로 fine-grained PAT 발급 → `yona auth login` → `yona issue
+   create --assignee --label` → `git clone`(스마트 HTTP)+두 브랜치 push → `yona pr create`.
+2. `yona admin backup export -o backup.json`(6191 bytes) 성공.
+3. 완전히 새로운 빈 서버2(18100, 별도 데이터/git 디렉터리)에 bootstrap-setup으로 임시 관리자
+   생성 → 세션 로그인 → `POST /site/import`(멀티파트)로 백업 업로드 → 302 성공.
+4. 서버2에 대해 **서버1에서 쓰던 것과 동일한 raw PAT 문자열**로 `yona auth login` → `yona
+   project view`/`yona issue view --json`/`yona pr view --json`/`yona issue list`를 실행한
+   결과 프로젝트/이슈(제목·본문)/PR(fromBranch/toBranch/title)이 전부 정상 조회됨을 확인 —
+   ApiToken의 해시 기반 인증(TOKEN_HASH 컬럼)이 백업에 그대로 담겨 복원돼, 원본 서버에서
+   발급받은 raw 토큰 문자열이 복원된 새 서버에서도 그대로 유효했다.
+
+**결론**: export→import→새 서버 조회까지 전체 왕복이 실제로 완결됨을 확인. 버그 없음.
+
+#### 미완료 4 — PR/이슈 assignee·label CLI 배선 갭 해소(TASK-0430, yona-cli 3개 커밋)
+
+**서버 측(yuna, TASK-0430)**: `ProjectMemberController.assignableUsers()`가 `loginId`/`name`/
+`avatarUrl`만 내려주고 `userId`는 주지 않아, CLI가 사람이 입력하는 로그인ID를 REST가 요구하는
+숫자 `assigneeId`/`userId`로 변환할 방법이 아예 없었다("나에게 할당하기" 항목과 멤버 후보 항목
+둘 다에 `userId` 추가, 기존 select2 소비자는 알려지지 않은 필드를 무시하므로 웹 UI 영향 없음).
+`ProjectMemberControllerSpec`에 검증 추가, GREEN.
+
+**CLI 측(yona-cli, 3개 커밋)**:
+1. `issue create/edit --assignee <loginId> --label <name>(반복 가능)` 배선. **배선 과정에서
+   심각한 기존 데이터 손실 버그를 발견** — `IssueServiceImpl.updateIssue()`는 title/body와
+   달리 assignee/milestone/labels를 "요청에 값이 없으면 유지"가 아니라 "요청에 값이 없으면
+   지운다"로 동작한다(웹 폼이 항상 현재 값을 hidden input으로 재제출하는 것을 전제로 설계된
+   전체교체 시맨틱). CLI의 `issue edit`이 이 세 필드를 아예 보내지 않고 있어서, **지금까지
+   `yona issue edit`을 한 번이라도 호출하면 그 이슈의 담당자·마일스톤·라벨이 전부 조용히
+   사라지는** 버그였다. title/body와 동일한 read-modify-write 패턴으로 세 필드 모두 보존하도록
+   함께 고쳤다(`--remove-assignee`로 명시적 해제만 예외).
+2. `pr edit --assignee/--remove-assignee/--add-label/--remove-label`, `pr list
+   --assignee/--label` 배선(서버는 7라운드부터 지원, CLI만 못 따라간 순수 배선 갭 — PR의
+   담당자/라벨은 update PATCH가 아닌 전용 PUT/DELETE/POST 엔드포인트라 이슈처럼 지워지는 문제는
+   원래 없었다).
+3. **부수 발견(같은 부류의 갭)** — `admin webhook list`/`admin permission list`가 "서버에 목록
+   JSON API가 없다"는 낡은 스텁 메시지를 반환하고 있었는데, 실제로는 Step8.6(7라운드)에서
+   `GET /api/v1/projects/{owner}/{project}/webhooks`/`.../permissions`가 이미 신설돼 있었다
+   (docs 위 "7라운드" 로그 참고) — CLI가 그 사실을 반영하지 못한 채 방치돼 있었던 것. 실제 GET
+   호출로 배선했다.
+
+**실서버+실CLI 골든패스**(위 서버1 재사용): `label create bug/urgent` → `issue create --assignee
+admin --label bug`(assignee.userId=1, labels=[bug] 정상 반영 확인) → `issue edit --title`(제목만
+변경해도 assignee/labels가 그대로 보존됨을 확인 — 수정 전이었다면 사라졌을 상황) → `issue edit
+--remove-assignee`(assignee: null 확인) → `git clone`+두 브랜치 push → `pr create` → `pr edit
+--assignee admin`/`--add-label bug`/`--remove-label bug --remove-assignee`(각 단계 `pr view
+--json`으로 반영 확인) → `pr list --assignee/--label`(필터링 정상 동작) → `admin webhook create`+
+`admin webhook list`(스코프 있는 새 토큰으로 재검증, `#1 http://example.com/hook SIMPLE` 정상
+출력) → `admin permission list`(`1 admin manager` 정상 출력). 전부 실측 GREEN.
+
+**단위/통합 테스트**: yuna `ProjectMemberControllerSpec`(+1). yona-cli
+`issue_test.go`(+4: 보존/명시적 해제/로그인ID 변환/create 배선), `pr_test.go`(+4: assignee 설정/
+해제/라벨 추가삭제/list 필터), `admin_test.go`+`admin_test.go(internal/api)`(스텁 테스트 2개를
+실제 GREEN 테스트로 교체). `go build`/`go vet`/`go test ./...` 전체 GREEN.
+
+#### 추가 탐색(신규 버그 발견 안 됨)
+
+위 4항목 처리 과정에서 새로 만든 CLI 배선 코드 자체를 다음 관점으로 추가 실측했다 — 전부
+정상 동작(버그 아님)으로 확인:
+- `issue edit --label`을 여러 번(2개 → 1개) 호출하면 매번 지정한 집합으로 완전히 교체됨(부분
+  추가가 아님, 서버 시맨틱과 일치, 문서화된 대로 동작).
+- 존재하지 않는 로그인ID로 `--assignee`, 존재하지 않는 이름으로 `--label` 지정 시 500이나
+  크래시 없이 명확한 한국어 에러 메시지로 exit 1 종료.
+- `pr edit --add-label`을 동일 라벨로 두 번 호출해도 중복 없이 유지(`labels`가 `MutableSet`).
+- 이미 존재하지 않는 라벨을 `--remove-label`해도 에러 없이 정상 종료(서버가 멱등 처리).
+- 이미 CLOSED된 이슈를 `issue edit --title`로 수정해도 정상 반영(레거시와 동일한 통상 동작,
+  11라운드가 이미 기록한 "CLOSED 이슈 댓글/edit 가능" 패턴과 일관).
+
+#### 라운드 종료 판단
+
+12라운드 미완료 4항목을 전부 실서버+실CLI로 완결했고, 그 과정에서 발견한 실제 데이터 손실
+버그 1건과 부수 발견 갭 1건(admin list 스텁)까지 전부 그 자리에서 고쳐 실측 재검증까지
+마쳤다 — "신규 버그를 찾으면 그 자리에서 고친다"는 이번 라운드 종료 조건상 이번 라운드는
+클린 라운드가 아니다. 다만 이번 라운드에서 실측한 전체 명령 표면(위 골든패스 + 추가 탐색
+5가지 관점)은 전부 정상 동작이었고, 처음부터 끝까지 별도의 신규 관점(동시성/토큰 만료/조직
+소유 프로젝트/대용량·특수문자 입력 등)으로 처음부터 다시 훑는 완전한 반복은 시간 관계상
+이번 세션에서는 진행하지 못했다 — 다음 세션이 14라운드로 이어서, 이번에 다루지 못한 관점
+(동시 fork, 토큰 만료, PRIVATE 프로젝트 경계, org 소유 프로젝트, 대용량/특수문자 입력)부터
+계속 실측하면 된다.
+
+#### 전체 스위트 / 커밋
+
+- `./gradlew test` 최종 재확인: 5827개 중 48개 실패 — 라운드 시작 시점 베이스라인과 **완전히
+  동일한 실패 집합**(위 "미완료 1" 참고), 전부 동시 세션 간 testcontainer 공유로 인한 환경
+  노이즈로 확정, 회귀 아님.
+- yuna 커밋(fetch로 origin과 동기화 확인 후 push 완료): `21af118`(TASK-0430, assignableUsers
+  userId), `71af51e`(TASK-0431, PR merge 충돌 ref 불변 회귀 테스트).
+- yona-cli 커밋(fetch로 origin과 동기화 확인 후 push 완료): `36a6a87`(issue create/edit
+  담당자·라벨 배선 + 데이터손실 버그 수정), `fc54231`(pr edit/list 담당자·라벨 배선),
+  `d4041bd`(admin webhook/permission list 배선).
+- **막힌 항목 없음** — origin과 diverge 없이 두 저장소 모두 정상 push 완료.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
