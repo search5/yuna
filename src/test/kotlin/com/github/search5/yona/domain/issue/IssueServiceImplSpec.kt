@@ -140,6 +140,48 @@ class IssueServiceImplSpec @Autowired constructor(
                     saved.labels.map { it.id } shouldBe listOf(label.id)
                 }
 
+                // yona-wiki P3-02 14라운드(실서버 REST API로 재현한 실제 IDOR) — labelIds를
+                // issueLabelRepository.findAllById()로만 조회하고 그 라벨이 실제로 issue.project
+                // 소속인지 전혀 검증하지 않았다. `POST /api/v1/projects/{owner}/{project}/issues`가
+                // labelIds를 그대로 받는 REST API라, 자기 프로젝트에 이슈를 만들 권한만 있으면
+                // labelIds에 완전히 무관한 다른(심지어 자신이 멤버도 아닌 PRIVATE) 프로젝트의 라벨
+                // id를 넣어 그 라벨(이름/색상/카테고리)을 자기 이슈에 노출시킬 수 있었다 — TASK-0426
+                // (label edit/delete IDOR)과 같은 근본원인이 issue 생성/수정 경로에는 남아 있었다.
+                it("다른 프로젝트 소속 라벨 id를 지정해도 그 라벨은 매핑되지 않아야 한다") {
+                    val author = mkUser("ci-l2")
+                    val project = mkProject("ci-l2-project", author.loginId)
+                    val otherProject = mkProject("ci-l2-other-project", "someone-else", ProjectScope.PRIVATE)
+                    val otherCategory = issueLabelCategoryRepository.save(
+                        IssueLabelCategory(name = "다른프로젝트카테고리", isExclusive = false, project = otherProject)
+                    )
+                    val otherLabel = issueLabelRepository.save(
+                        IssueLabel(category = otherCategory, color = "black", name = "남의라벨", project = otherProject)
+                    )
+
+                    val saved = issueService.createIssue(
+                        issue = Issue(title = "교차 프로젝트 라벨 시도", body = "본문", project = project),
+                        author = author, labelIds = listOf(otherLabel.id!!), isDraft = true
+                    )
+
+                    saved.labels.shouldBeEmpty()
+                }
+
+                // yona-wiki P3-02 14라운드 — 위와 같은 근본원인의 마일스톤 버전. milestoneId도
+                // project 소속 검증 없이 findById()로만 조회했다.
+                it("다른 프로젝트 소속 마일스톤 id를 지정해도 그 마일스톤은 설정되지 않아야 한다") {
+                    val author = mkUser("ci-m2")
+                    val project = mkProject("ci-m2-project", author.loginId)
+                    val otherProject = mkProject("ci-m2-other-project", "someone-else", ProjectScope.PRIVATE)
+                    val otherMilestone = milestoneRepository.save(Milestone(title = "남의마일스톤", project = otherProject))
+
+                    val saved = issueService.createIssue(
+                        issue = Issue(title = "교차 프로젝트 마일스톤 시도", body = "본문", project = project),
+                        author = author, milestoneId = otherMilestone.id, isDraft = true
+                    )
+
+                    saved.milestone shouldBe null
+                }
+
                 // yona NotificationEvent.forNewIssue()의 issue.body ?: "" 대응 — 본문이 없는(null)
                 // 이슈를 정식 발행해도 신규 이슈 알림 생성 중 NPE 없이 처리되어야 한다.
                 it("본문이 없는 이슈를 정식 생성해도 신규 이슈 알림이 발행되어야 한다") {
@@ -187,6 +229,46 @@ class IssueServiceImplSpec @Autowired constructor(
                     )
 
                     updated.milestone?.id shouldBe milestone.id
+                }
+
+                // yona-wiki P3-02 14라운드 — createIssue와 동일한 근본원인의 updateIssue 버전.
+                // `PUT /api/v1/projects/{owner}/{project}/issues/{number}`도 labelIds를 그대로
+                // 받으므로, 이미 존재하는 이슈를 수정할 권한만 있으면 다른 프로젝트의 라벨을 매핑해
+                // 조용히 붙일 수 있었다.
+                it("다른 프로젝트 소속 라벨 id로 updateIssue를 호출해도 그 라벨은 매핑되지 않아야 한다") {
+                    val author = mkUser("ui-l2")
+                    val project = mkProject("ui-l2-project", author.loginId)
+                    val issue = mkIssue("라벨 없는 이슈", project, author)
+                    val otherProject = mkProject("ui-l2-other-project", "someone-else", ProjectScope.PRIVATE)
+                    val otherCategory = issueLabelCategoryRepository.save(
+                        IssueLabelCategory(name = "다른프로젝트카테고리", isExclusive = false, project = otherProject)
+                    )
+                    val otherLabel = issueLabelRepository.save(
+                        IssueLabel(category = otherCategory, color = "black", name = "남의라벨", project = otherProject)
+                    )
+
+                    val updated = issueService.updateIssue(
+                        issueId = issue.id!!, title = issue.title, body = issue.body ?: "",
+                        updater = author, labelIds = listOf(otherLabel.id!!)
+                    )
+
+                    updated.labels.shouldBeEmpty()
+                }
+
+                // yona-wiki P3-02 14라운드 — 마일스톤 버전.
+                it("다른 프로젝트 소속 마일스톤 id로 updateIssue를 호출해도 그 마일스톤은 설정되지 않아야 한다") {
+                    val author = mkUser("ui-m2")
+                    val project = mkProject("ui-m2-project", author.loginId)
+                    val issue = mkIssue("마일스톤 없는 이슈", project, author)
+                    val otherProject = mkProject("ui-m2-other-project", "someone-else", ProjectScope.PRIVATE)
+                    val otherMilestone = milestoneRepository.save(Milestone(title = "남의마일스톤", project = otherProject))
+
+                    val updated = issueService.updateIssue(
+                        issueId = issue.id!!, title = issue.title, body = issue.body ?: "",
+                        updater = author, milestoneId = otherMilestone.id
+                    )
+
+                    updated.milestone shouldBe null
                 }
 
                 // "(oldBody ?: \"\") != body" 분기의 oldBody==null 쪽 — 원본 본문이 없던 이슈를 수정.

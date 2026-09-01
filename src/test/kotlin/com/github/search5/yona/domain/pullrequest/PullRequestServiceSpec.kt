@@ -648,6 +648,41 @@ class PullRequestServiceSpec @Autowired constructor(
                 }
             }
 
+            // yona-wiki P3-02 14라운드(실서버 REST API로 재현한 실제 IDOR, TASK-0426/이슈 라벨
+            // IDOR와 같은 근본원인) — addLabel()이 labelId로만 조회하고 그 라벨이 이 PR의
+            // 프로젝트(toProject) 소속인지 검증하지 않았다. `POST .../pull-requests/{number}/labels`가
+            // labelId를 그대로 받는 REST API라, 자기 프로젝트에 PR 라벨 추가 권한만 있으면 labelId를
+            // 다른(멤버가 아닌 PRIVATE) 프로젝트의 라벨 번호로 바꿔 그 라벨을 노출·연결할 수 있었다.
+            it("다른 프로젝트 소속 라벨을 PR에 추가하려 하면 예외가 발생하고 매핑되지 않아야 한다") {
+                val otherProject = projectRepository.save(
+                    Project(name = "다른프로젝트-${UUID.randomUUID()}", owner = "someone-else", projectScope = ProjectScope.PRIVATE)
+                )
+                val otherCategory = issueLabelCategoryRepository.save(
+                    IssueLabelCategory(name = "다른프로젝트카테고리", project = otherProject)
+                )
+                val otherLabel = issueLabelRepository.save(
+                    IssueLabel(name = "남의라벨", color = "black", category = otherCategory, project = otherProject)
+                )
+                val pr = pullRequestRepository.save(
+                    PullRequest(
+                        title = "교차 프로젝트 라벨 시도 PR",
+                        toProject = toProject,
+                        fromProject = fromProject,
+                        toBranch = "refs/heads/master",
+                        fromBranch = "refs/heads/feature",
+                        contributor = contributor,
+                        created = Instant.now(),
+                        state = State.OPEN
+                    )
+                )
+
+                shouldThrow<IllegalArgumentException> {
+                    pullRequestService.addLabel(pr.id!!, otherLabel.id!!)
+                }
+
+                pullRequestRepository.findById(pr.id!!).get().labels.size shouldBe 0
+            }
+
             it("5. 최소 리뷰어 수 미달 시 머지 실패 검증") {
                 // 프로젝트 설정 변경: 리뷰어 수 제한 설정 활성화, 최소 리뷰어 수 1명 요구
                 toProject.isUsingReviewerCount = true

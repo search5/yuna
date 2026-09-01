@@ -953,6 +953,15 @@ class PullRequestServiceImpl(
         val label = issueLabelRepository.findById(labelId)
             .orElseThrow { IllegalArgumentException("IssueLabel not found: $labelId") }
 
+        // yona-wiki P3-02 14라운드(IDOR, TASK-0426/이슈 라벨 IDOR와 같은 근본원인) — labelId를
+        // id로만 조회하고 그 라벨이 실제로 이 PR의 프로젝트(toProject) 소속인지 검증하지 않았다.
+        // 컨트롤러(PullRequestController.addLabel())는 URL 경로의 project에 대한 쓰기 권한만
+        // 확인하므로, 자기 프로젝트에 PR 라벨을 추가할 권한만 있으면 labelId를 다른(멤버가 아닌
+        // PRIVATE) 프로젝트의 라벨 번호로 바꿔 그 라벨을 노출·연결할 수 있었다.
+        if (label.project.id != pr.toProject.id) {
+            throw IllegalArgumentException("IssueLabel not found: $labelId")
+        }
+
         pr.labels.add(label)
         pr.updated = Instant.now()
         return pullRequestRepository.save(pr)

@@ -107,12 +107,20 @@ class IssueServiceImpl(
         }
 
         if (milestoneId != null) {
+            // yona-wiki P3-02 14라운드(IDOR, TASK-0426과 같은 근본원인) — id로만 조회하고 그
+            // 마일스톤이 이 이슈의 project 소속인지 검증하지 않으면, REST API로 labelIds/milestoneId를
+            // 직접 받는 이 경로가 다른(심지어 멤버가 아닌 PRIVATE) 프로젝트의 마일스톤을 노출·연결하는
+            // 데 악용될 수 있다. project 소속이 아니면 조용히 무시한다(웹 폼은 항상 자기 프로젝트
+            // 마일스톤만 보내므로 정상 사용에는 영향 없음).
             val milestone = milestoneRepository.findById(milestoneId).orElse(null)
-            issue.milestone = milestone
+            if (milestone != null && milestone.project.id == project.id) {
+                issue.milestone = milestone
+            }
         }
 
         if (!labelIds.isNullOrEmpty()) {
-            val labels = issueLabelRepository.findAllById(labelIds)
+            // yona-wiki P3-02 14라운드 — 위와 동일한 근본원인의 라벨 버전.
+            val labels = issueLabelRepository.findAllById(labelIds).filter { it.project.id == project.id }
             issue.labels = labels.toMutableSet()
         }
 
@@ -238,14 +246,17 @@ class IssueServiceImpl(
         }
 
         if (milestoneId != null) {
+            // yona-wiki P3-02 14라운드(IDOR, TASK-0426과 같은 근본원인) — createIssue와 동일하게
+            // 다른 프로젝트 소속 마일스톤은 조용히 무시한다.
             val milestone = milestoneRepository.findById(milestoneId).orElse(null)
-            issue.milestone = milestone
+            issue.milestone = if (milestone != null && milestone.project.id == issue.project.id) milestone else null
         } else {
             issue.milestone = null
         }
 
         if (labelIds != null) {
-            val labels = issueLabelRepository.findAllById(labelIds)
+            // yona-wiki P3-02 14라운드 — 위와 동일한 근본원인의 라벨 버전.
+            val labels = issueLabelRepository.findAllById(labelIds).filter { it.project.id == issue.project.id }
             issue.labels = labels.toMutableSet()
         } else {
             issue.labels.clear()
