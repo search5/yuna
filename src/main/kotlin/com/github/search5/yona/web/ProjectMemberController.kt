@@ -249,6 +249,7 @@ class ProjectMemberController(
             val loginId: String = currentUser.loginId ?: ""
 
             result.add(mapOf(
+                "userId" to (currentUser.id ?: 0L),
                 "loginId" to loginId,
                 "name" to assignToMeText,
                 "pureNameOnly" to pureName,
@@ -258,12 +259,20 @@ class ProjectMemberController(
         }
 
         members.forEach { user ->
-            if (query.isBlank() || 
-                user.loginId.contains(query, ignoreCase = true) || 
+            if (query.isBlank() ||
+                user.loginId.contains(query, ignoreCase = true) ||
                 user.name.contains(query, ignoreCase = true) ||
                 (user.englishName?.contains(query, ignoreCase = true) == true)
             ) {
                 result.add(mapOf(
+                    // yona-wiki P3-02 13라운드(TASK-0430) — yona-cli가 `issue create/edit
+                    // --assignee <loginId>`/`pr edit --assignee <loginId>`를 REST가 요구하는
+                    // 숫자 assigneeId/userId로 변환하려면 이 엔드포인트가 userId를 내려줘야 하는데
+                    // 원래 loginId만 있어 CLI가 로그인ID를 담당자로 지정할 방법이 없었다(웹 UI는
+                    // select2가 loginId를 그대로 hidden input에 넣고 서버가 loginId->User를
+                    // 별도 경로로 조회하는 방식이라 이 문제가 없었다). 기존 소비자(select2 "user"
+                    // 포맷)는 알려지지 않은 필드를 무시하므로 추가만으로는 웹 UI를 깨뜨리지 않는다.
+                    "userId" to (user.id ?: 0L),
                     "loginId" to user.loginId,
                     "name" to user.getDisplayName(),
                     "pureNameOnly" to user.getPureNameOnly(),

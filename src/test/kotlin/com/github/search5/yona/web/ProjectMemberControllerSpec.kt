@@ -146,6 +146,12 @@ class ProjectMemberControllerSpec : DescribeSpec({
             (body.contains("orgadmin")) shouldBe true
             (body.contains("orgmember")) shouldBe false
             verify(exactly = 0) { organizationUserRepository.findByOrganizationId(2L) }
+
+            // yona-wiki P3-02 13라운드(TASK-0430) — yona-cli가 loginId를 assigneeId(숫자)로
+            // 변환할 방법이 없던 갭 해소를 위해 userId 필드를 추가했다. "나에게 할당하기" 항목
+            // (요청자 40L)과 조직관리자 멤버 항목(20L) 둘 다 userId를 포함해야 한다.
+            (body.contains("\"userId\":40")) shouldBe true
+            (body.contains("\"userId\":20")) shouldBe true
         }
 
         it("사이트관리자는 프로젝트/조직 멤버가 아니어도 후보에 포함되어야 한다") {
