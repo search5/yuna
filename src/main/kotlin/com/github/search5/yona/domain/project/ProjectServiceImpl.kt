@@ -531,7 +531,21 @@ class ProjectServiceImpl(
         val targetDir = File(baseDir, "$destOwner/$destName.git")
 
         if (sourceDir.exists()) {
-            cloneHardLinkedRepository(sourceDir, targetDir)
+            try {
+                cloneHardLinkedRepository(sourceDir, targetDir)
+            } catch (e: java.io.IOException) {
+                // yona-wiki P3-02 14라운드 — 위 findByOwnerAndName() 사전 체크와 실제 하드링크
+                // 사이에는 시간차가 있다(TOCTOU). 같은 프로젝트를 동시에 두 번 fork하면(더블클릭
+                // 등) 두 요청 모두 "존재하지 않음"으로 사전 체크를 통과한 뒤 같은 물리 경로
+                // ($destOwner/$destName.git)에 하드링크를 시도해, 나중 요청이
+                // FileAlreadyExistsException(IOException의 하위 타입)으로 실패한다 — 그동안 이
+                // 예외가 잡히지 않아 500 Internal Server Error로 그대로 노출됐다(실서버 동시요청
+                // 3개로 재현: 1건 성공/2건 500). 이 메서드는 @Transactional이라 예외가 전파되면
+                // 방금 저장한 Project/ProjectUser row는 안전하게 롤백되므로(DB에 중복 row가
+                // 남지 않는다), 남은 건 사용자에게 보여줄 응답뿐이다 — 순차 중복 fork(위 사전
+                // 체크)와 동일한 메시지로 통일해 500 대신 400으로 깔끔하게 거절한다.
+                throw IllegalArgumentException("'$destOwner/$destName' 프로젝트가 이미 존재합니다.")
+            }
         }
 
         return savedFork
