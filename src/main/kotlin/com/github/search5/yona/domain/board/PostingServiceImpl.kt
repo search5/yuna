@@ -20,6 +20,7 @@ import com.github.search5.yona.domain.mention.MentionService
 import com.github.search5.yona.domain.enumeration.ResourceType
 import com.github.search5.yona.domain.support.HistoryUtil
 import com.github.search5.yona.domain.vcs.BareCommit
+import jakarta.persistence.EntityManager
 import org.springframework.beans.factory.annotation.Value
 
 @Service
@@ -42,7 +43,10 @@ class PostingServiceImpl(
     // (BoardController.updatePosting(), board/edit.html의 실제 제출 경로)에서도 쓸 수 있도록 서비스
     // 계층으로 옮겨왔다.
     @Value("\${yona.git.base-dir:/tmp/yona/git}")
-    private val gitBaseDir: String
+    private val gitBaseDir: String,
+    // yona-wiki P3-02 14라운드 — IssueServiceImpl.nextIssueNumber()와 동일한 이유(JPQL 벌크
+    // UPDATE가 1차 캐시를 갱신하지 않음)로 채번 직후 project 엔티티를 새로고침하는 데 쓴다.
+    private val entityManager: EntityManager
 ) : PostingService {
 
     // yona NotificationEvent.afterNewPost/afterResourceDeleted 대응 (P1-18)
@@ -109,9 +113,20 @@ class PostingServiceImpl(
             // 건드리지 않고 지정된 번호를 그대로 쓴다.
             posting.number = explicitNumber
         } else {
-            project.lastPostingNumber = project.lastPostingNumber + 1
-            projectRepository.save(project)
-            posting.number = project.lastPostingNumber
+            // yona-wiki P3-02 14라운드(IssueServiceImpl.nextIssueNumber()와 같은 근본원인/수정) —
+            // 잠금 없이 project.lastPostingNumber를 읽고 증가시켜 저장하면 동시 요청 두 개가 같은
+            // 번호를 읽어 posting(project_id, number) UNIQUE 제약 위반(500)이 날 수 있었다. 증가
+            // UPDATE 문 자체의 행 잠금(모든 RDBMS가 예외 없이 즉시 배타 잠금을 거는 기본 동작)으로
+            // 원자적으로 채번한다 — ProjectRepository.incrementLastIssueNumber() 주석 참고
+            // (SELECT FOR UPDATE 기반 잠금은 H2 AUTO_SERVER 파일 모드에서 실제로 블로킹하지 않음을
+            // 실서버로 확인해 폐기했다).
+            projectRepository.incrementLastPostingNumber(project.id!!)
+            posting.number = projectRepository.findLastPostingNumber(project.id!!)
+            // JPQL 벌크 UPDATE는 1차 캐시를 갱신하지 않는다 — project가 이미 관리 중인 엔티티라면
+            // DB의 최신 값으로 즉시 동기화한다(IssueServiceImpl.nextIssueNumber() 참고).
+            if (entityManager.contains(project)) {
+                entityManager.refresh(project)
+            }
         }
         posting.authorId = author.id
         posting.authorLoginId = author.loginId

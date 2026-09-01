@@ -4,6 +4,7 @@ import com.github.search5.yona.domain.support.toSnakeCaseSort
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.Optional
@@ -13,6 +14,32 @@ interface ProjectRepository : JpaRepository<Project, Long> {
     fun existsByOwnerAndName(owner: String, name: String): Boolean
     fun findByOwner(owner: String): List<Project>
     fun countByLabelsId(labelId: Long): Long
+
+    // yona-wiki P3-02 14라운드 — issue/posting 번호 채번(project.lastIssueNumber/lastPostingNumber
+    // 증가)이 전부 "읽고-증가시켜-저장"하는 read-modify-write 패턴인데, 그 사이 프로젝트 행에 아무
+    // 잠금도 걸지 않아 동시 요청 두 개가 같은 값을 읽고 각각 저장하는 경쟁 상태에 노출돼 있었다
+    // (실서버에 동시 요청 20개를 쏴 재현 — unique 제약 위반으로 대부분 500).
+    //
+    // 처음엔 @Lock(PESSIMISTIC_WRITE)로 조회 후 증가시키는 방식을 시도했으나, 실서버(H2,
+    // AUTO_SERVER=TRUE 파일 모드)로 재검증하는 과정에서 H2가 "select ... for update"를 실제로는
+    // 블로킹하지 않음을 확인했다(MariaDB에서는 정상 직렬화됨 — 통합테스트로 확인). SELECT FOR
+    // UPDATE의 블로킹 여부가 DB/모드마다 갈릴 수 있는 반면, UPDATE 문 자체의 행 잠금은 모든
+    // RDBMS가 예외 없이 갱신 시점에 즉시 배타 잠금을 거는 가장 기본적인 동작이라 이 방식이 더
+    // 이식성이 높다 — "증가 UPDATE 실행 → 그 결과값을 다시 SELECT"로 원자적으로 채번한다.
+    @Modifying
+    @Query("UPDATE Project p SET p.lastIssueNumber = p.lastIssueNumber + 1 WHERE p.id = :id")
+    fun incrementLastIssueNumber(@Param("id") id: Long): Int
+
+    @Query("SELECT p.lastIssueNumber FROM Project p WHERE p.id = :id")
+    fun findLastIssueNumber(@Param("id") id: Long): Long
+
+    // yona-wiki P3-02 14라운드 — 위와 동일한 근본원인/수정의 posting 버전(PostingServiceImpl.createPosting()).
+    @Modifying
+    @Query("UPDATE Project p SET p.lastPostingNumber = p.lastPostingNumber + 1 WHERE p.id = :id")
+    fun incrementLastPostingNumber(@Param("id") id: Long): Int
+
+    @Query("SELECT p.lastPostingNumber FROM Project p WHERE p.id = :id")
+    fun findLastPostingNumber(@Param("id") id: Long): Long
 
     // legacy Project.findByOwnerAndOriginalProject(destination, project) 대응 (그룹11 #173) —
     // 특정 소유자(destination) 밑에 이미 이 프로젝트를 원본으로 포크한 프로젝트가 있는지 조회.

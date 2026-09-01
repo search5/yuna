@@ -18,6 +18,7 @@ import com.github.search5.yona.domain.user.User
 import com.github.search5.yona.domain.user.UserRepository
 import com.github.search5.yona.domain.watch.WatchService
 import io.micrometer.core.instrument.MeterRegistry
+import jakarta.persistence.EntityManager
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -45,7 +46,11 @@ class IssueServiceImpl(
     private val mentionService: MentionService,
     // yona-wiki P3-01(Observability) 계측 지점 2 대응 — recordIssueEvent()가 위임하는
     // IssueEventRepository.recordWithDraftMerge()에 그대로 전달한다.
-    private val meterRegistry: MeterRegistry
+    private val meterRegistry: MeterRegistry,
+    // yona-wiki P3-02 14라운드 — nextIssueNumber()의 원자적 채번 UPDATE 이후, 이미 영속성
+    // 컨텍스트에 관리 중인 project 엔티티의 lastIssueNumber 필드를 DB의 최신 값으로 다시
+    // 동기화하는 데 쓴다(JPQL 벌크 UPDATE는 1차 캐시를 자동으로 갱신하지 않는다).
+    private val entityManager: EntityManager
 ) : IssueService {
 
     // yona models/support/IssueSearchCondition.java:18-44 getExpressionListByFilter() 대응 (P2-52).
@@ -72,6 +77,35 @@ class IssueServiceImpl(
         }
     }
 
+    // yona-wiki P3-02 14라운드 — project.lastIssueNumber를 읽고 증가시켜 저장하는 채번 로직을
+    // 공용 함수로 뽑았다. 원래 코드(project.lastIssueNumber = project.lastIssueNumber + 1;
+    // projectRepository.save(project))는 잠금이 전혀 없어, 동시에 같은 프로젝트에 이슈를 만들면
+    // (포크/동시 생성 등) 두 트랜잭션이 같은 번호를 읽고 각각 저장하려다 issue(project_id, number)
+    // UNIQUE 제약을 위반해 500 에러가 났다(실서버 동시요청 20개로 재현: 3건 성공/17건 500).
+    //
+    // 처음엔 @Lock(PESSIMISTIC_WRITE)로 프로젝트 행을 잠그는 방식을 시도했으나, 실서버(H2,
+    // AUTO_SERVER=TRUE 파일 모드)로 재검증하는 과정에서 H2가 "select ... for update"를 실제로는
+    // 블로킹하지 않고(두 트랜잭션의 "for update" SELECT가 로그상 곧바로 연달아 실행되고, 둘 다
+    // 상대방의 커밋을 기다리지 않은 채 같은 옛 값을 읽어감을 확인) 여전히 같은 버그가 재현됐다 —
+    // MariaDB(InnoDB)에서는 정상 직렬화됨을 통합테스트로 확인했지만, H2도 이 저장소가 공식
+    // 지원하는 6개 DB 중 하나라 H2에서도 안전해야 한다. UPDATE 문 자체의 행 잠금(SELECT FOR
+    // UPDATE와 달리 모든 RDBMS가 예외 없이 갱신 시점에 즉시 배타 잠금을 거는 가장 기본적인 동작)은
+    // MVCC 엔진에서도 흔들리지 않으므로, "증가 UPDATE 실행 → 그 결과값을 다시 SELECT"로 바꿔
+    // Project 엔티티의 Java 필드는 아예 건드리지 않는다(건드리면 트랜잭션 커밋 시점의 dirty
+    // checking이 이 스테일한 값으로 되돌려 쓸 위험이 있다).
+    private fun nextIssueNumber(project: Project): Long {
+        projectRepository.incrementLastIssueNumber(project.id!!)
+        val newNumber = projectRepository.findLastIssueNumber(project.id!!)
+        // JPQL 벌크 UPDATE는 영속성 컨텍스트의 1차 캐시를 건드리지 않는다 — project가 이미 관리
+        // 중인 엔티티라면(대부분 그렇다) 그 Java 필드는 여전히 증가 전 값을 들고 있어, 이후 같은
+        // 세션 안에서 project를 다시 조회하는 코드가 스테일한 값을 볼 수 있다. refresh()로
+        // DB의 최신 값을 즉시 동기화한다.
+        if (entityManager.contains(project)) {
+            entityManager.refresh(project)
+        }
+        return newNumber
+    }
+
     override fun createIssue(
         issue: Issue,
         author: User,
@@ -88,9 +122,7 @@ class IssueServiceImpl(
             // 건드리지 않고 지정된 번호를 그대로 쓴다.
             issue.number = explicitNumber
         } else {
-            project.lastIssueNumber = project.lastIssueNumber + 1
-            projectRepository.save(project)
-            issue.number = project.lastIssueNumber
+            issue.number = nextIssueNumber(project)
         }
         issue.createdDate = Instant.now()
         issue.updatedDate = Instant.now()
@@ -159,9 +191,7 @@ class IssueServiceImpl(
         }
         issue.isDraft = false
 
-        project.lastIssueNumber = project.lastIssueNumber + 1
-        projectRepository.save(project)
-        issue.number = project.lastIssueNumber
+        issue.number = nextIssueNumber(project)
 
         issue.history = ""
 
@@ -541,9 +571,7 @@ class IssueServiceImpl(
     // yona updateIssueToOtherProject() 대응.
     private fun updateIssueToOtherProject(issue: Issue, targetProject: Project, mover: User) {
         issue.project = targetProject
-        targetProject.lastIssueNumber = targetProject.lastIssueNumber + 1
-        projectRepository.save(targetProject)
-        issue.number = targetProject.lastIssueNumber
+        issue.number = nextIssueNumber(targetProject)
         issue.createdDate = Instant.now()
         issue.updatedDate = Instant.now()
         issue.milestone = null

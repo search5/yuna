@@ -37,6 +37,12 @@ class PullRequestController(
     private val codeReviewService: CodeReviewService
 ) {
 
+    companion object {
+        // yona-wiki P3-02 14라운드 — createPullRequest()의 pull_request(to_project_id, number)
+        // UNIQUE 제약 충돌 재시도 한도. 실서버 동시요청 10개 재현 기준으로 충분히 여유 있게 잡았다.
+        private const val MAX_NUMBER_RETRY_ATTEMPTS = 10
+    }
+
     private fun getLoginUser(authentication: Authentication?): User? {
         if (authentication == null) return null
         return userRepository.findByLoginId(authentication.name).orElse(null)
@@ -149,17 +155,38 @@ class PullRequestController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build()
         }
 
-        val pullRequest = pullRequestService.createPullRequest(
-            title = request.title,
-            body = request.body,
-            fromProjectId = request.fromProjectId,
-            toProjectId = projectId,
-            fromBranch = request.fromBranch,
-            toBranch = request.toBranch,
-            contributor = user
-        )
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(pullRequest)
+        // yona-wiki P3-02 14라운드 — PullRequestServiceImpl.createPullRequest()는 project.
+        // lastIssueNumber 같은 카운터 컬럼 없이 매번 findFirstByToProjectOrderByNumberDesc()로
+        // 최댓값을 조회해 +1하는 read-modify-write라, 동시에 같은 프로젝트로 PR을 여러 개 만들면
+        // 두 트랜잭션이 같은 번호를 계산해 pull_request(to_project_id, number) UNIQUE 제약(이번
+        // 라운드에 신설)을 위반할 수 있다 — 그 전에는 이 제약조차 없어 조용히 같은 번호로
+        // 중복 생성되는 데이터 손상이었다(실서버 동시요청 10개로 재현: 10개 전부 같은 번호로 성공).
+        // createPullRequest() 전체가 @Transactional이라 실패한 시도의 부수효과(merge 체크 등)는
+        // 트랜잭션 롤백으로 전부 되돌아가므로, 제약 위반 시 전체를 다시 호출해 재계산하면 안전하게
+        // 재시도할 수 있다(SELECT FOR UPDATE 기반 잠금은 H2 AUTO_SERVER 파일 모드에서 실제로
+        // 블로킹하지 않음을 실서버로 확인해 폐기했다 — ProjectRepository.incrementLastIssueNumber()
+        // 주석 참고. PR은 전용 카운터 컬럼이 없어 같은 원자적 UPDATE 방식 대신 제약 충돌 재시도로
+        // 대응한다).
+        var attempt = 0
+        while (true) {
+            try {
+                val pullRequest = pullRequestService.createPullRequest(
+                    title = request.title,
+                    body = request.body,
+                    fromProjectId = request.fromProjectId,
+                    toProjectId = projectId,
+                    fromBranch = request.fromBranch,
+                    toBranch = request.toBranch,
+                    contributor = user
+                )
+                return ResponseEntity.status(HttpStatus.CREATED).body(pullRequest)
+            } catch (e: org.springframework.dao.DataIntegrityViolationException) {
+                attempt++
+                if (attempt >= MAX_NUMBER_RETRY_ATTEMPTS) {
+                    throw e
+                }
+            }
+        }
     }
 
     @PutMapping("/{number}")

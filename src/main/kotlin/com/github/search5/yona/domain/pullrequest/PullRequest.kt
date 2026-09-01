@@ -8,8 +8,16 @@ import com.github.search5.yona.domain.enumeration.State
 import jakarta.persistence.*
 import java.time.Instant
 
+// yona-wiki P3-02 14라운드 — Issue/Posting은 (project_id, number) UNIQUE 제약이 있는데 PullRequest만
+// 없었다. 그래서 채번 경쟁(동시 PR 생성)이 나면 issue처럼 500으로라도 막히지 않고 서로 다른 PR이
+// 같은 번호를 갖는 조용한 데이터 손상이 났다(실서버 재현: 동시 요청 10개가 전부 #2로 성공). 이
+// 제약이 그 경쟁을 "명확한 제약 위반 실패"로 바꿔주고, PullRequestController.createPullRequest()가
+// 그 실패를 잡아 전체를 재시도한다(실서버 재검증: 동시 요청 10개가 전부 #1~#10 고유 번호로 성공).
 @Entity
-@Table(name = "pull_request")
+@Table(
+    name = "pull_request",
+    uniqueConstraints = [UniqueConstraint(columnNames = ["to_project_id", "number"])]
+)
 class PullRequest(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

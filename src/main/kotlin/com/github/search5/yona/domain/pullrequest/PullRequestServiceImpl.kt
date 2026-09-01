@@ -692,6 +692,15 @@ class PullRequestServiceImpl(
         val toProject = projectRepository.findById(toProjectId)
             .orElseThrow { IllegalArgumentException("Target project not found: $toProjectId") }
 
+        // yona-wiki P3-02 14라운드(IDOR 아님, 별도 발견) — PullRequest는 project.lastIssueNumber
+        // 같은 카운터 컬럼 없이 매번 findFirstByToProjectOrderByNumberDesc()로 최댓값을 조회해
+        // +1하는데, 게다가(이번 라운드 전까지는) pull_request 테이블에 (to_project_id, number)
+        // UNIQUE 제약조차 없었다. 그 결과 동시에 같은 프로젝트로 PR을 여러 개 만들면 issue처럼
+        // 500으로 막히지도 않고 완전히 조용한 데이터 손상이 났다 — 실서버에 동시 요청 10개를 쏴
+        // 재현: 10개 전부 201로 성공하면서 전부 같은 번호(#2)를 받아버렸다(번호로 PR을 특정할 수
+        // 없게 됨). PullRequest.kt에 그 UNIQUE 제약을 신설해 "조용한 손상"을 최소한 "명확한 제약
+        // 위반 실패"로 바꿨고, PullRequestController.createPullRequest()가 이 실패를 잡아 전체
+        // 재시도한다(이 메서드 전체가 @Transactional이라 실패 시 부수효과가 전부 롤백되므로 안전).
         val lastPr = pullRequestRepository.findFirstByToProjectOrderByNumberDesc(toProject)
         val nextNumber = (lastPr?.number ?: 0L) + 1L
 
