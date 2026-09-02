@@ -1881,7 +1881,7 @@ Requests/Mentions/Repository Activity 5개 구성요소, `gh status --help` 실�
   포함 — 이번 라운드가 수정한 파일)을 한 번에 묶어 단독 재실행한 결과 **전부 100% GREEN**
   (78건 전체 회귀 아님으로 확정). `PullRequestRepositorySpec`/`UserStatusRestApiControllerSpec`
   등 신규 테스트가 포함된 스펙은 애초에 이 78건에 없었다(처음부터 정상).
-- yuna 커밋: `<COMMIT_HASH>`(TASK-0440, `gh status` 구현).
+- yuna 커밋: `3df8cbd`(TASK-0440, `gh status` 구현).
 - yona-cli 커밋(fetch로 origin과 동기화 확인 후 즉시 push 완료): `6c5472b`(`yona status`
   최상위 커맨드 + `internal/api/userstatus.go`).
 - **막힌 항목 없음** — 양쪽 저장소 모두 origin과 diverge 없이 정상 push 완료.
