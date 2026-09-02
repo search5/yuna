@@ -208,6 +208,7 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 | `gh browse` | 브라우저로 현재 프로젝트/이슈/PR 열기 — 서버 API 불필요(URL 계산만), CLI 로컬 기능으로 바로 추가 가능 | 없음(순수 CLI 기능) |
 | `gh completion` | 쉘 자동완성 서브커맨드 없음 — Cobra가 기본 제공하는 기능이라 `root.go`에 등록만 하면 됨(구현 비용 거의 0) | `cmd/root.go`(`NewRootCmd()`에 미등록) |
 | `--version`/`gh version` | 버전 출력 플래그/커맨드 없음 | `cmd/root.go` |
+| `gh status` | 재감사(2026-09-03, 실제 설치된 `gh 2.92.0`으로 실측 대조하다 발견 — 최초 감사표엔 없었음)에서 발견. 내가 담당한 이슈/PR, 리뷰 요청, 멘션, 구독 저장소 활동을 한 화면에 보여주는 대시보드 — 이미 구현된 `issue status`(담당/작성 이슈만)보다 범위가 넓다(PR·리뷰요청·멘션·저장소 활동 포함). **다음 작업 대상** | 신규 조사 필요 |
 | `gh config` | 에디터/페이저 등 CLI 로컬 설정 커맨드 없음 — 우선순위 낮음(nice-to-have) | 없음(순수 CLI 기능) |
 | `gh alias` | 사용자 정의 별칭 커맨드 없음 — 우선순위 낮음(nice-to-have) | 없음(순수 CLI 기능) |
 
@@ -231,6 +232,9 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 | `gh release` | yuna에 릴리즈/태그 배포 개념 없음(전수 확인 — `Release`/`ReleaseController` 0건) |
 | `gh extension` | CLI 플러그인 생태계 — yona-cli 규모상 시기상조, 서버와 무관 |
 | `gh sponsors`류 | GitHub 특유 기능, yuna에 대응 없음 |
+| `gh licenses`(gh 바이너리 자체의 서드파티 라이선스 표시) | yuna와 무관한 gh 빌드 메타정보 — 재감사(2026-09-03)에서 추가 |
+| `gh preview`(gh 내부 테스트/개발용, 불안정) | gh 자체도 "테스트용, 언제든 바뀔 수 있음"이라고 명시 — 재감사(2026-09-03)에서 추가 |
+| `gh skill`/`gh agent-task`/`gh copilot` | GitHub Copilot·AI 에이전트 전용 기능, yuna에 대응 개념 없음 — 재감사(2026-09-03)에서 추가 |
 
 `gh watch`(저장소 알림 구독)에 가장 가까운 yuna 기능은 `WatchController`/`WatchService`이지만, `gh` 자체엔
 "watch" 최상위 명령이 없어(웹 UI 전용 기능) 대조 대상에서 제외했다 — 필요하면 (A)에 추가 검토 가능.

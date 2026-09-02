@@ -27,6 +27,7 @@
 | 8 | P3-05 | CI/Actions 러너 아키텍처 | planned | P3-01(약함) | [[plans/p3-05-ci-actions-runner]] |
 | 9 | P3-12 | Mercurial(hg4j) 저장소 지원 | planned — 외부 블로커 있음 | 없음(단, `search5/hg4j` 라이브러리 진행 상황이 사실상의 착수 조건) | [[plans/p3-12-mercurial-hg4j]] |
 | 10 | P3-13 | 프런트엔드 분리 (React/Vue3/Angular 등 SPA) | planned — 프레임워크/인증 방식 미결정 | P3-02(REST API·인증 토대, 약한 선행) | [[plans/p3-13-decoupled-spa-frontend]] |
+| 11 | P3-10 | Git 태그(tag) 지원 | planned — 범위 미확정(TODO 등록만, 2026-09-03) | P3-02(REST API·토큰 스코프 토대, 약한 선행) | [[plans/p3-10-git-tags]] |
 
 ## 우선순위 판단 근거
 
