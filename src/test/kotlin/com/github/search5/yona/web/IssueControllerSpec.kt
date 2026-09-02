@@ -478,6 +478,31 @@ class IssueControllerSpec : DescribeSpec({
                 verify(exactly = 0) { issueService.createIssue(any(), any(), any(), any(), any(), any()) }
             }
 
+            // yona-wiki P3-02 14라운드(TASK-0436) — checkWritePermission()이 legacy
+            // AccessControl.isProjectResourceCreatable()의 "PUBLIC 프로젝트는 조직 소속 여부와도
+            // 무관하게 로그인한 사용자라면 누구나 이슈를 만들 수 있다" 분기를 놓쳐, 조직에 속하지
+            // 않은 순수 PUBLIC 프로젝트의 비멤버가 항상 403을 받던 회귀 재현 테스트. 실서버(H2)
+            // 재현: acmeorg 소속 없는 PUBLIC 프로젝트에 비멤버 bob이 `yona issue create` 호출 시
+            // 403 Forbidden(수정 전) → 201 Created(수정 후).
+            it("조직 소속이 아닌 공개 프로젝트도 비멤버 로그인 사용자가 이슈를 생성할 수 있어야 한다") {
+                every { projectRepository.findById(2L) } returns Optional.of(publicProject)
+                every { userRepository.findByLoginId("otheruser") } returns Optional.of(otherUser)
+                every { projectUserRepository.existsByProjectIdAndUserId(2L, 30L) } returns false
+                every { issueService.createIssue(any(), otherUser, null, null, null, false) } returns issue
+
+                val jsonContent = """{ "title": "제목", "body": "내용", "milestoneId": null, "assigneeId": null, "labelIds": null }"""
+
+                mockMvc.perform(
+                    post("/api/projects/2/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonContent)
+                        .principal(otherAuth)
+                )
+                    .andExpect(status().isCreated)
+
+                verify(exactly = 1) { issueService.createIssue(any(), otherUser, null, null, null, false) }
+            }
+
             // checkWritePermission()의 existsByProjectIdAndUserId=false && isAllowedIfGroupMember=true 분기 대응 (P1-57).
             // 프로젝트 직접 멤버가 아니어도 PUBLIC/PROTECTED 프로젝트의 조직 멤버면 쓰기 권한을 가진다.
             it("프로젝트 멤버가 아니어도 공개 프로젝트의 조직 멤버면 이슈를 생성할 수 있어야 한다") {

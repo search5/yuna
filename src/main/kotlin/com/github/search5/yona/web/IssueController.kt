@@ -64,11 +64,16 @@ class IssueController(
         return accessControl.isAllowedIfSharer(issue, user)
     }
 
-    private fun checkWritePermission(project: Project, user: User?): Boolean {
-        if (user == null) return false
-        return projectUserRepository.existsByProjectIdAndUserId(project.id!!, user.id!!) ||
-            accessControl.isAllowedIfGroupMember(project, user)
-    }
+    // yona-wiki P3-02 14라운드(TASK-0436) — legacy AccessControl.isProjectResourceCreatable()의
+    // "PUBLIC 프로젝트면 멤버가 아닌 로그인 사용자도 이슈/게시글을 만들 수 있다" 분기
+    // (app/utils/AccessControl.java:64-77)가 이 메서드엔 빠져 있었다. 프로젝트 직접멤버/그룹멤버
+    // 여부만 확인해, PUBLIC 프로젝트라도 멤버가 아니면 이슈 생성이 항상 403으로 막혔다 — 세션
+    // 기반 웹 UI(IssueViewController.newIssue() 등)는 이미 accessControl.isProjectResourceCreatable()을
+    // 쓰고 있어 이 버그가 없었고, REST API(`POST /api/v1/projects/{owner}/{project}/issues`,
+    // `yona issue create`가 호출하는 경로)만 이 손수 구현한 좁은 체크를 쓰고 있었다. 실서버(H2)로
+    // 재현: PUBLIC 프로젝트의 비멤버 사용자가 `yona issue create`를 호출하면 403 Forbidden.
+    private fun checkWritePermission(project: Project, user: User?): Boolean =
+        accessControl.isProjectResourceCreatable(user, project, ResourceType.ISSUE_POST)
 
     // yona AccessControl.java:244-248의 "user.isManagerOf(project) || isAllowedIfAuthor(user, resource)
     // || isAllowedIfAssignee(user, resource)" 대응 (P2-12). 담당자(assignee)는 operation과 무관하게
