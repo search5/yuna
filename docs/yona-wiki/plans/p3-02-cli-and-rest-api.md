@@ -1656,6 +1656,131 @@ admin --label bug`(assignee.userId=1, labels=[bug] 정상 반영 확인) → `is
   `d4041bd`(admin webhook/permission list 배선).
 - **막힌 항목 없음** — origin과 diverge 없이 두 저장소 모두 정상 push 완료.
 
+### 14라운드 (2026-09-02) — TASK-0433~0435 회귀 확인 + 라벨 IDOR·채번 경합·fork TOCTOU 소급 기록 + 신규 버그 2건
+
+직전 세션이 TASK-0433(라벨/마일스톤 IDOR)/TASK-0434(이슈·게시글·PR 채번 동시성)/TASK-0435
+(project fork TOCTOU)를 실측 RED→GREEN으로 고쳐 로컬 커밋까지 마쳤으나, 전체 회귀 스위트를
+돌리려던 시점에 API 레이트리밋으로 강제 종료됐다(사용자가 그 3개 커밋을 그대로 push, 계획
+문서 기록은 못함 — 각 커밋 메시지 자체에 상세 내역이 이미 남아있어 위 커밋 로그 참고). 이번
+라운드는 그 3개 커밋의 전체 스위트 기준 안전성 확인부터 시작해, 13라운드가 다루지 못하고
+이월한 관점(동시 fork, 토큰 만료, PRIVATE 프로젝트 경계, org 소유 프로젝트, 대용량/특수문자
+입력)을 실측했다.
+
+#### TASK-0433~0435 회귀 확인
+
+`./gradlew test`(기본 mariadb) 5835개 중 53개 실패 — 13라운드 베이스라인(48개, 8개 스펙)과
+비교해 `PostingServiceSpec`만 16→21건으로 늘고 나머지 7개 스펙은 완전히 동일한 케이스 수.
+`PostingServiceSpec` 단독 재실행 100% GREEN, 나머지 7개 스펙도 한 번에 묶어 재실행 100%
+GREEN — 8개 스펙 전부 이 저장소가 매 라운드 기록해온 "동시 세션 간 testcontainer 공유"
+환경 노이즈로 확정, TASK-0433~0435는 **회귀 없음**.
+
+#### 실서버(H2) 실측 — org 소유 프로젝트 전체 명령 표면
+
+admin이 조직 `acmeorg`를 만들고(`POST /api/organizations`) 그 아래 `acmeorg/widget`
+(PUBLIC)을 생성한 뒤, org 비멤버 `bob`까지 포함해 `label create/edit/delete`, `issue
+create/edit(--assignee/--label/--remove-assignee)`, git clone/두 브랜치 push, `pr
+create/edit/diff/checkout(+추가 커밋 재push 후 pr diff가 최신 반영함을 확인)/review/merge
+(실제 병합 커밋으로 대상 브랜치 갱신 확인)`, `search issues/prs/projects`, `admin webhook
+create/list`, `admin permission list`, `org list/view`, `project fork`(자기 계정으로)까지
+전체 명령 표면을 실측 — 이 세션 전체에서 거의 다뤄보지 않았던 org 소유 프로젝트 조합이었다.
+
+#### 신규 버그 1 — PUBLIC 프로젝트 비멤버가 REST API로 이슈를 못 만들던 권한 로직 갭(TASK-0436)
+
+bob(acmeorg 비멤버)이 PUBLIC인 `acmeorg/widget`에 `yona issue create`를 호출하면 항상 403
+Forbidden — `IssueController.createIssue()`가 쓰던 손수 구현한 `checkWritePermission()`
+(프로젝트 직접멤버 or 조직 그룹멤버만 확인)이 legacy `AccessControl.
+isProjectResourceCreatable()`(app/utils/AccessControl.java:48-78)의 "PUBLIC 프로젝트면
+멤버가 아닌 로그인 사용자도 이슈/게시글을 만들 수 있다" 분기를 애초에 포팅하지 않은 것이
+원인이었다. 세션 기반 웹 UI(`IssueViewController.newIssue()` 등)는 이미 완전히 포팅된
+`config.security.AccessControl.isProjectResourceCreatable()`을 쓰고 있어 이 버그가 없었고,
+`yona issue create`가 타는 REST API(`POST /api/v1/projects/{owner}/{project}/issues`)만
+이 손수 구현한 좁은 체크 때문에 걸려 있었다 — org 소유 프로젝트가 아닌 순수 PUBLIC 프로젝트
+(`admin/solo`)에서도 동일하게 재현됨을 신규 서버(15라운드 재검증)로 별도 확인.
+
+수정: `checkWritePermission()`이 이미 검증된 `accessControl.isProjectResourceCreatable(user,
+project, ResourceType.ISSUE_POST)`에 위임하도록 교체(신규 로직 없음). `IssueControllerSpec`
+(mockk)에 조직 비소속 PUBLIC 프로젝트 비멤버 생성 허용 회귀 테스트 추가,
+`IssuePublicProjectNonMemberCreateIntegrationSpec`(`AbstractIntegrationTest`, 실제 DB+전체
+시큐리티 필터체인) 신설 — 수정 전 코드로 되돌려 두 테스트 모두 RED(403) 확인 후 복구해
+GREEN. 실서버(H2)+실 yona-cli 재검증: bob의 `yona issue create -R acmeorg/widget` 성공,
+PRIVATE 프로젝트(`admin/secret`)에서는 여전히 403 유지 확인. 15라운드 신규 서버에서도 org
+소유/비소유 PUBLIC 프로젝트 둘 다 동일하게 정상 동작 재확인.
+
+#### 신규 버그 2 — 전체 검색이 H2 프로파일에서 대소문자를 구분해 사실상 못 찾던 버그(TASK-0437)
+
+`yona search prs PR`이 제목에 분명히 "PR"이 포함된 PR(`조직 PR`, `bob의 PR`)을 하나도 못
+찾는 것을 실측 중 발견 — `SearchServiceImpl.searchInAll()`이 검색어를
+`keyword.lowercase()`로 항상 소문자화해 넘기는데, Issue/PullRequest/Posting/Milestone/
+User/PostingComment/IssueComment/ReviewComment/Project 9개 레포지토리의 네이티브 LIKE
+검색 쿼리는 컬럼 쪽을 소문자화하지 않고 있었다. 이 스위트의 기본 DB인 MariaDB(`*_ci`
+콜레이션)는 LIKE 자체가 대소문자를 구분하지 않아 이 갭이 완전히 가려져 있었고, H2(콜레이션
+무관하게 LIKE가 대소문자 구분)로 원본 DB에 `title LIKE '%casesensitivetest%'`(0건) vs
+`LOWER(title) LIKE LOWER(...)`(정상 매치)를 직접 질의해 근본원인을 확정했다 — `./gradlew
+test`(기본값 mariadb)로는 영원히 드러나지 않고, `-Dyona.it.db=h2`로 실행해야만 잡히는
+버그였다.
+
+수정: 9개 레포지토리의 모든 `LIKE :keyword`/`LIKE :query` 네이티브 쿼리를 `LOWER(컬럼) LIKE
+LOWER(:파라미터)`로 통일(이미 `IssueRepository.findForMention()`이 쓰던 패턴과 동일). 파라미터
+쪽도 LOWER로 감싸 호출부가 이미 소문자화했는지 여부와 무관하게 항상 대소문자 무시로 동작하게
+했다. `IssueRepositorySpec`에 대소문자 불일치 매치 회귀 테스트 추가 — **반드시
+`-Dyona.it.db=h2`로 실행해야 수정 전 RED가 재현됨**(기본값 mariadb로는 수정 전 코드도 이미
+GREEN)을 확인, 복구해 h2/mariadb 양쪽 GREEN. 영향받는 9개 레포지토리 전체 스펙 +
+`SearchRestApiControllerSpec`을 h2/mariadb 양쪽에서 재실행해 회귀 없음 확인. 실서버(H2)
+재검증: `yona search issues casesensitivetest`/`yona search prs PR`이 각각
+"CaseSensitiveTest Bug"/"조직 PR"·"bob의 PR"을 정상 검색.
+
+#### 추가 탐색(신규 버그 발견 안 됨)
+
+- **토큰 만료**: H2 DB 파일에 직접 SQL로 `api_token.expires_at`을 과거로 돌려 재현 — 만료된
+  토큰으로 API 호출 시 403(신원 자체는 인식하되 권한 없음으로 처리)으로 명확히 거절, 크래시
+  없음. 401이 더 적절할 수 있는 설계 선택이지만 기존에 의도된 동작이라 버그로 분류하지 않음.
+- **스코프 토큰 권한 분리**: ISSUES=READ만 있는 토큰으로 `issue list`는 성공, `issue create`는
+  403 — 정상 동작.
+- **비프로젝트멤버를 담당자로 지정**: 서버(`IssueController.createIssue/updateIssue`)는 멤버십
+  검증 없이 assignee를 그대로 받아들이는데(레거시 `IssueApi.findAssginee()`/`Assignee.add()`도
+  동일하게 멤버십 검증이 없음을 코드 대조로 확인 — 레거시 동치, 버그 아님), CLI가
+  `assignableUsers` 목록에 없는 로그인ID를 사전에 거절해 실제로는 명확한 에러 메시지로
+  막힘(`yona issue create --assignee bob`이 프로젝트 비멤버면 "담당자로 지정할 수 있는 후보 중
+  ... 찾을 수 없습니다"로 정상 종료).
+- **대용량/특수문자 입력**: 이모지, 실제 줄바꿈(`$'...\n...'`), 5000자 본문, SQL 인젝션성
+  문자열(`'; DROP TABLE ... --`)을 이슈/라벨 제목·본문에 넣어도 크래시/데이터 손상 없이
+  그대로 왕복 저장·조회됨(JPA 파라미터 바인딩이라 인젝션 자체가 원천 불가능함을 코드로도
+  확인 — `@Query` 네이티브 쿼리 전수 조사 결과 문자열 연결 방식의 동적 SQL 없음).
+- **`admin backup export`의 org 데이터 포함 여부**: `ORGANIZATION`/`ORGANIZATION_USER` 테이블이
+  백업 JSON에 정상 포함됨을 확인(이전 라운드는 org 없는 상태로만 백업을 검증했었음).
+- **PR merge 상태가드**: 이미 MERGED인 PR을 다시 merge 시도해도 TASK-0424가 고친 대로 400 +
+  명확한 메시지로 거절(500 아님), org 소유 프로젝트에서도 동일.
+- **웹훅 타입 오기입**: `--type PUSH`처럼 `WebhookType` enum에 없는 값을 넣으면
+  `WebhookController.createWebhook()`이 `WebhookType.valueOf()` 실패를 잡아 조용히 SIMPLE로
+  폴백함(기존 의도된 방어적 처리로 보임 — 크래시/보안 문제 없어 버그로 분류하지 않음, 다만
+  잘못된 타입 지정 시 사용자에게 알려주지 않는 UX 갭이 있어 다음 라운드 참고용으로만 기록).
+
+#### 15라운드 (2026-09-02, 같은 세션에서 이어서) — 완전히 새 서버로 클린 라운드 확인
+
+TASK-0436/TASK-0437을 반영한 새 jar + 새로 빌드한 yona-cli 바이너리로, 완전히 새로운 격리된
+H2 서버(포트 18311, 별도 `-Dyona.data`/`-Dyona.git.base-dir`)를 처음부터 다시 띄워 부트스트랩
+관리자 생성 → 조직 생성 → org 소유/비소유 PUBLIC 프로젝트 생성 → 라벨/이슈(대소문자 섞인
+제목 포함)/PR(생성·edit·검색·review·merge, 실제 병합 커밋 확인) → **대소문자 검색**(`search
+issues`/`search prs`가 대소문자 달라도 정상 매치, TASK-0437 재확인) → **PUBLIC 프로젝트
+비멤버 이슈 생성**(org 소유/비소유 둘 다, TASK-0436 재확인) → PRIVATE 프로젝트 경계(403
+유지) → admin 전용 엔드포인트 경계(bob 403 유지) → 이슈 edit 시 담당자/라벨 보존 →
+**동시 fork 3개**(TASK-0435 재확인, 1건 성공 + 2건 깔끔한 400, 500 없음)까지 전체 골든패스를
+처음부터 끝까지 재검증했다. **신규 버그 0건** — 클린 라운드로 종료.
+
+#### 전체 스위트 / 커밋
+
+- `./gradlew test`(기본 mariadb) 최종 재확인: 5838개 중 53개 실패 — TASK-0436/0437 반영 전
+  베이스라인과 **완전히 동일한 8개 스펙·동일 케이스 수**(위 "TASK-0433~0435 회귀 확인" 참고),
+  회귀 아님.
+- yuna 커밋(fetch로 origin과 동기화 확인 후 매 커밋 직후 즉시 push 완료): `6d4e250`
+  (TASK-0436, PUBLIC 프로젝트 비멤버 이슈 생성 권한 갭), `678b16c`(TASK-0437, 검색 대소문자
+  구분 버그).
+- yona-cli: 이번 라운드는 yona-cli 자체 변경 없음(전부 yuna 서버 측 버그였음).
+- **막힌 항목 없음** — origin과 diverge 없이 정상 push 완료.
+- **라운드 종료 판단**: 14라운드에서 신규 버그 2건 발견·수정, 15라운드가 완전히 새 서버로
+  처음부터 전체 골든패스(org 소유/비소유 프로젝트, 대소문자 검색, 권한 경계, 동시 fork)를
+  재검증해 신규 버그 0건 — **클린 라운드로 종료**(사용자의 최종 목표 달성).
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
