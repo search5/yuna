@@ -1886,6 +1886,30 @@ Requests/Mentions/Repository Activity 5개 구성요소, `gh status --help` 실�
   최상위 커맨드 + `internal/api/userstatus.go`).
 - **막힌 항목 없음** — 양쪽 저장소 모두 origin과 diverge 없이 정상 push 완료.
 
+#### 코디네이터 세션 독립 재검증 (2026-09-03)
+
+16라운드 완료 보고를 받은 뒤, 위임받은 에이전트의 자체 보고를 그대로 신뢰하지 않고 별도의
+격리된 서버(H2, `-Dyona.data`)+재빌드한 `yona-cli` 바이너리로 직접 다시 재현했다:
+
+- `yona status`를 admin 계정으로 실제로 실행해 담당 이슈/담당 PR/리뷰 요청 3개 섹션이 실데이터로
+  채워짐을 확인. 저장소 활동(Repository Activity)은 이번 재검증에서는 빈 목록으로 나왔는데,
+  원인을 코드로 추적해 **버그가 아님을 확인**했다 — `repositoryActivity`는
+  `NotificationEventRepository.findByReceiver()` 기반이라 "watch 중인 프로젝트에서 남이 한
+  행동"에만 알림이 쌓인다. 이 재검증은 admin 혼자 프로젝트를 만들고 이슈/PR도 admin 스스로
+  생성한 시나리오라 알림 수신 대상 자체가 없어 비어있는 게 정상 동작이다(`ProjectServiceImpl.
+  createProject()`가 생성자를 자동으로 watch 등록하지 않는다는 것도 코드로 확인 — 별도 버그는
+  아니고 gh의 "구독 저장소" 개념과 동일하게 명시적 watch가 필요한 설계).
+- **스코프 AND 판정 재검증**: `scope_PULL_REQUESTS=NONE`으로 발급한(ISSUES만 WRITE) 토큰으로
+  `GET /api/v1/user/status`를 직접 curl로 호출해 **403**을 재확인 — 16라운드가 보고한 결과와
+  일치.
+- **PR 멘션 제외 재확인**: 코드 조사 결과(위 "조사 결과" 절)와 실측 응답
+  (`mentionedIssues` 필드만 존재, PR 멘션 필드 없음)이 일치함을 확인 — yuna에 PR 멘션 감지
+  기능 자체가 없다는 16라운드의 판단이 맞고, gh 파리티 원칙(이미 있는 기능만 노출, 신규 기능
+  개발 아님)을 그대로 지켰다.
+
+두 항목(스코프 AND 판정, PR 멘션 제외) 모두 16라운드 보고와 동일한 결과로 재확인됐다 — 추가
+수정 없음.
+
 ## 리스크 / 미결정 사항
 
 | 항목 | 내용 | 해소 방법 |
