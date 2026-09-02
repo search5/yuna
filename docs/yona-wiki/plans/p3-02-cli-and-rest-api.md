@@ -8,7 +8,7 @@ depends_on: []
 blocks: [p3-03-ssh-gpg, p3-07-mcp-server, p3-05-ci-actions-runner]
 source: docs/PARITY_BACKLOG.md#P3-02
 created: 2026-08-28
-updated: 2026-09-01
+updated: 2026-09-03
 tags: [plan, p3, cli, api, auth]
 ---
 
@@ -208,7 +208,7 @@ Go로 결정됨(설치 직후 바로 실행되어야 하므로 JVM 콜드스타�
 | `gh browse` | 브라우저로 현재 프로젝트/이슈/PR 열기 — 서버 API 불필요(URL 계산만), CLI 로컬 기능으로 바로 추가 가능 | 없음(순수 CLI 기능) |
 | `gh completion` | 쉘 자동완성 서브커맨드 없음 — Cobra가 기본 제공하는 기능이라 `root.go`에 등록만 하면 됨(구현 비용 거의 0) | `cmd/root.go`(`NewRootCmd()`에 미등록) |
 | `--version`/`gh version` | 버전 출력 플래그/커맨드 없음 | `cmd/root.go` |
-| `gh status` | 재감사(2026-09-03, 실제 설치된 `gh 2.92.0`으로 실측 대조하다 발견 — 최초 감사표엔 없었음)에서 발견. 내가 담당한 이슈/PR, 리뷰 요청, 멘션, 구독 저장소 활동을 한 화면에 보여주는 대시보드 — 이미 구현된 `issue status`(담당/작성 이슈만)보다 범위가 넓다(PR·리뷰요청·멘션·저장소 활동 포함). **다음 작업 대상** | 신규 조사 필요 |
+| `gh status` | 재감사(2026-09-03, 실제 설치된 `gh 2.92.0`으로 실측 대조하다 발견 — 최초 감사표엔 없었음)에서 발견. 내가 담당한 이슈/PR, 리뷰 요청, 멘션, 구독 저장소 활동을 한 화면에 보여주는 대시보드. **16라운드에서 해소** — 담당 이슈/담당 PR/리뷰요청 PR/저장소 활동은 전부 구현, 멘션은 이슈만 지원(PR 멘션 감지 자체가 yuna에 없음, 아래 16라운드 로그 참고) | `web/UserStatusRestApiController.kt`(`GET /api/v1/user/status`) |
 | `gh config` | 에디터/페이저 등 CLI 로컬 설정 커맨드 없음 — 우선순위 낮음(nice-to-have) | 없음(순수 CLI 기능) |
 | `gh alias` | 사용자 정의 별칭 커맨드 없음 — 우선순위 낮음(nice-to-have) | 없음(순수 CLI 기능) |
 
@@ -1784,6 +1784,107 @@ issues`/`search prs`가 대소문자 달라도 정상 매치, TASK-0437 재확�
 - **라운드 종료 판단**: 14라운드에서 신규 버그 2건 발견·수정, 15라운드가 완전히 새 서버로
   처음부터 전체 골든패스(org 소유/비소유 프로젝트, 대소문자 검색, 권한 경계, 동시 fork)를
   재검증해 신규 버그 0건 — **클린 라운드로 종료**(사용자의 최종 목표 달성).
+
+### 16라운드 (2026-09-03, TASK-0440) — `gh status` 구현(위 "다음 작업 대상" 해소)
+
+15라운드 직후 재감사에서 "**다음 작업 대상**"으로 표시된 `gh status`(내가 구독 중인 모든
+저장소에 걸친 작업 현황 대시보드 — Assigned Issues/Assigned Pull Requests/Review
+Requests/Mentions/Repository Activity 5개 구성요소, `gh status --help` 실측 확인)를
+구현했다. 이미 있는 `issue status`는 이 중 이슈 하나(그것도 담당/작성만)뿐이라 부분집합이다.
+
+#### 조사 결과 — 5개 구성요소 중 yuna에 실제로 있는 것 / 없는 것
+
+- **Assigned Issues**: 이미 완전히 있음 — `UserIssueStatusRestApiController`의
+  `issueRepository.findByAssigneeAndState`/`countByAssigneeAndState` 그대로 재사용.
+- **Assigned Pull Requests**: 데이터 모델은 있었으나(13라운드에서 배선한 PR
+  `assignee`/`setAssignee`) "로그인 사용자 전체"를 대상으로 한 조회가 없었다 —
+  `PullRequestRepository`에 `findByAssigneeUserIdAndState`/`countByAssigneeUserIdAndState`
+  2쌍만 신규 추가(신규 서비스 로직 없음, `IssueRepository.countByAssigneeAndState`와 동일한
+  `pr.assignee.user.id` 패턴).
+- **Review Requests**: 데이터 모델은 있었으나(12라운드 `addReviewer`/`removeReviewer` REST
+  어댑터) 마찬가지로 전역 조회가 없었다 — `pr.reviewers`(`@ManyToMany`)를 JOIN해서 대조하는
+  `findByReviewerIdAndState`/`countByReviewerIdAndState` 신규 추가.
+- **Mentions**: `MentionService.getMentioningIssueIds()`가 이미 있지만 `ISSUE_POST`/
+  `ISSUE_COMMENT`만 다룬다 — `PullRequestServiceImpl`/`ReviewComment` 어디에도
+  `mentionService.update()` 호출이 없음을 전수 확인(PR 본문·리뷰 코멘트 멘션 감지 자체가
+  yuna에 없다). 따라서 이번 라운드는 "멘션된 이슈"만 노출하고, PR 멘션 감지를 새로
+  설계/구현하지는 않았다(범위 밖 — gh 파리티는 "이미 있는 서버 기능을 CLI로 노출"이 원칙이지
+  신규 기능 개발이 아니다). 서버 응답 필드명도 `mentionedIssues`로 명시해 gh처럼 이슈+PR을
+  섞은 통합 멘션이 아님을 드러냈다.
+- **Repository Activity**: 신규 기능처럼 보였지만 실제로는 이미 있었다 — `NotificationEvent`
+  + `WatchService.findActualWatchers()`가 "내가 watch하는 프로젝트에 새 이슈/PR/댓글이
+  생기면 나를 receiver로 알림 이벤트를 남긴다"를 이미 구현해뒀고(`IssueServiceImpl` 등),
+  이 데이터는 이미 `/api/notifications`(레거시, 세션 인증 전용)로 노출돼 있었다. 신규
+  서비스 로직 없이 `NotificationEventRepository.findByReceiver()`만 재사용해 새 엔드포인트
+  에도 얇게 포함시켰다.
+
+#### 구현
+
+- **서버**: 신규 `GET /api/v1/user/status`(`web/UserStatusRestApiController.kt`) — 위 5개
+  섹션을 한 번에 내려준다. Issue/PR을 응답에 중첩할 때는 항상 기존
+  `RestApiResponseDto.kt`의 `IssueResponse`/`PullRequestResponse`(`toResponse()`)를
+  재사용해 엔티티를 그대로 반환하지 않는다(9라운드가 고친 순환 직렬화 재발 방지).
+  `PullRequestRepository`에 신규 쿼리 2쌍(위 조사 결과 참고) 추가한 것 외엔 신규 서비스
+  로직이 없다.
+- **인가**: `/api/v1/user/status`는 `/api/v1/user/**` 네임스페이스라 10라운드가 이미 추가해둔
+  계정 수준 스코프 인식 패턴(`AccountLevelTarget`)에 올라탄다 — 다만 이 엔드포인트는
+  ISSUES뿐 아니라 PR 데이터도 함께 내려주므로, `AccountLevelTarget.resourceType`(단일)을
+  `resourceTypes: List<ResourceType?>`로 바꿔 ISSUES+PULL_REQUESTS 둘 다 READ 권한이 있어야
+  통과하도록(AND 판정) `ApiTokenAuthenticationFilter`를 확장했다 — 다른 계정 수준 URL(프로젝트
+  생성/`/api/v1/user/issues/status`/`/site/export`)은 전부 원소 1개짜리 리스트라 동작이
+  그대로 유지된다(회귀 없음, 아래 재검증 참고).
+- **yona-cli**: 최상위 `yona status` 커맨드 신설(서브커맨드 없음, `gh status`와 동일한 UX —
+  `gh status --help` 실측 결과 `-e/--exclude`, `-o/--org` 외엔 `--json`/`-L` 같은 공용
+  플래그를 받지 않아 이 커맨드도 `--json` 필드선택만 지원, 페이지네이션/상태 필터 없음). 섹션별
+  사람이 읽기 좋은 출력(담당 이슈/담당 PR/리뷰요청/멘션/저장소 활동).
+
+#### 실측 검증 (RED → GREEN)
+
+- **RED**: 이번 라운드 이전 커밋(`374f488`) 기준 소스로 서버 jar를 다시 빌드해(신규
+  `UserStatusRestApiController.kt`만 제외, 나머지 신규 서버 변경은 `git stash`) 별도 포트로
+  띄운 뒤, 시드해 둔 유효한 스코프 토큰(ISSUES:READ)으로 `GET /api/v1/user/issues/status`는
+  200(정상 동작 확인용 대조군), `GET /api/v1/user/status`는 **404**(Spring MVC "no mapping
+  found")임을 실측 확인. yona-cli 쪽도 이전 커밋으로 빌드한 바이너리에서
+  `yona status` 실행 시 `Error: unknown command "status" for "yona"`로 실패함을 확인.
+- **GREEN**: 구현 반영 후 격리된 `-Dyona.data`(H2, `spring.profiles.active=h2`)로 새 서버를
+  띄우고, H2 파일에 SQL로 담당 이슈 1건/담당 PR 1건/리뷰요청 PR 1건/멘션된 이슈 1건/저장소
+  활동 알림 1건 + `ApiToken`(ISSUES:READ + PULL_REQUESTS:READ, allRepositories=true)을
+  직접 시드했다. 실 `yona-cli` 바이너리로:
+  ```
+  $ yona status --server http://localhost:18453 --token yona_pat_e2e_status_test
+  담당 이슈 (Assigned Issues) (열림 1 / 닫힘 0)
+    #1	담당 이슈 E2E
+  담당 풀 리퀘스트 (Assigned Pull Requests) (열림 1 / 닫힘 0)
+    #1	담당 PR E2E
+  리뷰 요청 (Review Requests) (열림 1 / 닫힘 0)
+    #2	리뷰요청 PR E2E
+  멘션된 이슈 (Mentions, 이슈만 지원) (열림 1 / 닫힘 0)
+    #2	멘션 이슈 E2E
+
+  저장소 활동 (Repository Activity)
+    [NEW_ISSUE] 새 이슈가 등록되었습니다.
+  ```
+  5개 섹션 전부 실데이터로 정상 표시 확인. `--json reviewRequests` 필드선택도 정상 동작.
+  스코프 AND 판정도 실서버로 재검증: ISSUES:READ만 있는 별도 토큰으로 같은 엔드포인트 호출 시
+  **403**(PULL_REQUESTS 스코프 누락)을 실측 확인.
+- **통합 테스트**: `UserStatusRestApiControllerSpec`(mockk, 신규), `PullRequestRepositorySpec`에
+  신규 쿼리 2건 추가(`AbstractIntegrationTest`, 실제 H2 DB), `ApiTokenAccountLevelAndLegacyAuthorizationIntegrationSpec`에
+  `/api/v1/user/status` 스코프 AND 판정 3케이스(ISSUES만/PULL_REQUESTS만/둘 다) 추가 —
+  전부 mockk만으로 GREEN 처리하지 않고 최소 1개는 실제 DB+전체 시큐리티 필터체인을 타는
+  통합 테스트로 검증.
+
+#### 전체 스위트 / 커밋
+
+- `./gradlew test`(기본 mariadb): 5822개 통과, 78개 실패("Table 'yona.n4user' doesn't
+  exist" 등 — 이 세션 동시 작업 중인 다른 testcontainer 공유 노이즈, 14/15라운드와 동일한
+  패턴). 실패한 14개 스펙(`ApiTokenAccountLevelAndLegacyAuthorizationIntegrationSpec`
+  포함 — 이번 라운드가 수정한 파일)을 한 번에 묶어 단독 재실행한 결과 **전부 100% GREEN**
+  (78건 전체 회귀 아님으로 확정). `PullRequestRepositorySpec`/`UserStatusRestApiControllerSpec`
+  등 신규 테스트가 포함된 스펙은 애초에 이 78건에 없었다(처음부터 정상).
+- yuna 커밋: `<COMMIT_HASH>`(TASK-0440, `gh status` 구현).
+- yona-cli 커밋(fetch로 origin과 동기화 확인 후 즉시 push 완료): `6c5472b`(`yona status`
+  최상위 커맨드 + `internal/api/userstatus.go`).
+- **막힌 항목 없음** — 양쪽 저장소 모두 origin과 diverge 없이 정상 push 완료.
 
 ## 리스크 / 미결정 사항
 

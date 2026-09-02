@@ -183,5 +183,33 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
         nativeQuery = true
     )
     fun countSearchPullRequestsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
+
+    // yona-wiki P3-02 16라운드 — `gh status`의 "Assigned Pull Requests" 대응. 프로젝트 하나로
+    // 좁히지 않고 로그인 사용자 전체를 대상으로 하는 집계라 IssueRepository.countByAssigneeAndState/
+    // findByAssigneeAndState와 동일한 패턴(assignee.user.id로 필터)을 그대로 옮겼다. 여기선 LIKE
+    // 술어가 없어 IssueRepository.searchIssues()가 우회하는 Postgres Hibernate 7.2.x 네이티브 쿼리
+    // 버그(LIKE 2개 이상 바인딩 시 실패)에 해당하지 않으므로 일반 JPQL로 충분하다.
+    @Query("SELECT pr FROM PullRequest pr WHERE pr.assignee.user.id = :userId AND pr.state = :state")
+    fun findByAssigneeUserIdAndState(
+        @Param("userId") userId: Long,
+        @Param("state") state: State,
+        pageable: Pageable
+    ): Page<PullRequest>
+
+    @Query("SELECT COUNT(pr) FROM PullRequest pr WHERE pr.assignee.user.id = :userId AND pr.state = :state")
+    fun countByAssigneeUserIdAndState(@Param("userId") userId: Long, @Param("state") state: State): Long
+
+    // yona-wiki P3-02 16라운드 — `gh status`의 "Review Requests" 대응. reviewers는
+    // @ManyToMany(PullRequest.kt:71-78, pull_request_reviewers 조인 테이블)라 JOIN으로 펼쳐서
+    // 사용자 id를 대조한다.
+    @Query("SELECT pr FROM PullRequest pr JOIN pr.reviewers r WHERE r.id = :userId AND pr.state = :state")
+    fun findByReviewerIdAndState(
+        @Param("userId") userId: Long,
+        @Param("state") state: State,
+        pageable: Pageable
+    ): Page<PullRequest>
+
+    @Query("SELECT COUNT(pr) FROM PullRequest pr JOIN pr.reviewers r WHERE r.id = :userId AND pr.state = :state")
+    fun countByReviewerIdAndState(@Param("userId") userId: Long, @Param("state") state: State): Long
 }
 

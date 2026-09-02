@@ -72,6 +72,12 @@ import java.util.regex.Pattern
  *   기존 resourceSegmentToResourceType 매핑을 그대로 재사용한다. 이 경로는 세션 인증이 기본이라
  *   대부분의 요청엔 Authorization/Yona-Token 헤더가 없으므로(extractToken이 null 반환) 기존 세션
  *   기반 웹 UI 동작에는 영향이 없다 — PAT 헤더를 실제로 들고 오는 CLI 요청에만 적용된다.
+ *
+ * yona-wiki P3-02 16라운드(TASK-0440) — `GET /api/v1/user/status`(`gh status` 대응, 담당
+ * 이슈+담당 PR+리뷰요청 PR을 한 번에 내려줌)는 ISSUES 스코프 하나만으로는 부족하다(PR 데이터도
+ * 같이 내려주므로). `AccountLevelTarget.resourceType`을 `resourceTypes: List<ResourceType?>`로
+ * 바꿔 여러 그룹을 AND로 요구할 수 있게 했다 — ISSUES:READ와 PULL_REQUESTS:READ 둘 다 있어야
+ * 200, 하나라도 없으면 403.
  */
 @Component
 class ApiTokenAuthenticationFilter(
@@ -177,12 +183,18 @@ class ApiTokenAuthenticationFilter(
             ?: return true
 
         val requiredPermission = requiredPermissionFor(request.method)
-        val scopeAllowed = ApiTokenAuthorizer.isAuthorized(
-            token = apiToken,
-            resourceType = target.resourceType,
-            project = null,
-            requiredPermission = requiredPermission
-        )
+        // yona-wiki P3-02 16라운드 — `/api/v1/user/status`처럼 한 URL이 여러 스코프 그룹(ISSUES +
+        // PULL_REQUESTS)에 걸친 데이터를 한 번에 내려줄 수 있어 resourceTypes를 리스트로 바꾸고
+        // AND로 판정한다(전부 통과해야 허용) — 다른 계정 수준 URL은 전부 원소 1개짜리 리스트라
+        // 동작이 그대로 유지된다.
+        val scopeAllowed = target.resourceTypes.all { resourceType ->
+            ApiTokenAuthorizer.isAuthorized(
+                token = apiToken,
+                resourceType = resourceType,
+                project = null,
+                requiredPermission = requiredPermission
+            )
+        }
         val allowed = scopeAllowed && (!target.requireAllRepositories || apiToken.allRepositories)
         if (!allowed) {
             response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden")
@@ -263,6 +275,12 @@ class ApiTokenAuthenticationFilter(
         // (`/api/v1/user/issues/status` 등). `/api/v1/projects/**`와 구분되는 별도 네임스페이스다.
         private val userApiPattern = Pattern.compile("^/api/v1/user/issues(?:/.*)?$")
 
+        // yona-wiki P3-02 16라운드(TASK-0440) — `gh status` 대응(GET /api/v1/user/status)은 이슈뿐
+        // 아니라 PR(담당/리뷰요청)까지 한 번에 내려주므로 userApiPattern과 별도 패턴으로 분리한다 —
+        // 아래 AccountLevelTarget.resourceTypes가 ISSUES 스코프 하나가 아니라 ISSUES+PULL_REQUESTS
+        // 둘 다 요구하도록 판정해야 하기 때문이다.
+        private val userStatusApiPattern = Pattern.compile("^/api/v1/user/status(?:/.*)?$")
+
         // yona-wiki P3-02 10라운드 — 사이트 전체 관리 API(`/site/**`, `/sites/**`). 실제 사이트
         // 관리자 권한 여부는 SecurityConfig의 hasAnyRole("ADMIN","SITE_ADMIN")이 별도로 검사하므로,
         // 이 필터는 PAT 토큰의 신원 확인 + ADMINISTRATION 스코프 보유 여부만 판정한다.
@@ -336,13 +354,19 @@ class ApiTokenAuthenticationFilter(
             if (requestUri == null) return null
 
             if (projectCreatePattern.matcher(requestUri).matches()) {
-                return AccountLevelTarget(ResourceType.PROJECT, requireAllRepositories = true)
+                return AccountLevelTarget(listOf(ResourceType.PROJECT), requireAllRepositories = true)
+            }
+            // userStatusApiPattern을 userApiPattern보다 먼저 확인할 필요는 없다(두 정규식이
+            // "/api/v1/user/status"와 "/api/v1/user/issues"로 겹치지 않는다) — 가독성을 위해
+            // 더 넓은 범위를 다루는 쪽을 먼저 뒀다.
+            if (userStatusApiPattern.matcher(requestUri).matches()) {
+                return AccountLevelTarget(listOf(ResourceType.ISSUE_POST, ResourceType.PULL_REQUEST), requireAllRepositories = false)
             }
             if (userApiPattern.matcher(requestUri).matches()) {
-                return AccountLevelTarget(ResourceType.ISSUE_POST, requireAllRepositories = false)
+                return AccountLevelTarget(listOf(ResourceType.ISSUE_POST), requireAllRepositories = false)
             }
             if (siteApiPattern.matcher(requestUri).matches()) {
-                return AccountLevelTarget(ResourceType.SITE_SETTING, requireAllRepositories = true)
+                return AccountLevelTarget(listOf(ResourceType.SITE_SETTING), requireAllRepositories = true)
             }
             return null
         }
@@ -393,7 +417,7 @@ class ApiTokenAuthenticationFilter(
     )
 
     private data class AccountLevelTarget(
-        val resourceType: ResourceType?,
+        val resourceTypes: List<ResourceType?>,
         val requireAllRepositories: Boolean
     )
 }

@@ -167,6 +167,58 @@ class ApiTokenAccountLevelAndLegacyAuthorizationIntegrationSpec @Autowired const
                 result.response.status shouldBe 200
             }
 
+            // yona-wiki P3-02 16라운드(TASK-0440) — `GET /api/v1/user/status`(`gh status` 대응)는
+            // ISSUES+PULL_REQUESTS 두 스코프를 AND로 요구한다(둘 중 하나만 있으면 403).
+            it("GET /api/v1/user/status는 ISSUES 스코프만 있고 PULL_REQUESTS 스코프가 없으면 403이어야 한다") {
+                val owner = userRepository.save(
+                    User(loginId = "acct-status-owner1", name = "이슈만있음", email = "acct-status-owner1@example.com")
+                )
+                val raw = "user-status-issues-only"
+                tokenFor(owner, raw, allRepositories = true, scopeGroup = ApiTokenScopeGroup.ISSUES, permission = ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    get("/api/v1/user/status").header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("GET /api/v1/user/status는 PULL_REQUESTS 스코프만 있고 ISSUES 스코프가 없으면 403이어야 한다") {
+                val owner = userRepository.save(
+                    User(loginId = "acct-status-owner2", name = "PR만있음", email = "acct-status-owner2@example.com")
+                )
+                val raw = "user-status-prs-only"
+                tokenFor(owner, raw, allRepositories = true, scopeGroup = ApiTokenScopeGroup.PULL_REQUESTS, permission = ApiTokenPermission.READ)
+
+                val result = mockMvc.perform(
+                    get("/api/v1/user/status").header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldBe 403
+            }
+
+            it("GET /api/v1/user/status는 ISSUES:READ + PULL_REQUESTS:READ 토큰을 200으로 통과시켜야 한다") {
+                val owner = userRepository.save(
+                    User(loginId = "acct-status-owner3", name = "둘다있음", email = "acct-status-owner3@example.com")
+                )
+                val raw = "user-status-both-scopes"
+                val token = ApiToken(
+                    owner = owner,
+                    tokenHash = hashApiToken(raw),
+                    allRepositories = true,
+                    expiresAt = Instant.now().plus(30, ChronoUnit.DAYS)
+                )
+                token.scopes.add(ApiTokenScope(apiToken = token, scopeGroup = ApiTokenScopeGroup.ISSUES, permission = ApiTokenPermission.READ))
+                token.scopes.add(ApiTokenScope(apiToken = token, scopeGroup = ApiTokenScopeGroup.PULL_REQUESTS, permission = ApiTokenPermission.READ))
+                apiTokenRepository.save(token)
+
+                val result = mockMvc.perform(
+                    get("/api/v1/user/status").header("Yona-Token", raw)
+                ).andReturn()
+
+                result.response.status shouldBe 200
+            }
+
             it("GET /site/export는 ADMINISTRATION 스코프가 없는 토큰을 403으로 거부해야 한다") {
                 val owner = userRepository.save(
                     User(

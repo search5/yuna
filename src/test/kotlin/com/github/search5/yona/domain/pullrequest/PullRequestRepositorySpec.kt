@@ -168,6 +168,67 @@ class PullRequestRepositorySpec @Autowired constructor(
                 count shouldBe 1
                 page.content.map { it.id } shouldBe listOf(matched.id)
             }
+
+            // yona-wiki P3-02 16라운드(TASK-0440) — `gh status`의 "Assigned Pull Requests" 대응
+            // 신규 쿼리. IssueRepository.countByAssigneeAndState와 동일한 패턴(assignee.user.id)임을
+            // 실제 DB로 검증한다.
+            it("findByAssigneeUserIdAndState/countByAssigneeUserIdAndState는 담당자 기준으로 프로젝트 무관하게 조회해야 한다") {
+                val assignee = userRepository.save(User(loginId = "assignee-cross-proj", name = "담당자", email = "assignee-cross-proj@yona.io"))
+                val other = userRepository.save(User(loginId = "other-assignee", name = "다른담당자", email = "other-assignee@yona.io"))
+                val projectA = projectRepository.save(Project(name = "assignee-repo-a", owner = "owner-assignee-a"))
+                val projectB = projectRepository.save(Project(name = "assignee-repo-b", owner = "owner-assignee-b"))
+
+                val assignedOpenA = pullRequestRepository.save(
+                    PullRequest(
+                        title = "A 프로젝트 담당 PR", toProject = projectA, fromProject = projectA, contributor = other,
+                        state = State.OPEN, assignee = com.github.search5.yona.domain.issue.Assignee(user = assignee, project = projectA)
+                    )
+                )
+                pullRequestRepository.save(
+                    PullRequest(
+                        title = "B 프로젝트 담당 PR(닫힘)", toProject = projectB, fromProject = projectB, contributor = other,
+                        state = State.CLOSED, assignee = com.github.search5.yona.domain.issue.Assignee(user = assignee, project = projectB)
+                    )
+                )
+                pullRequestRepository.save(
+                    PullRequest(
+                        title = "무관한 PR", toProject = projectA, fromProject = projectA, contributor = other, state = State.OPEN
+                    )
+                )
+
+                val openPage = pullRequestRepository.findByAssigneeUserIdAndState(assignee.id!!, State.OPEN, org.springframework.data.domain.PageRequest.of(0, 20))
+                val openCount = pullRequestRepository.countByAssigneeUserIdAndState(assignee.id!!, State.OPEN)
+                val closedCount = pullRequestRepository.countByAssigneeUserIdAndState(assignee.id!!, State.CLOSED)
+
+                openPage.content.map { it.id } shouldBe listOf(assignedOpenA.id)
+                openCount shouldBe 1L
+                closedCount shouldBe 1L
+            }
+
+            // yona-wiki P3-02 16라운드(TASK-0440) — `gh status`의 "Review Requests" 대응 신규 쿼리.
+            it("findByReviewerIdAndState/countByReviewerIdAndState는 리뷰어 기준으로 프로젝트 무관하게 조회해야 한다") {
+                val reviewer = userRepository.save(User(loginId = "reviewer-cross-proj", name = "리뷰어", email = "reviewer-cross-proj@yona.io"))
+                val contributor = userRepository.save(User(loginId = "reviewer-target-contrib", name = "기여자", email = "reviewer-target-contrib@yona.io"))
+                val project = projectRepository.save(Project(name = "reviewer-repo", owner = "owner-reviewer"))
+
+                val reviewedOpen = pullRequestRepository.save(
+                    PullRequest(
+                        title = "리뷰 요청된 PR", toProject = project, fromProject = project, contributor = contributor,
+                        state = State.OPEN, reviewers = mutableSetOf(reviewer)
+                    )
+                )
+                pullRequestRepository.save(
+                    PullRequest(
+                        title = "무관한 PR", toProject = project, fromProject = project, contributor = contributor, state = State.OPEN
+                    )
+                )
+
+                val openPage = pullRequestRepository.findByReviewerIdAndState(reviewer.id!!, State.OPEN, org.springframework.data.domain.PageRequest.of(0, 20))
+                val openCount = pullRequestRepository.countByReviewerIdAndState(reviewer.id!!, State.OPEN)
+
+                openPage.content.map { it.id } shouldBe listOf(reviewedOpen.id)
+                openCount shouldBe 1L
+            }
         }
     }
 }
