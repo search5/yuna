@@ -102,8 +102,8 @@ interface ProjectRepository : JpaRepository<Project, Long> {
     // JPQL 대신 네이티브 쿼리를 쓰는 이유는 IssueRepository.searchIssues() 주석 참고 (Postgres
     // Hibernate 7.2.x LIKE 2개 이상 버그 회피 — name/overview 2개 컬럼이라 1개로 인수분해 불가).
     @Query(
-        value = "SELECT * FROM project WHERE id IN :projectIds AND (name LIKE :keyword OR overview LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM project WHERE id IN :projectIds AND (name LIKE :keyword OR overview LIKE :keyword)",
+        value = "SELECT * FROM project WHERE id IN :projectIds AND (LOWER(name) LIKE LOWER(:keyword) OR LOWER(overview) LIKE LOWER(:keyword))",
+        countQuery = "SELECT COUNT(*) FROM project WHERE id IN :projectIds AND (LOWER(name) LIKE LOWER(:keyword) OR LOWER(overview) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun searchProjectsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Project>
@@ -112,7 +112,7 @@ interface ProjectRepository : JpaRepository<Project, Long> {
         searchProjectsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM project WHERE id IN :projectIds AND (name LIKE :keyword OR overview LIKE :keyword)",
+        value = "SELECT COUNT(*) FROM project WHERE id IN :projectIds AND (LOWER(name) LIKE LOWER(:keyword) OR LOWER(overview) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun countSearchProjectsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
@@ -121,8 +121,8 @@ interface ProjectRepository : JpaRepository<Project, Long> {
         countSearchProjectsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword)
 
     @Query(
-        value = "SELECT * FROM project WHERE (name LIKE :query OR owner LIKE :query)",
-        countQuery = "SELECT COUNT(*) FROM project WHERE (name LIKE :query OR owner LIKE :query)",
+        value = "SELECT * FROM project WHERE (LOWER(name) LIKE LOWER(:query) OR LOWER(owner) LIKE LOWER(:query))",
+        countQuery = "SELECT COUNT(*) FROM project WHERE (LOWER(name) LIKE LOWER(:query) OR LOWER(owner) LIKE LOWER(:query))",
         nativeQuery = true
     )
     fun findProjectsForAdminQuery(@Param("query") query: String, pageable: Pageable): Page<Project>
@@ -131,7 +131,7 @@ interface ProjectRepository : JpaRepository<Project, Long> {
         findProjectsForAdminQuery(query, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM project WHERE (name LIKE :query OR owner LIKE :query)",
+        value = "SELECT COUNT(*) FROM project WHERE (LOWER(name) LIKE LOWER(:query) OR LOWER(owner) LIKE LOWER(:query))",
         nativeQuery = true
     )
     fun countProjectsForAdmin(@Param("query") query: String): Int

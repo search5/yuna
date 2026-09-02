@@ -162,6 +162,38 @@ class IssueRepositorySpec @Autowired constructor(
 
                     result.content.size shouldBe 0
                 }
+
+                // yona-wiki P3-02 14라운드(TASK-0437) — SearchServiceImpl.searchInAll()이
+                // 항상 keyword.lowercase()로 검색어를 소문자화하는데, searchIssuesQuery()의
+                // 네이티브 LIKE 술어는 컬럼 쪽을 소문자화하지 않아 "제목이 소문자화된 검색어와
+                // 정확히 대소문자가 일치할 때만" 매치됐다. MariaDB(이 스위트의 기본 DB, *_ci
+                // 콜레이션)에서는 LIKE 자체가 대소문자 무시라 이 갭이 가려져 있었고, H2(콜레이션
+                // 무관하게 LIKE가 대소문자 구분)로 실서버 골든패스를 돌릴 때만 실측으로 드러났다 —
+                // `./gradlew test -Dyona.it.db=h2`로 이 테스트를 실행해야 수정 전 RED를 재현할 수
+                // 있다(기본값 mariadb로는 수정 전 코드도 이미 GREEN이라 회귀를 못 잡는다).
+                it("검색어와 제목의 대소문자가 달라도 매치돼야 한다 [DB 무관 대소문자 무시 검색]") {
+                    val author = userRepository.save(
+                        User(loginId = "search-author5", name = "검색작성자5", email = "search-author5@yona.io")
+                    )
+                    val accessibleProject = projectRepository.save(
+                        Project(name = "case-insensitive-project", owner = author.loginId)
+                    )
+                    issueRepository.save(
+                        Issue(
+                            title = "CaseSensitiveTest Bug", body = "본문", project = accessibleProject,
+                            authorId = author.id, authorLoginId = author.loginId, authorName = author.name,
+                            createdDate = Instant.now(), state = State.OPEN
+                        )
+                    )
+
+                    // SearchServiceImpl과 동일하게 검색어를 소문자화한 뒤 넘긴다.
+                    val result = issueRepository.searchIssues(
+                        listOf(accessibleProject.id!!), "%casesensitivetest%", null, PageRequest.of(0, 20)
+                    )
+
+                    result.content.size shouldBe 1
+                    result.content.first().title shouldBe "CaseSensitiveTest Bug"
+                }
             }
         }
     }

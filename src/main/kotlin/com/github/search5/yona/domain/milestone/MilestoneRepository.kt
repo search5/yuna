@@ -23,8 +23,8 @@ interface MilestoneRepository : JpaRepository<Milestone, Long> {
     // JPQL 대신 네이티브 쿼리를 쓰는 이유는 IssueRepository.searchIssues() 주석 참고 (Postgres
     // Hibernate 7.2.x LIKE 2개 이상 버그 회피 — title/contents 2개 컬럼이라 1개로 인수분해 불가).
     @Query(
-        value = "SELECT * FROM milestone WHERE project_id IN :projectIds AND (title LIKE :keyword OR contents LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM milestone WHERE project_id IN :projectIds AND (title LIKE :keyword OR contents LIKE :keyword)",
+        value = "SELECT * FROM milestone WHERE project_id IN :projectIds AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(contents) LIKE LOWER(:keyword))",
+        countQuery = "SELECT COUNT(*) FROM milestone WHERE project_id IN :projectIds AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(contents) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun searchMilestonesQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, pageable: Pageable): Page<Milestone>
@@ -33,7 +33,7 @@ interface MilestoneRepository : JpaRepository<Milestone, Long> {
         searchMilestonesQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM milestone WHERE project_id IN :projectIds AND (title LIKE :keyword OR contents LIKE :keyword)",
+        value = "SELECT COUNT(*) FROM milestone WHERE project_id IN :projectIds AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(contents) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun countSearchMilestonesQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String): Int
@@ -42,8 +42,8 @@ interface MilestoneRepository : JpaRepository<Milestone, Long> {
         countSearchMilestonesQuery(projectIds.ifEmpty { listOf(-1L) }, keyword)
 
     @Query(
-        value = "SELECT * FROM milestone WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR contents LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM milestone WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR contents LIKE :keyword)",
+        value = "SELECT * FROM milestone WHERE project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(contents) LIKE LOWER(:keyword))",
+        countQuery = "SELECT COUNT(*) FROM milestone WHERE project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(contents) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun searchMilestonesInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<Milestone>
@@ -52,7 +52,7 @@ interface MilestoneRepository : JpaRepository<Milestone, Long> {
         searchMilestonesInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM milestone WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR contents LIKE :keyword)",
+        value = "SELECT COUNT(*) FROM milestone WHERE project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(contents) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun countSearchMilestonesInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int

@@ -19,8 +19,8 @@ interface PostingCommentRepository : JpaRepository<PostingComment, Long> {
     // 클래스의 denormalized 컬럼) 대신 posting을 조인해 posting.project_id를 쓰는 이유도 같은
     // 주석 참고 — denormalized 컬럼이 항상 채워진다는 보장이 없다(실측 확인).
     @Query(
-        value = "SELECT pc.* FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE pc.contents LIKE :keyword AND (p.project_id IN :projectIds OR pc.author_id = :userId)",
-        countQuery = "SELECT COUNT(*) FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE pc.contents LIKE :keyword AND (p.project_id IN :projectIds OR pc.author_id = :userId)",
+        value = "SELECT pc.* FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE LOWER(pc.contents) LIKE LOWER(:keyword) AND (p.project_id IN :projectIds OR pc.author_id = :userId)",
+        countQuery = "SELECT COUNT(*) FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE LOWER(pc.contents) LIKE LOWER(:keyword) AND (p.project_id IN :projectIds OR pc.author_id = :userId)",
         nativeQuery = true
     )
     fun searchPostingCommentsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long, pageable: Pageable): Page<PostingComment>
@@ -29,7 +29,7 @@ interface PostingCommentRepository : JpaRepository<PostingComment, Long> {
         searchPostingCommentsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId ?: -1L, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE pc.contents LIKE :keyword AND (p.project_id IN :projectIds OR pc.author_id = :userId)",
+        value = "SELECT COUNT(*) FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE LOWER(pc.contents) LIKE LOWER(:keyword) AND (p.project_id IN :projectIds OR pc.author_id = :userId)",
         nativeQuery = true
     )
     fun countSearchPostingCommentsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long): Int
@@ -38,8 +38,8 @@ interface PostingCommentRepository : JpaRepository<PostingComment, Long> {
         countSearchPostingCommentsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId ?: -1L)
 
     @Query(
-        value = "SELECT pc.* FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE p.project_id = :#{#project.id} AND pc.contents LIKE :keyword",
-        countQuery = "SELECT COUNT(*) FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE p.project_id = :#{#project.id} AND pc.contents LIKE :keyword",
+        value = "SELECT pc.* FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE p.project_id = :#{#project.id} AND LOWER(pc.contents) LIKE LOWER(:keyword)",
+        countQuery = "SELECT COUNT(*) FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE p.project_id = :#{#project.id} AND LOWER(pc.contents) LIKE LOWER(:keyword)",
         nativeQuery = true
     )
     fun searchPostingCommentsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<PostingComment>
@@ -48,7 +48,7 @@ interface PostingCommentRepository : JpaRepository<PostingComment, Long> {
         searchPostingCommentsInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE p.project_id = :#{#project.id} AND pc.contents LIKE :keyword",
+        value = "SELECT COUNT(*) FROM posting_comment pc JOIN posting p ON p.id = pc.posting_id WHERE p.project_id = :#{#project.id} AND LOWER(pc.contents) LIKE LOWER(:keyword)",
         nativeQuery = true
     )
     fun countSearchPostingCommentsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int

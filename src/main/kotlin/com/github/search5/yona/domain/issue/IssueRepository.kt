@@ -73,7 +73,7 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
             SELECT i.* FROM issue i
             LEFT JOIN assignee a ON a.id = i.assignee_id
             LEFT JOIN n4user au ON au.id = a.user_id
-            WHERE (i.title LIKE :keyword OR i.body LIKE :keyword)
+            WHERE (LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
               AND (i.project_id IN :projectIds
                    OR (:userId IS NOT NULL AND i.author_id = :userId)
                    OR (:userId IS NOT NULL AND au.id = :userId))
@@ -82,7 +82,7 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
             SELECT COUNT(*) FROM issue i
             LEFT JOIN assignee a ON a.id = i.assignee_id
             LEFT JOIN n4user au ON au.id = a.user_id
-            WHERE (i.title LIKE :keyword OR i.body LIKE :keyword)
+            WHERE (LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
               AND (i.project_id IN :projectIds
                    OR (:userId IS NOT NULL AND i.author_id = :userId)
                    OR (:userId IS NOT NULL AND au.id = :userId))
@@ -104,7 +104,7 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
             SELECT COUNT(*) FROM issue i
             LEFT JOIN assignee a ON a.id = i.assignee_id
             LEFT JOIN n4user au ON au.id = a.user_id
-            WHERE (i.title LIKE :keyword OR i.body LIKE :keyword)
+            WHERE (LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
               AND (i.project_id IN :projectIds
                    OR (:userId IS NOT NULL AND i.author_id = :userId)
                    OR (:userId IS NOT NULL AND au.id = :userId))
@@ -125,8 +125,8 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
     // 검색 대상이라 1개로 인수분해 불가) `like_escape(bigint, unknown) does not exist`로 항상
     // 실패하는 버그가 있다(searchIssues()/searchIssuesQuery() 주석 참고).
     @Query(
-        value = "SELECT * FROM issue WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM issue WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT * FROM issue WHERE project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
+        countQuery = "SELECT COUNT(*) FROM issue WHERE project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun searchIssuesInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<Issue>
@@ -135,8 +135,8 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
         searchIssuesInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT * FROM issue WHERE project_id = :#{#project.id} AND state = :#{#state.name()} AND (title LIKE :keyword OR body LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM issue WHERE project_id = :#{#project.id} AND state = :#{#state.name()} AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT * FROM issue WHERE project_id = :#{#project.id} AND state = :#{#state.name()} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
+        countQuery = "SELECT COUNT(*) FROM issue WHERE project_id = :#{#project.id} AND state = :#{#state.name()} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun searchIssuesInProjectAndStateQuery(
@@ -150,7 +150,7 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
         searchIssuesInProjectAndStateQuery(project, state, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM issue WHERE project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT COUNT(*) FROM issue WHERE project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun countSearchIssuesInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
@@ -167,13 +167,13 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
             SELECT i.* FROM issue i
             JOIN assignee a ON a.id = i.assignee_id
             WHERE a.user_id = :assigneeId AND i.state = :#{#state.name()}
-              AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
         """,
         countQuery = """
             SELECT COUNT(*) FROM issue i
             JOIN assignee a ON a.id = i.assignee_id
             WHERE a.user_id = :assigneeId AND i.state = :#{#state.name()}
-              AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
         """,
         nativeQuery = true
     )
@@ -202,12 +202,12 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
         value = """
             SELECT * FROM issue
             WHERE author_id = :authorId AND state = :#{#state.name()}
-              AND (:keyword IS NULL OR title LIKE :keyword OR body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))
         """,
         countQuery = """
             SELECT COUNT(*) FROM issue
             WHERE author_id = :authorId AND state = :#{#state.name()}
-              AND (:keyword IS NULL OR title LIKE :keyword OR body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))
         """,
         nativeQuery = true
     )
@@ -237,13 +237,13 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
             SELECT DISTINCT i.* FROM issue i
             JOIN issue_comment c ON c.issue_id = i.id
             WHERE c.author_id = :commenterId AND i.state = :#{#state.name()}
-              AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
         """,
         countQuery = """
             SELECT COUNT(DISTINCT i.id) FROM issue i
             JOIN issue_comment c ON c.issue_id = i.id
             WHERE c.author_id = :commenterId AND i.state = :#{#state.name()}
-              AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
         """,
         nativeQuery = true
     )
@@ -275,12 +275,12 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
         value = """
             SELECT * FROM issue
             WHERE id IN :mentionedIssueIds AND state = :#{#state.name()}
-              AND (:keyword IS NULL OR title LIKE :keyword OR body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))
         """,
         countQuery = """
             SELECT COUNT(*) FROM issue
             WHERE id IN :mentionedIssueIds AND state = :#{#state.name()}
-              AND (:keyword IS NULL OR title LIKE :keyword OR body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))
         """,
         nativeQuery = true
     )
@@ -309,13 +309,13 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
             SELECT i.* FROM issue i
             JOIN issue_voter v ON v.issue_id = i.id
             WHERE v.user_id = :voterId AND i.state = :#{#state.name()}
-              AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
         """,
         countQuery = """
             SELECT COUNT(*) FROM issue i
             JOIN issue_voter v ON v.issue_id = i.id
             WHERE v.user_id = :voterId AND i.state = :#{#state.name()}
-              AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
         """,
         nativeQuery = true
     )
@@ -346,13 +346,13 @@ interface IssueRepository : JpaRepository<Issue, Long>, JpaSpecificationExecutor
             SELECT DISTINCT i.* FROM issue i
             JOIN issue_sharer s ON s.issue_id = i.id
             WHERE s.user_id = :userId AND i.state = :#{#state.name()}
-              AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
         """,
         countQuery = """
             SELECT COUNT(DISTINCT i.id) FROM issue i
             JOIN issue_sharer s ON s.issue_id = i.id
             WHERE s.user_id = :userId AND i.state = :#{#state.name()}
-              AND (:keyword IS NULL OR i.title LIKE :keyword OR i.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(i.title) LIKE LOWER(:keyword) OR LOWER(i.body) LIKE LOWER(:keyword))
         """,
         nativeQuery = true
     )

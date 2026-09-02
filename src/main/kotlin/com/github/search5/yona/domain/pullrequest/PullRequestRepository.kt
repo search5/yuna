@@ -33,8 +33,8 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
     // Hibernate 7.2.x 버그 — LIKE가 다른 타입의 바인드 파라미터와 함께 있으면 실패). 네이티브
     // 쿼리는 엔티티가 아닌 ID로만 바인딩 가능하므로 `List<Project>`를 ID 리스트로 변환해 위임한다.
     @Query(
-        value = "SELECT * FROM pull_request WHERE to_project_id IN :projectIds AND state = :#{#state.name()} AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%'))",
-        countQuery = "SELECT COUNT(*) FROM pull_request WHERE to_project_id IN :projectIds AND state = :#{#state.name()} AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%'))",
+        value = "SELECT * FROM pull_request WHERE to_project_id IN :projectIds AND state = :#{#state.name()} AND (:keyword = '' OR LOWER(title) LIKE LOWER(CONCAT('%', :keyword, '%')))",
+        countQuery = "SELECT COUNT(*) FROM pull_request WHERE to_project_id IN :projectIds AND state = :#{#state.name()} AND (:keyword = '' OR LOWER(title) LIKE LOWER(CONCAT('%', :keyword, '%')))",
         nativeQuery = true
     )
     fun searchByToProjectIdInAndStateQuery(
@@ -128,13 +128,13 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
     @Query(
         value = """
             SELECT * FROM pull_request pr
-            WHERE (pr.title LIKE :keyword OR pr.body LIKE :keyword)
+            WHERE (LOWER(pr.title) LIKE LOWER(:keyword) OR LOWER(pr.body) LIKE LOWER(:keyword))
               AND (pr.to_project_id IN :projectIds
                    OR (:userId IS NOT NULL AND pr.contributor_id = :userId))
         """,
         countQuery = """
             SELECT COUNT(*) FROM pull_request pr
-            WHERE (pr.title LIKE :keyword OR pr.body LIKE :keyword)
+            WHERE (LOWER(pr.title) LIKE LOWER(:keyword) OR LOWER(pr.body) LIKE LOWER(:keyword))
               AND (pr.to_project_id IN :projectIds
                    OR (:userId IS NOT NULL AND pr.contributor_id = :userId))
         """,
@@ -153,7 +153,7 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
     @Query(
         value = """
             SELECT COUNT(*) FROM pull_request pr
-            WHERE (pr.title LIKE :keyword OR pr.body LIKE :keyword)
+            WHERE (LOWER(pr.title) LIKE LOWER(:keyword) OR LOWER(pr.body) LIKE LOWER(:keyword))
               AND (pr.to_project_id IN :projectIds
                    OR (:userId IS NOT NULL AND pr.contributor_id = :userId))
         """,
@@ -169,8 +169,8 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
         countSearchPullRequestsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId)
 
     @Query(
-        value = "SELECT * FROM pull_request WHERE to_project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM pull_request WHERE to_project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT * FROM pull_request WHERE to_project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
+        countQuery = "SELECT COUNT(*) FROM pull_request WHERE to_project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun searchPullRequestsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<PullRequest>
@@ -179,7 +179,7 @@ interface PullRequestRepository : JpaRepository<PullRequest, Long>, JpaSpecifica
         searchPullRequestsInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM pull_request WHERE to_project_id = :#{#project.id} AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT COUNT(*) FROM pull_request WHERE to_project_id = :#{#project.id} AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun countSearchPullRequestsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int

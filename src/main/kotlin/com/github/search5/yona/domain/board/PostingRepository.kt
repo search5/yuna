@@ -37,8 +37,8 @@ interface PostingRepository : JpaRepository<Posting, Long> {
     // 실측 확인). 리터럴 대신 파라미터로 바인딩하면 각 방언의 Boolean JDBC 타입 매핑을 그대로
     // 타므로 전부 호환된다.
     @Query(
-        value = "SELECT * FROM posting WHERE project_id IN :projectIds AND notice = :isNotice AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
-        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id IN :projectIds AND notice = :isNotice AND (:keyword = '' OR title LIKE CONCAT('%', :keyword, '%') OR body LIKE CONCAT('%', :keyword, '%'))",
+        value = "SELECT * FROM posting WHERE project_id IN :projectIds AND notice = :isNotice AND (:keyword = '' OR LOWER(title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(body) LIKE LOWER(CONCAT('%', :keyword, '%')))",
+        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id IN :projectIds AND notice = :isNotice AND (:keyword = '' OR LOWER(title) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(body) LIKE LOWER(CONCAT('%', :keyword, '%')))",
         nativeQuery = true
     )
     fun findByProjectIdInAndKeywordQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("isNotice") isNotice: Boolean, pageable: Pageable): Page<Posting>
@@ -47,8 +47,8 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         findByProjectIdInAndKeywordQuery(projects.map { it.id!! }.ifEmpty { listOf(-1L) }, keyword, false, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT * FROM posting WHERE (project_id IN :projectIds AND (title LIKE :keyword OR body LIKE :keyword)) OR (:userId IS NOT NULL AND author_id = :userId AND (title LIKE :keyword OR body LIKE :keyword))",
-        countQuery = "SELECT COUNT(*) FROM posting WHERE (project_id IN :projectIds AND (title LIKE :keyword OR body LIKE :keyword)) OR (:userId IS NOT NULL AND author_id = :userId AND (title LIKE :keyword OR body LIKE :keyword))",
+        value = "SELECT * FROM posting WHERE (project_id IN :projectIds AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))) OR (:userId IS NOT NULL AND author_id = :userId AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword)))",
+        countQuery = "SELECT COUNT(*) FROM posting WHERE (project_id IN :projectIds AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))) OR (:userId IS NOT NULL AND author_id = :userId AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword)))",
         nativeQuery = true
     )
     fun searchPostingsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?, pageable: Pageable): Page<Posting>
@@ -57,7 +57,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         searchPostingsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM posting WHERE (project_id IN :projectIds AND (title LIKE :keyword OR body LIKE :keyword)) OR (:userId IS NOT NULL AND author_id = :userId AND (title LIKE :keyword OR body LIKE :keyword))",
+        value = "SELECT COUNT(*) FROM posting WHERE (project_id IN :projectIds AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))) OR (:userId IS NOT NULL AND author_id = :userId AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword)))",
         nativeQuery = true
     )
     fun countSearchPostingsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long?): Int
@@ -66,8 +66,8 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         countSearchPostingsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId)
 
     @Query(
-        value = "SELECT * FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (title LIKE :keyword OR body LIKE :keyword)",
-        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT * FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
+        countQuery = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun searchPostingsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, @Param("isNotice") isNotice: Boolean, pageable: Pageable): Page<Posting>
@@ -76,7 +76,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
         searchPostingsInProjectQuery(project, keyword, false, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (title LIKE :keyword OR body LIKE :keyword)",
+        value = "SELECT COUNT(*) FROM posting WHERE project_id = :#{#project.id} AND notice = :isNotice AND (LOWER(title) LIKE LOWER(:keyword) OR LOWER(body) LIKE LOWER(:keyword))",
         nativeQuery = true
     )
     fun countSearchPostingsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, @Param("isNotice") isNotice: Boolean): Int
@@ -94,7 +94,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
             WHERE p.project_id = :#{#project.id}
               AND p.notice = :isNotice
               AND pl.issue_label_id IN :labelIds
-              AND (:keyword IS NULL OR p.title LIKE :keyword OR p.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(p.title) LIKE LOWER(:keyword) OR LOWER(p.body) LIKE LOWER(:keyword))
         """,
         countQuery = """
             SELECT COUNT(DISTINCT p.id) FROM posting p
@@ -102,7 +102,7 @@ interface PostingRepository : JpaRepository<Posting, Long> {
             WHERE p.project_id = :#{#project.id}
               AND p.notice = :isNotice
               AND pl.issue_label_id IN :labelIds
-              AND (:keyword IS NULL OR p.title LIKE :keyword OR p.body LIKE :keyword)
+              AND (:keyword IS NULL OR LOWER(p.title) LIKE LOWER(:keyword) OR LOWER(p.body) LIKE LOWER(:keyword))
         """,
         nativeQuery = true
     )

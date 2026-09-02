@@ -19,13 +19,13 @@ interface ReviewCommentRepository : JpaRepository<ReviewComment, Long> {
         value = """
             SELECT rc.* FROM review_comment rc
             JOIN comment_thread t ON t.id = rc.thread_id
-            WHERE rc.contents LIKE :keyword
+            WHERE LOWER(rc.contents) LIKE LOWER(:keyword)
               AND (t.project_id IN :projectIds OR (:userId IS NOT NULL AND rc.author_id = :userId))
         """,
         countQuery = """
             SELECT COUNT(*) FROM review_comment rc
             JOIN comment_thread t ON t.id = rc.thread_id
-            WHERE rc.contents LIKE :keyword
+            WHERE LOWER(rc.contents) LIKE LOWER(:keyword)
               AND (t.project_id IN :projectIds OR (:userId IS NOT NULL AND rc.author_id = :userId))
         """,
         nativeQuery = true
@@ -39,7 +39,7 @@ interface ReviewCommentRepository : JpaRepository<ReviewComment, Long> {
         value = """
             SELECT COUNT(*) FROM review_comment rc
             JOIN comment_thread t ON t.id = rc.thread_id
-            WHERE rc.contents LIKE :keyword
+            WHERE LOWER(rc.contents) LIKE LOWER(:keyword)
               AND (t.project_id IN :projectIds OR (:userId IS NOT NULL AND rc.author_id = :userId))
         """,
         nativeQuery = true
@@ -53,12 +53,12 @@ interface ReviewCommentRepository : JpaRepository<ReviewComment, Long> {
         value = """
             SELECT rc.* FROM review_comment rc
             JOIN comment_thread t ON t.id = rc.thread_id
-            WHERE t.project_id = :#{#project.id} AND rc.contents LIKE :keyword
+            WHERE t.project_id = :#{#project.id} AND LOWER(rc.contents) LIKE LOWER(:keyword)
         """,
         countQuery = """
             SELECT COUNT(*) FROM review_comment rc
             JOIN comment_thread t ON t.id = rc.thread_id
-            WHERE t.project_id = :#{#project.id} AND rc.contents LIKE :keyword
+            WHERE t.project_id = :#{#project.id} AND LOWER(rc.contents) LIKE LOWER(:keyword)
         """,
         nativeQuery = true
     )
@@ -71,7 +71,7 @@ interface ReviewCommentRepository : JpaRepository<ReviewComment, Long> {
         value = """
             SELECT COUNT(*) FROM review_comment rc
             JOIN comment_thread t ON t.id = rc.thread_id
-            WHERE t.project_id = :#{#project.id} AND rc.contents LIKE :keyword
+            WHERE t.project_id = :#{#project.id} AND LOWER(rc.contents) LIKE LOWER(:keyword)
         """,
         nativeQuery = true
     )

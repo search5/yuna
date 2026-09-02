@@ -24,8 +24,8 @@ interface IssueCommentRepository : JpaRepository<IssueComment, Long> {
     // JPQL(ic.issue.project.id)이 관계를 통해 항상 신뢰할 수 있게 프로젝트를 구했던 것과 동일하게,
     // issue 조인을 통해 구해야 한다. userId는 null일 수 있어 매치 불가능한 sentinel(-1)로 치환한다.
     @Query(
-        value = "SELECT ic.* FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE ic.contents LIKE :keyword AND (i.project_id IN :projectIds OR ic.author_id = :userId)",
-        countQuery = "SELECT COUNT(*) FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE ic.contents LIKE :keyword AND (i.project_id IN :projectIds OR ic.author_id = :userId)",
+        value = "SELECT ic.* FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE LOWER(ic.contents) LIKE LOWER(:keyword) AND (i.project_id IN :projectIds OR ic.author_id = :userId)",
+        countQuery = "SELECT COUNT(*) FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE LOWER(ic.contents) LIKE LOWER(:keyword) AND (i.project_id IN :projectIds OR ic.author_id = :userId)",
         nativeQuery = true
     )
     fun searchIssueCommentsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long, pageable: Pageable): Page<IssueComment>
@@ -34,7 +34,7 @@ interface IssueCommentRepository : JpaRepository<IssueComment, Long> {
         searchIssueCommentsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId ?: -1L, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE ic.contents LIKE :keyword AND (i.project_id IN :projectIds OR ic.author_id = :userId)",
+        value = "SELECT COUNT(*) FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE LOWER(ic.contents) LIKE LOWER(:keyword) AND (i.project_id IN :projectIds OR ic.author_id = :userId)",
         nativeQuery = true
     )
     fun countSearchIssueCommentsQuery(@Param("projectIds") projectIds: List<Long>, @Param("keyword") keyword: String, @Param("userId") userId: Long): Int
@@ -43,8 +43,8 @@ interface IssueCommentRepository : JpaRepository<IssueComment, Long> {
         countSearchIssueCommentsQuery(projectIds.ifEmpty { listOf(-1L) }, keyword, userId ?: -1L)
 
     @Query(
-        value = "SELECT ic.* FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE i.project_id = :#{#project.id} AND ic.contents LIKE :keyword",
-        countQuery = "SELECT COUNT(*) FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE i.project_id = :#{#project.id} AND ic.contents LIKE :keyword",
+        value = "SELECT ic.* FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE i.project_id = :#{#project.id} AND LOWER(ic.contents) LIKE LOWER(:keyword)",
+        countQuery = "SELECT COUNT(*) FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE i.project_id = :#{#project.id} AND LOWER(ic.contents) LIKE LOWER(:keyword)",
         nativeQuery = true
     )
     fun searchIssueCommentsInProjectQuery(@Param("project") project: Project, @Param("keyword") keyword: String, pageable: Pageable): Page<IssueComment>
@@ -53,7 +53,7 @@ interface IssueCommentRepository : JpaRepository<IssueComment, Long> {
         searchIssueCommentsInProjectQuery(project, keyword, pageable.toSnakeCaseSort())
 
     @Query(
-        value = "SELECT COUNT(*) FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE i.project_id = :#{#project.id} AND ic.contents LIKE :keyword",
+        value = "SELECT COUNT(*) FROM issue_comment ic JOIN issue i ON i.id = ic.issue_id WHERE i.project_id = :#{#project.id} AND LOWER(ic.contents) LIKE LOWER(:keyword)",
         nativeQuery = true
     )
     fun countSearchIssueCommentsInProject(@Param("project") project: Project, @Param("keyword") keyword: String): Int
